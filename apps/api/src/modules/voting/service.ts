@@ -23,6 +23,7 @@ import type {
   VoteResult,
 } from "./contracts.js";
 import { GuestVoteError } from "./errors.js";
+import { isGuestIssueAvailable } from "../issues/policy.js";
 
 const ELIGIBILITY_POLICY_VERSION = "guest-low-v1";
 const INTEGRITY_POLICY_VERSION = "vote-integrity-v1";
@@ -178,18 +179,7 @@ export function createGuestVoteService(database: Database["db"]): GuestVoteServi
         }
 
         const now = new Date();
-        const isInsideVoteWindow =
-          (!votableIssue.voteOpenAt || votableIssue.voteOpenAt <= now) &&
-          (!votableIssue.voteCloseAt || votableIssue.voteCloseAt > now);
-        const isGuestVotable =
-          votableIssue.lifecycle === "PUBLISHED" &&
-          votableIssue.visibility === "VISIBLE" &&
-          votableIssue.participation === "VOTING_OPEN" &&
-          votableIssue.riskLevel === "LOW" &&
-          !votableIssue.isPolitical &&
-          isInsideVoteWindow;
-
-        if (!isGuestVotable) {
+        if (!isGuestIssueAvailable(votableIssue, now)) {
           throw new GuestVoteError(
             "ISSUE_NOT_VOTABLE",
             409,
