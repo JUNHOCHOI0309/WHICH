@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { buildApp } from "../src/app.js";
 import { getConfig } from "../src/config.js";
+import type { CommentReadService } from "../src/modules/comments/contracts.js";
 import type { IssueReadService } from "../src/modules/issues/contracts.js";
 import type { GuestVoteService } from "../src/modules/voting/contracts.js";
 
@@ -17,6 +18,10 @@ const issueReader: IssueReadService = {
   listGuestIssues: vi.fn(),
 };
 
+const commentReader: CommentReadService = {
+  listGuestComments: vi.fn(),
+};
+
 afterEach(async () => {
   await Promise.all(openApps.splice(0).map(async (app) => app.close()));
 });
@@ -28,6 +33,7 @@ describe("system health", () => {
       close: vi.fn(),
       issueReader,
       guestVotes,
+      commentReader,
     });
     openApps.push(app);
 
@@ -43,6 +49,7 @@ describe("system health", () => {
       close: vi.fn(),
       issueReader,
       guestVotes,
+      commentReader,
     });
     openApps.push(app);
 
@@ -69,6 +76,7 @@ describe("OpenAPI contract", () => {
       close: vi.fn(),
       issueReader,
       guestVotes,
+      commentReader,
     });
     openApps.push(app);
 
@@ -81,5 +89,6 @@ describe("OpenAPI contract", () => {
     expect(document.paths).toHaveProperty(["/v1/issues/feed", "get"]);
     expect(document.paths).toHaveProperty(["/v1/guest-subjects", "post"]);
     expect(document.paths).toHaveProperty(["/v1/issues/{issueId}/votes", "post"]);
+    expect(document.paths).toHaveProperty(["/v1/issues/{issueId}/comments", "get"]);
   });
 });

@@ -40,6 +40,23 @@ export type PublicIssueFeed = {
   nextCursor: string | null;
 };
 
+export type CommentSide = "ALL" | "A" | "B";
+
+export type PublicComment = {
+  id: string;
+  choice: "A" | "B";
+  author: { displayName: string };
+  body: string;
+  threadState: "OPEN" | "LOCKED";
+  createdAt: string;
+  editedAt: string | null;
+};
+
+export type PublicCommentPage = {
+  items: PublicComment[];
+  nextCursor: string | null;
+};
+
 export type VoteResponse = {
   outcome: "ACCEPTED" | "REJECTED_DUPLICATE";
   voteAttemptId: string;

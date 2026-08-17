@@ -157,4 +157,24 @@ For each Issue Version, rebuild counts from current Vote integrity states, compa
 - Initial migration: `apps/api/migrations/0000_data_architecture_v1.sql`
 - Schema contract tests: `apps/api/test/schema.test.ts`
 
-The next feature should implement the transaction service and HTTP contract around these tables. Authentication, challenge providers, comments, recommendation storage, and moderation cases remain separate feature tasks.
+The vote transaction and Guest read contracts now build on this baseline. Authentication, challenge providers, recommendation storage, and advanced moderation remain separate feature tasks.
+
+## 10. Comment read baseline
+
+The first community data extension adds `comments` without turning Comments into an independent social feed.
+
+- A Comment references the exact `(issue_id, issue_version)` whose wording and A/B labels formed its context.
+- `choice_snapshot` preserves the author position at creation time; public reads do not reconstruct it from a mutable Vote lookup.
+- `accepted_vote_id` and `author_subject_id` retain the eligibility evidence needed for future writing and moderation flows.
+- `parent_comment_id` and `thread_root_comment_id` reserve the reply topology, while the v1 public API returns only top-level Comments.
+- Publication, visibility, integrity, thread lock, and author deletion are separate states. Review, hidden, collapsed, removed, invalidated, and deleted rows are excluded from the public list.
+- A locked Thread remains readable. Locking stops new discussion; it is not a deletion or moderation-hide action.
+- Guest reads require an `ACCEPTED` Vote on the same Issue and use the voted Issue Version.
+- Public ordering is stable keyset pagination by `(created_at DESC, comment_id DESC)`. A/B filtering is applied before the cursor boundary.
+
+Implemented artifacts:
+
+- Migration: `apps/api/migrations/0001_thick_agent_zero.sql`
+- Drizzle schema: `apps/api/src/database/schema/comments.ts`
+- Public read service: `apps/api/src/modules/comments/`
+- PostgreSQL integration test: `apps/api/test/comment-read.integration.test.ts`

@@ -67,3 +67,24 @@ export const resultIntegrityStateEnum = pgEnum("result_integrity_state", [
   "CORRECTED",
 ]);
 export const outboxStatusEnum = pgEnum("outbox_status", ["PENDING", "PUBLISHED", "FAILED"]);
+export const commentPublicationStateEnum = pgEnum("comment_publication_state", [
+  "PENDING_AUTOMOD",
+  "PENDING_HUMAN_REVIEW",
+  "PUBLISHED",
+  "FAILED",
+]);
+export const commentVisibilityEnum = pgEnum("comment_visibility", [
+  "VISIBLE",
+  "DEPRIORITIZED",
+  "COLLAPSED",
+  "HIDDEN",
+  "REMOVED_BY_AUTHOR",
+  "REMOVED_POLICY",
+]);
+export const commentThreadStateEnum = pgEnum("comment_thread_state", ["OPEN", "LOCKED"]);
+export const commentIntegrityStateEnum = pgEnum("comment_integrity_state", [
+  "NORMAL",
+  "REVIEW",
+  "REJECTED",
+  "INVALIDATED",
+]);
