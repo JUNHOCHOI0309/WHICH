@@ -3,11 +3,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 import type { IssueChoice, PublicIssue, VoteResponse } from "@/lib/contracts";
 
 import styles from "./issue-experience.module.css";
-import { ensureGuestSubject, loadPublicIssue, submitGuestVote, WebApiError } from "./client";
+import {
+  ensureGuestSubject,
+  loadIssueFeed,
+  loadPublicIssue,
+  submitGuestVote,
+  WebApiError,
+} from "./client";
 
 type Screen = "loading" | "ready" | "submitting" | "load-error" | "submit-error" | "result";
 
@@ -271,8 +278,44 @@ function ResultScreen({ issue, result }: { issue: PublicIssue; result: VoteRespo
           />
         </div>
         <p className={styles.totalCount}>현재 유효한 선택 {total.toLocaleString("ko-KR")}개</p>
+        <NextIssueAction currentIssueId={issue.id} />
       </article>
     </ExperienceShell>
+  );
+}
+
+function NextIssueAction({ currentIssueId }: { currentIssueId: string }) {
+  const router = useRouter();
+  const [state, setState] = useState<"idle" | "loading" | "empty" | "error">("idle");
+
+  const moveNext = useCallback(async () => {
+    if (state === "loading") return;
+    setState("loading");
+
+    try {
+      const feed = await loadIssueFeed({ limit: 1, excludeIssueId: currentIssueId });
+      const nextIssue = feed.items[0];
+      if (!nextIssue) {
+        setState("empty");
+        return;
+      }
+      router.push(`/issues/${nextIssue.id}`);
+    } catch {
+      setState("error");
+    }
+  }, [currentIssueId, router, state]);
+
+  return (
+    <div className={styles.nextIssue}>
+      <button type="button" disabled={state === "loading"} onClick={() => void moveNext()}>
+        {state === "loading" ? "다음 질문을 찾는 중…" : "다음 질문 보기"}
+        <span aria-hidden="true">→</span>
+      </button>
+      {state === "empty" ? <p role="status">지금 참여할 수 있는 질문을 모두 골랐어요.</p> : null}
+      {state === "error" ? (
+        <p role="alert">다음 질문을 찾지 못했어요. 버튼을 눌러 다시 시도해 주세요.</p>
+      ) : null}
+    </div>
   );
 }
 

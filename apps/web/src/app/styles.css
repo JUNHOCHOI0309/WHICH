@@ -9,8 +9,8 @@
     BlinkMacSystemFont,
     "Segoe UI",
     sans-serif;
-  background: #f2efe7;
-  color: #171717;
+  background: #061923;
+  color: #f6f8f7;
 }
 
 * {
@@ -20,7 +20,7 @@
 body {
   margin: 0;
   min-width: 320px;
-  background: #f2efe7;
+  background: #061923;
 }
 
 button,

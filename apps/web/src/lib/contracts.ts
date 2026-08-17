@@ -33,6 +33,13 @@ export type PublicIssue = {
   };
 };
 
+export type PublicFeedIssue = Omit<PublicIssue, "context" | "experienceModeCode" | "result">;
+
+export type PublicIssueFeed = {
+  items: PublicFeedIssue[];
+  nextCursor: string | null;
+};
+
 export type VoteResponse = {
   outcome: "ACCEPTED" | "REJECTED_DUPLICATE";
   voteAttemptId: string;
