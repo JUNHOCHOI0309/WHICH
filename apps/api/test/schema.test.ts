@@ -3,9 +3,13 @@ import { describe, expect, it } from "vitest";
 
 import {
   comments,
+  guestMemberLinks,
   issueChoices,
   issueVersions,
   issues,
+  memberIdentityLinks,
+  memberSessions,
+  members,
   outboxEvents,
   resultSnapshots,
   voteAggregates,
@@ -28,6 +32,10 @@ describe("data architecture v1 schema", () => {
       resultSnapshots,
       outboxEvents,
       comments,
+      members,
+      memberIdentityLinks,
+      memberSessions,
+      guestMemberLinks,
     ].map((table) => getTableConfig(table).name);
 
     expect(tableNames).toEqual([
@@ -41,6 +49,10 @@ describe("data architecture v1 schema", () => {
       "result_snapshots",
       "outbox_events",
       "comments",
+      "members",
+      "member_identity_links",
+      "member_sessions",
+      "guest_member_links",
     ]);
   });
 

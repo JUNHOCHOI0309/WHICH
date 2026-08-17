@@ -11,6 +11,8 @@ import type { CommentReadService } from "./modules/comments/contracts.js";
 import { registerCommentRoutes } from "./modules/comments/routes.js";
 import type { IssueReadService } from "./modules/issues/contracts.js";
 import { registerIssueRoutes } from "./modules/issues/routes.js";
+import type { MemberIdentityService } from "./modules/identity/contracts.js";
+import { registerMemberIdentityRoutes } from "./modules/identity/routes.js";
 import type { GuestVoteService } from "./modules/voting/contracts.js";
 import { registerVotingRoutes } from "./modules/voting/routes.js";
 
@@ -18,6 +20,7 @@ export type AppDependencies = Pick<Database, "ping" | "close"> & {
   issueReader: IssueReadService;
   guestVotes: GuestVoteService;
   commentReader: CommentReadService;
+  memberIdentity: MemberIdentityService;
 };
 
 const statusSchema = Type.Object({
@@ -95,6 +98,7 @@ export async function buildApp(config: AppConfig, database: AppDependencies) {
   await registerIssueRoutes(app, database.issueReader);
   await registerVotingRoutes(app, database.guestVotes);
   await registerCommentRoutes(app, database.commentReader);
+  await registerMemberIdentityRoutes(app, database.memberIdentity, config.auth.internalSecret);
 
   app.addHook("onClose", async () => {
     await database.close();

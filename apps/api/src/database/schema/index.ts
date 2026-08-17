@@ -1,5 +1,6 @@
 export * from "./enums.js";
 export * from "./comments.js";
+export * from "./identity.js";
 export * from "./issues.js";
 export * from "./outbox.js";
 export * from "./results.js";
