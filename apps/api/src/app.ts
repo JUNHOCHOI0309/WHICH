@@ -7,8 +7,12 @@ import Fastify from "fastify";
 
 import type { AppConfig } from "./config.js";
 import type { Database } from "./database/client.js";
+import type { GuestVoteService } from "./modules/voting/contracts.js";
+import { registerVotingRoutes } from "./modules/voting/routes.js";
 
-type AppDependencies = Pick<Database, "ping" | "close">;
+export type AppDependencies = Pick<Database, "ping" | "close"> & {
+  guestVotes: GuestVoteService;
+};
 
 const statusSchema = Type.Object({
   status: Type.Union([Type.Literal("ok"), Type.Literal("unavailable")]),
@@ -81,6 +85,8 @@ export async function buildApp(config: AppConfig, database: AppDependencies) {
     version: "0.1.0",
     featureFlags: config.featureFlags,
   }));
+
+  await registerVotingRoutes(app, database.guestVotes);
 
   app.addHook("onClose", async () => {
     await database.close();
