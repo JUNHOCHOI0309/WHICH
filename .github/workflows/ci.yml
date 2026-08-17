@@ -23,6 +23,24 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: which
+          POSTGRES_USER: which
+          POSTGRES_PASSWORD: which_local
+        ports:
+          - 54329:5432
+        options: >-
+          --health-cmd "pg_isready -U which -d which"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://which:which_local@localhost:54329/which
+
     steps:
       - name: Checkout
         uses: actions/checkout@v7

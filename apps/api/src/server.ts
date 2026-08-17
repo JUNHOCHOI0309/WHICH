@@ -5,6 +5,7 @@ import { config as loadEnvironment } from "dotenv";
 import { buildApp } from "./app.js";
 import { getConfig } from "./config.js";
 import { createDatabase } from "./database/client.js";
+import { createGuestVoteService } from "./modules/voting/service.js";
 
 loadEnvironment({
   path: [resolve(process.cwd(), "../../.env.local"), resolve(process.cwd(), "../../.env")],
@@ -13,7 +14,10 @@ loadEnvironment({
 
 const config = getConfig();
 const database = createDatabase(config.databaseUrl);
-const app = await buildApp(config, database);
+const app = await buildApp(config, {
+  ...database,
+  guestVotes: createGuestVoteService(database.db),
+});
 
 try {
   await app.listen({ host: config.server.host, port: config.server.port });

@@ -1,0 +1,5 @@
+# Serena is intentionally project-scoped to avoid one server per unrelated Codex task.
+[mcp_servers.serena]
+enabled = true
+command = "serena"
+args = ["start-mcp-server", "--context=codex", "--project-from-cwd", "--open-web-dashboard=false"]
