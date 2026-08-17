@@ -19,6 +19,7 @@ import {
   voteAggregates,
 } from "../src/database/schema/index.js";
 import { createIssueReadService } from "../src/modules/issues/service.js";
+import { createCommentReadService } from "../src/modules/comments/service.js";
 import { createGuestVoteService } from "../src/modules/voting/service.js";
 import { createTestDatabase } from "./helpers/test-database.js";
 
@@ -96,6 +97,7 @@ beforeAll(async () => {
     ...database,
     issueReader: createIssueReadService(database.db),
     guestVotes: createGuestVoteService(database.db),
+    commentReader: createCommentReadService(database.db),
   });
 }, 30_000);
 

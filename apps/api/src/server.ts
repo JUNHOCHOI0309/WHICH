@@ -5,6 +5,7 @@ import { config as loadEnvironment } from "dotenv";
 import { buildApp } from "./app.js";
 import { getConfig } from "./config.js";
 import { createDatabase } from "./database/client.js";
+import { createCommentReadService } from "./modules/comments/service.js";
 import { createIssueReadService } from "./modules/issues/service.js";
 import { createGuestVoteService } from "./modules/voting/service.js";
 
@@ -19,6 +20,7 @@ const app = await buildApp(config, {
   ...database,
   issueReader: createIssueReadService(database.db),
   guestVotes: createGuestVoteService(database.db),
+  commentReader: createCommentReadService(database.db),
 });
 
 try {

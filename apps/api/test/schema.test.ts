@@ -2,6 +2,7 @@ import { getTableConfig } from "drizzle-orm/pg-core";
 import { describe, expect, it } from "vitest";
 
 import {
+  comments,
   issueChoices,
   issueVersions,
   issues,
@@ -26,6 +27,7 @@ describe("data architecture v1 schema", () => {
       voteAggregates,
       resultSnapshots,
       outboxEvents,
+      comments,
     ].map((table) => getTableConfig(table).name);
 
     expect(tableNames).toEqual([
@@ -38,6 +40,7 @@ describe("data architecture v1 schema", () => {
       "vote_aggregates",
       "result_snapshots",
       "outbox_events",
+      "comments",
     ]);
   });
 
