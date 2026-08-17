@@ -14,6 +14,7 @@ const guestVotes: GuestVoteService = {
 
 const issueReader: IssueReadService = {
   getGuestIssue: vi.fn(),
+  listGuestIssues: vi.fn(),
 };
 
 afterEach(async () => {
@@ -77,6 +78,7 @@ describe("OpenAPI contract", () => {
 
     expect(response.statusCode).toBe(200);
     expect(document.paths).toHaveProperty(["/v1/issues/{issueId}", "get"]);
+    expect(document.paths).toHaveProperty(["/v1/issues/feed", "get"]);
     expect(document.paths).toHaveProperty(["/v1/guest-subjects", "post"]);
     expect(document.paths).toHaveProperty(["/v1/issues/{issueId}/votes", "post"]);
   });

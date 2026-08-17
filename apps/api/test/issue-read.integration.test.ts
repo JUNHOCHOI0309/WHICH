@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { buildApp } from "../src/app.js";
@@ -9,6 +9,7 @@ import type { Database } from "../src/database/client.js";
 import {
   assertDevelopmentSeedAllowed,
   DEVELOPMENT_ISSUE,
+  DEVELOPMENT_ISSUES,
   seedDevelopmentIssues,
 } from "../src/database/development-seed.js";
 import {
@@ -47,6 +48,7 @@ type IssueOverrides = Partial<
     | "riskLevel"
     | "isPolitical"
     | "resultVisibility"
+    | "feedEligibility"
     | "voteOpenAt"
     | "voteCloseAt"
   >
@@ -56,7 +58,10 @@ let database: Database;
 let app: Awaited<ReturnType<typeof buildApp>>;
 let dropDatabase: () => Promise<void>;
 
-async function createReadableIssue(overrides: IssueOverrides = {}) {
+async function createReadableIssue(
+  overrides: IssueOverrides = {},
+  publishedAt = new Date("2026-08-01T00:00:00.000Z"),
+) {
   const issueId = randomUUID();
   const choiceAId = randomUUID();
   const choiceBId = randomUUID();
@@ -73,7 +78,7 @@ async function createReadableIssue(overrides: IssueOverrides = {}) {
     primaryCategoryCode: "TEST",
     experienceModeCode: "BINARY",
     taxonomyVersion: "v1",
-    publishedAt: new Date("2026-08-01T00:00:00.000Z"),
+    publishedAt,
   });
   await database.db.insert(issueChoices).values([
     { id: choiceAId, issueId, issueVersion: 1, code: "A", label: "First A" },
@@ -117,6 +122,15 @@ describe("development Issue seed", () => {
       .select()
       .from(issues)
       .where(eq(issues.id, DEVELOPMENT_ISSUE.id));
+    const allStoredIssues = await database.db
+      .select({ id: issues.id })
+      .from(issues)
+      .where(
+        inArray(
+          issues.id,
+          DEVELOPMENT_ISSUES.map((issue) => issue.id),
+        ),
+      );
     const storedVersions = await database.db
       .select()
       .from(issueVersions)
@@ -127,6 +141,7 @@ describe("development Issue seed", () => {
       .where(eq(issueChoices.issueId, DEVELOPMENT_ISSUE.id));
 
     expect(storedIssues).toHaveLength(1);
+    expect(allStoredIssues).toHaveLength(DEVELOPMENT_ISSUES.length);
     expect(storedVersions).toHaveLength(1);
     expect(storedVersions[0]?.question).toBe("Locally edited seed question");
     expect(storedChoices).toHaveLength(2);
@@ -297,5 +312,88 @@ describe("Guest Issue read API", () => {
 
     expect(response.statusCode).toBe(409);
     expect(response.json()).toMatchObject({ code: "ISSUE_NOT_AVAILABLE" });
+  });
+});
+
+describe("Guest Issue feed API", () => {
+  it("paginates with a stable publishedAt and Issue ID cursor", async () => {
+    const now = Date.now();
+    const newest = await createReadableIssue({}, new Date(now - 60_000));
+    const middle = await createReadableIssue({}, new Date(now - 120_000));
+    const oldest = await createReadableIssue({}, new Date(now - 180_000));
+
+    const firstResponse = await app.inject({ method: "GET", url: "/v1/issues/feed?limit=2" });
+    const firstPage = firstResponse.json<{
+      items: Array<{ id: string; choices: Array<{ code: string }> }>;
+      nextCursor: string | null;
+    }>();
+
+    expect(firstResponse.statusCode).toBe(200);
+    expect(firstPage.items.map((item) => item.id)).toEqual([newest.issueId, middle.issueId]);
+    expect(
+      firstPage.items.every((item) => item.choices.map((choice) => choice.code).join("") === "AB"),
+    ).toBe(true);
+    expect(firstPage.nextCursor).toEqual(expect.any(String));
+
+    const secondResponse = await app.inject({
+      method: "GET",
+      url: `/v1/issues/feed?limit=2&cursor=${encodeURIComponent(firstPage.nextCursor!)}`,
+    });
+    const secondPage = secondResponse.json<{
+      items: Array<{ id: string }>;
+      nextCursor: string | null;
+    }>();
+
+    expect(secondResponse.statusCode).toBe(200);
+    expect(secondPage.items[0]?.id).toBe(oldest.issueId);
+    expect(secondPage.items.map((item) => item.id)).not.toContain(newest.issueId);
+    expect(secondPage.items.map((item) => item.id)).not.toContain(middle.issueId);
+  });
+
+  it("excludes the current Issue and Issues already accepted for the Guest", async () => {
+    const now = Date.now();
+    const votedIssue = await createReadableIssue({}, new Date(now - 10_000));
+    const currentIssue = await createReadableIssue({}, new Date(now - 20_000));
+    const nextIssue = await createReadableIssue({}, new Date(now - 30_000));
+    const subjectResponse = await app.inject({ method: "POST", url: "/v1/guest-subjects" });
+    const subject = subjectResponse.json<{ anonymousSubjectId: string }>();
+
+    const voteResponse = await app.inject({
+      method: "POST",
+      url: `/v1/issues/${votedIssue.issueId}/votes`,
+      headers: {
+        "idempotency-key": randomUUID(),
+        "x-anonymous-subject-id": subject.anonymousSubjectId,
+      },
+      payload: { issueVersion: 1, choiceId: votedIssue.choiceAId },
+    });
+    expect(voteResponse.statusCode).toBe(201);
+
+    const feedResponse = await app.inject({
+      method: "GET",
+      url: `/v1/issues/feed?limit=20&excludeIssueId=${currentIssue.issueId}`,
+      headers: { "x-anonymous-subject-id": subject.anonymousSubjectId },
+    });
+    const feed = feedResponse.json<{ items: Array<{ id: string }> }>();
+
+    expect(feedResponse.statusCode).toBe(200);
+    expect(feed.items.map((item) => item.id)).toContain(nextIssue.issueId);
+    expect(feed.items.map((item) => item.id)).not.toContain(votedIssue.issueId);
+    expect(feed.items.map((item) => item.id)).not.toContain(currentIssue.issueId);
+  });
+
+  it("rejects invalid cursors and omits Feed-ineligible Issues", async () => {
+    const hidden = await createReadableIssue({ feedEligibility: "EXCLUDED" }, new Date());
+    const feedResponse = await app.inject({ method: "GET", url: "/v1/issues/feed?limit=20" });
+    const invalidCursorResponse = await app.inject({
+      method: "GET",
+      url: "/v1/issues/feed?cursor=not-a-cursor",
+    });
+
+    expect(
+      feedResponse.json<{ items: Array<{ id: string }> }>().items.map((item) => item.id),
+    ).not.toContain(hidden.issueId);
+    expect(invalidCursorResponse.statusCode).toBe(400);
+    expect(invalidCursorResponse.json()).toMatchObject({ code: "INVALID_CURSOR" });
   });
 });

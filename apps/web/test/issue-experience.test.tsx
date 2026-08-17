@@ -5,6 +5,12 @@ import { resetGuestPreparation } from "@/features/issues/client";
 import { IssueExperience } from "@/features/issues/issue-experience";
 import type { PublicIssue, VoteResponse } from "@/lib/contracts";
 
+const navigation = vi.hoisted(() => ({ push: vi.fn() }));
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => navigation,
+}));
+
 const ISSUE_ID = "10000000-0000-4000-8000-000000000001";
 
 const issue: PublicIssue = {
@@ -32,6 +38,7 @@ function jsonResponse(body: unknown, status = 200) {
 describe("IssueExperience", () => {
   beforeEach(() => {
     resetGuestPreparation();
+    navigation.push.mockReset();
     vi.restoreAllMocks();
   });
 
@@ -63,6 +70,21 @@ describe("IssueExperience", () => {
           voteRequests.push(init ?? {});
           return jsonResponse(voteResult);
         }
+        if (url.startsWith("/api/issues/feed?")) {
+          return jsonResponse({
+            items: [
+              {
+                id: "20000000-0000-4000-8000-000000000001",
+                version: 1,
+                question: "다음 질문",
+                publishedAt: "2026-08-18T01:00:00.000Z",
+                categoryCode: "DAILY_LIFE",
+                choices: issue.choices,
+              },
+            ],
+            nextCursor: null,
+          });
+        }
         throw new Error(`Unexpected request: ${url}`);
       }),
     );
@@ -82,6 +104,11 @@ describe("IssueExperience", () => {
     const requestBody = JSON.parse(String(voteRequests[0]?.body)) as Record<string, unknown>;
     expect(requestBody).toMatchObject({ issueVersion: 1, choiceId: "choice-a" });
     expect(requestBody.idempotencyKey).toEqual(expect.any(String));
+
+    fireEvent.click(screen.getByRole("button", { name: /다음 질문 보기/ }));
+    await waitFor(() =>
+      expect(navigation.push).toHaveBeenCalledWith("/issues/20000000-0000-4000-8000-000000000001"),
+    );
   });
 
   it("explains that the first choice remains for a duplicate vote", async () => {
