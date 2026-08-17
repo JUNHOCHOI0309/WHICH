@@ -1,0 +1,52 @@
+import type { NextResponse } from "next/server";
+
+import type { ApiErrorBody } from "../contracts";
+
+export const GUEST_SUBJECT_COOKIE = "which_guest_subject";
+
+const anonymousSubjectPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function apiBaseUrl() {
+  const configured =
+    process.env.API_BASE_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
+  return configured.endsWith("/") ? configured : `${configured}/`;
+}
+
+export function fetchWhichApi(path: string, init?: RequestInit) {
+  return fetch(new URL(path.replace(/^\//, ""), apiBaseUrl()), {
+    ...init,
+    cache: "no-store",
+  });
+}
+
+export function validGuestSubject(value: string | undefined) {
+  return value && anonymousSubjectPattern.test(value) ? value : null;
+}
+
+export async function createGuestSubject() {
+  const upstream = await fetchWhichApi("/v1/guest-subjects", {
+    method: "POST",
+    headers: { accept: "application/json" },
+  });
+  const body = (await upstream.json()) as { anonymousSubjectId?: string } & ApiErrorBody;
+  const anonymousSubjectId = validGuestSubject(body.anonymousSubjectId);
+
+  if (!upstream.ok || !anonymousSubjectId) {
+    throw new Error(body.message || "Guest Subject를 준비하지 못했습니다.");
+  }
+
+  return anonymousSubjectId;
+}
+
+export function setGuestSubjectCookie(response: NextResponse, anonymousSubjectId: string) {
+  response.cookies.set({
+    name: GUEST_SUBJECT_COOKIE,
+    value: anonymousSubjectId,
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 365,
+  });
+}
