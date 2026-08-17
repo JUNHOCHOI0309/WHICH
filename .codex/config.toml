@@ -1,5 +1,5 @@
-# Serena is intentionally project-scoped to avoid one server per unrelated Codex task.
+# Serena uses one shared HTTP process and stays off until .codex/serena-on-demand.ps1 on is run.
 [mcp_servers.serena]
-enabled = true
-command = "serena"
-args = ["start-mcp-server", "--context=codex", "--project-from-cwd", "--open-web-dashboard=false"]
+enabled = false
+url = "http://127.0.0.1:9121/mcp"
+startup_timeout_sec = 2
