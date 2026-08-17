@@ -1,0 +1,18 @@
+#!/bin/sh
+
+message_file="$1"
+subject="$(sed -n '1p' "$message_file")"
+
+if printf '%s\n' "$subject" | grep -Eq '^(feat|fix|build|chore|ci|docs|style|refactor|test|perf)(\([a-z0-9._/-]+\))?: .+'; then
+  exit 0
+fi
+
+if printf '%s\n' "$subject" | grep -Eq '^merge: .+'; then
+  exit 0
+fi
+
+echo "Invalid commit subject: $subject" >&2
+echo "Use feat|fix|build|chore|ci|docs|style|refactor|test|perf: <imperative subject>." >&2
+echo "Integration commits may use merge: <completed capability>." >&2
+exit 1
+

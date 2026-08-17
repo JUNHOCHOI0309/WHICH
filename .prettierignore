@@ -1,0 +1,8 @@
+.next
+dist
+coverage
+.turbo
+node_modules
+pnpm-lock.yaml
+WHICH_PLANNING_V2_REVISIONS
+

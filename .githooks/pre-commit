@@ -1,0 +1,15 @@
+#!/bin/sh
+
+branch="$(git symbolic-ref --quiet --short HEAD 2>/dev/null || true)"
+git_dir="$(git rev-parse --git-dir)"
+
+# The unborn repository needs one bootstrap commit before branches can share a base.
+if ! git rev-parse --verify HEAD >/dev/null 2>&1; then
+  exit 0
+fi
+
+if [ "$branch" = "main" ] && [ ! -f "$git_dir/MERGE_HEAD" ]; then
+  echo "Direct commits to main are blocked. Create a typed topic branch first." >&2
+  exit 1
+fi
+

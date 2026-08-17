@@ -1,0 +1,28 @@
+{
+  "name": "which",
+  "version": "0.0.0",
+  "private": true,
+  "description": "WHICH product monorepo",
+  "packageManager": "pnpm@10.6.5",
+  "engines": {
+    "node": ">=22.14.0 <23",
+    "pnpm": ">=10.6.5 <11"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "check": "pnpm format:check && turbo run lint typecheck test build",
+    "dev": "turbo run dev --parallel",
+    "format": "prettier . --write",
+    "format:check": "prettier . --check",
+    "infra:down": "docker compose -f infra/compose.yaml down",
+    "infra:logs": "docker compose -f infra/compose.yaml logs -f",
+    "infra:up": "docker compose -f infra/compose.yaml up -d --wait",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck"
+  },
+  "devDependencies": {
+    "prettier": "3.9.6",
+    "turbo": "2.10.10"
+  }
+}
