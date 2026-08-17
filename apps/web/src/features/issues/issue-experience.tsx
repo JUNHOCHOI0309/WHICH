@@ -5,11 +5,18 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-import type { IssueChoice, PublicIssue, VoteResponse } from "@/lib/contracts";
+import type {
+  CommentSide,
+  IssueChoice,
+  PublicComment,
+  PublicIssue,
+  VoteResponse,
+} from "@/lib/contracts";
 
 import styles from "./issue-experience.module.css";
 import {
   ensureGuestSubject,
+  loadIssueComments,
   loadIssueFeed,
   loadPublicIssue,
   submitGuestVote,
@@ -278,9 +285,168 @@ function ResultScreen({ issue, result }: { issue: PublicIssue; result: VoteRespo
           />
         </div>
         <p className={styles.totalCount}>현재 유효한 선택 {total.toLocaleString("ko-KR")}개</p>
+        <CommentSection issueId={issue.id} />
         <NextIssueAction currentIssueId={issue.id} />
       </article>
     </ExperienceShell>
+  );
+}
+
+type CommentState = "loading" | "ready" | "empty" | "error" | "loading-more";
+
+const COMMENT_FILTERS: Array<{ side: CommentSide; label: string }> = [
+  { side: "ALL", label: "전체" },
+  { side: "A", label: "A 선택" },
+  { side: "B", label: "B 선택" },
+];
+
+function CommentSection({ issueId }: { issueId: string }) {
+  const [side, setSide] = useState<CommentSide>("ALL");
+  const [items, setItems] = useState<PublicComment[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [state, setState] = useState<CommentState>("loading");
+
+  const loadComments = useCallback(
+    async (selectedSide: CommentSide, cursor?: string) => {
+      try {
+        const page = await loadIssueComments({
+          issueId,
+          side: selectedSide,
+          cursor,
+          limit: 10,
+        });
+        setItems((current) => (cursor ? [...current, ...page.items] : page.items));
+        setNextCursor(page.nextCursor);
+        setState(page.items.length === 0 && !cursor ? "empty" : "ready");
+      } catch {
+        setState("error");
+      }
+    },
+    [issueId],
+  );
+
+  useEffect(() => {
+    let active = true;
+    const controller = new AbortController();
+
+    void loadIssueComments({ issueId, side, limit: 10, signal: controller.signal })
+      .then((page) => {
+        if (!active) return;
+        setItems(page.items);
+        setNextCursor(page.nextCursor);
+        setState(page.items.length === 0 ? "empty" : "ready");
+      })
+      .catch((error: unknown) => {
+        if (!active || (error instanceof DOMException && error.name === "AbortError")) return;
+        setState("error");
+      });
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [issueId, side]);
+
+  const selectSide = (selectedSide: CommentSide) => {
+    if (selectedSide === side) return;
+    setItems([]);
+    setNextCursor(null);
+    setState("loading");
+    setSide(selectedSide);
+  };
+
+  return (
+    <section className={styles.comments} aria-labelledby="comment-title">
+      <div className={styles.commentHeading}>
+        <div>
+          <p className={styles.commentEyebrow}>CHOICE REASONS</p>
+          <h2 id="comment-title">사람들은 이렇게 골랐어요</h2>
+        </div>
+        <span>최신순</span>
+      </div>
+
+      <div className={styles.commentFilters} aria-label="선택 이유 필터">
+        {COMMENT_FILTERS.map((filter) => (
+          <button
+            type="button"
+            key={filter.side}
+            className={side === filter.side ? styles.commentFilterActive : undefined}
+            aria-pressed={side === filter.side}
+            onClick={() => selectSide(filter.side)}
+          >
+            {filter.label}
+          </button>
+        ))}
+      </div>
+
+      {state === "loading" ? (
+        <div className={styles.commentMessage} role="status">
+          선택 이유를 불러오는 중…
+        </div>
+      ) : null}
+
+      {state === "empty" ? (
+        <div className={styles.commentMessage} role="status">
+          아직 공개된 선택 이유가 없어요. 결과와 다음 질문은 계속 볼 수 있습니다.
+        </div>
+      ) : null}
+
+      {state === "error" ? (
+        <div className={styles.commentMessage} role="alert">
+          <p>선택 이유를 불러오지 못했어요. 결과는 그대로 유지됩니다.</p>
+          <button
+            type="button"
+            onClick={() => {
+              setState("loading");
+              void loadComments(side);
+            }}
+          >
+            댓글만 다시 불러오기
+          </button>
+        </div>
+      ) : null}
+
+      {items.length > 0 ? (
+        <div className={styles.commentList}>
+          {items.map((comment) => (
+            <article
+              key={comment.id}
+              className={`${styles.commentCard} ${styles[`comment${comment.choice}`]}`}
+            >
+              <header>
+                <span className={styles.commentChoice}>{comment.choice}</span>
+                <strong>{comment.author.displayName}</strong>
+                <time dateTime={comment.createdAt}>
+                  {new Intl.DateTimeFormat("ko-KR", {
+                    month: "short",
+                    day: "numeric",
+                  }).format(new Date(comment.createdAt))}
+                </time>
+              </header>
+              <p>{comment.body}</p>
+              <footer>
+                {comment.editedAt ? <span>수정됨</span> : null}
+                {comment.threadState === "LOCKED" ? <span>대화 잠김</span> : null}
+              </footer>
+            </article>
+          ))}
+        </div>
+      ) : null}
+
+      {state !== "error" && nextCursor ? (
+        <button
+          type="button"
+          className={styles.loadMoreComments}
+          disabled={state === "loading-more"}
+          onClick={() => {
+            setState("loading-more");
+            void loadComments(side, nextCursor);
+          }}
+        >
+          {state === "loading-more" ? "더 불러오는 중…" : "선택 이유 더 보기"}
+        </button>
+      ) : null}
+    </section>
   );
 }
 

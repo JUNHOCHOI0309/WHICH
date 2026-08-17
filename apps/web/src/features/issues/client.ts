@@ -1,4 +1,11 @@
-import type { ApiErrorBody, PublicIssue, PublicIssueFeed, VoteResponse } from "@/lib/contracts";
+import type {
+  ApiErrorBody,
+  CommentSide,
+  PublicCommentPage,
+  PublicIssue,
+  PublicIssueFeed,
+  VoteResponse,
+} from "@/lib/contracts";
 
 export class WebApiError extends Error {
   constructor(
@@ -106,4 +113,29 @@ export async function submitGuestVote(command: {
   }
 
   throwApiError(response, body as ApiErrorBody);
+}
+
+export async function loadIssueComments(options: {
+  issueId: string;
+  side: CommentSide;
+  cursor?: string;
+  limit?: number;
+  signal?: AbortSignal;
+}) {
+  const search = new URLSearchParams({ side: options.side });
+  if (options.cursor) search.set("cursor", options.cursor);
+  if (options.limit) search.set("limit", String(options.limit));
+
+  const response = await fetch(
+    `/api/issues/${encodeURIComponent(options.issueId)}/comments?${search.toString()}`,
+    {
+      headers: { accept: "application/json" },
+      cache: "no-store",
+      signal: options.signal,
+    },
+  );
+  const body = await responseBody<PublicCommentPage>(response);
+
+  if (!response.ok) throwApiError(response, body as ApiErrorBody);
+  return body as PublicCommentPage;
 }
