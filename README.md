@@ -38,6 +38,7 @@ pnpm dev
 PowerShell에서는 환경 파일 복사에 `Copy-Item .env.example .env`를 사용할 수 있습니다.
 
 - 웹: <http://localhost:3000>
+- 개발 질문 직접 참여: <http://localhost:3000/issues/10000000-0000-4000-8000-000000000001>
 - API live check: <http://localhost:4000/health/live>
 - API readiness: <http://localhost:4000/health/ready>
 - OpenAPI UI: <http://localhost:4000/docs>
@@ -73,8 +74,11 @@ pnpm --filter @which/api db:seed       # 멱등 Development Issue 생성
 - Vote Aggregate, Result Snapshot, Versioned Outbox 기록
 - Guest Issue Read API와 Result Visibility 처리
 - 반복 가능한 Development Issue Seed
+- HttpOnly Guest 식별자를 사용하는 Web BFF
+- 모바일 Guest 투표 화면과 투표 후 결과 공개
+- 중복 제출·네트워크 재시도 시 최초 선택 보호
 - 실제 PostgreSQL Integration Test
 - CI 검증 경로
 
-Feed Ranking, Web 투표 화면, 회원 인증, 강화된 Integrity Challenge, Comment와 추천 모델은
+Feed Ranking과 다음 질문 이동, 회원 인증, 강화된 Integrity Challenge, Comment와 추천 모델은
 후속 Task에서 구현합니다.
