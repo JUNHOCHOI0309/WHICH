@@ -8,6 +8,13 @@
       "when": 1786987046162,
       "tag": "0000_data_architecture_v1",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1786993306266,
+      "tag": "0001_thick_agent_zero",
+      "breakpoints": true
     }
   ]
 }

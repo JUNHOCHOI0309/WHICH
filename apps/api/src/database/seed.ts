@@ -19,6 +19,7 @@ const database = createDatabase(config.databaseUrl);
 try {
   const seededIssues = await seedDevelopmentIssues(database.db);
   console.log(`Development Issues ready: ${seededIssues.map((issue) => issue.id).join(", ")}`);
+  console.log("Development Comments ready for every Issue side.");
 } finally {
   await database.close();
 }
