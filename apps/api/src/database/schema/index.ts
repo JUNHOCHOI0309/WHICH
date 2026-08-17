@@ -1,7 +1,6 @@
-/**
- * Phase 1 schema entrypoint.
- *
- * Domain tables are intentionally deferred until the logical ERD, retention rules,
- * identifiers, and Issue/Vote invariants are approved in Data Architecture v1.
- */
-export {};
+export * from "./enums.js";
+export * from "./issues.js";
+export * from "./outbox.js";
+export * from "./results.js";
+export * from "./subjects.js";
+export * from "./votes.js";
