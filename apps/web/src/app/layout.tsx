@@ -4,13 +4,16 @@ import type { ReactNode } from "react";
 import "./styles.css";
 
 export const metadata: Metadata = {
-  title: "WHICH",
+  title: {
+    default: "WHICH",
+    template: "%s · WHICH",
+  },
   description: "고르고, 결과를 보고, 다음 질문으로.",
 };
 
 export const viewport: Viewport = {
   colorScheme: "light",
-  themeColor: "#f7f4ed",
+  themeColor: "#f2efe7",
   width: "device-width",
   initialScale: 1,
 };
