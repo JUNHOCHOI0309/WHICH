@@ -2,7 +2,7 @@
 
 WHICH는 질문, A/B 선택, 결과, 다음 이슈로 이어지는 모바일 우선 의견 소비 제품입니다.
 현재 저장소에는 Platform Foundation과 Data Architecture v1, Guest 핵심 투표 Transaction,
-Guest Issue Read API까지 구현되어 있습니다.
+Guest Comment Read Flow까지 구현되어 있습니다.
 
 ## 기술 기반
 
@@ -57,11 +57,11 @@ pnpm infra:up     # PostgreSQL 시작
 pnpm infra:down   # 컨테이너 정지 (데이터 볼륨 유지)
 pnpm --filter @which/api db:generate
 pnpm --filter @which/api db:migrate
-pnpm --filter @which/api db:seed       # 멱등 Development Issue 생성
+pnpm --filter @which/api db:seed       # 멱등 Development Issue·Comment 생성
 ```
 
-`db:seed`는 Production 환경에서 실행되지 않으며, 여러 번 실행해도 같은 Issue나 Choice를
-중복 생성하거나 기존 Version을 덮어쓰지 않습니다.
+`db:seed`는 Production 환경에서 실행되지 않으며, 여러 번 실행해도 같은 Issue, Choice,
+Comment를 중복 생성하거나 기존 Version을 덮어쓰지 않습니다.
 
 ## 현재 구현 범위
 
@@ -79,10 +79,14 @@ pnpm --filter @which/api db:seed       # 멱등 Development Issue 생성
 - HttpOnly Guest 식별자를 사용하는 Web BFF
 - 모바일 Guest 투표 화면과 투표 후 결과 공개
 - 이미 참여한 질문을 제외한 Result → Next Issue 이동
+- Issue Version과 작성 당시 A/B 선택을 보존하는 Comment Schema
+- 승인된 Vote 이후에만 공개되는 Guest Comment Read API
+- Comment 최신순 Cursor Pagination과 전체/A/B Filter
+- Result 화면의 Comment 목록, Empty, Error, 추가 조회 상태
 - Deep Navy 기반 Cyan–Orange 선택 디자인 시스템
 - 중복 제출·네트워크 재시도 시 최초 선택 보호
 - 실제 PostgreSQL Integration Test
 - CI 검증 경로
 
-개인화 Feed Ranking, 회원 인증, 강화된 Integrity Challenge, Comment와 추천 모델은 후속
-Task에서 구현합니다.
+Comment 작성·Reply·Reaction, 개인화 Feed Ranking, 회원 인증, 강화된 Integrity Challenge와
+추천 모델은 후속 Task에서 구현합니다.
