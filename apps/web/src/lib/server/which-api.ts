@@ -3,6 +3,7 @@ import type { NextResponse } from "next/server";
 import type { ApiErrorBody } from "../contracts";
 
 export const GUEST_SUBJECT_COOKIE = "which_guest_subject";
+export const MEMBER_SESSION_COOKIE = "which_member_session";
 
 const anonymousSubjectPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -48,5 +49,29 @@ export function setGuestSubjectCookie(response: NextResponse, anonymousSubjectId
     secure: process.env.NODE_ENV === "production",
     path: "/",
     maxAge: 60 * 60 * 24 * 365,
+  });
+}
+
+export function setMemberSessionCookie(response: NextResponse, token: string, expiresAt: string) {
+  response.cookies.set({
+    name: MEMBER_SESSION_COOKIE,
+    value: token,
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    expires: new Date(expiresAt),
+  });
+}
+
+export function clearMemberSessionCookie(response: NextResponse) {
+  response.cookies.set({
+    name: MEMBER_SESSION_COOKIE,
+    value: "",
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 0,
   });
 }

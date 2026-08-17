@@ -38,6 +38,7 @@ function jsonResponse(body: unknown, status = 200) {
 describe("IssueExperience", () => {
   beforeEach(() => {
     resetGuestPreparation();
+    sessionStorage.clear();
     navigation.push.mockReset();
     vi.restoreAllMocks();
   });

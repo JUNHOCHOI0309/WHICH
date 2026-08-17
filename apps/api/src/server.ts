@@ -7,6 +7,7 @@ import { getConfig } from "./config.js";
 import { createDatabase } from "./database/client.js";
 import { createCommentReadService } from "./modules/comments/service.js";
 import { createIssueReadService } from "./modules/issues/service.js";
+import { createMemberIdentityService } from "./modules/identity/service.js";
 import { createGuestVoteService } from "./modules/voting/service.js";
 
 loadEnvironment({
@@ -21,6 +22,10 @@ const app = await buildApp(config, {
   issueReader: createIssueReadService(database.db),
   guestVotes: createGuestVoteService(database.db),
   commentReader: createCommentReadService(database.db),
+  memberIdentity: createMemberIdentityService(database.db, {
+    sessionTtlSeconds: config.auth.memberSessionTtlSeconds,
+    allowDevelopmentProvider: config.auth.allowDevelopmentProvider,
+  }),
 });
 
 try {

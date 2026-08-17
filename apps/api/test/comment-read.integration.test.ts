@@ -16,6 +16,7 @@ import {
 } from "../src/database/schema/index.js";
 import { createCommentReadService } from "../src/modules/comments/service.js";
 import { createIssueReadService } from "../src/modules/issues/service.js";
+import { createMemberIdentityService } from "../src/modules/identity/service.js";
 import { createGuestVoteService } from "../src/modules/voting/service.js";
 import { createTestDatabase } from "./helpers/test-database.js";
 
@@ -136,6 +137,10 @@ beforeAll(async () => {
     issueReader: createIssueReadService(database.db),
     guestVotes: createGuestVoteService(database.db),
     commentReader: createCommentReadService(database.db),
+    memberIdentity: createMemberIdentityService(database.db, {
+      sessionTtlSeconds: 3_600,
+      allowDevelopmentProvider: true,
+    }),
   });
 }, 30_000);
 

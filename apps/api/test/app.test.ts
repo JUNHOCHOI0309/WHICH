@@ -4,6 +4,7 @@ import { buildApp } from "../src/app.js";
 import { getConfig } from "../src/config.js";
 import type { CommentReadService } from "../src/modules/comments/contracts.js";
 import type { IssueReadService } from "../src/modules/issues/contracts.js";
+import type { MemberIdentityService } from "../src/modules/identity/contracts.js";
 import type { GuestVoteService } from "../src/modules/voting/contracts.js";
 
 const openApps: Array<Awaited<ReturnType<typeof buildApp>>> = [];
@@ -22,6 +23,12 @@ const commentReader: CommentReadService = {
   listGuestComments: vi.fn(),
 };
 
+const memberIdentity: MemberIdentityService = {
+  createSession: vi.fn(),
+  getSession: vi.fn(),
+  revokeSession: vi.fn(),
+};
+
 afterEach(async () => {
   await Promise.all(openApps.splice(0).map(async (app) => app.close()));
 });
@@ -34,6 +41,7 @@ describe("system health", () => {
       issueReader,
       guestVotes,
       commentReader,
+      memberIdentity,
     });
     openApps.push(app);
 
@@ -50,6 +58,7 @@ describe("system health", () => {
       issueReader,
       guestVotes,
       commentReader,
+      memberIdentity,
     });
     openApps.push(app);
 
@@ -67,6 +76,12 @@ describe("safe feature defaults", () => {
     expect(config.featureFlags.politicalVoting).toBe(false);
     expect(config.featureFlags.politicalComments).toBe(false);
   });
+
+  it("rejects the known local internal secret in production", () => {
+    expect(() => getConfig({ NODE_ENV: "production" })).toThrow(
+      "INTERNAL_AUTH_SECRET must be configured for production.",
+    );
+  });
 });
 
 describe("OpenAPI contract", () => {
@@ -77,6 +92,7 @@ describe("OpenAPI contract", () => {
       issueReader,
       guestVotes,
       commentReader,
+      memberIdentity,
     });
     openApps.push(app);
 
@@ -90,5 +106,7 @@ describe("OpenAPI contract", () => {
     expect(document.paths).toHaveProperty(["/v1/guest-subjects", "post"]);
     expect(document.paths).toHaveProperty(["/v1/issues/{issueId}/votes", "post"]);
     expect(document.paths).toHaveProperty(["/v1/issues/{issueId}/comments", "get"]);
+    expect(document.paths).toHaveProperty(["/v1/member-session", "get"]);
+    expect(document.paths).toHaveProperty(["/v1/member-session", "delete"]);
   });
 });

@@ -35,6 +35,13 @@ export const feedEligibilityEnum = pgEnum("feed_eligibility", [
 ]);
 export const riskLevelEnum = pgEnum("risk_level", ["LOW", "MEDIUM", "HIGH", "RESTRICTED"]);
 export const subjectKindEnum = pgEnum("subject_kind", ["GUEST", "MEMBER", "VERIFIED_MEMBER"]);
+export const memberStatusEnum = pgEnum("member_status", [
+  "ACTIVE",
+  "LIMITED",
+  "SUSPENDED",
+  "DELETED",
+]);
+export const identityProviderEnum = pgEnum("identity_provider", ["GOOGLE", "DEVELOPMENT"]);
 export const voteRequestStateEnum = pgEnum("vote_request_state", [
   "RECEIVED",
   "VALIDATING",

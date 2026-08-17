@@ -12,6 +12,7 @@ import type {
   PublicIssue,
   VoteResponse,
 } from "@/lib/contracts";
+import { MemberAccess } from "@/features/identity/member-access";
 
 import styles from "./issue-experience.module.css";
 import {
@@ -29,6 +30,25 @@ type PendingAction = {
   choice: IssueChoice;
   idempotencyKey: string;
 };
+
+function savedResultKey(issueId: string) {
+  return `which:vote-result:${issueId}`;
+}
+
+function readSavedResult(issueId: string) {
+  try {
+    const value = sessionStorage.getItem(savedResultKey(issueId));
+    if (!value) return null;
+    const result = JSON.parse(value) as VoteResponse;
+    return result.issueId === issueId ? result : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveResult(result: VoteResponse) {
+  sessionStorage.setItem(savedResultKey(result.issueId), JSON.stringify(result));
+}
 
 function loadErrorCopy(error: unknown) {
   if (error instanceof WebApiError) {
@@ -70,7 +90,9 @@ export function IssueExperience({ issueId }: { issueId: string }) {
     try {
       const [loadedIssue] = await Promise.all([loadPublicIssue(issueId), ensureGuestSubject()]);
       setIssue(loadedIssue);
-      setScreen("ready");
+      const savedResult = readSavedResult(issueId);
+      if (savedResult) setResult(savedResult);
+      setScreen(savedResult ? "result" : "ready");
     } catch (error) {
       setLoadError(error);
       setScreen("load-error");
@@ -85,7 +107,9 @@ export function IssueExperience({ issueId }: { issueId: string }) {
       .then(([loadedIssue]) => {
         if (!active) return;
         setIssue(loadedIssue);
-        setScreen("ready");
+        const savedResult = readSavedResult(issueId);
+        if (savedResult) setResult(savedResult);
+        setScreen(savedResult ? "result" : "ready");
       })
       .catch((error: unknown) => {
         if (!active || (error instanceof DOMException && error.name === "AbortError")) return;
@@ -115,6 +139,7 @@ export function IssueExperience({ issueId }: { issueId: string }) {
           idempotencyKey: action.idempotencyKey,
         });
         setResult(vote);
+        saveResult(vote);
         setPendingAction(null);
         setScreen("result");
       } catch {
@@ -285,6 +310,7 @@ function ResultScreen({ issue, result }: { issue: PublicIssue; result: VoteRespo
           />
         </div>
         <p className={styles.totalCount}>현재 유효한 선택 {total.toLocaleString("ko-KR")}개</p>
+        <MemberAccess issueId={issue.id} />
         <CommentSection issueId={issue.id} />
         <NextIssueAction currentIssueId={issue.id} />
       </article>
