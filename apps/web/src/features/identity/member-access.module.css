@@ -1,0 +1,68 @@
+.access {
+  margin-top: 30px;
+  border: 1px solid var(--ink);
+  background: #e8fbfc;
+  padding: 20px;
+}
+
+.eyebrow {
+  margin: 0;
+  color: #087b84;
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+}
+
+.access h2 {
+  margin: 7px 0 0;
+  font-size: clamp(1.2rem, 3.5vw, 1.65rem);
+  letter-spacing: -0.04em;
+}
+
+.access p:not(.eyebrow, .notice) {
+  margin: 10px 0 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.login,
+.logout {
+  width: 100%;
+  min-height: 48px;
+  margin-top: 18px;
+  border: 1px solid var(--ink);
+  background: var(--a);
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 900;
+  padding: 11px 15px;
+  text-decoration: none;
+}
+
+.logout {
+  background: transparent;
+}
+
+.login:focus-visible,
+.logout:focus-visible {
+  outline: 3px solid var(--b);
+  outline-offset: 3px;
+}
+
+.status,
+.notice {
+  display: block;
+  margin-top: 14px;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.notice {
+  border-left: 4px solid var(--b);
+  background: #fff1e8;
+  padding: 10px 12px;
+}
