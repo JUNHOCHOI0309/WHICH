@@ -16,6 +16,7 @@ import {
   voteAttempts,
   votes,
 } from "../src/database/schema/index.js";
+import { createIssueReadService } from "../src/modules/issues/service.js";
 import { createGuestVoteService } from "../src/modules/voting/service.js";
 import { createTestDatabase } from "./helpers/test-database.js";
 
@@ -85,6 +86,7 @@ beforeAll(async () => {
   dropDatabase = () => testDatabase.drop();
   app = await buildApp(getConfig({ NODE_ENV: "test" }), {
     ...database,
+    issueReader: createIssueReadService(database.db),
     guestVotes: createGuestVoteService(database.db),
   });
 }, 30_000);

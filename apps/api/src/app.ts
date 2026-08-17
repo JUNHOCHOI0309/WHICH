@@ -7,10 +7,13 @@ import Fastify from "fastify";
 
 import type { AppConfig } from "./config.js";
 import type { Database } from "./database/client.js";
+import type { IssueReadService } from "./modules/issues/contracts.js";
+import { registerIssueRoutes } from "./modules/issues/routes.js";
 import type { GuestVoteService } from "./modules/voting/contracts.js";
 import { registerVotingRoutes } from "./modules/voting/routes.js";
 
 export type AppDependencies = Pick<Database, "ping" | "close"> & {
+  issueReader: IssueReadService;
   guestVotes: GuestVoteService;
 };
 
@@ -86,6 +89,7 @@ export async function buildApp(config: AppConfig, database: AppDependencies) {
     featureFlags: config.featureFlags,
   }));
 
+  await registerIssueRoutes(app, database.issueReader);
   await registerVotingRoutes(app, database.guestVotes);
 
   app.addHook("onClose", async () => {

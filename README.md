@@ -1,8 +1,8 @@
 # WHICH
 
 WHICH는 질문, A/B 선택, 결과, 다음 이슈로 이어지는 모바일 우선 의견 소비 제품입니다.
-이 저장소는 상세 기획의 Phase 1(`Data Contract & Platform Foundation`)을 시작하기 위한
-개발 기반만 포함합니다. 도메인 스키마와 제품 기능은 Data Architecture v1 승인 뒤 추가합니다.
+현재 저장소에는 Platform Foundation과 Data Architecture v1, Guest 핵심 투표 Transaction,
+Guest Issue Read API까지 구현되어 있습니다.
 
 ## 기술 기반
 
@@ -30,6 +30,8 @@ corepack enable
 pnpm install
 copy .env.example .env
 pnpm infra:up
+pnpm --filter @which/api db:migrate
+pnpm --filter @which/api db:seed
 pnpm dev
 ```
 
@@ -53,17 +55,26 @@ pnpm infra:up     # PostgreSQL 시작
 pnpm infra:down   # 컨테이너 정지 (데이터 볼륨 유지)
 pnpm --filter @which/api db:generate
 pnpm --filter @which/api db:migrate
+pnpm --filter @which/api db:seed       # 멱등 Development Issue 생성
 ```
 
-## 구현 경계
+`db:seed`는 Production 환경에서 실행되지 않으며, 여러 번 실행해도 같은 Issue나 Choice를
+중복 생성하거나 기존 Version을 덮어쓰지 않습니다.
 
-현재는 아래 항목만 준비되어 있습니다.
+## 현재 구현 범위
+
+현재 아래 항목이 구현되어 있습니다.
 
 - 환경 변수 검증
 - 기본 비활성 Feature Flag
 - API live/readiness 계약
-- 빈 Drizzle schema entrypoint와 migration directory
+- Data Architecture v1 PostgreSQL Schema와 Migration
+- Guest Subject 발급과 멱등 Vote Transaction
+- Vote Aggregate, Result Snapshot, Versioned Outbox 기록
+- Guest Issue Read API와 Result Visibility 처리
+- 반복 가능한 Development Issue Seed
+- 실제 PostgreSQL Integration Test
 - CI 검증 경로
 
-Issue, Choice, Subject, Vote, Result 등의 테이블·API는 논리 ERD, 불변조건, 보존 정책이
-확정되기 전 추가하지 않습니다.
+Feed Ranking, Web 투표 화면, 회원 인증, 강화된 Integrity Challenge, Comment와 추천 모델은
+후속 Task에서 구현합니다.
