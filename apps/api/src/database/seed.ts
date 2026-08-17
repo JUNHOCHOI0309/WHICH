@@ -17,8 +17,8 @@ assertDevelopmentSeedAllowed(config.environment);
 const database = createDatabase(config.databaseUrl);
 
 try {
-  const seededIssue = await seedDevelopmentIssues(database.db);
-  console.log(`Development Issue ready: ${seededIssue.id}`);
+  const seededIssues = await seedDevelopmentIssues(database.db);
+  console.log(`Development Issues ready: ${seededIssues.map((issue) => issue.id).join(", ")}`);
 } finally {
   await database.close();
 }

@@ -33,6 +33,21 @@ export type PublicIssue = {
   };
 };
 
+export type PublicFeedIssue = Omit<PublicIssue, "context" | "experienceModeCode" | "result">;
+
+export type PublicIssueFeed = {
+  items: PublicFeedIssue[];
+  nextCursor: string | null;
+};
+
+export type GuestIssueFeedQuery = {
+  cursor?: string;
+  limit: number;
+  excludeIssueId?: string;
+  anonymousSubjectId?: string;
+};
+
 export interface IssueReadService {
   getGuestIssue(issueId: string): Promise<PublicIssue>;
+  listGuestIssues(query: GuestIssueFeedQuery): Promise<PublicIssueFeed>;
 }

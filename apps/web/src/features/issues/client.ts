@@ -1,4 +1,4 @@
-import type { ApiErrorBody, PublicIssue, VoteResponse } from "@/lib/contracts";
+import type { ApiErrorBody, PublicIssue, PublicIssueFeed, VoteResponse } from "@/lib/contracts";
 
 export class WebApiError extends Error {
   constructor(
@@ -51,6 +51,30 @@ export function ensureGuestSubject() {
 
 export function resetGuestPreparation() {
   guestPreparation = null;
+}
+
+export async function loadIssueFeed(
+  options: {
+    cursor?: string;
+    limit?: number;
+    excludeIssueId?: string;
+    signal?: AbortSignal;
+  } = {},
+) {
+  const search = new URLSearchParams();
+  if (options.cursor) search.set("cursor", options.cursor);
+  if (options.limit) search.set("limit", String(options.limit));
+  if (options.excludeIssueId) search.set("excludeIssueId", options.excludeIssueId);
+
+  const response = await fetch(`/api/issues/feed?${search.toString()}`, {
+    headers: { accept: "application/json" },
+    cache: "no-store",
+    signal: options.signal,
+  });
+  const body = await responseBody<PublicIssueFeed>(response);
+
+  if (!response.ok) throwApiError(response, body as ApiErrorBody);
+  return body as PublicIssueFeed;
 }
 
 export async function submitGuestVote(command: {

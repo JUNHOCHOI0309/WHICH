@@ -26,6 +26,12 @@ const tallySchema = Type.Object({
   ]),
 });
 
+const choiceSchema = Type.Object({
+  id: uuidSchema,
+  code: Type.Union([Type.Literal("A"), Type.Literal("B")]),
+  label: Type.String(),
+});
+
 const issueResponseSchema = Type.Object({
   id: uuidSchema,
   version: Type.Integer({ minimum: 1 }),
@@ -34,14 +40,7 @@ const issueResponseSchema = Type.Object({
   publishedAt: Type.String({ format: "date-time" }),
   categoryCode: Type.String(),
   experienceModeCode: Type.String(),
-  choices: Type.Array(
-    Type.Object({
-      id: uuidSchema,
-      code: Type.Union([Type.Literal("A"), Type.Literal("B")]),
-      label: Type.String(),
-    }),
-    { minItems: 2, maxItems: 2 },
-  ),
+  choices: Type.Array(choiceSchema, { minItems: 2, maxItems: 2 }),
   result: Type.Object({
     visibility: Type.Union([
       Type.Literal("PRE_VOTE_HIDDEN"),
@@ -54,8 +53,27 @@ const issueResponseSchema = Type.Object({
   }),
 });
 
+const feedResponseSchema = Type.Object({
+  items: Type.Array(
+    Type.Object({
+      id: uuidSchema,
+      version: Type.Integer({ minimum: 1 }),
+      question: Type.String(),
+      publishedAt: Type.String({ format: "date-time" }),
+      categoryCode: Type.String(),
+      choices: Type.Array(choiceSchema, { minItems: 2, maxItems: 2 }),
+    }),
+  ),
+  nextCursor: Type.Union([Type.String(), Type.Null()]),
+});
+
 type IssueRoute = {
   Params: { issueId: string };
+};
+
+type IssueFeedRoute = {
+  Querystring: { cursor?: string; limit?: number; excludeIssueId?: string };
+  Headers: { "x-anonymous-subject-id"?: string };
 };
 
 export async function registerIssueRoutes(app: FastifyInstance, service: IssueReadService) {
@@ -83,6 +101,37 @@ export async function registerIssueRoutes(app: FastifyInstance, service: IssueRe
         message: "The Issue could not be loaded.",
       });
     });
+
+    issueApp.get<IssueFeedRoute>(
+      "/v1/issues/feed",
+      {
+        schema: {
+          tags: ["issues"],
+          summary: "List Guest-available Issues using a stable cursor",
+          querystring: Type.Object({
+            cursor: Type.Optional(Type.String({ minLength: 1, maxLength: 512 })),
+            limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 20, default: 10 })),
+            excludeIssueId: Type.Optional(uuidSchema),
+          }),
+          headers: Type.Object(
+            { "x-anonymous-subject-id": Type.Optional(uuidSchema) },
+            { additionalProperties: true },
+          ),
+          response: {
+            200: feedResponseSchema,
+            400: errorResponseSchema,
+            500: errorResponseSchema,
+          },
+        },
+      },
+      async (request) =>
+        service.listGuestIssues({
+          cursor: request.query.cursor,
+          limit: request.query.limit ?? 10,
+          excludeIssueId: request.query.excludeIssueId,
+          anonymousSubjectId: request.headers["x-anonymous-subject-id"],
+        }),
+    );
 
     issueApp.get<IssueRoute>(
       "/v1/issues/:issueId",
