@@ -41,16 +41,20 @@ export type PublicIssueFeed = {
 };
 
 export type CommentSide = "ALL" | "A" | "B";
+export type CommentReportReason =
+  "SPAM" | "HARASSMENT" | "HATE_OR_ABUSE" | "PERSONAL_INFORMATION" | "OTHER";
 
 export type PublicComment = {
   id: string;
   choice: "A" | "B";
   author: { displayName: string };
   body: string;
+  visibility: "VISIBLE" | "DEPRIORITIZED" | "COLLAPSED";
   threadState: "OPEN" | "LOCKED";
   createdAt: string;
   editedAt: string | null;
   reactions: { helpfulCount: number; viewerReacted: boolean };
+  reports: { viewerReported: boolean; canReport: boolean };
 };
 
 export type PublicCommentPage = {
@@ -62,6 +66,11 @@ export type CommentWriteResponse = { comment: PublicComment };
 
 export type HelpfulReactionResponse = {
   reaction: { code: "HELPFUL"; active: boolean; helpfulCount: number };
+};
+
+export type CommentReportResponse = {
+  report: { accepted: true; viewerReported: true };
+  comment: { visibility: "VISIBLE" | "DEPRIORITIZED" | "COLLAPSED" | "HIDDEN" };
 };
 
 export type VoteResponse = {

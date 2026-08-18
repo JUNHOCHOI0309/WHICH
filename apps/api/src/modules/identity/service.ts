@@ -7,6 +7,7 @@ import type { Database } from "../../database/client.js";
 import {
   guestMemberLinks,
   commentReactions,
+  commentReports,
   issueChoices,
   memberIdentityLinks,
   memberSessions,
@@ -121,6 +122,8 @@ export function createMemberIdentityService(
         let invalidatedDuplicateVotes = 0;
         let migratedReactions = 0;
         let mergedDuplicateReactions = 0;
+        let migratedReports = 0;
+        let mergedDuplicateReports = 0;
 
         if (assertion.anonymousSubjectId) {
           await transaction.execute(
@@ -360,6 +363,72 @@ export function createMemberIdentityService(
                     member_subject_id: memberSubject.id,
                     migrated_reactions: migratedReactions,
                     merged_duplicate_reactions: mergedDuplicateReactions,
+                  },
+                },
+              });
+            }
+
+            const guestReports = await transaction
+              .select()
+              .from(commentReports)
+              .where(
+                and(
+                  eq(commentReports.subjectId, guestSubject.id),
+                  eq(commentReports.counted, true),
+                ),
+              );
+            for (const guestReport of guestReports) {
+              const [memberReport] = await transaction
+                .select({ id: commentReports.id })
+                .from(commentReports)
+                .where(
+                  and(
+                    eq(commentReports.commentId, guestReport.commentId),
+                    eq(commentReports.subjectId, memberSubject.id),
+                    eq(commentReports.counted, true),
+                  ),
+                )
+                .limit(1);
+              if (memberReport) {
+                await transaction
+                  .update(commentReports)
+                  .set({
+                    counted: false,
+                    mergedIntoReportId: memberReport.id,
+                    updatedAt: now,
+                  })
+                  .where(eq(commentReports.id, guestReport.id));
+                mergedDuplicateReports += 1;
+              } else {
+                await transaction
+                  .update(commentReports)
+                  .set({ subjectId: memberSubject.id, updatedAt: now })
+                  .where(eq(commentReports.id, guestReport.id));
+                migratedReports += 1;
+              }
+            }
+
+            if (migratedReports > 0 || mergedDuplicateReports > 0) {
+              const eventId = randomUUID();
+              await transaction.insert(outboxEvents).values({
+                id: eventId,
+                aggregateType: "MEMBER",
+                aggregateId: identity.member.id,
+                eventType: "COMMENT_REPORTS_LINKED",
+                schemaVersion: EVENT_SCHEMA_VERSION,
+                occurredAt: now,
+                payload: {
+                  event_id: eventId,
+                  event_type: "COMMENT_REPORTS_LINKED",
+                  schema_version: EVENT_SCHEMA_VERSION,
+                  occurred_at: now.toISOString(),
+                  aggregate_type: "MEMBER",
+                  aggregate_id: identity.member.id,
+                  data: {
+                    guest_subject_id: guestSubject.id,
+                    member_subject_id: memberSubject.id,
+                    migrated_reports: migratedReports,
+                    merged_duplicate_reports: mergedDuplicateReports,
                   },
                 },
               });

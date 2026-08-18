@@ -12,12 +12,21 @@ export type CommentErrorCode =
   | "COMMENT_CONTROL_CHARACTER"
   | "COMMENT_SPAM_PATTERN"
   | "REACTION_SUBJECT_REQUIRED"
-  | "REACTION_UNAVAILABLE";
+  | "REACTION_UNAVAILABLE"
+  | "REPORT_SUBJECT_REQUIRED"
+  | "REPORT_UNAVAILABLE"
+  | "REPORT_OWN_COMMENT"
+  | "REPORT_ALREADY_EXISTS"
+  | "REPORT_RATE_LIMITED"
+  | "REPORT_DETAIL_REQUIRED"
+  | "REPORT_DETAIL_NOT_ALLOWED"
+  | "MODERATION_AUTH_REQUIRED"
+  | "MODERATION_COMMENT_NOT_FOUND";
 
 export class CommentError extends Error {
   constructor(
     public readonly code: CommentErrorCode,
-    public readonly statusCode: 400 | 401 | 403 | 409 | 422,
+    public readonly statusCode: 400 | 401 | 403 | 404 | 409 | 422 | 429,
     message: string,
   ) {
     super(message);

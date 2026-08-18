@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import type {
+  CommentReportReason,
   CommentSide,
   IssueChoice,
   PublicComment,
@@ -20,6 +21,7 @@ import {
   loadIssueComments,
   loadIssueFeed,
   loadPublicIssue,
+  reportComment,
   submitMemberComment,
   submitGuestVote,
   toggleHelpfulReaction,
@@ -328,6 +330,14 @@ const COMMENT_FILTERS: Array<{ side: CommentSide; label: string }> = [
   { side: "B", label: "B 선택" },
 ];
 
+const COMMENT_REPORT_REASONS: Array<{ value: CommentReportReason; label: string }> = [
+  { value: "SPAM", label: "스팸 또는 반복 게시" },
+  { value: "HARASSMENT", label: "괴롭힘 또는 위협" },
+  { value: "HATE_OR_ABUSE", label: "혐오 또는 모욕" },
+  { value: "PERSONAL_INFORMATION", label: "개인정보 노출" },
+  { value: "OTHER", label: "기타" },
+];
+
 function CommentSection({ issueId }: { issueId: string }) {
   const router = useRouter();
   const [side, setSide] = useState<CommentSide>("ALL");
@@ -341,7 +351,17 @@ function CommentSection({ issueId }: { issueId: string }) {
   const [postError, setPostError] = useState<string | null>(null);
   const [reactionError, setReactionError] = useState<string | null>(null);
   const [pendingReactionIds, setPendingReactionIds] = useState<Set<string>>(() => new Set());
+  const [reportDraft, setReportDraft] = useState<{
+    commentId: string;
+    reason: CommentReportReason;
+    detail: string;
+  } | null>(null);
+  const [reportingCommentId, setReportingCommentId] = useState<string | null>(null);
+  const [reportMessage, setReportMessage] = useState<string | null>(null);
+  const [reportError, setReportError] = useState<string | null>(null);
+  const [expandedCollapsedIds, setExpandedCollapsedIds] = useState<Set<string>>(() => new Set());
   const pendingCommentKey = useRef<string | null>(null);
+  const pendingReportKey = useRef<{ commentId: string; key: string } | null>(null);
   const draftTouched = useRef(false);
   const draftKey = `which:comment-draft:${issueId}`;
 
@@ -534,6 +554,69 @@ function CommentSection({ issueId }: { issueId: string }) {
     }
   };
 
+  const submitReport = async () => {
+    if (!reportDraft || reportingCommentId) return;
+    const detail = reportDraft.detail.trim();
+    if (reportDraft.reason === "OTHER" && Array.from(detail).length < 10) {
+      setReportError("기타 사유는 10자 이상 설명해 주세요.");
+      return;
+    }
+    if (pendingReportKey.current?.commentId !== reportDraft.commentId) {
+      pendingReportKey.current = { commentId: reportDraft.commentId, key: crypto.randomUUID() };
+    }
+    setReportingCommentId(reportDraft.commentId);
+    setReportError(null);
+    setReportMessage(null);
+    try {
+      const result = await reportComment({
+        commentId: reportDraft.commentId,
+        idempotencyKey: pendingReportKey.current.key,
+        reason: reportDraft.reason,
+        detail: reportDraft.reason === "OTHER" ? detail : undefined,
+      });
+      if (result.comment.visibility === "HIDDEN") {
+        setItems((current) => current.filter((item) => item.id !== reportDraft.commentId));
+      } else {
+        setItems((current) =>
+          current.map((item) =>
+            item.id === reportDraft.commentId
+              ? {
+                  ...item,
+                  visibility: result.comment.visibility as PublicComment["visibility"],
+                  reports: { viewerReported: true, canReport: false },
+                }
+              : item,
+          ),
+        );
+      }
+      pendingReportKey.current = null;
+      setReportDraft(null);
+      setReportMessage(
+        result.comment.visibility === "HIDDEN"
+          ? "신고가 접수되어 댓글이 검토 전까지 숨겨졌어요."
+          : "신고가 접수되었어요. 검토에 반영하겠습니다.",
+      );
+    } catch (error) {
+      if (error instanceof WebApiError) {
+        if (error.code === "REPORT_OWN_COMMENT") {
+          setReportError("내가 작성한 댓글은 신고할 수 없어요.");
+        } else if (error.code === "REPORT_ALREADY_EXISTS") {
+          setReportError("이미 신고한 댓글이에요.");
+        } else if (error.code === "VOTE_REQUIRED") {
+          setReportError("이 안건에 유효한 투표가 있어야 신고할 수 있어요.");
+        } else if (error.code === "REPORT_RATE_LIMITED") {
+          setReportError("오늘 신고할 수 있는 횟수를 모두 사용했어요.");
+        } else {
+          setReportError("신고를 접수하지 못했어요. 같은 내용으로 다시 시도해 주세요.");
+        }
+      } else {
+        setReportError("신고를 접수하지 못했어요. 같은 내용으로 다시 시도해 주세요.");
+      }
+    } finally {
+      setReportingCommentId(null);
+    }
+  };
+
   return (
     <section className={styles.comments} aria-labelledby="comment-title">
       <div className={styles.commentHeading}>
@@ -627,44 +710,159 @@ function CommentSection({ issueId }: { issueId: string }) {
 
       {items.length > 0 ? (
         <div className={styles.commentList}>
-          {items.map((comment) => (
-            <article
-              key={comment.id}
-              className={`${styles.commentCard} ${styles[`comment${comment.choice}`]}`}
-            >
-              <header>
-                <span className={styles.commentChoice}>{comment.choice}</span>
-                <strong>{comment.author.displayName}</strong>
-                <time dateTime={comment.createdAt}>
-                  {new Intl.DateTimeFormat("ko-KR", {
-                    month: "short",
-                    day: "numeric",
-                  }).format(new Date(comment.createdAt))}
-                </time>
-              </header>
-              <p>{comment.body}</p>
-              <footer>
-                {comment.editedAt ? <span>수정됨</span> : null}
-                {comment.threadState === "LOCKED" ? <span>대화 잠김</span> : null}
-                <button
-                  type="button"
-                  className={comment.reactions?.viewerReacted ? styles.reactionActive : undefined}
-                  aria-pressed={comment.reactions?.viewerReacted ?? false}
-                  disabled={pendingReactionIds.has(comment.id)}
-                  onClick={() => void toggleReaction(comment)}
-                >
-                  <span aria-hidden="true">{comment.reactions?.viewerReacted ? "♥" : "♡"}</span>
-                  공감 {comment.reactions?.helpfulCount ?? 0}
-                </button>
-              </footer>
-            </article>
-          ))}
+          {items.map((comment) => {
+            const isCollapsed = comment.visibility === "COLLAPSED";
+            const isExpanded = expandedCollapsedIds.has(comment.id);
+            const reportState = comment.reports ?? {
+              viewerReported: false,
+              canReport: true,
+            };
+            const isReporting = reportingCommentId === comment.id;
+            return (
+              <article
+                key={comment.id}
+                className={`${styles.commentCard} ${styles[`comment${comment.choice}`]} ${
+                  isCollapsed ? styles.commentCollapsed : ""
+                }`}
+              >
+                <header>
+                  <span className={styles.commentChoice}>{comment.choice}</span>
+                  <strong>{comment.author.displayName}</strong>
+                  <time dateTime={comment.createdAt}>
+                    {new Intl.DateTimeFormat("ko-KR", {
+                      month: "short",
+                      day: "numeric",
+                    }).format(new Date(comment.createdAt))}
+                  </time>
+                </header>
+                {isCollapsed && !isExpanded ? (
+                  <div className={styles.collapsedNotice}>
+                    <p>여러 신고가 접수되어 내용을 접어 두었어요.</p>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setExpandedCollapsedIds((current) => new Set(current).add(comment.id))
+                      }
+                    >
+                      내용 확인
+                    </button>
+                  </div>
+                ) : (
+                  <p>{comment.body}</p>
+                )}
+                <footer>
+                  {comment.editedAt ? <span>수정됨</span> : null}
+                  {comment.threadState === "LOCKED" ? <span>대화 잠김</span> : null}
+                  {!isCollapsed ? (
+                    <button
+                      type="button"
+                      className={`${styles.reactionButton} ${
+                        comment.reactions?.viewerReacted ? styles.reactionActive : ""
+                      }`}
+                      aria-pressed={comment.reactions?.viewerReacted ?? false}
+                      disabled={pendingReactionIds.has(comment.id)}
+                      onClick={() => void toggleReaction(comment)}
+                    >
+                      <span aria-hidden="true">{comment.reactions?.viewerReacted ? "♥" : "♡"}</span>
+                      공감 {comment.reactions?.helpfulCount ?? 0}
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    className={styles.reportButton}
+                    disabled={reportState.viewerReported || !reportState.canReport || isReporting}
+                    onClick={() => {
+                      setReportMessage(null);
+                      setReportError(null);
+                      setReportDraft({ commentId: comment.id, reason: "SPAM", detail: "" });
+                    }}
+                  >
+                    {reportState.viewerReported ? "신고 완료" : isReporting ? "접수 중…" : "신고"}
+                  </button>
+                </footer>
+                {reportDraft?.commentId === comment.id ? (
+                  <form
+                    className={styles.reportForm}
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      void submitReport();
+                    }}
+                  >
+                    <label htmlFor={`report-reason-${comment.id}`}>신고 사유</label>
+                    <select
+                      id={`report-reason-${comment.id}`}
+                      value={reportDraft.reason}
+                      onChange={(event) => {
+                        setReportError(null);
+                        setReportDraft((current) =>
+                          current
+                            ? {
+                                ...current,
+                                reason: event.target.value as CommentReportReason,
+                                detail: "",
+                              }
+                            : current,
+                        );
+                      }}
+                    >
+                      {COMMENT_REPORT_REASONS.map((reason) => (
+                        <option key={reason.value} value={reason.value}>
+                          {reason.label}
+                        </option>
+                      ))}
+                    </select>
+                    {reportDraft.reason === "OTHER" ? (
+                      <textarea
+                        aria-label="기타 신고 사유"
+                        value={reportDraft.detail}
+                        maxLength={300}
+                        rows={3}
+                        placeholder="문제가 되는 이유를 10자 이상 적어 주세요."
+                        onChange={(event) =>
+                          setReportDraft((current) =>
+                            current ? { ...current, detail: event.target.value } : current,
+                          )
+                        }
+                      />
+                    ) : null}
+                    <div>
+                      <button type="submit" disabled={isReporting}>
+                        {isReporting ? "접수 중…" : "신고 접수"}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isReporting}
+                        onClick={() => {
+                          pendingReportKey.current = null;
+                          setReportDraft(null);
+                          setReportError(null);
+                        }}
+                      >
+                        취소
+                      </button>
+                    </div>
+                  </form>
+                ) : null}
+              </article>
+            );
+          })}
         </div>
       ) : null}
 
       {reactionError ? (
         <p className={styles.reactionError} role="alert">
           {reactionError}
+        </p>
+      ) : null}
+
+      {reportMessage ? (
+        <p className={styles.reportMessage} role="status">
+          {reportMessage}
+        </p>
+      ) : null}
+      {reportError ? (
+        <p className={styles.reactionError} role="alert">
+          {reportError}
         </p>
       ) : null}
 

@@ -23,6 +23,9 @@ const commentReader: CommentService = {
   listGuestComments: vi.fn(),
   submitMemberComment: vi.fn(),
   toggleHelpfulReaction: vi.fn(),
+  reportComment: vi.fn(),
+  listModerationCases: vi.fn(),
+  decideModeration: vi.fn(),
 };
 
 const memberIdentity: MemberIdentityService = {

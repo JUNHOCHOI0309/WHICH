@@ -12,12 +12,21 @@ const publicCommentSchema = Type.Object({
   choice: Type.Union([Type.Literal("A"), Type.Literal("B")]),
   author: Type.Object({ displayName: Type.String() }),
   body: Type.String(),
+  visibility: Type.Union([
+    Type.Literal("VISIBLE"),
+    Type.Literal("DEPRIORITIZED"),
+    Type.Literal("COLLAPSED"),
+  ]),
   threadState: Type.Union([Type.Literal("OPEN"), Type.Literal("LOCKED")]),
   createdAt: Type.String({ format: "date-time" }),
   editedAt: Type.Union([Type.String({ format: "date-time" }), Type.Null()]),
   reactions: Type.Object({
     helpfulCount: Type.Integer({ minimum: 0 }),
     viewerReacted: Type.Boolean(),
+  }),
+  reports: Type.Object({
+    viewerReported: Type.Boolean(),
+    canReport: Type.Boolean(),
   }),
 });
 
@@ -47,13 +56,44 @@ type HelpfulReactionRoute = {
   };
 };
 
+type CommentReportRoute = {
+  Params: { commentId: string };
+  Headers: {
+    authorization?: string;
+    "x-anonymous-subject-id"?: string;
+    "idempotency-key": string;
+  };
+  Body: {
+    reason: "SPAM" | "HARASSMENT" | "HATE_OR_ABUSE" | "PERSONAL_INFORMATION" | "OTHER";
+    detail?: string;
+  };
+};
+
+type ModerationCasesRoute = {
+  Querystring: { limit?: number };
+  Headers: { "x-moderation-auth-secret"?: string };
+};
+
+type ModerationDecisionRoute = {
+  Params: { commentId: string };
+  Headers: { "x-moderation-auth-secret"?: string };
+  Body: {
+    action: "COLLAPSE" | "HIDE" | "REMOVE_POLICY" | "RESTORE";
+    reasonCode: string;
+  };
+};
+
 function bearerToken(authorization: string | undefined) {
   if (!authorization?.startsWith("Bearer ")) return null;
   const token = authorization.slice("Bearer ".length).trim();
   return token.length > 0 ? token : null;
 }
 
-export async function registerCommentRoutes(app: FastifyInstance, service: CommentService) {
+export async function registerCommentRoutes(
+  app: FastifyInstance,
+  service: CommentService,
+  moderationInternalSecret: string,
+) {
   await app.register((commentApp) => {
     commentApp.setErrorHandler((error, request, reply) => {
       if (error instanceof CommentError) {
@@ -212,6 +252,155 @@ export async function registerCommentRoutes(app: FastifyInstance, service: Comme
           idempotencyKey: request.headers["idempotency-key"],
         });
         return reply.code(result.httpStatus).send(result.body);
+      },
+    );
+
+    commentApp.post<CommentReportRoute>(
+      "/v1/comments/:commentId/reports",
+      {
+        schema: {
+          tags: ["comments"],
+          summary: "Report a public Comment once as an eligible Guest or Member",
+          params: Type.Object({ commentId: uuidSchema }),
+          headers: Type.Object(
+            {
+              authorization: Type.Optional(Type.String()),
+              "x-anonymous-subject-id": Type.Optional(uuidSchema),
+              "idempotency-key": uuidSchema,
+            },
+            { additionalProperties: true },
+          ),
+          body: Type.Object({
+            reason: Type.Union([
+              Type.Literal("SPAM"),
+              Type.Literal("HARASSMENT"),
+              Type.Literal("HATE_OR_ABUSE"),
+              Type.Literal("PERSONAL_INFORMATION"),
+              Type.Literal("OTHER"),
+            ]),
+            detail: Type.Optional(Type.String({ maxLength: 300 })),
+          }),
+          response: {
+            201: Type.Object({
+              report: Type.Object({
+                accepted: Type.Literal(true),
+                viewerReported: Type.Literal(true),
+              }),
+              comment: Type.Object({
+                visibility: Type.Union([
+                  Type.Literal("VISIBLE"),
+                  Type.Literal("DEPRIORITIZED"),
+                  Type.Literal("COLLAPSED"),
+                  Type.Literal("HIDDEN"),
+                ]),
+              }),
+            }),
+            400: errorResponseSchema,
+            401: errorResponseSchema,
+            403: errorResponseSchema,
+            409: errorResponseSchema,
+            422: errorResponseSchema,
+            429: errorResponseSchema,
+            500: errorResponseSchema,
+          },
+        },
+      },
+      async (request, reply) => {
+        const sessionToken = bearerToken(request.headers.authorization);
+        if (request.headers.authorization && !sessionToken) {
+          throw new CommentError("SESSION_REQUIRED", 401, "The Member session is invalid.");
+        }
+        const result = await service.reportComment({
+          commentId: request.params.commentId,
+          sessionToken: sessionToken ?? undefined,
+          anonymousSubjectId: request.headers["x-anonymous-subject-id"],
+          idempotencyKey: request.headers["idempotency-key"],
+          reason: request.body.reason,
+          detail: request.body.detail,
+        });
+        return reply.code(result.httpStatus).send(result.body);
+      },
+    );
+
+    commentApp.get<ModerationCasesRoute>(
+      "/v1/internal/comment-moderation/cases",
+      {
+        schema: {
+          tags: ["internal"],
+          summary: "List Comments awaiting internal moderation",
+          headers: Type.Object(
+            { "x-moderation-auth-secret": Type.Optional(Type.String()) },
+            { additionalProperties: true },
+          ),
+          querystring: Type.Object({
+            limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100, default: 20 })),
+          }),
+          response: {
+            200: Type.Object({ items: Type.Array(Type.Any()) }),
+            401: errorResponseSchema,
+          },
+        },
+      },
+      async (request) => {
+        if (request.headers["x-moderation-auth-secret"] !== moderationInternalSecret) {
+          throw new CommentError(
+            "MODERATION_AUTH_REQUIRED",
+            401,
+            "A valid moderation secret is required.",
+          );
+        }
+        return service.listModerationCases(request.query.limit ?? 20);
+      },
+    );
+
+    commentApp.post<ModerationDecisionRoute>(
+      "/v1/internal/comments/:commentId/moderation-decisions",
+      {
+        schema: {
+          tags: ["internal"],
+          summary: "Apply an append-only internal Comment moderation decision",
+          params: Type.Object({ commentId: uuidSchema }),
+          headers: Type.Object(
+            { "x-moderation-auth-secret": Type.Optional(Type.String()) },
+            { additionalProperties: true },
+          ),
+          body: Type.Object({
+            action: Type.Union([
+              Type.Literal("COLLAPSE"),
+              Type.Literal("HIDE"),
+              Type.Literal("REMOVE_POLICY"),
+              Type.Literal("RESTORE"),
+            ]),
+            reasonCode: Type.String({ minLength: 2, maxLength: 64, pattern: "^[A-Z0-9_]+$" }),
+          }),
+          response: {
+            200: Type.Object({
+              comment: Type.Object({
+                id: uuidSchema,
+                publicationState: Type.String(),
+                visibility: Type.String(),
+                integrityState: Type.String(),
+              }),
+            }),
+            401: errorResponseSchema,
+            404: errorResponseSchema,
+            500: errorResponseSchema,
+          },
+        },
+      },
+      async (request) => {
+        if (request.headers["x-moderation-auth-secret"] !== moderationInternalSecret) {
+          throw new CommentError(
+            "MODERATION_AUTH_REQUIRED",
+            401,
+            "A valid moderation secret is required.",
+          );
+        }
+        return service.decideModeration({
+          commentId: request.params.commentId,
+          action: request.body.action,
+          reasonCode: request.body.reasonCode,
+        });
       },
     );
   });

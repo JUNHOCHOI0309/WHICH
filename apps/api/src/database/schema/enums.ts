@@ -96,3 +96,20 @@ export const commentIntegrityStateEnum = pgEnum("comment_integrity_state", [
   "INVALIDATED",
 ]);
 export const commentReactionCodeEnum = pgEnum("comment_reaction_code", ["HELPFUL"]);
+export const commentReportReasonEnum = pgEnum("comment_report_reason", [
+  "SPAM",
+  "HARASSMENT",
+  "HATE_OR_ABUSE",
+  "PERSONAL_INFORMATION",
+  "OTHER",
+]);
+export const commentModerationActionEnum = pgEnum("comment_moderation_action", [
+  "COLLAPSE",
+  "HIDE",
+  "REMOVE_POLICY",
+  "RESTORE",
+]);
+export const commentModerationSourceEnum = pgEnum("comment_moderation_source", [
+  "SYSTEM_AUTOMATION",
+  "INTERNAL_MODERATOR",
+]);
