@@ -57,6 +57,7 @@ export async function createTestDatabase() {
 
   return {
     database,
+    databaseUrl: testUrl.toString(),
     async drop() {
       await dropDatabaseWhenDisconnected();
       await administrationPool.end();
