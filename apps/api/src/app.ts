@@ -96,7 +96,7 @@ export async function buildApp(config: AppConfig, database: AppDependencies) {
   }));
 
   await registerIssueRoutes(app, database.issueReader);
-  await registerVotingRoutes(app, database.guestVotes);
+  await registerVotingRoutes(app, database.guestVotes, config.auth.internalSecret);
   await registerCommentRoutes(app, database.commentReader, config.auth.moderationInternalSecret);
   await registerMemberIdentityRoutes(app, database.memberIdentity, config.auth.internalSecret);
 

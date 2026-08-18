@@ -12,6 +12,7 @@ const openApps: Array<Awaited<ReturnType<typeof buildApp>>> = [];
 const guestVotes: GuestVoteService = {
   createGuestSubject: vi.fn(),
   submitGuestVote: vi.fn(),
+  reconcileIssueVersion: vi.fn(),
 };
 
 const issueReader: IssueReadService = {
