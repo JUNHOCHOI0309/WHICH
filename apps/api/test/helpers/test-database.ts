@@ -8,6 +8,10 @@ import { createDatabase } from "../../src/database/client.js";
 
 const migrationsFolder = fileURLToPath(new URL("../../migrations", import.meta.url));
 
+function wait(milliseconds: number) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
 export async function createTestDatabase() {
   const sourceUrl = new URL(
     process.env.DATABASE_URL ?? "postgresql://which:which_local@localhost:54329/which",
@@ -22,6 +26,20 @@ export async function createTestDatabase() {
   administrationUrl.pathname = "/postgres";
   const administrationPool = new Pool({ connectionString: administrationUrl.toString() });
 
+  async function dropDatabaseWhenDisconnected() {
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      try {
+        await administrationPool.query(`DROP DATABASE ${databaseName}`);
+        return;
+      } catch (error) {
+        const databaseIsInUse =
+          typeof error === "object" && error !== null && "code" in error && error.code === "55006";
+        if (!databaseIsInUse || attempt === 9) throw error;
+        await wait(50 * (attempt + 1));
+      }
+    }
+  }
+
   await administrationPool.query(`CREATE DATABASE ${databaseName}`);
 
   const testUrl = new URL(sourceUrl);
@@ -32,7 +50,7 @@ export async function createTestDatabase() {
     await migrate(database.db, { migrationsFolder });
   } catch (error) {
     await database.close();
-    await administrationPool.query(`DROP DATABASE ${databaseName} WITH (FORCE)`);
+    await dropDatabaseWhenDisconnected();
     await administrationPool.end();
     throw error;
   }
@@ -40,7 +58,7 @@ export async function createTestDatabase() {
   return {
     database,
     async drop() {
-      await administrationPool.query(`DROP DATABASE ${databaseName} WITH (FORCE)`);
+      await dropDatabaseWhenDisconnected();
       await administrationPool.end();
     },
   };
