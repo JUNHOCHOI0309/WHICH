@@ -262,6 +262,19 @@
   padding: 5px 11px;
 }
 
+.commentCard footer button.reactionButton {
+  margin-left: auto;
+}
+
+.commentCard footer button.reportButton {
+  margin-left: 0;
+  color: var(--muted);
+}
+
+.commentCard footer button.reportButton:first-of-type {
+  margin-left: auto;
+}
+
 .commentCard footer button.reactionActive {
   border-color: var(--a);
   background: color-mix(in srgb, var(--a) 16%, var(--surface));
@@ -282,6 +295,86 @@
   color: #9c2f00;
   font-size: 0.76rem;
   font-weight: 750;
+}
+
+.commentCollapsed {
+  background: color-mix(in srgb, var(--line) 18%, var(--surface));
+}
+
+.collapsedNotice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+  color: var(--muted);
+}
+
+.collapsedNotice p {
+  margin: 0;
+  line-height: 1.6;
+}
+
+.collapsedNotice button {
+  flex: 0 0 auto;
+  min-height: 36px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  padding: 6px 10px;
+}
+
+.reportForm {
+  display: grid;
+  gap: 9px;
+  margin-top: 14px;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+.reportForm label {
+  font-size: 0.76rem;
+  font-weight: 850;
+}
+
+.reportForm select,
+.reportForm textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  padding: 10px 11px;
+}
+
+.reportForm textarea {
+  resize: vertical;
+}
+
+.reportForm > div {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.reportForm button {
+  min-height: 38px;
+  border: 1px solid var(--ink);
+  background: var(--surface);
+  color: var(--ink);
+  padding: 7px 12px;
+}
+
+.reportForm button[type="submit"] {
+  background: var(--ink);
+  color: var(--surface);
+}
+
+.reportMessage {
+  margin: 12px 0 0;
+  color: #006a70;
+  font-size: 0.78rem;
+  font-weight: 800;
 }
 
 .commentMessage {
