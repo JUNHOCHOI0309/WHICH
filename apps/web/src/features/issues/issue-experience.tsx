@@ -20,6 +20,7 @@ import {
   loadIssueComments,
   loadIssueFeed,
   loadPublicIssue,
+  submitMemberComment,
   submitGuestVote,
   WebApiError,
 } from "./client";
@@ -327,10 +328,48 @@ const COMMENT_FILTERS: Array<{ side: CommentSide; label: string }> = [
 ];
 
 function CommentSection({ issueId }: { issueId: string }) {
+  const router = useRouter();
   const [side, setSide] = useState<CommentSide>("ALL");
   const [items, setItems] = useState<PublicComment[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [state, setState] = useState<CommentState>("loading");
+  const [draft, setDraft] = useState("");
+  const [draftReady, setDraftReady] = useState(false);
+  const [authState, setAuthState] = useState<"loading" | "guest" | "member">("loading");
+  const [posting, setPosting] = useState(false);
+  const [postError, setPostError] = useState<string | null>(null);
+  const pendingCommentKey = useRef<string | null>(null);
+  const draftTouched = useRef(false);
+  const draftKey = `which:comment-draft:${issueId}`;
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      if (!draftTouched.current) setDraft(sessionStorage.getItem(draftKey) ?? "");
+      setDraftReady(true);
+    }, 0);
+    return () => window.clearTimeout(timeoutId);
+  }, [draftKey]);
+
+  useEffect(() => {
+    if (!draftReady) return;
+    if (draft) sessionStorage.setItem(draftKey, draft);
+    else sessionStorage.removeItem(draftKey);
+  }, [draft, draftKey, draftReady]);
+
+  useEffect(() => {
+    let active = true;
+    void fetch("/api/member-session", { cache: "no-store" })
+      .then((response) => {
+        if (!active) return;
+        setAuthState(response.ok ? "member" : "guest");
+      })
+      .catch(() => {
+        if (active) setAuthState("guest");
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const loadComments = useCallback(
     async (selectedSide: CommentSide, cursor?: string) => {
@@ -381,6 +420,63 @@ function CommentSection({ issueId }: { issueId: string }) {
     setSide(selectedSide);
   };
 
+  const publishComment = async () => {
+    const normalizedDraft = draft.trim();
+    setPostError(null);
+
+    if (Array.from(normalizedDraft).length < 2) {
+      setPostError("두 글자 이상 입력해 주세요.");
+      return;
+    }
+
+    if (authState !== "member") {
+      sessionStorage.setItem(draftKey, draft);
+      const returnTo = `/issues/${issueId}#comment-compose`;
+      router.push(`/api/auth/google/start?returnTo=${encodeURIComponent(returnTo)}`);
+      return;
+    }
+
+    pendingCommentKey.current ??= crypto.randomUUID();
+    setPosting(true);
+    try {
+      const result = await submitMemberComment({
+        issueId,
+        body: draft,
+        idempotencyKey: pendingCommentKey.current,
+      });
+      if (side === "ALL" || side === result.comment.choice) {
+        setItems((current) => [
+          result.comment,
+          ...current.filter((item) => item.id !== result.comment.id),
+        ]);
+      }
+      setState("ready");
+      sessionStorage.removeItem(draftKey);
+      draftTouched.current = false;
+      setDraft("");
+      pendingCommentKey.current = null;
+    } catch (error) {
+      if (error instanceof WebApiError) {
+        if (error.status === 401) {
+          setAuthState("guest");
+          setPostError("로그인이 만료됐어요. 초안은 보관했으니 다시 로그인해 주세요.");
+        } else if (error.code === "VOTE_REQUIRED") {
+          setPostError("이 계정에 연결된 유효한 투표가 없어 댓글을 게시할 수 없어요.");
+        } else if (error.code === "COMMENT_ALREADY_EXISTS") {
+          setPostError("이 안건에는 이미 댓글을 남겼어요.");
+        } else if (error.status === 422) {
+          setPostError("URL·제어문자·과도한 반복 없이 2~500자로 작성해 주세요.");
+        } else {
+          setPostError("댓글을 게시하지 못했어요. 같은 내용으로 다시 시도할 수 있어요.");
+        }
+      } else {
+        setPostError("댓글을 게시하지 못했어요. 같은 내용으로 다시 시도할 수 있어요.");
+      }
+    } finally {
+      setPosting(false);
+    }
+  };
+
   return (
     <section className={styles.comments} aria-labelledby="comment-title">
       <div className={styles.commentHeading}>
@@ -390,6 +486,46 @@ function CommentSection({ issueId }: { issueId: string }) {
         </div>
         <span>최신순</span>
       </div>
+
+      <form
+        id="comment-compose"
+        className={styles.commentComposer}
+        onSubmit={(event) => {
+          event.preventDefault();
+          void publishComment();
+        }}
+      >
+        <label htmlFor={`comment-body-${issueId}`}>내 선택 이유</label>
+        <textarea
+          id={`comment-body-${issueId}`}
+          value={draft}
+          maxLength={500}
+          rows={4}
+          placeholder="왜 이 선택을 했는지 짧게 남겨 보세요. 초안은 이 기기에 보관됩니다."
+          onChange={(event) => {
+            draftTouched.current = true;
+            setDraft(event.target.value);
+            setPostError(null);
+          }}
+          aria-describedby={`comment-help-${issueId}`}
+        />
+        <div className={styles.commentComposerFooter}>
+          <p id={`comment-help-${issueId}`}>
+            {authState === "member"
+              ? "투표 선택지는 서버에서 확인해 자동으로 표시합니다."
+              : "Guest도 초안을 쓸 수 있고, 게시할 때만 로그인이 필요합니다."}
+          </p>
+          <span>{Array.from(draft).length}/500</span>
+          <button type="submit" disabled={posting || authState === "loading"}>
+            {posting ? "게시 중…" : authState === "member" ? "이유 게시" : "로그인하고 게시"}
+          </button>
+        </div>
+        {postError ? (
+          <p className={styles.commentComposerError} role="alert">
+            {postError}
+          </p>
+        ) : null}
+      </form>
 
       <div className={styles.commentFilters} aria-label="선택 이유 필터">
         {COMMENT_FILTERS.map((filter) => (

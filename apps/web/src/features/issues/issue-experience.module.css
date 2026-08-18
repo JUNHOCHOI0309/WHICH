@@ -56,6 +56,85 @@
   white-space: nowrap;
 }
 
+.commentComposer {
+  margin-top: 20px;
+  border: 1px solid var(--ink);
+  background: color-mix(in srgb, var(--a) 7%, var(--surface));
+  padding: 18px;
+}
+
+.commentComposer label {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 900;
+  letter-spacing: -0.01em;
+}
+
+.commentComposer textarea {
+  width: 100%;
+  min-height: 112px;
+  margin-top: 10px;
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  line-height: 1.6;
+  padding: 13px 14px;
+}
+
+.commentComposer textarea:focus-visible,
+.commentComposer button:focus-visible {
+  outline: 3px solid var(--a);
+  outline-offset: 2px;
+}
+
+.commentComposerFooter {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.commentComposerFooter p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
+.commentComposerFooter > span {
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.commentComposerFooter button {
+  min-height: 44px;
+  border: 1px solid var(--ink);
+  background: var(--ink);
+  color: var(--surface);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 900;
+  padding: 9px 15px;
+}
+
+.commentComposerFooter button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.commentComposerError {
+  margin: 11px 0 0;
+  color: #9c2f00;
+  font-size: 0.76rem;
+  font-weight: 750;
+}
+
 .commentEyebrow {
   margin: 0;
   color: var(--a);
@@ -67,6 +146,16 @@
   margin-top: 20px;
   overflow-x: auto;
   padding: 3px;
+}
+
+@media (max-width: 620px) {
+  .commentComposerFooter {
+    grid-template-columns: 1fr auto;
+  }
+
+  .commentComposerFooter p {
+    grid-column: 1 / -1;
+  }
 }
 
 .commentFilters button,

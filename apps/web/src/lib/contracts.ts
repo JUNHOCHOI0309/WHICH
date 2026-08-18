@@ -57,6 +57,8 @@ export type PublicCommentPage = {
   nextCursor: string | null;
 };
 
+export type CommentWriteResponse = { comment: PublicComment };
+
 export type VoteResponse = {
   outcome: "ACCEPTED" | "REJECTED_DUPLICATE";
   voteAttemptId: string;
