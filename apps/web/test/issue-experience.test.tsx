@@ -395,6 +395,73 @@ describe("IssueExperience", () => {
     expect(sessionStorage.getItem(`which:comment-draft:${ISSUE_ID}`)).toBeNull();
   });
 
+  it("optimistically toggles 공감 and reconciles the server count", async () => {
+    const savedResult: VoteResponse = {
+      outcome: "ACCEPTED",
+      voteAttemptId: "attempt-reaction",
+      voteId: "vote-reaction",
+      issueId: ISSUE_ID,
+      issueVersion: 1,
+      choice: "A",
+      result: {
+        resultVersion: 1,
+        acceptedA: 1,
+        acceptedB: 0,
+        displayedTotal: 1,
+        integrityState: "NORMAL",
+      },
+    };
+    sessionStorage.setItem(`which:vote-result:${ISSUE_ID}`, JSON.stringify(savedResult));
+    const reactionRequests: RequestInit[] = [];
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = String(input);
+        if (url === "/api/guest-subjects") return jsonResponse({ status: "ready" });
+        if (url.endsWith(`/api/issues/${ISSUE_ID}`)) return jsonResponse(issue);
+        if (url === "/api/member-session") {
+          return jsonResponse({ code: "SESSION_INVALID", message: "guest" }, 401);
+        }
+        if (url.startsWith(`/api/issues/${ISSUE_ID}/comments?`)) {
+          return jsonResponse({
+            items: [
+              {
+                id: "reaction-comment",
+                choice: "A",
+                author: { displayName: "작성자" },
+                body: "공감 테스트 댓글",
+                threadState: "OPEN",
+                createdAt: "2026-08-18T02:00:00.000Z",
+                editedAt: null,
+                reactions: { helpfulCount: 2, viewerReacted: false },
+              },
+            ],
+            nextCursor: null,
+          });
+        }
+        if (url === "/api/comments/reaction-comment/reactions/helpful") {
+          reactionRequests.push(init ?? {});
+          return jsonResponse({
+            reaction: { code: "HELPFUL", active: true, helpfulCount: 3 },
+          });
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      }),
+    );
+
+    render(<IssueExperience issueId={ISSUE_ID} />);
+    const reaction = await screen.findByRole("button", { name: "공감 2" });
+    fireEvent.click(reaction);
+
+    const activeReaction = await screen.findByRole("button", { name: "공감 3" });
+    expect(activeReaction).toHaveAttribute("aria-pressed", "true");
+    expect(reactionRequests).toHaveLength(1);
+    expect(new Headers(reactionRequests[0]?.headers).get("idempotency-key")).toEqual(
+      expect.any(String),
+    );
+  });
+
   it("shows a recoverable state when the question cannot load", async () => {
     vi.stubGlobal(
       "fetch",

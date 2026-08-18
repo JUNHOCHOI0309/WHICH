@@ -22,6 +22,7 @@ const issueReader: IssueReadService = {
 const commentReader: CommentService = {
   listGuestComments: vi.fn(),
   submitMemberComment: vi.fn(),
+  toggleHelpfulReaction: vi.fn(),
 };
 
 const memberIdentity: MemberIdentityService = {
@@ -107,6 +108,7 @@ describe("OpenAPI contract", () => {
     expect(document.paths).toHaveProperty(["/v1/guest-subjects", "post"]);
     expect(document.paths).toHaveProperty(["/v1/issues/{issueId}/votes", "post"]);
     expect(document.paths).toHaveProperty(["/v1/issues/{issueId}/comments", "get"]);
+    expect(document.paths).toHaveProperty(["/v1/comments/{commentId}/reactions/helpful", "post"]);
     expect(document.paths).toHaveProperty(["/v1/member-session", "get"]);
     expect(document.paths).toHaveProperty(["/v1/member-session", "delete"]);
   });

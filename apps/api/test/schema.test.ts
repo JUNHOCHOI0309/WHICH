@@ -3,6 +3,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   comments,
+  commentReactionAttempts,
+  commentReactionCodeEnum,
+  commentReactions,
   guestMemberLinks,
   issueChoices,
   issueVersions,
@@ -36,6 +39,8 @@ describe("data architecture v1 schema", () => {
       memberIdentityLinks,
       memberSessions,
       guestMemberLinks,
+      commentReactions,
+      commentReactionAttempts,
     ].map((table) => getTableConfig(table).name);
 
     expect(tableNames).toEqual([
@@ -53,7 +58,13 @@ describe("data architecture v1 schema", () => {
       "member_identity_links",
       "member_sessions",
       "guest_member_links",
+      "comment_reactions",
+      "comment_reaction_attempts",
     ]);
+  });
+
+  it("keeps HELPFUL as the single v1 Comment reaction code", () => {
+    expect(commentReactionCodeEnum.enumValues).toEqual(["HELPFUL"]);
   });
 
   it("keeps the canonical vote integrity states", () => {
