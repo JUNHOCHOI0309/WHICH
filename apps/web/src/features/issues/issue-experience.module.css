@@ -248,6 +248,42 @@
   font-weight: 750;
 }
 
+.commentCard footer button {
+  min-height: 34px;
+  margin-left: auto;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 850;
+  padding: 5px 11px;
+}
+
+.commentCard footer button.reactionActive {
+  border-color: var(--a);
+  background: color-mix(in srgb, var(--a) 16%, var(--surface));
+}
+
+.commentCard footer button:focus-visible {
+  outline: 3px solid var(--a);
+  outline-offset: 2px;
+}
+
+.commentCard footer button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.reactionError {
+  margin: 12px 0 0;
+  color: #9c2f00;
+  font-size: 0.76rem;
+  font-weight: 750;
+}
+
 .commentMessage {
   margin-top: 18px;
   border: 1px dashed var(--line);

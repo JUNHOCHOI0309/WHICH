@@ -22,6 +22,7 @@ import {
   loadPublicIssue,
   submitMemberComment,
   submitGuestVote,
+  toggleHelpfulReaction,
   WebApiError,
 } from "./client";
 
@@ -338,6 +339,8 @@ function CommentSection({ issueId }: { issueId: string }) {
   const [authState, setAuthState] = useState<"loading" | "guest" | "member">("loading");
   const [posting, setPosting] = useState(false);
   const [postError, setPostError] = useState<string | null>(null);
+  const [reactionError, setReactionError] = useState<string | null>(null);
+  const [pendingReactionIds, setPendingReactionIds] = useState<Set<string>>(() => new Set());
   const pendingCommentKey = useRef<string | null>(null);
   const draftTouched = useRef(false);
   const draftKey = `which:comment-draft:${issueId}`;
@@ -477,6 +480,60 @@ function CommentSection({ issueId }: { issueId: string }) {
     }
   };
 
+  const toggleReaction = async (comment: PublicComment) => {
+    if (pendingReactionIds.has(comment.id)) return;
+    const previous = comment.reactions ?? { helpfulCount: 0, viewerReacted: false };
+    const optimisticActive = !previous.viewerReacted;
+    const optimisticCount = Math.max(0, previous.helpfulCount + (optimisticActive ? 1 : -1));
+    setReactionError(null);
+    setPendingReactionIds((current) => new Set(current).add(comment.id));
+    setItems((current) =>
+      current.map((item) =>
+        item.id === comment.id
+          ? {
+              ...item,
+              reactions: { helpfulCount: optimisticCount, viewerReacted: optimisticActive },
+            }
+          : item,
+      ),
+    );
+
+    try {
+      const result = await toggleHelpfulReaction({
+        commentId: comment.id,
+        idempotencyKey: crypto.randomUUID(),
+      });
+      setItems((current) =>
+        current.map((item) =>
+          item.id === comment.id
+            ? {
+                ...item,
+                reactions: {
+                  helpfulCount: result.reaction.helpfulCount,
+                  viewerReacted: result.reaction.active,
+                },
+              }
+            : item,
+        ),
+      );
+    } catch (error) {
+      setItems((current) =>
+        current.map((item) => (item.id === comment.id ? { ...item, reactions: previous } : item)),
+      );
+      setReactionError(
+        error instanceof WebApiError && error.code === "VOTE_REQUIRED"
+          ? "이 안건의 유효한 투표가 있어야 공감할 수 있어요."
+          : "공감 상태를 바꾸지 못했어요. 잠시 후 다시 시도해 주세요.",
+      );
+    } finally {
+      setPendingReactionIds((current) => {
+        const next = new Set(current);
+        next.delete(comment.id);
+        return next;
+      });
+    }
+  };
+
   return (
     <section className={styles.comments} aria-labelledby="comment-title">
       <div className={styles.commentHeading}>
@@ -589,10 +646,26 @@ function CommentSection({ issueId }: { issueId: string }) {
               <footer>
                 {comment.editedAt ? <span>수정됨</span> : null}
                 {comment.threadState === "LOCKED" ? <span>대화 잠김</span> : null}
+                <button
+                  type="button"
+                  className={comment.reactions?.viewerReacted ? styles.reactionActive : undefined}
+                  aria-pressed={comment.reactions?.viewerReacted ?? false}
+                  disabled={pendingReactionIds.has(comment.id)}
+                  onClick={() => void toggleReaction(comment)}
+                >
+                  <span aria-hidden="true">{comment.reactions?.viewerReacted ? "♥" : "♡"}</span>
+                  공감 {comment.reactions?.helpfulCount ?? 0}
+                </button>
               </footer>
             </article>
           ))}
         </div>
+      ) : null}
+
+      {reactionError ? (
+        <p className={styles.reactionError} role="alert">
+          {reactionError}
+        </p>
       ) : null}
 
       {state !== "error" && nextCursor ? (

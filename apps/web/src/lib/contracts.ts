@@ -50,6 +50,7 @@ export type PublicComment = {
   threadState: "OPEN" | "LOCKED";
   createdAt: string;
   editedAt: string | null;
+  reactions: { helpfulCount: number; viewerReacted: boolean };
 };
 
 export type PublicCommentPage = {
@@ -58,6 +59,10 @@ export type PublicCommentPage = {
 };
 
 export type CommentWriteResponse = { comment: PublicComment };
+
+export type HelpfulReactionResponse = {
+  reaction: { code: "HELPFUL"; active: boolean; helpfulCount: number };
+};
 
 export type VoteResponse = {
   outcome: "ACCEPTED" | "REJECTED_DUPLICATE";
