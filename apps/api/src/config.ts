@@ -6,6 +6,7 @@ const booleanString = z
   .transform((value) => value === "true");
 
 const LOCAL_INTERNAL_AUTH_SECRET = "which-local-internal-auth-secret";
+const LOCAL_MODERATION_INTERNAL_SECRET = "which-local-moderation-internal-secret";
 
 const environmentSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
@@ -15,6 +16,7 @@ const environmentSchema = z.object({
   WEB_ORIGIN: z.string().url().default("http://localhost:3000"),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
   INTERNAL_AUTH_SECRET: z.string().min(16).default(LOCAL_INTERNAL_AUTH_SECRET),
+  MODERATION_INTERNAL_SECRET: z.string().min(16).default(LOCAL_MODERATION_INTERNAL_SECRET),
   MEMBER_SESSION_TTL_SECONDS: z.coerce.number().int().min(300).max(2_592_000).default(604_800),
   FEATURE_COMMENTS_ENABLED: booleanString,
   FEATURE_CREATOR_SUBMISSIONS_ENABLED: booleanString,
@@ -34,6 +36,12 @@ export function getConfig(environment: NodeJS.ProcessEnv = process.env) {
   ) {
     throw new Error("INTERNAL_AUTH_SECRET must be configured for production.");
   }
+  if (
+    parsed.NODE_ENV === "production" &&
+    parsed.MODERATION_INTERNAL_SECRET === LOCAL_MODERATION_INTERNAL_SECRET
+  ) {
+    throw new Error("MODERATION_INTERNAL_SECRET must be configured for production.");
+  }
 
   return {
     environment: parsed.NODE_ENV,
@@ -46,6 +54,7 @@ export function getConfig(environment: NodeJS.ProcessEnv = process.env) {
     databaseUrl: parsed.DATABASE_URL,
     auth: {
       internalSecret: parsed.INTERNAL_AUTH_SECRET,
+      moderationInternalSecret: parsed.MODERATION_INTERNAL_SECRET,
       memberSessionTtlSeconds: parsed.MEMBER_SESSION_TTL_SECONDS,
       allowDevelopmentProvider: parsed.NODE_ENV !== "production",
     },

@@ -72,6 +72,8 @@ export const comments = pgTable(
     visibility: commentVisibilityEnum("visibility").default("VISIBLE").notNull(),
     threadState: commentThreadStateEnum("thread_state").default("OPEN").notNull(),
     integrityState: commentIntegrityStateEnum("integrity_state").default("NORMAL").notNull(),
+    reportScoreBaseline: integer("report_score_baseline").default(0).notNull(),
+    reporterCountBaseline: integer("reporter_count_baseline").default(0).notNull(),
     editedAt: timestamp("edited_at", { withTimezone: true }),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
     version: integer("version").default(1).notNull(),
@@ -105,6 +107,8 @@ export const comments = pgTable(
       .where(sql`${table.parentCommentId} is null and ${table.deletedAt} is null`),
     check("comments_body_not_blank_check", sql`length(btrim(${table.body})) > 0`),
     check("comments_positive_version_check", sql`${table.version} > 0`),
+    check("comments_report_score_baseline_check", sql`${table.reportScoreBaseline} >= 0`),
+    check("comments_reporter_count_baseline_check", sql`${table.reporterCountBaseline} >= 0`),
     check(
       "comments_thread_shape_check",
       sql`(${table.parentCommentId} is null and ${table.threadRootCommentId} is null)

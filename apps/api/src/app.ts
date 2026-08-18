@@ -97,7 +97,7 @@ export async function buildApp(config: AppConfig, database: AppDependencies) {
 
   await registerIssueRoutes(app, database.issueReader);
   await registerVotingRoutes(app, database.guestVotes);
-  await registerCommentRoutes(app, database.commentReader);
+  await registerCommentRoutes(app, database.commentReader, config.auth.moderationInternalSecret);
   await registerMemberIdentityRoutes(app, database.memberIdentity, config.auth.internalSecret);
 
   app.addHook("onClose", async () => {

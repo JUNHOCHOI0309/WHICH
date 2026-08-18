@@ -1,12 +1,29 @@
 import { createHash, randomUUID } from "node:crypto";
 
-import { and, asc, count, desc, eq, gt, inArray, isNull, lt, or, sql, type SQL } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNull,
+  lt,
+  or,
+  sql,
+  sum,
+  type SQL,
+} from "drizzle-orm";
 
 import type { Database } from "../../database/client.js";
 import {
   comments,
+  commentModerationDecisions,
   commentReactionAttempts,
   commentReactions,
+  commentReportAttempts,
+  commentReports,
   commentWriteAttempts,
   guestMemberLinks,
   issueChoices,
@@ -19,6 +36,8 @@ import {
 } from "../../database/schema/index.js";
 import type {
   CommentService,
+  CommentReportCommand,
+  CommentReportResult,
   HelpfulReactionCommand,
   HelpfulReactionResult,
   MemberCommentSubmission,
@@ -30,6 +49,12 @@ import { CommentError } from "./errors.js";
 
 const TEXT_POLICY_VERSION = "comment-text-v1";
 const EVENT_SCHEMA_VERSION = 1;
+const REPORT_POLICY_VERSION = "comment-report-v1";
+const REPORT_DAILY_LIMIT = 20;
+const COLLAPSE_SCORE = 10;
+const COLLAPSE_REPORTERS = 5;
+const HIDE_SCORE = 20;
+const HIDE_REPORTERS = 10;
 
 type EligibleVote = { id: string; issueVersion: number; choice: "A" | "B" };
 
@@ -108,17 +133,71 @@ function isStoredCommentResponse(value: unknown): value is MemberCommentSubmissi
 function toPublicComment(
   row: typeof comments.$inferSelect,
   reactions: PublicComment["reactions"] = { helpfulCount: 0, viewerReacted: false },
+  reports: PublicComment["reports"] = { viewerReported: false, canReport: false },
 ): PublicComment {
   return {
     id: row.id,
     choice: row.choice,
     author: { displayName: row.authorDisplayName },
     body: row.body,
+    visibility: row.visibility as PublicComment["visibility"],
     threadState: row.threadState,
     createdAt: row.createdAt.toISOString(),
     editedAt: row.editedAt?.toISOString() ?? null,
     reactions,
+    reports,
   };
+}
+
+function normalizeReportDetail(command: Pick<CommentReportCommand, "reason" | "detail">) {
+  const detail = command.detail?.replace(/\r\n?/g, "\n").normalize("NFC").trim();
+  if (command.reason === "OTHER") {
+    if (!detail || Array.from(detail).length < 10) {
+      throw new CommentError(
+        "REPORT_DETAIL_REQUIRED",
+        422,
+        "OTHER reports require a detail of at least 10 characters.",
+      );
+    }
+    return detail;
+  }
+  if (detail) {
+    throw new CommentError(
+      "REPORT_DETAIL_NOT_ALLOWED",
+      422,
+      "A report detail is only accepted for OTHER reports.",
+    );
+  }
+  return undefined;
+}
+
+function reportFingerprint(
+  command: CommentReportCommand,
+  actorSubjectId: string,
+  detail: string | undefined,
+) {
+  return createHash("sha256")
+    .update(
+      JSON.stringify([
+        command.idempotencyKey,
+        actorSubjectId,
+        command.commentId,
+        command.reason,
+        detail ?? null,
+      ]),
+    )
+    .digest("hex");
+}
+
+function isStoredReportResponse(value: unknown): value is CommentReportResult {
+  if (typeof value !== "object" || value === null) return false;
+  const candidate = value as Partial<CommentReportResult>;
+  return (
+    candidate.httpStatus === 201 &&
+    candidate.body?.report?.accepted === true &&
+    candidate.body.report.viewerReported === true &&
+    typeof candidate.body.comment?.visibility === "string"
+  );
 }
 
 function reactionFingerprint(command: HelpfulReactionCommand, actorSubjectId: string) {
@@ -311,7 +390,7 @@ export function createCommentService(database: Database["db"]): CommentService {
           eq(comments.issueVersion, acceptedVote.issueVersion),
           isNull(comments.parentCommentId),
           eq(comments.publicationState, "PUBLISHED"),
-          inArray(comments.visibility, ["VISIBLE", "DEPRIORITIZED"]),
+          inArray(comments.visibility, ["VISIBLE", "DEPRIORITIZED", "COLLAPSED"]),
           eq(comments.integrityState, "NORMAL"),
           isNull(comments.deletedAt),
         ];
@@ -365,18 +444,40 @@ export function createCommentService(database: Database["db"]): CommentService {
                     eq(commentReactions.active, true),
                   ),
                 );
+        const viewerReports =
+          commentIds.length === 0
+            ? []
+            : await transaction
+                .select({ commentId: commentReports.commentId })
+                .from(commentReports)
+                .where(
+                  and(
+                    inArray(commentReports.commentId, commentIds),
+                    eq(commentReports.subjectId, viewerSubjectId),
+                    eq(commentReports.counted, true),
+                  ),
+                );
         const countByComment = new Map(
           reactionCounts.map((reaction) => [reaction.commentId, reaction.total]),
         );
         const reactedCommentIds = new Set(viewerReactions.map((reaction) => reaction.commentId));
+        const reportedCommentIds = new Set(viewerReports.map((report) => report.commentId));
 
         return {
-          items: pageRows.map((row) =>
-            toPublicComment(row, {
-              helpfulCount: countByComment.get(row.id) ?? 0,
-              viewerReacted: reactedCommentIds.has(row.id),
-            }),
-          ),
+          items: pageRows.map((row) => {
+            const viewerReported = reportedCommentIds.has(row.id);
+            return toPublicComment(
+              row,
+              {
+                helpfulCount: countByComment.get(row.id) ?? 0,
+                viewerReacted: reactedCommentIds.has(row.id),
+              },
+              {
+                viewerReported,
+                canReport: row.authorSubjectId !== viewerSubjectId && !viewerReported,
+              },
+            );
+          }),
           nextCursor:
             hasMore && lastItem
               ? encodeCommentCursor({ createdAt: lastItem.createdAt, commentId: lastItem.id })
@@ -877,6 +978,562 @@ export function createCommentService(database: Database["db"]): CommentService {
           .set({ completedAt: now, responseSnapshot: response })
           .where(eq(commentReactionAttempts.id, command.idempotencyKey));
         return response;
+      });
+    },
+
+    async reportComment(command) {
+      const detail = normalizeReportDetail(command);
+      const now = new Date();
+
+      return database.transaction(async (transaction) => {
+        let actorSubjectId: string;
+        let originSubjectId: string;
+        let actorMemberId: string | undefined;
+        let actorKind: "GUEST" | "MEMBER" | "VERIFIED_MEMBER";
+
+        if (command.sessionToken) {
+          const [memberActor] = await transaction
+            .select({
+              memberId: members.id,
+              subjectId: voterSubjects.id,
+              kind: voterSubjects.kind,
+            })
+            .from(memberSessions)
+            .innerJoin(members, eq(memberSessions.memberId, members.id))
+            .innerJoin(voterSubjects, eq(voterSubjects.userId, members.id))
+            .where(
+              and(
+                eq(memberSessions.tokenHash, hashToken(command.sessionToken)),
+                isNull(memberSessions.revokedAt),
+                gt(memberSessions.expiresAt, now),
+                eq(members.status, "ACTIVE"),
+              ),
+            )
+            .limit(1);
+          if (!memberActor) {
+            throw new CommentError("SESSION_REQUIRED", 401, "The Member session is invalid.");
+          }
+          actorSubjectId = memberActor.subjectId;
+          originSubjectId = memberActor.subjectId;
+          actorMemberId = memberActor.memberId;
+          actorKind = memberActor.kind;
+        } else {
+          if (!command.anonymousSubjectId) {
+            throw new CommentError(
+              "REPORT_SUBJECT_REQUIRED",
+              401,
+              "A Guest subject or Member session is required.",
+            );
+          }
+          await transaction.execute(
+            sql`select pg_advisory_xact_lock(hashtextextended(${command.anonymousSubjectId}, 0))`,
+          );
+          const [guestActor] = await transaction
+            .select({ id: voterSubjects.id })
+            .from(voterSubjects)
+            .where(
+              and(
+                eq(voterSubjects.kind, "GUEST"),
+                eq(voterSubjects.anonymousSubjectId, command.anonymousSubjectId),
+              ),
+            )
+            .limit(1);
+          if (!guestActor) {
+            throw new CommentError("REPORT_SUBJECT_REQUIRED", 401, "The Guest subject is invalid.");
+          }
+          const [guestLink] = await transaction
+            .select({
+              memberId: guestMemberLinks.memberId,
+              memberSubjectId: guestMemberLinks.memberSubjectId,
+              memberKind: voterSubjects.kind,
+            })
+            .from(guestMemberLinks)
+            .innerJoin(voterSubjects, eq(voterSubjects.id, guestMemberLinks.memberSubjectId))
+            .where(eq(guestMemberLinks.guestSubjectId, guestActor.id))
+            .limit(1);
+          actorSubjectId = guestLink?.memberSubjectId ?? guestActor.id;
+          originSubjectId = guestActor.id;
+          actorMemberId = guestLink?.memberId;
+          actorKind = guestLink?.memberKind ?? "GUEST";
+        }
+
+        const requestFingerprint = reportFingerprint(command, actorSubjectId, detail);
+        await transaction.execute(
+          sql`select pg_advisory_xact_lock(hashtextextended(${command.idempotencyKey}, 0))`,
+        );
+        const [existingAttempt] = await transaction
+          .select({
+            actorSubjectId: commentReportAttempts.actorSubjectId,
+            requestFingerprint: commentReportAttempts.requestFingerprint,
+            responseSnapshot: commentReportAttempts.responseSnapshot,
+          })
+          .from(commentReportAttempts)
+          .where(eq(commentReportAttempts.id, command.idempotencyKey))
+          .limit(1);
+        if (existingAttempt) {
+          if (
+            existingAttempt.actorSubjectId !== actorSubjectId ||
+            existingAttempt.requestFingerprint !== requestFingerprint
+          ) {
+            throw new CommentError(
+              "IDEMPOTENCY_CONFLICT",
+              409,
+              "The Idempotency-Key was already used for a different report request.",
+            );
+          }
+          if (!isStoredReportResponse(existingAttempt.responseSnapshot)) {
+            throw new CommentError(
+              "IDEMPOTENCY_INCOMPLETE",
+              409,
+              "The original report request has not reached a reusable result.",
+            );
+          }
+          return existingAttempt.responseSnapshot;
+        }
+
+        await transaction.execute(
+          sql`select pg_advisory_xact_lock(hashtextextended(${`${command.commentId}:${actorSubjectId}:REPORT`}, 0))`,
+        );
+        const [target] = await transaction
+          .select({
+            commentId: comments.id,
+            issueId: comments.issueId,
+            issueVersion: comments.issueVersion,
+            authorSubjectId: comments.authorSubjectId,
+            publicationState: comments.publicationState,
+            commentVisibility: comments.visibility,
+            commentIntegrityState: comments.integrityState,
+            reportScoreBaseline: comments.reportScoreBaseline,
+            reporterCountBaseline: comments.reporterCountBaseline,
+            deletedAt: comments.deletedAt,
+            lifecycle: issues.lifecycle,
+            issueVisibility: issues.visibility,
+            resultVisibility: issues.resultVisibility,
+            riskLevel: issues.riskLevel,
+            isPolitical: issues.isPolitical,
+          })
+          .from(comments)
+          .innerJoin(issues, eq(issues.id, comments.issueId))
+          .where(eq(comments.id, command.commentId))
+          .limit(1)
+          .for("update");
+
+        const reportableTarget =
+          target &&
+          commentsAvailable({
+            lifecycle: target.lifecycle,
+            visibility: target.issueVisibility,
+            resultVisibility: target.resultVisibility,
+            riskLevel: target.riskLevel,
+            isPolitical: target.isPolitical,
+          }) &&
+          target.publicationState === "PUBLISHED" &&
+          ["VISIBLE", "DEPRIORITIZED", "COLLAPSED"].includes(target.commentVisibility) &&
+          target.commentIntegrityState === "NORMAL" &&
+          target.deletedAt === null;
+        if (!target || !reportableTarget) {
+          throw new CommentError(
+            "REPORT_UNAVAILABLE",
+            403,
+            "Reports are not available for this Comment.",
+          );
+        }
+        if (target.authorSubjectId === actorSubjectId) {
+          throw new CommentError(
+            "REPORT_OWN_COMMENT",
+            403,
+            "Authors cannot report their own Comment.",
+          );
+        }
+
+        let [eligibleVote] = await transaction
+          .select({ id: votes.id })
+          .from(votes)
+          .where(
+            and(
+              eq(votes.issueId, target.issueId),
+              eq(votes.issueVersion, target.issueVersion),
+              eq(votes.subjectId, actorSubjectId),
+              eq(votes.integrityState, "ACCEPTED"),
+            ),
+          )
+          .limit(1);
+        if (!eligibleVote && actorMemberId) {
+          [eligibleVote] = await transaction
+            .select({ id: votes.id })
+            .from(guestMemberLinks)
+            .innerJoin(votes, eq(votes.subjectId, guestMemberLinks.guestSubjectId))
+            .where(
+              and(
+                eq(guestMemberLinks.memberId, actorMemberId),
+                eq(votes.issueId, target.issueId),
+                eq(votes.issueVersion, target.issueVersion),
+                eq(votes.integrityState, "ACCEPTED"),
+              ),
+            )
+            .limit(1);
+        }
+        if (!eligibleVote) {
+          throw new CommentError(
+            "VOTE_REQUIRED",
+            403,
+            "An accepted Vote on the Comment Issue is required.",
+          );
+        }
+
+        const [existingReport] = await transaction
+          .select({ id: commentReports.id })
+          .from(commentReports)
+          .where(
+            and(
+              eq(commentReports.commentId, command.commentId),
+              eq(commentReports.subjectId, actorSubjectId),
+              eq(commentReports.counted, true),
+            ),
+          )
+          .limit(1);
+        if (existingReport) {
+          throw new CommentError(
+            "REPORT_ALREADY_EXISTS",
+            409,
+            "This subject already reported the Comment.",
+          );
+        }
+
+        const [daily] = await transaction
+          .select({ total: count() })
+          .from(commentReports)
+          .where(
+            and(
+              eq(commentReports.subjectId, actorSubjectId),
+              eq(commentReports.counted, true),
+              gt(commentReports.createdAt, new Date(now.getTime() - 86_400_000)),
+            ),
+          );
+        if ((daily?.total ?? 0) >= REPORT_DAILY_LIMIT) {
+          throw new CommentError(
+            "REPORT_RATE_LIMITED",
+            429,
+            "The daily Comment report limit has been reached.",
+          );
+        }
+
+        await transaction.insert(commentReportAttempts).values({
+          id: command.idempotencyKey,
+          commentId: command.commentId,
+          actorSubjectId,
+          requestFingerprint,
+        });
+        const weight = actorKind === "GUEST" ? 1 : 2;
+        const [report] = await transaction
+          .insert(commentReports)
+          .values({
+            commentId: command.commentId,
+            subjectId: actorSubjectId,
+            originSubjectId,
+            reason: command.reason,
+            detail,
+            weight,
+            createdAt: now,
+            updatedAt: now,
+          })
+          .returning({ id: commentReports.id });
+        if (!report) throw new Error("Comment report insert did not return a row.");
+
+        const [aggregate] = await transaction
+          .select({ score: sum(commentReports.weight), reporters: count() })
+          .from(commentReports)
+          .where(
+            and(eq(commentReports.commentId, command.commentId), eq(commentReports.counted, true)),
+          );
+        const reportScore = Number(aggregate?.score ?? 0);
+        const reporterCount = aggregate?.reporters ?? 0;
+        const effectiveScore = reportScore - target.reportScoreBaseline;
+        const effectiveReporters = reporterCount - target.reporterCountBaseline;
+
+        let nextPublicationState = target.publicationState;
+        let nextVisibility = target.commentVisibility;
+        let nextIntegrityState = target.commentIntegrityState;
+        let autoAction: "COLLAPSE" | "HIDE" | null = null;
+        if (effectiveScore >= HIDE_SCORE && effectiveReporters >= HIDE_REPORTERS) {
+          nextPublicationState = "PENDING_HUMAN_REVIEW";
+          nextVisibility = "HIDDEN";
+          nextIntegrityState = "REVIEW";
+          autoAction = "HIDE";
+        } else if (
+          effectiveScore >= COLLAPSE_SCORE &&
+          effectiveReporters >= COLLAPSE_REPORTERS &&
+          target.commentVisibility !== "COLLAPSED"
+        ) {
+          nextVisibility = "COLLAPSED";
+          autoAction = "COLLAPSE";
+        }
+
+        if (autoAction) {
+          await transaction
+            .update(comments)
+            .set({
+              publicationState: nextPublicationState,
+              visibility: nextVisibility,
+              integrityState: nextIntegrityState,
+              version: sql`${comments.version} + 1`,
+              updatedAt: now,
+            })
+            .where(eq(comments.id, command.commentId));
+          await transaction.insert(commentModerationDecisions).values({
+            commentId: command.commentId,
+            revision: sql`(select coalesce(max(revision), 0) + 1 from comment_moderation_decisions where comment_id = ${command.commentId})`,
+            action: autoAction,
+            source: "SYSTEM_AUTOMATION",
+            reasonCode: autoAction === "HIDE" ? "REPORT_SCORE_20" : "REPORT_SCORE_10",
+            fromPublicationState: target.publicationState,
+            toPublicationState: nextPublicationState,
+            fromVisibility: target.commentVisibility,
+            toVisibility: nextVisibility,
+            fromIntegrityState: target.commentIntegrityState,
+            toIntegrityState: nextIntegrityState,
+            evidence: {
+              policy_version: REPORT_POLICY_VERSION,
+              report_score: reportScore,
+              reporter_count: reporterCount,
+              effective_report_score: effectiveScore,
+              effective_reporter_count: effectiveReporters,
+            },
+            decidedAt: now,
+          });
+        }
+
+        const reportEventId = randomUUID();
+        await transaction.insert(outboxEvents).values({
+          id: reportEventId,
+          aggregateType: "COMMENT",
+          aggregateId: command.commentId,
+          eventType: "COMMENT_REPORTED",
+          schemaVersion: EVENT_SCHEMA_VERSION,
+          occurredAt: now,
+          payload: {
+            event_id: reportEventId,
+            event_type: "COMMENT_REPORTED",
+            schema_version: EVENT_SCHEMA_VERSION,
+            occurred_at: now.toISOString(),
+            aggregate_type: "COMMENT",
+            aggregate_id: command.commentId,
+            data: {
+              report_id: report.id,
+              actor_subject_id: actorSubjectId,
+              reason: command.reason,
+              weight,
+              policy_version: REPORT_POLICY_VERSION,
+            },
+          },
+        });
+        if (autoAction) {
+          const moderationEventId = randomUUID();
+          const eventType =
+            autoAction === "HIDE" ? "COMMENT_AUTO_HIDDEN" : "COMMENT_AUTO_COLLAPSED";
+          await transaction.insert(outboxEvents).values({
+            id: moderationEventId,
+            aggregateType: "COMMENT",
+            aggregateId: command.commentId,
+            eventType,
+            schemaVersion: EVENT_SCHEMA_VERSION,
+            occurredAt: now,
+            payload: {
+              event_id: moderationEventId,
+              event_type: eventType,
+              schema_version: EVENT_SCHEMA_VERSION,
+              occurred_at: now.toISOString(),
+              aggregate_type: "COMMENT",
+              aggregate_id: command.commentId,
+              data: {
+                report_score: reportScore,
+                reporter_count: reporterCount,
+                visibility: nextVisibility,
+              },
+            },
+          });
+        }
+
+        const response: CommentReportResult = {
+          httpStatus: 201,
+          body: {
+            report: { accepted: true, viewerReported: true },
+            comment: {
+              visibility: nextVisibility as CommentReportResult["body"]["comment"]["visibility"],
+            },
+          },
+        };
+        await transaction
+          .update(commentReportAttempts)
+          .set({ completedAt: now, responseSnapshot: response })
+          .where(eq(commentReportAttempts.id, command.idempotencyKey));
+        return response;
+      });
+    },
+
+    async listModerationCases(limit) {
+      return database.transaction(async (transaction) => {
+        const rows = await transaction
+          .select()
+          .from(comments)
+          .where(
+            or(
+              eq(comments.visibility, "COLLAPSED"),
+              eq(comments.publicationState, "PENDING_HUMAN_REVIEW"),
+            ),
+          )
+          .orderBy(desc(comments.updatedAt), desc(comments.id))
+          .limit(limit);
+        const commentIds = rows.map((row) => row.id);
+        const aggregates =
+          commentIds.length === 0
+            ? []
+            : await transaction
+                .select({
+                  commentId: commentReports.commentId,
+                  score: sum(commentReports.weight),
+                  reporters: count(),
+                })
+                .from(commentReports)
+                .where(
+                  and(
+                    inArray(commentReports.commentId, commentIds),
+                    eq(commentReports.counted, true),
+                  ),
+                )
+                .groupBy(commentReports.commentId);
+        const aggregateByComment = new Map(
+          aggregates.map((aggregate) => [aggregate.commentId, aggregate]),
+        );
+        return {
+          items: rows.map((row) => {
+            const aggregate = aggregateByComment.get(row.id);
+            const reportScore = Number(aggregate?.score ?? 0);
+            const reporterCount = aggregate?.reporters ?? 0;
+            return {
+              commentId: row.id,
+              issueId: row.issueId,
+              authorDisplayName: row.authorDisplayName,
+              body: row.body,
+              publicationState: row.publicationState,
+              visibility: row.visibility,
+              integrityState: row.integrityState,
+              reportScore,
+              reporterCount,
+              effectiveReportScore: reportScore - row.reportScoreBaseline,
+              effectiveReporterCount: reporterCount - row.reporterCountBaseline,
+              updatedAt: row.updatedAt.toISOString(),
+            };
+          }),
+        };
+      });
+    },
+
+    async decideModeration(command) {
+      const now = new Date();
+      return database.transaction(async (transaction) => {
+        const [target] = await transaction
+          .select()
+          .from(comments)
+          .where(eq(comments.id, command.commentId))
+          .limit(1)
+          .for("update");
+        if (!target) {
+          throw new CommentError(
+            "MODERATION_COMMENT_NOT_FOUND",
+            404,
+            "The Comment does not exist.",
+          );
+        }
+        const [aggregate] = await transaction
+          .select({ score: sum(commentReports.weight), reporters: count() })
+          .from(commentReports)
+          .where(
+            and(eq(commentReports.commentId, command.commentId), eq(commentReports.counted, true)),
+          );
+        const reportScore = Number(aggregate?.score ?? 0);
+        const reporterCount = aggregate?.reporters ?? 0;
+
+        let publicationState: typeof target.publicationState = target.publicationState;
+        let visibility: typeof target.visibility = target.visibility;
+        let integrityState: typeof target.integrityState = target.integrityState;
+        if (command.action === "COLLAPSE") visibility = "COLLAPSED";
+        if (command.action === "HIDE") {
+          publicationState = "PENDING_HUMAN_REVIEW";
+          visibility = "HIDDEN";
+          integrityState = "REVIEW";
+        }
+        if (command.action === "REMOVE_POLICY") {
+          publicationState = "PUBLISHED";
+          visibility = "REMOVED_POLICY";
+          integrityState = "REJECTED";
+        }
+        if (command.action === "RESTORE") {
+          publicationState = "PUBLISHED";
+          visibility = "VISIBLE";
+          integrityState = "NORMAL";
+        }
+
+        await transaction
+          .update(comments)
+          .set({
+            publicationState,
+            visibility,
+            integrityState,
+            ...(command.action === "RESTORE"
+              ? { reportScoreBaseline: reportScore, reporterCountBaseline: reporterCount }
+              : {}),
+            version: sql`${comments.version} + 1`,
+            updatedAt: now,
+          })
+          .where(eq(comments.id, command.commentId));
+        await transaction.insert(commentModerationDecisions).values({
+          commentId: command.commentId,
+          revision: sql`(select coalesce(max(revision), 0) + 1 from comment_moderation_decisions where comment_id = ${command.commentId})`,
+          action: command.action,
+          source: "INTERNAL_MODERATOR",
+          reasonCode: command.reasonCode,
+          fromPublicationState: target.publicationState,
+          toPublicationState: publicationState,
+          fromVisibility: target.visibility,
+          toVisibility: visibility,
+          fromIntegrityState: target.integrityState,
+          toIntegrityState: integrityState,
+          evidence: { report_score: reportScore, reporter_count: reporterCount },
+          decidedAt: now,
+        });
+        const eventId = randomUUID();
+        await transaction.insert(outboxEvents).values({
+          id: eventId,
+          aggregateType: "COMMENT",
+          aggregateId: command.commentId,
+          eventType: "COMMENT_MODERATION_DECIDED",
+          schemaVersion: EVENT_SCHEMA_VERSION,
+          occurredAt: now,
+          payload: {
+            event_id: eventId,
+            event_type: "COMMENT_MODERATION_DECIDED",
+            schema_version: EVENT_SCHEMA_VERSION,
+            occurred_at: now.toISOString(),
+            aggregate_type: "COMMENT",
+            aggregate_id: command.commentId,
+            data: {
+              action: command.action,
+              reason_code: command.reasonCode,
+              publication_state: publicationState,
+              visibility,
+              integrity_state: integrityState,
+            },
+          },
+        });
+        return {
+          comment: {
+            id: command.commentId,
+            publicationState,
+            visibility,
+            integrityState,
+          },
+        };
       });
     },
   };
