@@ -15,6 +15,7 @@ const environmentSchema = z.object({
   DATABASE_URL: z.string().url().default("postgresql://which:which_local@localhost:54329/which"),
   WEB_ORIGIN: z.string().url().default("http://localhost:3000"),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
+  RELEASE_ID: z.string().min(1).max(128).default("local"),
   INTERNAL_AUTH_SECRET: z.string().min(16).default(LOCAL_INTERNAL_AUTH_SECRET),
   MODERATION_INTERNAL_SECRET: z.string().min(16).default(LOCAL_MODERATION_INTERNAL_SECRET),
   MEMBER_SESSION_TTL_SECONDS: z.coerce.number().int().min(300).max(2_592_000).default(604_800),
@@ -42,9 +43,13 @@ export function getConfig(environment: NodeJS.ProcessEnv = process.env) {
   ) {
     throw new Error("MODERATION_INTERNAL_SECRET must be configured for production.");
   }
+  if (parsed.NODE_ENV === "production" && parsed.RELEASE_ID === "local") {
+    throw new Error("RELEASE_ID must identify the deployed production release.");
+  }
 
   return {
     environment: parsed.NODE_ENV,
+    releaseId: parsed.RELEASE_ID,
     server: {
       host: parsed.API_HOST,
       port: parsed.API_PORT,

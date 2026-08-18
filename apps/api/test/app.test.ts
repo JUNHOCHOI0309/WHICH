@@ -73,6 +73,23 @@ describe("system health", () => {
     expect(response.statusCode).toBe(503);
     expect(response.json()).toEqual({ status: "unavailable", service: "which-api" });
   });
+
+  it("reports the running release identity", async () => {
+    const app = await buildApp(getConfig({ NODE_ENV: "test", RELEASE_ID: "test-release" }), {
+      ping: vi.fn(),
+      close: vi.fn(),
+      issueReader,
+      guestVotes,
+      commentReader,
+      memberIdentity,
+    });
+    openApps.push(app);
+
+    const response = await app.inject({ method: "GET", url: "/v1/meta" });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ service: "which-api", releaseId: "test-release" });
+  });
 });
 
 describe("safe feature defaults", () => {
@@ -87,6 +104,16 @@ describe("safe feature defaults", () => {
     expect(() => getConfig({ NODE_ENV: "production" })).toThrow(
       "INTERNAL_AUTH_SECRET must be configured for production.",
     );
+  });
+
+  it("requires an identifiable production release", () => {
+    expect(() =>
+      getConfig({
+        NODE_ENV: "production",
+        INTERNAL_AUTH_SECRET: "production-internal-secret",
+        MODERATION_INTERNAL_SECRET: "production-moderation-secret",
+      }),
+    ).toThrow("RELEASE_ID must identify the deployed production release.");
   });
 });
 

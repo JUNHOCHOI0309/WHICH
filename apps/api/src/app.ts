@@ -92,6 +92,7 @@ export async function buildApp(config: AppConfig, database: AppDependencies) {
   app.get("/v1/meta", { schema: { tags: ["system"] } }, () => ({
     service: "which-api",
     version: "0.1.0",
+    releaseId: config.releaseId,
     featureFlags: config.featureFlags,
   }));
 

@@ -64,6 +64,7 @@ pnpm --filter @which/api db:migrate
 pnpm --filter @which/api db:seed       # 멱등 Development Issue·Comment 생성
 pnpm --filter @which/api outbox:worker # 독립 Outbox Publisher 실행
 pnpm --filter @which/api outbox:publish-once
+pnpm --filter @which/api launch:gate # 읽기 전용 Public MVP GO/NO-GO 판정
 ```
 
 `db:seed`는 Production 환경에서 실행되지 않으며, 여러 번 실행해도 같은 Issue, Choice,
@@ -80,6 +81,7 @@ Comment를 중복 생성하거나 기존 Version을 덮어쓰지 않습니다.
 - Guest Subject 발급과 멱등 Vote Transaction
 - Vote Aggregate, Result Snapshot, Versioned Outbox 기록
 - Lease 기반 Outbox Publisher, 지수 백오프, Dead Letter와 재큐잉
+- 릴리스 ID 검증, Public MVP Gate와 비파괴 Rollback Drill
 - Guest Issue Read API와 Result Visibility 처리
 - 반복 가능한 Development Issue Seed
 - 안정 Cursor를 사용하는 Guest Issue Feed API
@@ -99,4 +101,6 @@ Comment를 중복 생성하거나 기존 Version을 덮어쓰지 않습니다.
 
 X·Instagram Login Adapter, Reply, 개인화 Feed Ranking, 강화된 Integrity Challenge와 추천 모델은
 후속 Task에서 구현합니다. Outbox Worker 운영 방법은
-[`docs/operations/outbox-publisher.md`](docs/operations/outbox-publisher.md)를 확인하세요.
+[`docs/operations/outbox-publisher.md`](docs/operations/outbox-publisher.md), 출시 판정과 복구 훈련은
+[`docs/operations/public-mvp-gate-and-rollback.md`](docs/operations/public-mvp-gate-and-rollback.md)를
+확인하세요.
