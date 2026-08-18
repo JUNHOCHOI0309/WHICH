@@ -4,13 +4,17 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsup src/server.ts --format esm --platform node --target node22 --clean --sourcemap",
+    "build": "tsup src/server.ts src/outbox-worker.ts --format esm --platform node --target node22 --clean --sourcemap",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:seed": "tsx src/database/seed.ts",
     "db:studio": "drizzle-kit studio",
     "dev": "tsx watch src/server.ts",
     "lint": "eslint .",
+    "outbox:dead-letters": "tsx src/outbox-worker.ts dead-letters",
+    "outbox:publish-once": "tsx src/outbox-worker.ts once",
+    "outbox:requeue": "tsx src/outbox-worker.ts requeue",
+    "outbox:worker": "tsx src/outbox-worker.ts run",
     "start": "node dist/server.js",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
