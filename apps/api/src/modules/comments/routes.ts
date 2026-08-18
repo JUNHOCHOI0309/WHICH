@@ -1,24 +1,24 @@
 import { Type } from "@sinclair/typebox";
 import type { FastifyInstance } from "fastify";
 
-import type { CommentReadService } from "./contracts.js";
-import { CommentReadError } from "./errors.js";
+import type { CommentService } from "./contracts.js";
+import { CommentError } from "./errors.js";
 
 const uuidSchema = Type.String({ format: "uuid" });
 const errorResponseSchema = Type.Object({ code: Type.String(), message: Type.String() });
 
+const publicCommentSchema = Type.Object({
+  id: uuidSchema,
+  choice: Type.Union([Type.Literal("A"), Type.Literal("B")]),
+  author: Type.Object({ displayName: Type.String() }),
+  body: Type.String(),
+  threadState: Type.Union([Type.Literal("OPEN"), Type.Literal("LOCKED")]),
+  createdAt: Type.String({ format: "date-time" }),
+  editedAt: Type.Union([Type.String({ format: "date-time" }), Type.Null()]),
+});
+
 const commentPageSchema = Type.Object({
-  items: Type.Array(
-    Type.Object({
-      id: uuidSchema,
-      choice: Type.Union([Type.Literal("A"), Type.Literal("B")]),
-      author: Type.Object({ displayName: Type.String() }),
-      body: Type.String(),
-      threadState: Type.Union([Type.Literal("OPEN"), Type.Literal("LOCKED")]),
-      createdAt: Type.String({ format: "date-time" }),
-      editedAt: Type.Union([Type.String({ format: "date-time" }), Type.Null()]),
-    }),
-  ),
+  items: Type.Array(publicCommentSchema),
   nextCursor: Type.Union([Type.String(), Type.Null()]),
 });
 
@@ -28,10 +28,22 @@ type CommentRoute = {
   Headers: { "x-anonymous-subject-id"?: string };
 };
 
-export async function registerCommentRoutes(app: FastifyInstance, service: CommentReadService) {
+type CommentWriteRoute = {
+  Params: { issueId: string };
+  Headers: { authorization?: string; "idempotency-key": string };
+  Body: { body: string };
+};
+
+function bearerToken(authorization: string | undefined) {
+  if (!authorization?.startsWith("Bearer ")) return null;
+  const token = authorization.slice("Bearer ".length).trim();
+  return token.length > 0 ? token : null;
+}
+
+export async function registerCommentRoutes(app: FastifyInstance, service: CommentService) {
   await app.register((commentApp) => {
     commentApp.setErrorHandler((error, request, reply) => {
-      if (error instanceof CommentReadError) {
+      if (error instanceof CommentError) {
         return reply.code(error.statusCode).send({ code: error.code, message: error.message });
       }
 
@@ -91,6 +103,47 @@ export async function registerCommentRoutes(app: FastifyInstance, service: Comme
           cursor: request.query.cursor,
           limit: request.query.limit ?? 10,
         }),
+    );
+
+    commentApp.post<CommentWriteRoute>(
+      "/v1/issues/:issueId/comments",
+      {
+        schema: {
+          tags: ["comments"],
+          summary: "Publish one eligible Member Comment for an Issue",
+          params: Type.Object({ issueId: uuidSchema }),
+          headers: Type.Object(
+            {
+              authorization: Type.Optional(Type.String()),
+              "idempotency-key": uuidSchema,
+            },
+            { additionalProperties: true },
+          ),
+          body: Type.Object({ body: Type.String({ minLength: 1, maxLength: 2_000 }) }),
+          response: {
+            201: Type.Object({ comment: publicCommentSchema }),
+            400: errorResponseSchema,
+            401: errorResponseSchema,
+            403: errorResponseSchema,
+            409: errorResponseSchema,
+            422: errorResponseSchema,
+            500: errorResponseSchema,
+          },
+        },
+      },
+      async (request, reply) => {
+        const token = bearerToken(request.headers.authorization);
+        if (!token) {
+          throw new CommentError("SESSION_REQUIRED", 401, "An active Member session is required.");
+        }
+        const result = await service.submitMemberComment({
+          issueId: request.params.issueId,
+          sessionToken: token,
+          idempotencyKey: request.headers["idempotency-key"],
+          body: request.body.body,
+        });
+        return reply.code(result.httpStatus).send(result.body);
+      },
     );
   });
 }

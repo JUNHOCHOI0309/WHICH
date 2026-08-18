@@ -4,9 +4,11 @@ import {
   foreignKey,
   index,
   integer,
+  jsonb,
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
@@ -18,9 +20,31 @@ import {
   commentThreadStateEnum,
   commentVisibilityEnum,
 } from "./enums.js";
-import { issueVersions } from "./issues.js";
+import { issues, issueVersions } from "./issues.js";
+import { members } from "./identity.js";
 import { voterSubjects } from "./subjects.js";
 import { votes } from "./votes.js";
+
+export const commentWriteAttempts = pgTable(
+  "comment_write_attempts",
+  {
+    id: uuid("comment_write_attempt_id").primaryKey(),
+    memberId: uuid("member_id")
+      .notNull()
+      .references(() => members.id, { onDelete: "restrict" }),
+    issueId: uuid("issue_id")
+      .notNull()
+      .references(() => issues.id, { onDelete: "restrict" }),
+    requestFingerprint: varchar("request_fingerprint", { length: 64 }).notNull(),
+    responseSnapshot: jsonb("response_snapshot").$type<Record<string, unknown>>(),
+    receivedAt: timestamp("received_at", { withTimezone: true }).defaultNow().notNull(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("comment_write_attempts_member_received_idx").on(table.memberId, table.receivedAt),
+    index("comment_write_attempts_issue_received_idx").on(table.issueId, table.receivedAt),
+  ],
+);
 
 export const comments = pgTable(
   "comments",
@@ -39,6 +63,9 @@ export const comments = pgTable(
     threadRootCommentId: uuid("thread_root_comment_id"),
     authorDisplayName: varchar("author_display_name_snapshot", { length: 40 }).notNull(),
     body: text("body").notNull(),
+    textPolicyVersion: varchar("text_policy_version", { length: 32 })
+      .default("comment-text-v1")
+      .notNull(),
     publicationState: commentPublicationStateEnum("publication_state")
       .default("PENDING_AUTOMOD")
       .notNull(),
@@ -73,6 +100,9 @@ export const comments = pgTable(
       table.createdAt,
       table.id,
     ),
+    uniqueIndex("comments_one_active_top_level_per_issue_author_unique")
+      .on(table.issueId, table.authorSubjectId)
+      .where(sql`${table.parentCommentId} is null and ${table.deletedAt} is null`),
     check("comments_body_not_blank_check", sql`length(btrim(${table.body})) > 0`),
     check("comments_positive_version_check", sql`${table.version} > 0`),
     check(

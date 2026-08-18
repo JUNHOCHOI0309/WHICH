@@ -1,6 +1,7 @@
 import type {
   ApiErrorBody,
   CommentSide,
+  CommentWriteResponse,
   PublicCommentPage,
   PublicIssue,
   PublicIssueFeed,
@@ -138,4 +139,23 @@ export async function loadIssueComments(options: {
 
   if (!response.ok) throwApiError(response, body as ApiErrorBody);
   return body as PublicCommentPage;
+}
+
+export async function submitMemberComment(command: {
+  issueId: string;
+  body: string;
+  idempotencyKey: string;
+}) {
+  const response = await fetch(`/api/issues/${encodeURIComponent(command.issueId)}/comments`, {
+    method: "POST",
+    headers: {
+      accept: "application/json",
+      "content-type": "application/json",
+      "idempotency-key": command.idempotencyKey,
+    },
+    body: JSON.stringify({ body: command.body }),
+  });
+  const body = await responseBody<CommentWriteResponse>(response);
+  if (!response.ok) throwApiError(response, body as ApiErrorBody);
+  return body as CommentWriteResponse;
 }

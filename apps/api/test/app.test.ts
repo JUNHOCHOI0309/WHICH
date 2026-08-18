@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { buildApp } from "../src/app.js";
 import { getConfig } from "../src/config.js";
-import type { CommentReadService } from "../src/modules/comments/contracts.js";
+import type { CommentService } from "../src/modules/comments/contracts.js";
 import type { IssueReadService } from "../src/modules/issues/contracts.js";
 import type { MemberIdentityService } from "../src/modules/identity/contracts.js";
 import type { GuestVoteService } from "../src/modules/voting/contracts.js";
@@ -19,8 +19,9 @@ const issueReader: IssueReadService = {
   listGuestIssues: vi.fn(),
 };
 
-const commentReader: CommentReadService = {
+const commentReader: CommentService = {
   listGuestComments: vi.fn(),
+  submitMemberComment: vi.fn(),
 };
 
 const memberIdentity: MemberIdentityService = {

@@ -1,12 +1,26 @@
-export type CommentReadErrorCode = "INVALID_CURSOR" | "VOTE_REQUIRED" | "COMMENTS_UNAVAILABLE";
+export type CommentErrorCode =
+  | "INVALID_CURSOR"
+  | "VOTE_REQUIRED"
+  | "COMMENTS_UNAVAILABLE"
+  | "SESSION_REQUIRED"
+  | "COMMENT_ALREADY_EXISTS"
+  | "IDEMPOTENCY_CONFLICT"
+  | "IDEMPOTENCY_INCOMPLETE"
+  | "COMMENT_TOO_SHORT"
+  | "COMMENT_TOO_LONG"
+  | "COMMENT_URL_NOT_ALLOWED"
+  | "COMMENT_CONTROL_CHARACTER"
+  | "COMMENT_SPAM_PATTERN";
 
-export class CommentReadError extends Error {
+export class CommentError extends Error {
   constructor(
-    public readonly code: CommentReadErrorCode,
-    public readonly statusCode: 400 | 403 | 409,
+    public readonly code: CommentErrorCode,
+    public readonly statusCode: 400 | 401 | 403 | 409 | 422,
     message: string,
   ) {
     super(message);
-    this.name = "CommentReadError";
+    this.name = "CommentError";
   }
 }
+
+export { CommentError as CommentReadError };

@@ -282,6 +282,119 @@ describe("IssueExperience", () => {
     expect(screen.getByRole("button", { name: "댓글만 다시 불러오기" })).toBeInTheDocument();
   });
 
+  it("keeps a Guest draft and sends the user to login only when publishing", async () => {
+    const savedResult: VoteResponse = {
+      outcome: "ACCEPTED",
+      voteAttemptId: "attempt-draft",
+      voteId: "vote-draft",
+      issueId: ISSUE_ID,
+      issueVersion: 1,
+      choice: "A",
+      result: {
+        resultVersion: 1,
+        acceptedA: 1,
+        acceptedB: 0,
+        displayedTotal: 1,
+        integrityState: "NORMAL",
+      },
+    };
+    sessionStorage.setItem(`which:vote-result:${ISSUE_ID}`, JSON.stringify(savedResult));
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = String(input);
+        if (url === "/api/guest-subjects") return jsonResponse({ status: "ready" });
+        if (url.endsWith(`/api/issues/${ISSUE_ID}`)) return jsonResponse(issue);
+        if (url === "/api/member-session") {
+          return jsonResponse({ code: "SESSION_INVALID", message: "login" }, 401);
+        }
+        if (url.startsWith(`/api/issues/${ISSUE_ID}/comments?`)) {
+          return jsonResponse({ items: [], nextCursor: null });
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      }),
+    );
+
+    render(<IssueExperience issueId={ISSUE_ID} />);
+    const editor = await screen.findByRole("textbox", { name: "내 선택 이유" });
+    fireEvent.change(editor, { target: { value: "로그인 뒤에도 남을 초안" } });
+    fireEvent.click(await screen.findByRole("button", { name: "로그인하고 게시" }));
+
+    expect(sessionStorage.getItem(`which:comment-draft:${ISSUE_ID}`)).toBe(
+      "로그인 뒤에도 남을 초안",
+    );
+    expect(navigation.push).toHaveBeenCalledWith(
+      `/api/auth/google/start?returnTo=${encodeURIComponent(`/issues/${ISSUE_ID}#comment-compose`)}`,
+    );
+  });
+
+  it("publishes a Member draft with an idempotency key and prepends the Comment", async () => {
+    const savedResult: VoteResponse = {
+      outcome: "ACCEPTED",
+      voteAttemptId: "attempt-member-comment",
+      voteId: "vote-member-comment",
+      issueId: ISSUE_ID,
+      issueVersion: 1,
+      choice: "B",
+      result: {
+        resultVersion: 1,
+        acceptedA: 0,
+        acceptedB: 1,
+        displayedTotal: 1,
+        integrityState: "NORMAL",
+      },
+    };
+    sessionStorage.setItem(`which:vote-result:${ISSUE_ID}`, JSON.stringify(savedResult));
+    const requests: RequestInit[] = [];
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = String(input);
+        if (url === "/api/guest-subjects") return jsonResponse({ status: "ready" });
+        if (url.endsWith(`/api/issues/${ISSUE_ID}`)) return jsonResponse(issue);
+        if (url === "/api/member-session") {
+          return jsonResponse({
+            member: { id: "member-1", displayName: "회원", status: "ACTIVE" },
+            expiresAt: "2026-08-19T00:00:00.000Z",
+          });
+        }
+        if (url === `/api/issues/${ISSUE_ID}/comments` && init?.method === "POST") {
+          requests.push(init);
+          return jsonResponse(
+            {
+              comment: {
+                id: "new-comment",
+                choice: "B",
+                author: { displayName: "회원" },
+                body: "저녁에 집중이 잘돼요.",
+                threadState: "OPEN",
+                createdAt: "2026-08-18T10:00:00.000Z",
+                editedAt: null,
+              },
+            },
+            201,
+          );
+        }
+        if (url.startsWith(`/api/issues/${ISSUE_ID}/comments?`)) {
+          return jsonResponse({ items: [], nextCursor: null });
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      }),
+    );
+
+    render(<IssueExperience issueId={ISSUE_ID} />);
+    const editor = await screen.findByRole("textbox", { name: "내 선택 이유" });
+    fireEvent.change(editor, { target: { value: "저녁에 집중이 잘돼요." } });
+    fireEvent.click(await screen.findByRole("button", { name: "이유 게시" }));
+
+    expect(await screen.findByText("저녁에 집중이 잘돼요.")).toBeInTheDocument();
+    expect(requests).toHaveLength(1);
+    expect(new Headers(requests[0]?.headers).get("idempotency-key")).toEqual(expect.any(String));
+    expect(sessionStorage.getItem(`which:comment-draft:${ISSUE_ID}`)).toBeNull();
+  });
+
   it("shows a recoverable state when the question cannot load", async () => {
     vi.stubGlobal(
       "fetch",
