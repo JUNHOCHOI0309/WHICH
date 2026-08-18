@@ -148,7 +148,20 @@ The authenticated internal endpoint
 - Repeating `REPAIR` after a successful repair returns `CONSISTENT`; it does not create another result version, snapshot, or event.
 - An accepted Vote that cannot be mapped to A or B is not guessed. Repair locks result visibility and emits one idempotent `RESULT_RECONCILIATION_LOCKED` event for operator investigation.
 
-The v1 endpoint is manual and single-Issue-Version by design. Scheduling, batch scans, and Outbox delivery/retry are follow-up work.
+The v1 endpoint is manual and single-Issue-Version by design. Scheduling and batch scans remain follow-up work.
+
+### Outbox delivery
+
+The independent Outbox Worker publishes stored payloads through a replaceable Transport. The v1 Transport is an HMAC-signed HTTP Webhook.
+
+- Delivery is at-least-once. Consumers deduplicate by `event_id` and use domain versions when ordering matters.
+- A short `FOR UPDATE SKIP LOCKED` transaction claims available rows and sets a lease token before network I/O.
+- HTTP `2xx` marks the matching lease `PUBLISHED`. Other responses or transport errors retain a bounded `last_error` and schedule exponential backoff.
+- The default policy uses five attempts, beginning at five seconds and capped at five minutes.
+- Exhausted Events become `FAILED` Dead Letters. Operator requeue resets the current-cycle attempt count while lifetime attempts and requeue count remain auditable.
+- A Worker that stops during delivery does not strand the Event. The lease expires and another Worker can claim it; a stale lease token cannot overwrite the newer result.
+
+Operational commands, headers, HMAC verification, Dead Letter response, and rollback are documented in `docs/operations/outbox-publisher.md`.
 
 ### Migration
 
@@ -171,6 +184,10 @@ The v1 endpoint is manual and single-Issue-Version by design. Scheduling, batch 
 - Schema contract tests: `apps/api/test/schema.test.ts`
 - Reconciliation contract and service: `apps/api/src/modules/voting/`
 - Reconciliation integration coverage: `apps/api/test/voting.integration.test.ts`
+- Outbox lease/DLQ migration: `apps/api/migrations/0006_outbox_publisher_retry_dlq_v1.sql`
+- Publisher and HTTP Transport: `apps/api/src/modules/outbox/`
+- Independent Worker entry point: `apps/api/src/outbox-worker.ts`
+- Outbox operations runbook: `docs/operations/outbox-publisher.md`
 
 The vote transaction and Guest read contracts now build on this baseline. Authentication, challenge providers, recommendation storage, and advanced moderation remain separate feature tasks.
 

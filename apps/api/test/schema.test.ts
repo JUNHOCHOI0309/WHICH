@@ -112,4 +112,27 @@ describe("data architecture v1 schema", () => {
     expect(acceptedVoteIndex?.config.unique).toBe(true);
     expect(acceptedVoteIndex?.config.where).toBeDefined();
   });
+
+  it("keeps Outbox lease and Dead Letter state auditable", () => {
+    const config = getTableConfig(outboxEvents);
+    const columnNames = config.columns.map((column) => column.name);
+    const checkNames = config.checks.map((check) => check.name);
+
+    expect(columnNames).toEqual(
+      expect.arrayContaining([
+        "attempt_count",
+        "total_attempt_count",
+        "requeue_count",
+        "claim_token",
+        "claimed_at",
+        "dead_lettered_at",
+      ]),
+    );
+    expect(checkNames).toEqual(
+      expect.arrayContaining(["outbox_events_claim_check", "outbox_events_delivery_state_check"]),
+    );
+    expect(config.indexes.map((index) => index.config.name)).toContain(
+      "outbox_events_dead_letter_idx",
+    );
+  });
 });
