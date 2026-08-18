@@ -114,7 +114,7 @@ Every Outbox payload uses this envelope:
 }
 ```
 
-Initial event names are `VOTE_ACCEPTED`, `VOTE_REVIEWED`, `VOTE_REJECTED`, `VOTE_INVALIDATED`, `VOTE_RESTORED`, `RESULT_AGGREGATE_REBUILT`, and `ISSUE_VERSION_LOCKED`. Server-domain events are the analytics source of truth for vote success; client events only describe UI intent and exposure.
+Initial event names are `VOTE_ACCEPTED`, `VOTE_REVIEWED`, `VOTE_REJECTED`, `VOTE_INVALIDATED`, `VOTE_RESTORED`, `RESULT_AGGREGATE_REBUILT`, `RESULT_RECONCILIATION_LOCKED`, and `ISSUE_VERSION_LOCKED`. Server-domain events are the analytics source of truth for vote success; client events only describe UI intent and exposure.
 
 ## 7. Data classification and retention
 
@@ -135,7 +135,20 @@ Exact legal retention periods remain a launch gate. Secrets, raw network data, a
 
 ### Reconciliation
 
-For each Issue Version, rebuild counts from current Vote integrity states, compare them with `vote_aggregates`, write a new `result_version`, retain a snapshot, and emit `RESULT_AGGREGATE_REBUILT`. The job must be idempotent and report request, accepted, review, rejected, and invalidated deltas separately.
+The authenticated internal endpoint
+`POST /v1/internal/issues/:issueId/versions/:issueVersion/vote-reconciliation` reconciles one Issue Version at a time. It requires `x-internal-auth-secret` and accepts the following body:
+
+```json
+{ "mode": "DRY_RUN" }
+```
+
+- `DRY_RUN` is the default. It recalculates request, accepted A/B, review, duplicate, abuse, invalidated, and displayed counts from current Vote facts and reports each difference without writing data.
+- `REPAIR` acquires an Issue Version advisory lock, recalculates the same counts, and only writes when a mismatch exists.
+- A repair replaces the derived aggregate with the source counts, increments `result_version`, stores a `CORRECTED` snapshot, and emits `RESULT_AGGREGATE_REBUILT` in the same transaction.
+- Repeating `REPAIR` after a successful repair returns `CONSISTENT`; it does not create another result version, snapshot, or event.
+- An accepted Vote that cannot be mapped to A or B is not guessed. Repair locks result visibility and emits one idempotent `RESULT_RECONCILIATION_LOCKED` event for operator investigation.
+
+The v1 endpoint is manual and single-Issue-Version by design. Scheduling, batch scans, and Outbox delivery/retry are follow-up work.
 
 ### Migration
 
@@ -156,6 +169,8 @@ For each Issue Version, rebuild counts from current Vote integrity states, compa
 - Drizzle schema: `apps/api/src/database/schema/`
 - Initial migration: `apps/api/migrations/0000_data_architecture_v1.sql`
 - Schema contract tests: `apps/api/test/schema.test.ts`
+- Reconciliation contract and service: `apps/api/src/modules/voting/`
+- Reconciliation integration coverage: `apps/api/test/voting.integration.test.ts`
 
 The vote transaction and Guest read contracts now build on this baseline. Authentication, challenge providers, recommendation storage, and advanced moderation remain separate feature tasks.
 
