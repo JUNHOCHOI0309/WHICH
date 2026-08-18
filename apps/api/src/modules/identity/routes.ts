@@ -95,6 +95,8 @@ export async function registerMemberIdentityRoutes(
               guestLink: Type.Object({
                 linked: Type.Boolean(),
                 invalidatedDuplicateVotes: Type.Integer({ minimum: 0 }),
+                migratedReactions: Type.Integer({ minimum: 0 }),
+                mergedDuplicateReactions: Type.Integer({ minimum: 0 }),
               }),
             }),
             400: errorSchema,

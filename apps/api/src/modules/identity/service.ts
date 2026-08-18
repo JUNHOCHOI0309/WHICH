@@ -6,6 +6,7 @@ import { and, eq, gt, isNull, sql } from "drizzle-orm";
 import type { Database } from "../../database/client.js";
 import {
   guestMemberLinks,
+  commentReactions,
   issueChoices,
   memberIdentityLinks,
   memberSessions,
@@ -118,6 +119,8 @@ export function createMemberIdentityService(
 
         let guestLinked = false;
         let invalidatedDuplicateVotes = 0;
+        let migratedReactions = 0;
+        let mergedDuplicateReactions = 0;
 
         if (assertion.anonymousSubjectId) {
           await transaction.execute(
@@ -283,6 +286,84 @@ export function createMemberIdentityService(
               });
               invalidatedDuplicateVotes += 1;
             }
+
+            const guestReactions = await transaction
+              .select()
+              .from(commentReactions)
+              .where(
+                and(
+                  eq(commentReactions.subjectId, guestSubject.id),
+                  eq(commentReactions.active, true),
+                ),
+              );
+            for (const guestReaction of guestReactions) {
+              const [memberReaction] = await transaction
+                .select()
+                .from(commentReactions)
+                .where(
+                  and(
+                    eq(commentReactions.commentId, guestReaction.commentId),
+                    eq(commentReactions.subjectId, memberSubject.id),
+                    eq(commentReactions.code, guestReaction.code),
+                  ),
+                )
+                .limit(1);
+
+              if (memberReaction) {
+                await transaction
+                  .update(commentReactions)
+                  .set({
+                    active: true,
+                    activatedAt: memberReaction.active ? memberReaction.activatedAt : now,
+                    deactivatedAt: null,
+                    mergedIntoReactionId: null,
+                    updatedAt: now,
+                  })
+                  .where(eq(commentReactions.id, memberReaction.id));
+                await transaction
+                  .update(commentReactions)
+                  .set({
+                    active: false,
+                    deactivatedAt: now,
+                    mergedIntoReactionId: memberReaction.id,
+                    updatedAt: now,
+                  })
+                  .where(eq(commentReactions.id, guestReaction.id));
+                mergedDuplicateReactions += 1;
+              } else {
+                await transaction
+                  .update(commentReactions)
+                  .set({ subjectId: memberSubject.id, updatedAt: now })
+                  .where(eq(commentReactions.id, guestReaction.id));
+                migratedReactions += 1;
+              }
+            }
+
+            if (migratedReactions > 0 || mergedDuplicateReactions > 0) {
+              const eventId = randomUUID();
+              await transaction.insert(outboxEvents).values({
+                id: eventId,
+                aggregateType: "MEMBER",
+                aggregateId: identity.member.id,
+                eventType: "COMMENT_REACTIONS_LINKED",
+                schemaVersion: EVENT_SCHEMA_VERSION,
+                occurredAt: now,
+                payload: {
+                  event_id: eventId,
+                  event_type: "COMMENT_REACTIONS_LINKED",
+                  schema_version: EVENT_SCHEMA_VERSION,
+                  occurred_at: now.toISOString(),
+                  aggregate_type: "MEMBER",
+                  aggregate_id: identity.member.id,
+                  data: {
+                    guest_subject_id: guestSubject.id,
+                    member_subject_id: memberSubject.id,
+                    migrated_reactions: migratedReactions,
+                    merged_duplicate_reactions: mergedDuplicateReactions,
+                  },
+                },
+              });
+            }
           }
         }
 
@@ -298,7 +379,12 @@ export function createMemberIdentityService(
           token,
           expiresAt: expiresAt.toISOString(),
           member: toMemberView(identity.member),
-          guestLink: { linked: guestLinked, invalidatedDuplicateVotes },
+          guestLink: {
+            linked: guestLinked,
+            invalidatedDuplicateVotes,
+            migratedReactions,
+            mergedDuplicateReactions,
+          },
         };
       });
     },

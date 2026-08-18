@@ -15,6 +15,10 @@ const publicCommentSchema = Type.Object({
   threadState: Type.Union([Type.Literal("OPEN"), Type.Literal("LOCKED")]),
   createdAt: Type.String({ format: "date-time" }),
   editedAt: Type.Union([Type.String({ format: "date-time" }), Type.Null()]),
+  reactions: Type.Object({
+    helpfulCount: Type.Integer({ minimum: 0 }),
+    viewerReacted: Type.Boolean(),
+  }),
 });
 
 const commentPageSchema = Type.Object({
@@ -25,13 +29,22 @@ const commentPageSchema = Type.Object({
 type CommentRoute = {
   Params: { issueId: string };
   Querystring: { side?: "ALL" | "A" | "B"; cursor?: string; limit?: number };
-  Headers: { "x-anonymous-subject-id"?: string };
+  Headers: { authorization?: string; "x-anonymous-subject-id"?: string };
 };
 
 type CommentWriteRoute = {
   Params: { issueId: string };
   Headers: { authorization?: string; "idempotency-key": string };
   Body: { body: string };
+};
+
+type HelpfulReactionRoute = {
+  Params: { commentId: string };
+  Headers: {
+    authorization?: string;
+    "x-anonymous-subject-id"?: string;
+    "idempotency-key": string;
+  };
 };
 
 function bearerToken(authorization: string | undefined) {
@@ -83,26 +96,36 @@ export async function registerCommentRoutes(app: FastifyInstance, service: Comme
             limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 20, default: 10 })),
           }),
           headers: Type.Object(
-            { "x-anonymous-subject-id": Type.Optional(uuidSchema) },
+            {
+              authorization: Type.Optional(Type.String()),
+              "x-anonymous-subject-id": Type.Optional(uuidSchema),
+            },
             { additionalProperties: true },
           ),
           response: {
             200: commentPageSchema,
             400: errorResponseSchema,
+            401: errorResponseSchema,
             403: errorResponseSchema,
             409: errorResponseSchema,
             500: errorResponseSchema,
           },
         },
       },
-      async (request) =>
-        service.listGuestComments({
+      async (request) => {
+        const sessionToken = bearerToken(request.headers.authorization);
+        if (request.headers.authorization && !sessionToken) {
+          throw new CommentError("SESSION_REQUIRED", 401, "The Member session is invalid.");
+        }
+        return service.listGuestComments({
           issueId: request.params.issueId,
+          sessionToken: sessionToken ?? undefined,
           anonymousSubjectId: request.headers["x-anonymous-subject-id"],
           side: request.query.side ?? "ALL",
           cursor: request.query.cursor,
           limit: request.query.limit ?? 10,
-        }),
+        });
+      },
     );
 
     commentApp.post<CommentWriteRoute>(
@@ -141,6 +164,52 @@ export async function registerCommentRoutes(app: FastifyInstance, service: Comme
           sessionToken: token,
           idempotencyKey: request.headers["idempotency-key"],
           body: request.body.body,
+        });
+        return reply.code(result.httpStatus).send(result.body);
+      },
+    );
+
+    commentApp.post<HelpfulReactionRoute>(
+      "/v1/comments/:commentId/reactions/helpful",
+      {
+        schema: {
+          tags: ["comments"],
+          summary: "Toggle a HELPFUL reaction on a public Comment",
+          params: Type.Object({ commentId: uuidSchema }),
+          headers: Type.Object(
+            {
+              authorization: Type.Optional(Type.String()),
+              "x-anonymous-subject-id": Type.Optional(uuidSchema),
+              "idempotency-key": uuidSchema,
+            },
+            { additionalProperties: true },
+          ),
+          response: {
+            200: Type.Object({
+              reaction: Type.Object({
+                code: Type.Literal("HELPFUL"),
+                active: Type.Boolean(),
+                helpfulCount: Type.Integer({ minimum: 0 }),
+              }),
+            }),
+            400: errorResponseSchema,
+            401: errorResponseSchema,
+            403: errorResponseSchema,
+            409: errorResponseSchema,
+            500: errorResponseSchema,
+          },
+        },
+      },
+      async (request, reply) => {
+        const sessionToken = bearerToken(request.headers.authorization);
+        if (request.headers.authorization && !sessionToken) {
+          throw new CommentError("SESSION_REQUIRED", 401, "The Member session is invalid.");
+        }
+        const result = await service.toggleHelpfulReaction({
+          commentId: request.params.commentId,
+          sessionToken: sessionToken ?? undefined,
+          anonymousSubjectId: request.headers["x-anonymous-subject-id"],
+          idempotencyKey: request.headers["idempotency-key"],
         });
         return reply.code(result.httpStatus).send(result.body);
       },

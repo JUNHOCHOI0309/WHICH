@@ -8,6 +8,7 @@ export type PublicComment = {
   threadState: "OPEN" | "LOCKED";
   createdAt: string;
   editedAt: string | null;
+  reactions: { helpfulCount: number; viewerReacted: boolean };
 };
 
 export type PublicCommentPage = {
@@ -17,6 +18,7 @@ export type PublicCommentPage = {
 
 export type GuestCommentQuery = {
   issueId: string;
+  sessionToken?: string;
   anonymousSubjectId?: string;
   side: CommentSide;
   cursor?: string;
@@ -35,7 +37,22 @@ export type MemberCommentSubmissionResult = {
   body: { comment: PublicComment };
 };
 
+export type HelpfulReactionCommand = {
+  commentId: string;
+  sessionToken?: string;
+  anonymousSubjectId?: string;
+  idempotencyKey: string;
+};
+
+export type HelpfulReactionResult = {
+  httpStatus: 200;
+  body: {
+    reaction: { code: "HELPFUL"; active: boolean; helpfulCount: number };
+  };
+};
+
 export interface CommentService {
   listGuestComments(query: GuestCommentQuery): Promise<PublicCommentPage>;
   submitMemberComment(command: MemberCommentSubmission): Promise<MemberCommentSubmissionResult>;
+  toggleHelpfulReaction(command: HelpfulReactionCommand): Promise<HelpfulReactionResult>;
 }

@@ -3,6 +3,7 @@ export * from "./comments.js";
 export * from "./identity.js";
 export * from "./issues.js";
 export * from "./outbox.js";
+export * from "./reactions.js";
 export * from "./results.js";
 export * from "./subjects.js";
 export * from "./votes.js";
