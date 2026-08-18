@@ -462,6 +462,82 @@ describe("IssueExperience", () => {
     );
   });
 
+  it("submits a fixed Comment report reason and collapses the card from the server result", async () => {
+    const savedResult: VoteResponse = {
+      outcome: "ACCEPTED",
+      voteAttemptId: "attempt-report",
+      voteId: "vote-report",
+      issueId: ISSUE_ID,
+      issueVersion: 1,
+      choice: "A",
+      result: {
+        resultVersion: 1,
+        acceptedA: 1,
+        acceptedB: 0,
+        displayedTotal: 1,
+        integrityState: "NORMAL",
+      },
+    };
+    sessionStorage.setItem(`which:vote-result:${ISSUE_ID}`, JSON.stringify(savedResult));
+    const reportRequests: RequestInit[] = [];
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = String(input);
+        if (url === "/api/guest-subjects") return jsonResponse({ status: "ready" });
+        if (url.endsWith(`/api/issues/${ISSUE_ID}`)) return jsonResponse(issue);
+        if (url === "/api/member-session") {
+          return jsonResponse({ code: "SESSION_INVALID", message: "guest" }, 401);
+        }
+        if (url.startsWith(`/api/issues/${ISSUE_ID}/comments?`)) {
+          return jsonResponse({
+            items: [
+              {
+                id: "reported-comment",
+                choice: "A",
+                author: { displayName: "작성자" },
+                body: "신고 테스트 댓글",
+                visibility: "VISIBLE",
+                threadState: "OPEN",
+                createdAt: "2026-08-18T02:00:00.000Z",
+                editedAt: null,
+                reactions: { helpfulCount: 0, viewerReacted: false },
+                reports: { viewerReported: false, canReport: true },
+              },
+            ],
+            nextCursor: null,
+          });
+        }
+        if (url === "/api/comments/reported-comment/reports") {
+          reportRequests.push(init ?? {});
+          return jsonResponse(
+            {
+              report: { accepted: true, viewerReported: true },
+              comment: { visibility: "COLLAPSED" },
+            },
+            201,
+          );
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      }),
+    );
+
+    render(<IssueExperience issueId={ISSUE_ID} />);
+    fireEvent.click(await screen.findByRole("button", { name: "신고" }));
+    fireEvent.click(screen.getByRole("button", { name: "신고 접수" }));
+
+    expect(
+      await screen.findByText("여러 신고가 접수되어 내용을 접어 두었어요."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "신고 완료" })).toBeDisabled();
+    expect(reportRequests).toHaveLength(1);
+    expect(new Headers(reportRequests[0]?.headers).get("idempotency-key")).toEqual(
+      expect.any(String),
+    );
+    expect(JSON.parse(String(reportRequests[0]?.body))).toEqual({ reason: "SPAM" });
+  });
+
   it("shows a recoverable state when the question cannot load", async () => {
     vi.stubGlobal(
       "fetch",

@@ -3,9 +3,14 @@ import { describe, expect, it } from "vitest";
 
 import {
   comments,
+  commentModerationDecisions,
+  commentModerationActionEnum,
   commentReactionAttempts,
   commentReactionCodeEnum,
   commentReactions,
+  commentReportAttempts,
+  commentReportReasonEnum,
+  commentReports,
   guestMemberLinks,
   issueChoices,
   issueVersions,
@@ -41,6 +46,9 @@ describe("data architecture v1 schema", () => {
       guestMemberLinks,
       commentReactions,
       commentReactionAttempts,
+      commentReports,
+      commentReportAttempts,
+      commentModerationDecisions,
     ].map((table) => getTableConfig(table).name);
 
     expect(tableNames).toEqual([
@@ -60,11 +68,30 @@ describe("data architecture v1 schema", () => {
       "guest_member_links",
       "comment_reactions",
       "comment_reaction_attempts",
+      "comment_reports",
+      "comment_report_attempts",
+      "comment_moderation_decisions",
     ]);
   });
 
   it("keeps HELPFUL as the single v1 Comment reaction code", () => {
     expect(commentReactionCodeEnum.enumValues).toEqual(["HELPFUL"]);
+  });
+
+  it("keeps the fixed v1 Comment report and moderation codes", () => {
+    expect(commentReportReasonEnum.enumValues).toEqual([
+      "SPAM",
+      "HARASSMENT",
+      "HATE_OR_ABUSE",
+      "PERSONAL_INFORMATION",
+      "OTHER",
+    ]);
+    expect(commentModerationActionEnum.enumValues).toEqual([
+      "COLLAPSE",
+      "HIDE",
+      "REMOVE_POLICY",
+      "RESTORE",
+    ]);
   });
 
   it("keeps the canonical vote integrity states", () => {

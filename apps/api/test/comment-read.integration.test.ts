@@ -269,10 +269,12 @@ describe("Guest Comment read API", () => {
         choice: "A",
         author: { displayName: "A 작성자" },
         body: "locked but public",
+        visibility: "VISIBLE",
         threadState: "LOCKED",
         createdAt: "2026-08-18T03:00:00.000Z",
         editedAt: null,
         reactions: { helpfulCount: 0, viewerReacted: false },
+        reports: { viewerReported: false, canReport: true },
       },
     ]);
   });
