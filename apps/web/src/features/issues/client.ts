@@ -2,6 +2,7 @@ import type {
   ApiErrorBody,
   CommentSide,
   CommentWriteResponse,
+  HelpfulReactionResponse,
   PublicCommentPage,
   PublicIssue,
   PublicIssueFeed,
@@ -158,4 +159,20 @@ export async function submitMemberComment(command: {
   const body = await responseBody<CommentWriteResponse>(response);
   if (!response.ok) throwApiError(response, body as ApiErrorBody);
   return body as CommentWriteResponse;
+}
+
+export async function toggleHelpfulReaction(command: {
+  commentId: string;
+  idempotencyKey: string;
+}) {
+  const response = await fetch(
+    `/api/comments/${encodeURIComponent(command.commentId)}/reactions/helpful`,
+    {
+      method: "POST",
+      headers: { accept: "application/json", "idempotency-key": command.idempotencyKey },
+    },
+  );
+  const body = await responseBody<HelpfulReactionResponse>(response);
+  if (!response.ok) throwApiError(response, body as ApiErrorBody);
+  return body as HelpfulReactionResponse;
 }

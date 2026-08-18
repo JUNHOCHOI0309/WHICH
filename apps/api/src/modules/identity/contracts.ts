@@ -20,6 +20,8 @@ export type MemberSessionResult = {
   guestLink: {
     linked: boolean;
     invalidatedDuplicateVotes: number;
+    migratedReactions: number;
+    mergedDuplicateReactions: number;
   };
 };
 

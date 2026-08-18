@@ -21,6 +21,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     if (value) search.set(name, value);
   }
   const subjectId = validGuestSubject(request.cookies.get(GUEST_SUBJECT_COOKIE)?.value);
+  const token = request.cookies.get(MEMBER_SESSION_COOKIE)?.value;
 
   try {
     const upstream = await fetchWhichApi(
@@ -28,15 +29,18 @@ export async function GET(request: NextRequest, context: RouteContext) {
       {
         headers: {
           accept: "application/json",
+          ...(token ? { authorization: `Bearer ${token}` } : {}),
           ...(subjectId ? { "x-anonymous-subject-id": subjectId } : {}),
         },
       },
     );
     const body: unknown = await upstream.json();
-    return NextResponse.json(body, {
+    const response = NextResponse.json(body, {
       status: upstream.status,
       headers: { "cache-control": "no-store" },
     });
+    if (upstream.status === 401 && token) clearMemberSessionCookie(response);
+    return response;
   } catch {
     return NextResponse.json(
       { code: "API_UNAVAILABLE", message: "선택 이유를 불러오지 못했습니다." },

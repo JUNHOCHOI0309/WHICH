@@ -95,3 +95,4 @@ export const commentIntegrityStateEnum = pgEnum("comment_integrity_state", [
   "REJECTED",
   "INVALIDATED",
 ]);
+export const commentReactionCodeEnum = pgEnum("comment_reaction_code", ["HELPFUL"]);

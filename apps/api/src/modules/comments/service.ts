@@ -1,10 +1,12 @@
 import { createHash, randomUUID } from "node:crypto";
 
-import { and, asc, desc, eq, gt, inArray, isNull, lt, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, inArray, isNull, lt, or, sql, type SQL } from "drizzle-orm";
 
 import type { Database } from "../../database/client.js";
 import {
   comments,
+  commentReactionAttempts,
+  commentReactions,
   commentWriteAttempts,
   guestMemberLinks,
   issueChoices,
@@ -17,6 +19,8 @@ import {
 } from "../../database/schema/index.js";
 import type {
   CommentService,
+  HelpfulReactionCommand,
+  HelpfulReactionResult,
   MemberCommentSubmission,
   MemberCommentSubmissionResult,
   PublicComment,
@@ -101,7 +105,10 @@ function isStoredCommentResponse(value: unknown): value is MemberCommentSubmissi
   );
 }
 
-function toPublicComment(row: typeof comments.$inferSelect): PublicComment {
+function toPublicComment(
+  row: typeof comments.$inferSelect,
+  reactions: PublicComment["reactions"] = { helpfulCount: 0, viewerReacted: false },
+): PublicComment {
   return {
     id: row.id,
     choice: row.choice,
@@ -110,7 +117,26 @@ function toPublicComment(row: typeof comments.$inferSelect): PublicComment {
     threadState: row.threadState,
     createdAt: row.createdAt.toISOString(),
     editedAt: row.editedAt?.toISOString() ?? null,
+    reactions,
   };
+}
+
+function reactionFingerprint(command: HelpfulReactionCommand, actorSubjectId: string) {
+  return createHash("sha256")
+    .update(JSON.stringify([command.idempotencyKey, actorSubjectId, command.commentId, "HELPFUL"]))
+    .digest("hex");
+}
+
+function isStoredReactionResponse(value: unknown): value is HelpfulReactionResult {
+  if (typeof value !== "object" || value === null) return false;
+  const candidate = value as Partial<HelpfulReactionResult>;
+  return (
+    candidate.httpStatus === 200 &&
+    typeof candidate.body?.reaction === "object" &&
+    candidate.body.reaction.code === "HELPFUL" &&
+    typeof candidate.body.reaction.active === "boolean" &&
+    typeof candidate.body.reaction.helpfulCount === "number"
+  );
 }
 
 function commentsAvailable(issue: {
@@ -135,39 +161,122 @@ export function createCommentService(database: Database["db"]): CommentService {
       const cursor = query.cursor ? decodeCommentCursor(query.cursor) : null;
 
       return database.transaction(async (transaction) => {
-        if (!query.anonymousSubjectId) {
-          throw new CommentError(
-            "VOTE_REQUIRED",
-            403,
-            "An accepted Vote is required before reading Comments.",
-          );
+        let viewerSubjectId: string;
+        let acceptedVote: { issueVersion: number } | undefined;
+
+        if (query.sessionToken) {
+          const [memberViewer] = await transaction
+            .select({ memberId: members.id, subjectId: voterSubjects.id })
+            .from(memberSessions)
+            .innerJoin(members, eq(memberSessions.memberId, members.id))
+            .innerJoin(voterSubjects, eq(voterSubjects.userId, members.id))
+            .where(
+              and(
+                eq(memberSessions.tokenHash, hashToken(query.sessionToken)),
+                isNull(memberSessions.revokedAt),
+                gt(memberSessions.expiresAt, new Date()),
+                eq(members.status, "ACTIVE"),
+              ),
+            )
+            .limit(1);
+          if (!memberViewer) {
+            throw new CommentError("SESSION_REQUIRED", 401, "The Member session is invalid.");
+          }
+          viewerSubjectId = memberViewer.subjectId;
+          [acceptedVote] = await transaction
+            .select({ issueVersion: votes.issueVersion })
+            .from(votes)
+            .where(
+              and(
+                eq(votes.issueId, query.issueId),
+                eq(votes.subjectId, viewerSubjectId),
+                eq(votes.integrityState, "ACCEPTED"),
+              ),
+            )
+            .limit(1);
+          if (!acceptedVote) {
+            [acceptedVote] = await transaction
+              .select({ issueVersion: votes.issueVersion })
+              .from(guestMemberLinks)
+              .innerJoin(votes, eq(votes.subjectId, guestMemberLinks.guestSubjectId))
+              .where(
+                and(
+                  eq(guestMemberLinks.memberId, memberViewer.memberId),
+                  eq(votes.issueId, query.issueId),
+                  eq(votes.integrityState, "ACCEPTED"),
+                ),
+              )
+              .orderBy(asc(votes.acceptedAt), asc(votes.id))
+              .limit(1);
+          }
+        } else {
+          if (!query.anonymousSubjectId) {
+            throw new CommentError(
+              "VOTE_REQUIRED",
+              403,
+              "An accepted Vote is required before reading Comments.",
+            );
+          }
+          const [guestViewer] = await transaction
+            .select({ id: voterSubjects.id })
+            .from(voterSubjects)
+            .where(eq(voterSubjects.anonymousSubjectId, query.anonymousSubjectId))
+            .limit(1);
+          if (!guestViewer) {
+            throw new CommentError(
+              "VOTE_REQUIRED",
+              403,
+              "An accepted Vote is required before reading Comments.",
+            );
+          }
+          const [guestLink] = await transaction
+            .select({
+              memberId: guestMemberLinks.memberId,
+              memberSubjectId: guestMemberLinks.memberSubjectId,
+            })
+            .from(guestMemberLinks)
+            .where(eq(guestMemberLinks.guestSubjectId, guestViewer.id))
+            .limit(1);
+          viewerSubjectId = guestLink?.memberSubjectId ?? guestViewer.id;
+          [acceptedVote] = await transaction
+            .select({ issueVersion: votes.issueVersion })
+            .from(votes)
+            .where(
+              and(
+                eq(votes.issueId, query.issueId),
+                eq(votes.subjectId, guestViewer.id),
+                eq(votes.integrityState, "ACCEPTED"),
+              ),
+            )
+            .limit(1);
+          if (!acceptedVote && guestLink) {
+            [acceptedVote] = await transaction
+              .select({ issueVersion: votes.issueVersion })
+              .from(votes)
+              .where(
+                and(
+                  eq(votes.issueId, query.issueId),
+                  eq(votes.subjectId, guestLink.memberSubjectId),
+                  eq(votes.integrityState, "ACCEPTED"),
+                ),
+              )
+              .limit(1);
+          }
+          if (!acceptedVote && guestLink) {
+            [acceptedVote] = await transaction
+              .select({ issueVersion: votes.issueVersion })
+              .from(guestMemberLinks)
+              .innerJoin(votes, eq(votes.subjectId, guestMemberLinks.guestSubjectId))
+              .where(
+                and(
+                  eq(guestMemberLinks.memberId, guestLink.memberId),
+                  eq(votes.issueId, query.issueId),
+                  eq(votes.integrityState, "ACCEPTED"),
+                ),
+              )
+              .limit(1);
+          }
         }
-
-        const [subject] = await transaction
-          .select({ id: voterSubjects.id })
-          .from(voterSubjects)
-          .where(eq(voterSubjects.anonymousSubjectId, query.anonymousSubjectId))
-          .limit(1);
-
-        if (!subject) {
-          throw new CommentError(
-            "VOTE_REQUIRED",
-            403,
-            "An accepted Vote is required before reading Comments.",
-          );
-        }
-
-        const [acceptedVote] = await transaction
-          .select({ issueVersion: votes.issueVersion })
-          .from(votes)
-          .where(
-            and(
-              eq(votes.issueId, query.issueId),
-              eq(votes.subjectId, subject.id),
-              eq(votes.integrityState, "ACCEPTED"),
-            ),
-          )
-          .limit(1);
 
         if (!acceptedVote) {
           throw new CommentError(
@@ -227,9 +336,47 @@ export function createCommentService(database: Database["db"]): CommentService {
         const hasMore = rows.length > query.limit;
         const pageRows = rows.slice(0, query.limit);
         const lastItem = pageRows.at(-1);
+        const commentIds = pageRows.map((row) => row.id);
+        const reactionCounts =
+          commentIds.length === 0
+            ? []
+            : await transaction
+                .select({ commentId: commentReactions.commentId, total: count() })
+                .from(commentReactions)
+                .where(
+                  and(
+                    inArray(commentReactions.commentId, commentIds),
+                    eq(commentReactions.code, "HELPFUL"),
+                    eq(commentReactions.active, true),
+                  ),
+                )
+                .groupBy(commentReactions.commentId);
+        const viewerReactions =
+          commentIds.length === 0
+            ? []
+            : await transaction
+                .select({ commentId: commentReactions.commentId })
+                .from(commentReactions)
+                .where(
+                  and(
+                    inArray(commentReactions.commentId, commentIds),
+                    eq(commentReactions.subjectId, viewerSubjectId),
+                    eq(commentReactions.code, "HELPFUL"),
+                    eq(commentReactions.active, true),
+                  ),
+                );
+        const countByComment = new Map(
+          reactionCounts.map((reaction) => [reaction.commentId, reaction.total]),
+        );
+        const reactedCommentIds = new Set(viewerReactions.map((reaction) => reaction.commentId));
 
         return {
-          items: pageRows.map(toPublicComment),
+          items: pageRows.map((row) =>
+            toPublicComment(row, {
+              helpfulCount: countByComment.get(row.id) ?? 0,
+              viewerReacted: reactedCommentIds.has(row.id),
+            }),
+          ),
           nextCursor:
             hasMore && lastItem
               ? encodeCommentCursor({ createdAt: lastItem.createdAt, commentId: lastItem.id })
@@ -448,6 +595,287 @@ export function createCommentService(database: Database["db"]): CommentService {
           .set({ completedAt: now, responseSnapshot: response })
           .where(eq(commentWriteAttempts.id, command.idempotencyKey));
 
+        return response;
+      });
+    },
+
+    async toggleHelpfulReaction(command) {
+      const now = new Date();
+
+      return database.transaction(async (transaction) => {
+        let actorSubjectId: string;
+        let voteSubjectId: string;
+        let originSubjectId: string;
+        let actorMemberId: string | undefined;
+
+        if (command.sessionToken) {
+          const [memberActor] = await transaction
+            .select({ memberId: members.id, subjectId: voterSubjects.id })
+            .from(memberSessions)
+            .innerJoin(members, eq(memberSessions.memberId, members.id))
+            .innerJoin(voterSubjects, eq(voterSubjects.userId, members.id))
+            .where(
+              and(
+                eq(memberSessions.tokenHash, hashToken(command.sessionToken)),
+                isNull(memberSessions.revokedAt),
+                gt(memberSessions.expiresAt, now),
+                eq(members.status, "ACTIVE"),
+              ),
+            )
+            .limit(1);
+          if (!memberActor) {
+            throw new CommentError("SESSION_REQUIRED", 401, "The Member session is invalid.");
+          }
+          actorSubjectId = memberActor.subjectId;
+          voteSubjectId = memberActor.subjectId;
+          originSubjectId = memberActor.subjectId;
+          actorMemberId = memberActor.memberId;
+        } else {
+          if (!command.anonymousSubjectId) {
+            throw new CommentError(
+              "REACTION_SUBJECT_REQUIRED",
+              401,
+              "A Guest subject or Member session is required.",
+            );
+          }
+          await transaction.execute(
+            sql`select pg_advisory_xact_lock(hashtextextended(${command.anonymousSubjectId}, 0))`,
+          );
+          const [guestActor] = await transaction
+            .select({ id: voterSubjects.id })
+            .from(voterSubjects)
+            .where(
+              and(
+                eq(voterSubjects.kind, "GUEST"),
+                eq(voterSubjects.anonymousSubjectId, command.anonymousSubjectId),
+              ),
+            )
+            .limit(1);
+          if (!guestActor) {
+            throw new CommentError(
+              "REACTION_SUBJECT_REQUIRED",
+              401,
+              "The Guest subject is invalid.",
+            );
+          }
+          const [guestLink] = await transaction
+            .select({
+              memberId: guestMemberLinks.memberId,
+              memberSubjectId: guestMemberLinks.memberSubjectId,
+            })
+            .from(guestMemberLinks)
+            .where(eq(guestMemberLinks.guestSubjectId, guestActor.id))
+            .limit(1);
+          actorSubjectId = guestLink?.memberSubjectId ?? guestActor.id;
+          voteSubjectId = guestLink?.memberSubjectId ?? guestActor.id;
+          originSubjectId = guestActor.id;
+          actorMemberId = guestLink?.memberId;
+        }
+
+        const requestFingerprint = reactionFingerprint(command, actorSubjectId);
+        await transaction.execute(
+          sql`select pg_advisory_xact_lock(hashtextextended(${command.idempotencyKey}, 0))`,
+        );
+        const [existingAttempt] = await transaction
+          .select({
+            actorSubjectId: commentReactionAttempts.actorSubjectId,
+            requestFingerprint: commentReactionAttempts.requestFingerprint,
+            responseSnapshot: commentReactionAttempts.responseSnapshot,
+          })
+          .from(commentReactionAttempts)
+          .where(eq(commentReactionAttempts.id, command.idempotencyKey))
+          .limit(1);
+        if (existingAttempt) {
+          if (
+            existingAttempt.actorSubjectId !== actorSubjectId ||
+            existingAttempt.requestFingerprint !== requestFingerprint
+          ) {
+            throw new CommentError(
+              "IDEMPOTENCY_CONFLICT",
+              409,
+              "The Idempotency-Key was already used for a different reaction request.",
+            );
+          }
+          if (!isStoredReactionResponse(existingAttempt.responseSnapshot)) {
+            throw new CommentError(
+              "IDEMPOTENCY_INCOMPLETE",
+              409,
+              "The original reaction request has not reached a reusable result.",
+            );
+          }
+          return existingAttempt.responseSnapshot;
+        }
+
+        await transaction.execute(
+          sql`select pg_advisory_xact_lock(hashtextextended(${`${command.commentId}:${actorSubjectId}:HELPFUL`}, 0))`,
+        );
+
+        const [target] = await transaction
+          .select({
+            commentId: comments.id,
+            issueId: comments.issueId,
+            issueVersion: comments.issueVersion,
+            parentCommentId: comments.parentCommentId,
+            publicationState: comments.publicationState,
+            commentVisibility: comments.visibility,
+            commentIntegrityState: comments.integrityState,
+            deletedAt: comments.deletedAt,
+            lifecycle: issues.lifecycle,
+            issueVisibility: issues.visibility,
+            resultVisibility: issues.resultVisibility,
+            riskLevel: issues.riskLevel,
+            isPolitical: issues.isPolitical,
+          })
+          .from(comments)
+          .innerJoin(issues, eq(issues.id, comments.issueId))
+          .where(eq(comments.id, command.commentId))
+          .limit(1)
+          .for("update");
+
+        const publicTarget =
+          target &&
+          commentsAvailable({
+            lifecycle: target.lifecycle,
+            visibility: target.issueVisibility,
+            resultVisibility: target.resultVisibility,
+            riskLevel: target.riskLevel,
+            isPolitical: target.isPolitical,
+          }) &&
+          target.publicationState === "PUBLISHED" &&
+          ["VISIBLE", "DEPRIORITIZED"].includes(target.commentVisibility) &&
+          target.commentIntegrityState === "NORMAL" &&
+          target.deletedAt === null;
+        if (!target || !publicTarget) {
+          throw new CommentError(
+            "REACTION_UNAVAILABLE",
+            403,
+            "Reactions are not available for this Comment.",
+          );
+        }
+
+        let [eligibleVote] = await transaction
+          .select({ id: votes.id })
+          .from(votes)
+          .where(
+            and(
+              eq(votes.issueId, target.issueId),
+              eq(votes.issueVersion, target.issueVersion),
+              eq(votes.subjectId, voteSubjectId),
+              eq(votes.integrityState, "ACCEPTED"),
+            ),
+          )
+          .limit(1);
+        if (!eligibleVote && actorMemberId) {
+          [eligibleVote] = await transaction
+            .select({ id: votes.id })
+            .from(guestMemberLinks)
+            .innerJoin(votes, eq(votes.subjectId, guestMemberLinks.guestSubjectId))
+            .where(
+              and(
+                eq(guestMemberLinks.memberId, actorMemberId),
+                eq(votes.issueId, target.issueId),
+                eq(votes.issueVersion, target.issueVersion),
+                eq(votes.integrityState, "ACCEPTED"),
+              ),
+            )
+            .limit(1);
+        }
+        if (!eligibleVote) {
+          throw new CommentError(
+            "VOTE_REQUIRED",
+            403,
+            "An accepted Vote on the Comment Issue is required.",
+          );
+        }
+
+        await transaction.insert(commentReactionAttempts).values({
+          id: command.idempotencyKey,
+          commentId: command.commentId,
+          actorSubjectId,
+          requestFingerprint,
+        });
+
+        const [existingReaction] = await transaction
+          .select()
+          .from(commentReactions)
+          .where(
+            and(
+              eq(commentReactions.commentId, command.commentId),
+              eq(commentReactions.subjectId, actorSubjectId),
+              eq(commentReactions.code, "HELPFUL"),
+            ),
+          )
+          .limit(1);
+        const active = !existingReaction?.active;
+        if (existingReaction) {
+          await transaction
+            .update(commentReactions)
+            .set({
+              active,
+              activatedAt: active ? now : existingReaction.activatedAt,
+              deactivatedAt: active ? null : now,
+              mergedIntoReactionId: null,
+              updatedAt: now,
+            })
+            .where(eq(commentReactions.id, existingReaction.id));
+        } else {
+          await transaction.insert(commentReactions).values({
+            commentId: command.commentId,
+            subjectId: actorSubjectId,
+            originSubjectId,
+            active: true,
+            activatedAt: now,
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
+
+        const [aggregate] = await transaction
+          .select({ helpfulCount: count() })
+          .from(commentReactions)
+          .where(
+            and(
+              eq(commentReactions.commentId, command.commentId),
+              eq(commentReactions.code, "HELPFUL"),
+              eq(commentReactions.active, true),
+            ),
+          );
+        const helpfulCount = aggregate?.helpfulCount ?? 0;
+
+        const eventId = randomUUID();
+        const eventType = active ? "COMMENT_REACTION_ACTIVATED" : "COMMENT_REACTION_DEACTIVATED";
+        await transaction.insert(outboxEvents).values({
+          id: eventId,
+          aggregateType: "COMMENT",
+          aggregateId: command.commentId,
+          eventType,
+          schemaVersion: EVENT_SCHEMA_VERSION,
+          occurredAt: now,
+          payload: {
+            event_id: eventId,
+            event_type: eventType,
+            schema_version: EVENT_SCHEMA_VERSION,
+            occurred_at: now.toISOString(),
+            aggregate_type: "COMMENT",
+            aggregate_id: command.commentId,
+            data: {
+              comment_id: command.commentId,
+              actor_subject_id: actorSubjectId,
+              reaction_code: "HELPFUL",
+              active,
+              helpful_count: helpfulCount,
+            },
+          },
+        });
+
+        const response: HelpfulReactionResult = {
+          httpStatus: 200,
+          body: { reaction: { code: "HELPFUL", active, helpfulCount } },
+        };
+        await transaction
+          .update(commentReactionAttempts)
+          .set({ completedAt: now, responseSnapshot: response })
+          .where(eq(commentReactionAttempts.id, command.idempotencyKey));
         return response;
       });
     },

@@ -10,7 +10,9 @@ export type CommentErrorCode =
   | "COMMENT_TOO_LONG"
   | "COMMENT_URL_NOT_ALLOWED"
   | "COMMENT_CONTROL_CHARACTER"
-  | "COMMENT_SPAM_PATTERN";
+  | "COMMENT_SPAM_PATTERN"
+  | "REACTION_SUBJECT_REQUIRED"
+  | "REACTION_UNAVAILABLE";
 
 export class CommentError extends Error {
   constructor(
