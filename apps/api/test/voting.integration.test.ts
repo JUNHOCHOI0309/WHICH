@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { buildApp } from "../src/app.js";
@@ -79,6 +79,22 @@ function submitVote(command: {
       "x-anonymous-subject-id": command.anonymousSubjectId,
     },
     payload: { issueVersion: 1, choiceId: command.choiceId },
+  });
+}
+
+function reconcileVotes(command: {
+  issueId: string;
+  mode?: "DRY_RUN" | "REPAIR";
+  internalSecret?: string;
+}) {
+  return app.inject({
+    method: "POST",
+    url: `/v1/internal/issues/${command.issueId}/versions/1/vote-reconciliation`,
+    headers: {
+      "x-internal-auth-secret":
+        command.internalSecret ?? getConfig({ NODE_ENV: "test" }).auth.internalSecret,
+    },
+    payload: command.mode ? { mode: command.mode } : {},
   });
 }
 
@@ -251,5 +267,157 @@ describe("guest vote transaction", () => {
       .from(voteAttempts)
       .where(eq(voteAttempts.issueId, issue.issueId));
     expect(attempts).toHaveLength(0);
+  });
+});
+
+describe("vote aggregate reconciliation", () => {
+  it("requires internal authentication", async () => {
+    const issue = await createIssue();
+
+    const response = await reconcileVotes({
+      issueId: issue.issueId,
+      internalSecret: "invalid-internal-secret",
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json()).toEqual({
+      code: "UNAUTHORIZED",
+      message: "Internal authentication failed.",
+    });
+  });
+
+  it("dry-runs by default, repairs atomically, and is idempotent on a rerun", async () => {
+    const issue = await createIssue();
+    const anonymousSubjectId = await createGuestSubject();
+    const voteResponse = await submitVote({
+      idempotencyKey: randomUUID(),
+      anonymousSubjectId,
+      issueId: issue.issueId,
+      choiceId: issue.choiceAId,
+    });
+    expect(voteResponse.statusCode).toBe(201);
+
+    await database.db
+      .update(voteAggregates)
+      .set({
+        acceptedACount: sql`${voteAggregates.acceptedACount} + 1`,
+        acceptedVoteCount: sql`${voteAggregates.acceptedVoteCount} + 1`,
+        displayedVoteCount: sql`${voteAggregates.displayedVoteCount} + 1`,
+      })
+      .where(and(eq(voteAggregates.issueId, issue.issueId), eq(voteAggregates.issueVersion, 1)));
+
+    const dryRun = await reconcileVotes({ issueId: issue.issueId });
+    expect(dryRun.statusCode).toBe(200);
+    expect(dryRun.json()).toMatchObject({
+      mode: "DRY_RUN",
+      status: "MISMATCH_FOUND",
+      source: {
+        voteRequestCount: 1,
+        acceptedACount: 1,
+        acceptedBCount: 0,
+        acceptedVoteCount: 1,
+        displayedVoteCount: 1,
+      },
+      aggregateBefore: {
+        resultVersion: 1,
+        acceptedACount: 2,
+        acceptedVoteCount: 2,
+        displayedVoteCount: 2,
+      },
+      resultAfter: null,
+    });
+    expect(
+      dryRun.json<{ mismatches: Array<{ target: string; field: string }> }>().mismatches,
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ target: "AGGREGATE", field: "acceptedACount" }),
+        expect.objectContaining({ target: "LATEST_SNAPSHOT", field: "acceptedACount" }),
+      ]),
+    );
+
+    const [afterDryRun] = await database.db
+      .select()
+      .from(voteAggregates)
+      .where(eq(voteAggregates.issueId, issue.issueId));
+    const eventsAfterDryRun = await database.db
+      .select()
+      .from(outboxEvents)
+      .where(eq(outboxEvents.aggregateId, `${issue.issueId}:1`));
+    expect(afterDryRun).toMatchObject({ resultVersion: 1, acceptedACount: 2 });
+    expect(eventsAfterDryRun).toHaveLength(1);
+
+    const [repair, concurrentRepair] = await Promise.all([
+      reconcileVotes({ issueId: issue.issueId, mode: "REPAIR" }),
+      reconcileVotes({ issueId: issue.issueId, mode: "REPAIR" }),
+    ]);
+    expect(repair.statusCode).toBe(200);
+    expect(concurrentRepair.statusCode).toBe(200);
+    const repairBodies = [repair.json(), concurrentRepair.json()] as Array<{
+      status: string;
+      resultAfter: Record<string, unknown>;
+    }>;
+    expect(repairBodies.map((body) => body.status).sort()).toEqual(["CONSISTENT", "REPAIRED"]);
+    expect(repairBodies.find((body) => body.status === "REPAIRED")).toMatchObject({
+      mode: "REPAIR",
+      status: "REPAIRED",
+      resultAfter: {
+        resultVersion: 2,
+        acceptedACount: 1,
+        acceptedBCount: 0,
+        acceptedVoteCount: 1,
+        displayedVoteCount: 1,
+        integrityState: "CORRECTED",
+      },
+    });
+
+    const [repairedAggregate] = await database.db
+      .select()
+      .from(voteAggregates)
+      .where(eq(voteAggregates.issueId, issue.issueId));
+    const snapshots = await database.db
+      .select()
+      .from(resultSnapshots)
+      .where(eq(resultSnapshots.issueId, issue.issueId))
+      .orderBy(desc(resultSnapshots.resultVersion));
+    const rebuiltEvents = await database.db
+      .select()
+      .from(outboxEvents)
+      .where(eq(outboxEvents.aggregateId, `${issue.issueId}:1`));
+    expect(repairedAggregate).toMatchObject({
+      resultVersion: 2,
+      acceptedACount: 1,
+      acceptedVoteCount: 1,
+      displayedVoteCount: 1,
+      integrityState: "CORRECTED",
+    });
+    expect(snapshots).toHaveLength(2);
+    expect(snapshots[0]).toMatchObject({
+      resultVersion: 2,
+      acceptedACount: 1,
+      displayedVoteCount: 1,
+      integrityState: "CORRECTED",
+    });
+    expect(rebuiltEvents).toHaveLength(2);
+    expect(rebuiltEvents.map((event) => event.eventType)).toContain("RESULT_AGGREGATE_REBUILT");
+
+    const rerun = await reconcileVotes({ issueId: issue.issueId, mode: "REPAIR" });
+    expect(rerun.statusCode).toBe(200);
+    expect(rerun.json()).toMatchObject({
+      mode: "REPAIR",
+      status: "CONSISTENT",
+      mismatches: [],
+      resultAfter: { resultVersion: 2, integrityState: "CORRECTED" },
+    });
+
+    const finalSnapshots = await database.db
+      .select()
+      .from(resultSnapshots)
+      .where(eq(resultSnapshots.issueId, issue.issueId));
+    const finalEvents = await database.db
+      .select()
+      .from(outboxEvents)
+      .where(eq(outboxEvents.aggregateId, `${issue.issueId}:1`));
+    expect(finalSnapshots).toHaveLength(2);
+    expect(finalEvents).toHaveLength(2);
   });
 });

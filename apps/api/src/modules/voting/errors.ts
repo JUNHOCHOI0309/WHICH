@@ -3,7 +3,8 @@ export type GuestVoteErrorCode =
   | "IDEMPOTENCY_CONFLICT"
   | "IDEMPOTENCY_INCOMPLETE"
   | "ISSUE_OR_CHOICE_NOT_FOUND"
-  | "ISSUE_NOT_VOTABLE";
+  | "ISSUE_NOT_VOTABLE"
+  | "ISSUE_VERSION_NOT_FOUND";
 
 export class GuestVoteError extends Error {
   constructor(
