@@ -29,13 +29,17 @@ Guest Comment Read Flow까지 구현되어 있습니다.
 corepack enable
 pnpm install
 copy .env.example .env
+copy apps/web/.env.example apps/web/.env.local
 pnpm infra:up
 pnpm --filter @which/api db:migrate
 pnpm --filter @which/api db:seed
 pnpm dev
 ```
 
-PowerShell에서는 환경 파일 복사에 `Copy-Item .env.example .env`를 사용할 수 있습니다.
+PowerShell에서는 `Copy-Item .env.example .env`와
+`Copy-Item apps/web/.env.example apps/web/.env.local`을 사용할 수 있습니다. OAuth 환경 변수와
+Callback 설정은 [`docs/development/social-auth-setup.md`](docs/development/social-auth-setup.md)를
+확인하세요.
 
 - 웹: <http://localhost:3000>
 - 공개 질문 Feed: <http://localhost:3000>
@@ -77,6 +81,8 @@ Comment를 중복 생성하거나 기존 Version을 덮어쓰지 않습니다.
 - 반복 가능한 Development Issue Seed
 - 안정 Cursor를 사용하는 Guest Issue Feed API
 - HttpOnly Guest 식별자를 사용하는 Web BFF
+- Provider Subject 기반 Member Identity와 HttpOnly Member Session
+- Google OAuth 2.0 + OIDC Web BFF와 Guest → Member Vote 연결
 - 모바일 Guest 투표 화면과 투표 후 결과 공개
 - 이미 참여한 질문을 제외한 Result → Next Issue 이동
 - Issue Version과 작성 당시 A/B 선택을 보존하는 Comment Schema
@@ -88,5 +94,5 @@ Comment를 중복 생성하거나 기존 Version을 덮어쓰지 않습니다.
 - 실제 PostgreSQL Integration Test
 - CI 검증 경로
 
-Comment 작성·Reply·Reaction, 개인화 Feed Ranking, 회원 인증, 강화된 Integrity Challenge와
-추천 모델은 후속 Task에서 구현합니다.
+X·Instagram Login Adapter, Comment 작성·Reply·Reaction, 개인화 Feed Ranking, 강화된
+Integrity Challenge와 추천 모델은 후속 Task에서 구현합니다.
