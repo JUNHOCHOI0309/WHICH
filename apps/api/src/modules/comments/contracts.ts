@@ -23,6 +23,19 @@ export type GuestCommentQuery = {
   limit: number;
 };
 
-export interface CommentReadService {
+export type MemberCommentSubmission = {
+  issueId: string;
+  sessionToken: string;
+  idempotencyKey: string;
+  body: string;
+};
+
+export type MemberCommentSubmissionResult = {
+  httpStatus: 201;
+  body: { comment: PublicComment };
+};
+
+export interface CommentService {
   listGuestComments(query: GuestCommentQuery): Promise<PublicCommentPage>;
+  submitMemberComment(command: MemberCommentSubmission): Promise<MemberCommentSubmissionResult>;
 }

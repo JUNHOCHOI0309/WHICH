@@ -7,7 +7,7 @@ import Fastify from "fastify";
 
 import type { AppConfig } from "./config.js";
 import type { Database } from "./database/client.js";
-import type { CommentReadService } from "./modules/comments/contracts.js";
+import type { CommentService } from "./modules/comments/contracts.js";
 import { registerCommentRoutes } from "./modules/comments/routes.js";
 import type { IssueReadService } from "./modules/issues/contracts.js";
 import { registerIssueRoutes } from "./modules/issues/routes.js";
@@ -19,7 +19,7 @@ import { registerVotingRoutes } from "./modules/voting/routes.js";
 export type AppDependencies = Pick<Database, "ping" | "close"> & {
   issueReader: IssueReadService;
   guestVotes: GuestVoteService;
-  commentReader: CommentReadService;
+  commentReader: CommentService;
   memberIdentity: MemberIdentityService;
 };
 
