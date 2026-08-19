@@ -1,8 +1,9 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   decodeOidcFlow,
   encodeOidcFlow,
+  internalAuthSecret,
   sanitizeReturnTo,
   withAuthOutcome,
 } from "@/lib/server/member-auth";
@@ -10,6 +11,10 @@ import {
 describe("Member OIDC return flow", () => {
   beforeEach(() => {
     vi.stubEnv("AUTH_FLOW_SECRET", "test-auth-flow-secret-with-enough-entropy");
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it("keeps only same-origin application return paths", () => {
@@ -40,5 +45,13 @@ describe("Member OIDC return flow", () => {
     expect(withAuthOutcome("/issues/issue-1?draft=kept#member-access", "cancelled")).toBe(
       "/issues/issue-1?draft=kept&auth=cancelled#member-access",
     );
+  });
+
+  it("shares the API internal secret in a single-service deployment", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("AUTH_INTERNAL_SECRET", "");
+    vi.stubEnv("INTERNAL_AUTH_SECRET", "shared-render-internal-secret");
+
+    expect(internalAuthSecret()).toBe("shared-render-internal-secret");
   });
 });

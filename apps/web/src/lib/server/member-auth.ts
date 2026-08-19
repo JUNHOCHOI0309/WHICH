@@ -89,10 +89,10 @@ export function googleOidcCredentials() {
 }
 
 export function internalAuthSecret() {
-  const configured = process.env.AUTH_INTERNAL_SECRET;
+  const configured = process.env.AUTH_INTERNAL_SECRET || process.env.INTERNAL_AUTH_SECRET;
   if (configured) return configured;
   if (process.env.NODE_ENV === "production") {
-    throw new Error("AUTH_INTERNAL_SECRET is required in production.");
+    throw new Error("AUTH_INTERNAL_SECRET or INTERNAL_AUTH_SECRET is required in production.");
   }
   return "which-local-internal-auth-secret";
 }
