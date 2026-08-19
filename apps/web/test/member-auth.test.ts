@@ -1,14 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
-  decodeOidcFlow,
-  encodeOidcFlow,
+  authFlowMatches,
+  decodeAuthFlow,
+  encodeAuthFlow,
   internalAuthSecret,
   sanitizeReturnTo,
   withAuthOutcome,
 } from "@/lib/server/member-auth";
 
-describe("Member OIDC return flow", () => {
+describe("Member OAuth return flow", () => {
   beforeEach(() => {
     vi.stubEnv("AUTH_FLOW_SECRET", "test-auth-flow-secret-with-enough-entropy");
   });
@@ -27,18 +28,35 @@ describe("Member OIDC return flow", () => {
   });
 
   it("signs flow state and rejects a modified cookie", () => {
-    const encoded = encodeOidcFlow({
+    const encoded = encodeAuthFlow({
+      provider: "GOOGLE",
       state: "state",
       nonce: "nonce",
       codeVerifier: "verifier",
       returnTo: "/issues/issue-1#member-access",
       createdAt: Date.now(),
     });
-    expect(decodeOidcFlow(encoded)).toMatchObject({
+    expect(decodeAuthFlow(encoded)).toMatchObject({
+      provider: "GOOGLE",
       state: "state",
       returnTo: "/issues/issue-1#member-access",
     });
-    expect(decodeOidcFlow(`${encoded}tampered`)).toBeNull();
+    expect(decodeAuthFlow(`${encoded}tampered`)).toBeNull();
+  });
+
+  it("binds the signed flow to its Provider and returned state", () => {
+    const encoded = encodeAuthFlow({
+      provider: "X",
+      state: "x-state",
+      codeVerifier: "verifier",
+      returnTo: "/issues/issue-1#member-access",
+      createdAt: Date.now(),
+    });
+    const flow = decodeAuthFlow(encoded);
+
+    expect(flow && authFlowMatches(flow, "X", "x-state")).toBe(true);
+    expect(flow && authFlowMatches(flow, "GOOGLE", "x-state")).toBe(false);
+    expect(flow && authFlowMatches(flow, "X", "wrong-state")).toBe(false);
   });
 
   it("adds the auth outcome without losing query or hash state", () => {

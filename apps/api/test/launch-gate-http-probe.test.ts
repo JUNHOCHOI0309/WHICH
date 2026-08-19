@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { createHttpPublicWebProbe } from "../src/modules/launch-gate/http-probe.js";
 
 describe("Public Web HTTP probe", () => {
-  it("reads the public home, Feed, and Google redirect without following OAuth", async () => {
+  it("reads the public home, Feed, and OAuth redirects without following them", async () => {
     const request: typeof fetch = (input) => {
       const url = new URL(input instanceof Request ? input.url : input.toString());
       if (url.pathname === "/") {
@@ -19,12 +19,11 @@ describe("Public Web HTTP probe", () => {
           Response.json({ items: [{ issueId: "issue-1" }], nextCursor: null }),
         );
       }
-      return Promise.resolve(
-        new Response(null, {
-          status: 307,
-          headers: { location: "https://accounts.google.com/o/oauth2/v2/auth?client_id=hidden" },
-        }),
-      );
+      const location =
+        url.pathname === "/api/auth/x/start"
+          ? "https://x.com/i/oauth2/authorize?client_id=hidden"
+          : "https://accounts.google.com/o/oauth2/v2/auth?client_id=hidden";
+      return Promise.resolve(new Response(null, { status: 307, headers: { location } }));
     };
     const probe = createHttpPublicWebProbe({
       publicWebUrl: "https://whichone.site",
@@ -36,6 +35,10 @@ describe("Public Web HTTP probe", () => {
     await expect(probe.googleOAuthStart()).resolves.toEqual({
       statusCode: 307,
       providerHost: "accounts.google.com",
+    });
+    await expect(probe.xOAuthStart()).resolves.toEqual({
+      statusCode: 307,
+      providerHost: "x.com",
     });
   });
 });

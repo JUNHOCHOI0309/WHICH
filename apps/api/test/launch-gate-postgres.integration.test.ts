@@ -37,7 +37,7 @@ describe("PostgreSQL launch gate store", () => {
     const baseline = await store.captureRollbackBaseline();
     const sameFacts = await store.readProtectedFacts(baseline.capturedAt);
 
-    expect(baseline.appliedMigrationTimestamps).toHaveLength(7);
+    expect(baseline.appliedMigrationTimestamps).toHaveLength(8);
     expect(baseline.outbox).toMatchObject({ total: 1, pending: 1, failed: 0 });
     expect(baseline.protectedFacts).toEqual(sameFacts);
 
