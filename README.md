@@ -88,7 +88,7 @@ Comment를 중복 생성하거나 기존 Version을 덮어쓰지 않습니다.
 - 안정 Cursor를 사용하는 Guest Issue Feed API
 - HttpOnly Guest 식별자를 사용하는 Web BFF
 - Provider Subject 기반 Member Identity와 HttpOnly Member Session
-- Google OAuth 2.0 + OIDC Web BFF와 Guest → Member Vote 연결
+- Google OIDC·X OAuth 2.0 PKCE Web BFF와 Guest → Member Vote 연결
 - 모바일 Guest 투표 화면과 투표 후 결과 공개
 - 이미 참여한 질문을 제외한 Result → Next Issue 이동
 - Issue Version과 작성 당시 A/B 선택을 보존하는 Comment Schema
@@ -100,8 +100,8 @@ Comment를 중복 생성하거나 기존 Version을 덮어쓰지 않습니다.
 - 실제 PostgreSQL Integration Test
 - CI 검증 경로
 
-X·Instagram Login Adapter, Reply, 개인화 Feed Ranking, 강화된 Integrity Challenge와 추천 모델은
-후속 Task에서 구현합니다. Outbox Worker 운영 방법은
+Reply, 개인화 Feed Ranking, 강화된 Integrity Challenge와 추천 모델은 후속 Task에서 구현합니다.
+Outbox Worker 운영 방법은
 [`docs/operations/outbox-publisher.md`](docs/operations/outbox-publisher.md), 출시 판정과 복구 훈련은
 [`docs/operations/public-mvp-gate-and-rollback.md`](docs/operations/public-mvp-gate-and-rollback.md)를
 확인하세요.
