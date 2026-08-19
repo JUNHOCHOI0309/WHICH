@@ -11,11 +11,14 @@ const LOCAL_MODERATION_INTERNAL_SECRET = "which-local-moderation-internal-secret
 const environmentSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   API_HOST: z.string().min(1).default("0.0.0.0"),
-  API_PORT: z.coerce.number().int().positive().max(65_535).default(4000),
+  // Render and other container platforms provide PORT. Keep API_PORT as an
+  // explicit override so local development can continue to use port 4000.
+  API_PORT: z.coerce.number().int().positive().max(65_535).optional(),
+  PORT: z.coerce.number().int().positive().max(65_535).optional(),
   DATABASE_URL: z.string().url().default("postgresql://which:which_local@localhost:54329/which"),
   WEB_ORIGIN: z.string().url().default("http://localhost:3000"),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
-  RELEASE_ID: z.string().min(1).max(128).default("local"),
+  RELEASE_ID: z.string().min(1).max(128).optional(),
   INTERNAL_AUTH_SECRET: z.string().min(16).default(LOCAL_INTERNAL_AUTH_SECRET),
   MODERATION_INTERNAL_SECRET: z.string().min(16).default(LOCAL_MODERATION_INTERNAL_SECRET),
   MEMBER_SESSION_TTL_SECONDS: z.coerce.number().int().min(300).max(2_592_000).default(604_800),
@@ -30,6 +33,8 @@ export type AppConfig = ReturnType<typeof getConfig>;
 
 export function getConfig(environment: NodeJS.ProcessEnv = process.env) {
   const parsed = environmentSchema.parse(environment);
+  const releaseId = parsed.RELEASE_ID ?? environment.RENDER_GIT_COMMIT ?? "local";
+  const port = parsed.API_PORT ?? parsed.PORT ?? 4000;
 
   if (
     parsed.NODE_ENV === "production" &&
@@ -43,16 +48,16 @@ export function getConfig(environment: NodeJS.ProcessEnv = process.env) {
   ) {
     throw new Error("MODERATION_INTERNAL_SECRET must be configured for production.");
   }
-  if (parsed.NODE_ENV === "production" && parsed.RELEASE_ID === "local") {
+  if (parsed.NODE_ENV === "production" && releaseId === "local") {
     throw new Error("RELEASE_ID must identify the deployed production release.");
   }
 
   return {
     environment: parsed.NODE_ENV,
-    releaseId: parsed.RELEASE_ID,
+    releaseId,
     server: {
       host: parsed.API_HOST,
-      port: parsed.API_PORT,
+      port,
       logLevel: parsed.LOG_LEVEL,
       webOrigin: parsed.WEB_ORIGIN,
     },

@@ -115,6 +115,25 @@ describe("safe feature defaults", () => {
       }),
     ).toThrow("RELEASE_ID must identify the deployed production release.");
   });
+
+  it("uses a container platform port and immutable release identifier", () => {
+    const config = getConfig({
+      NODE_ENV: "production",
+      PORT: "10000",
+      RENDER_GIT_COMMIT: "0123456789abcdef",
+      INTERNAL_AUTH_SECRET: "production-internal-secret",
+      MODERATION_INTERNAL_SECRET: "production-moderation-secret",
+    });
+
+    expect(config.server.port).toBe(10000);
+    expect(config.releaseId).toBe("0123456789abcdef");
+  });
+
+  it("keeps API_PORT as the explicit local override", () => {
+    const config = getConfig({ API_PORT: "4000", PORT: "10000" });
+
+    expect(config.server.port).toBe(4000);
+  });
 });
 
 describe("OpenAPI contract", () => {

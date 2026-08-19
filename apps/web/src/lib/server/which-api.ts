@@ -9,9 +9,12 @@ const anonymousSubjectPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function apiBaseUrl() {
-  const configured =
-    process.env.API_BASE_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
-  return configured.endsWith("/") ? configured : `${configured}/`;
+  const configured = process.env.API_BASE_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL;
+  const renderPrivateHostport = process.env.WHICH_API_HOSTPORT;
+  const baseUrl =
+    configured ??
+    (renderPrivateHostport ? `http://${renderPrivateHostport}` : "http://localhost:4000");
+  return baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`;
 }
 
 export function fetchWhichApi(path: string, init?: RequestInit) {

@@ -1,0 +1,103 @@
+# Render production Blueprint for WHICH.
+#
+# The existing `which-db` Postgres instance remains managed in the Render
+# dashboard. This Blueprint references its internal connection string and never
+# stores database credentials or OAuth secrets in Git.
+services:
+  - type: pserv
+    name: which-api
+    runtime: node
+    region: singapore
+    plan: starter
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @which/api build
+    preDeployCommand: pnpm --filter @which/api db:migrate
+    startCommand: pnpm --filter @which/api start
+    autoDeployTrigger: checksPass
+    maxShutdownDelaySeconds: 30
+    buildFilter:
+      paths:
+        - apps/api/**
+        - packages/**
+        - package.json
+        - pnpm-lock.yaml
+        - pnpm-workspace.yaml
+        - tsconfig.base.json
+        - turbo.json
+        - render.yaml
+    envVars:
+      - key: NODE_VERSION
+        value: 22.14.0
+      - key: NODE_ENV
+        value: production
+      - key: API_HOST
+        value: 0.0.0.0
+      # Port 10000 is reserved for Render private-network traffic. The Web
+      # service receives this service's discovered host:4000 value.
+      - key: API_PORT
+        value: "4000"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: which-db
+          property: connectionString
+      - key: WEB_ORIGIN
+        value: https://whichone.site
+      - key: LOG_LEVEL
+        value: info
+      - key: INTERNAL_AUTH_SECRET
+        generateValue: true
+      - key: MODERATION_INTERNAL_SECRET
+        generateValue: true
+      - key: MEMBER_SESSION_TTL_SECONDS
+        value: "604800"
+      - key: FEATURE_COMMENTS_ENABLED
+        value: "false"
+      - key: FEATURE_CREATOR_SUBMISSIONS_ENABLED
+        value: "false"
+      - key: FEATURE_ML_RANKER_ENABLED
+        value: "false"
+      - key: FEATURE_RESULT_SHARING_ENABLED
+        value: "false"
+      - key: FEATURE_RISK_CHALLENGE_ENABLED
+        value: "false"
+
+  - type: web
+    name: which-web
+    runtime: node
+    region: singapore
+    plan: starter
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @which/web build
+    startCommand: pnpm --filter @which/web start
+    autoDeployTrigger: checksPass
+    buildFilter:
+      paths:
+        - apps/web/**
+        - packages/**
+        - package.json
+        - pnpm-lock.yaml
+        - pnpm-workspace.yaml
+        - tsconfig.base.json
+        - turbo.json
+        - render.yaml
+    envVars:
+      - key: NODE_VERSION
+        value: 22.14.0
+      - key: NODE_ENV
+        value: production
+      - key: WHICH_API_HOSTPORT
+        fromService:
+          name: which-api
+          type: pserv
+          property: hostport
+      - key: AUTH_BASE_URL
+        value: https://whichone.site
+      - key: AUTH_INTERNAL_SECRET
+        fromService:
+          name: which-api
+          type: pserv
+          envVarKey: INTERNAL_AUTH_SECRET
+      - key: AUTH_FLOW_SECRET
+        generateValue: true
+      - key: GOOGLE_OIDC_CLIENT_ID
+        sync: false
+      - key: GOOGLE_OIDC_CLIENT_SECRET
+        sync: false
