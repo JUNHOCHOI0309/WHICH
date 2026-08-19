@@ -48,6 +48,26 @@ services:
         value: https://whichone.site
       - key: LOG_LEVEL
         value: info
+      # Render exposes this service's immutable commit as RENDER_GIT_COMMIT.
+      # The Gate uses it automatically as the expected API release ID.
+      - key: LAUNCH_GATE_TARGET_ENVIRONMENT
+        value: production
+      - key: LAUNCH_GATE_API_URL
+        value: http://127.0.0.1:4000
+      - key: LAUNCH_GATE_PUBLIC_WEB_URL
+        value: https://whichone.site
+      # No real HTTP Event consumer exists for the cost-optimized MVP yet.
+      # Pending Events remain durable and Dead Letters still block the Gate.
+      - key: LAUNCH_GATE_OUTBOX_DELIVERY_REQUIRED
+        value: "false"
+      - key: LAUNCH_GATE_ISSUE_ID
+        sync: false
+      - key: LAUNCH_GATE_ISSUE_VERSION
+        value: "1"
+      - key: LAUNCH_GATE_MAX_DEAD_LETTERS
+        value: "0"
+      - key: LAUNCH_GATE_MAX_PENDING_AGE_SECONDS
+        value: "300"
       # The Web BFF falls back to this same value for API authentication.
       - key: INTERNAL_AUTH_SECRET
         generateValue: true

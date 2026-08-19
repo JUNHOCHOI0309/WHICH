@@ -65,6 +65,7 @@ pnpm --filter @which/api db:seed       # 멱등 Development Issue·Comment 생�
 pnpm --filter @which/api outbox:worker # 독립 Outbox Publisher 실행
 pnpm --filter @which/api outbox:publish-once
 pnpm --filter @which/api launch:gate # 읽기 전용 Public MVP GO/NO-GO 판정
+pnpm --filter @which/api launch:public-smoke https://whichone.site
 ```
 
 `db:seed`는 Production 환경에서 실행되지 않으며, 여러 번 실행해도 같은 Issue, Choice,

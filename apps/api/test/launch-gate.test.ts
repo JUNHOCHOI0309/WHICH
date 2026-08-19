@@ -4,19 +4,24 @@ import type {
   LaunchGateApiProbe,
   LaunchGateConfig,
   LaunchGateStore,
+  PublicWebProbe,
   RollbackSnapshot,
 } from "../src/modules/launch-gate/contracts.js";
+import { getLaunchGateConfig } from "../src/modules/launch-gate/config.js";
 import {
   createRollbackSnapshot,
   runLaunchGate,
+  runPublicSurfaceGate,
   verifyRollback,
 } from "../src/modules/launch-gate/service.js";
 
 const config: LaunchGateConfig = {
   targetEnvironment: "production",
-  apiBaseUrl: "https://api.which.test",
+  apiBaseUrl: "http://127.0.0.1:4000",
+  publicWebUrl: "https://which.test",
   expectedReleaseId: "release-2026-08-19.1",
   internalAuthSecret: "safe-production-internal-secret",
+  outboxDeliveryRequired: true,
   outboxWebhookUrl: "https://events.which.test/delivery",
   outboxWebhookSecret: "safe-production-webhook-secret",
   issueId: "10000000-0000-4000-8000-000000000001",
@@ -25,6 +30,16 @@ const config: LaunchGateConfig = {
   maxPendingAgeSeconds: 300,
   expectedMigrations: [{ tag: "0000_initial", appliedAt: 1000 }],
 };
+
+function createPublicWeb(overrides: Partial<PublicWebProbe> = {}): PublicWebProbe {
+  return {
+    home: () => Promise.resolve({ statusCode: 200, isHtml: true }),
+    feed: () => Promise.resolve({ statusCode: 200, itemCount: 1 }),
+    googleOAuthStart: () =>
+      Promise.resolve({ statusCode: 307, providerHost: "accounts.google.com" }),
+    ...overrides,
+  };
+}
 
 function createStore(overrides: Partial<LaunchGateStore> = {}): LaunchGateStore {
   return {
@@ -90,11 +105,12 @@ describe("Public MVP Gate", () => {
     const report = await runLaunchGate(config, {
       store: createStore(),
       api: createApi(),
+      publicWeb: createPublicWeb(),
       now: () => new Date("2026-08-19T01:00:00.000Z"),
     });
 
     expect(report.verdict).toBe("GO");
-    expect(report.checks).toHaveLength(7);
+    expect(report.checks).toHaveLength(10);
     expect(report.checks.every((check) => check.status === "PASS")).toBe(true);
     expect(JSON.stringify(report)).not.toContain(config.internalAuthSecret);
     expect(JSON.stringify(report)).not.toContain(config.outboxWebhookSecret);
@@ -122,6 +138,7 @@ describe("Public MVP Gate", () => {
             mismatchCount: 2,
           }),
       }),
+      publicWeb: createPublicWeb(),
     });
 
     expect(report.verdict).toBe("NO_GO");
@@ -135,16 +152,82 @@ describe("Public MVP Gate", () => {
       {
         ...config,
         apiBaseUrl: "http://localhost:4000",
+        publicWebUrl: "http://localhost:3000",
         expectedReleaseId: "local",
         internalAuthSecret: "which-local-internal-auth-secret",
         outboxWebhookUrl: "https://events.example.com/which",
         outboxWebhookSecret: "replace-with-a-secret",
       },
-      { store: createStore(), api: createApi() },
+      { store: createStore(), api: createApi(), publicWeb: createPublicWeb() },
     );
 
     expect(report.verdict).toBe("NO_GO");
     expect(report.checks[0]).toMatchObject({ name: "environment", status: "FAIL" });
+  });
+
+  it("allows an explicit deferred Outbox while retaining Dead Letter enforcement", async () => {
+    const report = await runLaunchGate(
+      {
+        ...config,
+        outboxDeliveryRequired: false,
+        outboxWebhookUrl: null,
+        outboxWebhookSecret: null,
+      },
+      {
+        store: createStore({
+          readOutboxHealth: () =>
+            Promise.resolve({
+              total: 10,
+              pending: 10,
+              published: 0,
+              failed: 0,
+              oldestPendingAgeSeconds: 86_400,
+            }),
+        }),
+        api: createApi(),
+        publicWeb: createPublicWeb(),
+      },
+    );
+
+    expect(report.verdict).toBe("GO");
+    expect(report.checks.find((check) => check.name === "outbox_health")).toMatchObject({
+      status: "PASS",
+      details: { deliveryMode: "DEFERRED", pending: 10 },
+    });
+  });
+
+  it("uses Render's immutable commit when an explicit release ID is absent", () => {
+    const parsed = getLaunchGateConfig(
+      {
+        LAUNCH_GATE_TARGET_ENVIRONMENT: "production",
+        LAUNCH_GATE_API_URL: "http://127.0.0.1:4000",
+        LAUNCH_GATE_PUBLIC_WEB_URL: "https://whichone.site",
+        RENDER_GIT_COMMIT: "render-commit-sha",
+        INTERNAL_AUTH_SECRET: "safe-production-internal-secret",
+        LAUNCH_GATE_OUTBOX_DELIVERY_REQUIRED: "false",
+        LAUNCH_GATE_ISSUE_ID: config.issueId,
+        LAUNCH_GATE_ISSUE_VERSION: "1",
+      },
+      config.expectedMigrations,
+    );
+
+    expect(parsed.expectedReleaseId).toBe("render-commit-sha");
+    expect(parsed.outboxDeliveryRequired).toBe(false);
+    expect(parsed.outboxWebhookUrl).toBeNull();
+  });
+});
+
+describe("Public Surface Gate", () => {
+  it("returns NO_GO when the deployed Feed has no launchable Issue", async () => {
+    const report = await runPublicSurfaceGate(
+      "https://whichone.site",
+      createPublicWeb({ feed: () => Promise.resolve({ statusCode: 200, itemCount: 0 }) }),
+    );
+
+    expect(report.verdict).toBe("NO_GO");
+    expect(report.checks).toContainEqual(
+      expect.objectContaining({ name: "public_feed", status: "FAIL" }),
+    );
   });
 });
 
@@ -183,6 +266,7 @@ describe("rollback drill", () => {
             featureFlags: { comments: false },
           }),
       }),
+      publicWeb: createPublicWeb(),
     });
 
     expect(report.verdict).toBe("VERIFIED");
@@ -216,6 +300,7 @@ describe("rollback drill", () => {
             featureFlags: null,
           }),
       }),
+      publicWeb: createPublicWeb(),
     });
 
     expect(report.verdict).toBe("FAILED");

@@ -64,16 +64,27 @@ session cookies.
 
 ## First-release verification
 
-1. Check `https://whichone.site` and the Google login flow.
-2. Confirm Issue -> Vote -> Result -> Comment -> Report with a dedicated test
+1. From a workstation, run
+   `pnpm --filter @which/api launch:public-smoke https://whichone.site`.
+2. Publish at least one production Issue and set `LAUNCH_GATE_ISSUE_ID` to a
+   stable LOW-risk Issue Version used for reconciliation Dry Run.
+3. From a Render Shell, run
+   `pnpm --filter @which/api launch:gate artifacts/public-mvp-gate.json`.
+   `RENDER_GIT_COMMIT` supplies the expected Release ID automatically, and the
+   API is inspected over `http://127.0.0.1:4000`.
+4. Confirm Issue -> Vote -> Result -> Comment -> Report with a dedicated test
    account.
-3. Run the Public MVP Gate from a Render shell or one-off job after configuring
-   its explicit release, issue, and Outbox consumer values. The Gate remains
-   read-only.
+5. Copy the secret-free Gate report to the release record.
+
+As of the 2026-08-20 v1.1 verification, the canonical home and Google OAuth
+start pass, but the public Feed contains zero launchable Issues. This correctly
+keeps the public result at `NO_GO` until production content is published.
 
 ## Outbox boundary
 
-Do not deploy `which-outbox-worker` yet. The current worker requires a real
-HTTP consumer with signature verification and event-id idempotency. A placeholder
-webhook would leave pending Events or create Dead Letters, which makes the launch
-Gate return `NO_GO`.
+Do not deploy `which-outbox-worker` yet. The current worker requires a real HTTP
+consumer with signature verification and event-id idempotency. The Blueprint
+therefore declares `LAUNCH_GATE_OUTBOX_DELIVERY_REQUIRED=false`: Pending Events
+remain durable and the Gate reports `DEFERRED`, while any Dead Letter still
+returns `NO_GO`. Change the value to `true` only when a real consumer, URL, and
+secret are configured.

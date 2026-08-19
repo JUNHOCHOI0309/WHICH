@@ -4,11 +4,13 @@ import type {
   LaunchGateConfig,
   LaunchGateReport,
   LaunchGateStore,
+  PublicSurfaceReport,
+  PublicWebProbe,
   RollbackSnapshot,
   RollbackVerificationReport,
 } from "./contracts.js";
 
-const PLACEHOLDER_PATTERN = /(replace|changeme|example\.com|which-local|local-internal)/i;
+const PLACEHOLDER_PATTERN = /(^local$|replace|changeme|example\.com|which-local|local-internal)/i;
 
 function pass(name: string, summary: string, details?: Record<string, unknown>): LaunchGateCheck {
   return { name, status: "PASS", summary, ...(details ? { details } : {}) };
@@ -31,37 +33,101 @@ async function checked(
 
 function environmentCheck(config: LaunchGateConfig) {
   const apiUrl = new URL(config.apiBaseUrl);
-  const webhookUrl = new URL(config.outboxWebhookUrl);
+  const publicWebUrl = new URL(config.publicWebUrl);
+  const webhookUrl = config.outboxWebhookUrl ? new URL(config.outboxWebhookUrl) : null;
   const problems: string[] = [];
+  const apiIsLoopback = ["localhost", "127.0.0.1", "::1", "[::1]"].includes(apiUrl.hostname);
 
   if (PLACEHOLDER_PATTERN.test(config.expectedReleaseId))
     problems.push("release ID is a placeholder");
   if (PLACEHOLDER_PATTERN.test(config.internalAuthSecret)) {
     problems.push("internal auth secret is a placeholder");
   }
-  if (PLACEHOLDER_PATTERN.test(config.outboxWebhookSecret)) {
-    problems.push("Outbox webhook secret is a placeholder");
-  }
-  if (PLACEHOLDER_PATTERN.test(config.outboxWebhookUrl)) {
-    problems.push("Outbox webhook URL is a placeholder");
+  if (config.outboxDeliveryRequired) {
+    if (!config.outboxWebhookSecret) problems.push("Outbox webhook secret is missing");
+    else if (PLACEHOLDER_PATTERN.test(config.outboxWebhookSecret)) {
+      problems.push("Outbox webhook secret is a placeholder");
+    }
+    if (!config.outboxWebhookUrl) problems.push("Outbox webhook URL is missing");
+    else if (PLACEHOLDER_PATTERN.test(config.outboxWebhookUrl)) {
+      problems.push("Outbox webhook URL is a placeholder");
+    }
   }
   if (config.targetEnvironment === "production") {
-    if (apiUrl.protocol !== "https:") problems.push("production API URL is not HTTPS");
-    if (webhookUrl.protocol !== "https:") problems.push("production Outbox URL is not HTTPS");
+    if (apiUrl.protocol !== "https:" && !(apiIsLoopback && apiUrl.protocol === "http:")) {
+      problems.push("production API URL must be HTTPS or an HTTP loopback URL");
+    }
+    if (publicWebUrl.protocol !== "https:") problems.push("production Web URL is not HTTPS");
+    if (config.outboxDeliveryRequired && webhookUrl?.protocol !== "https:") {
+      problems.push("production Outbox URL is not HTTPS");
+    }
   }
 
   return problems.length === 0
     ? pass("environment", "Required release values are configured without exposing secrets.", {
         targetEnvironment: config.targetEnvironment,
         apiOrigin: apiUrl.origin,
-        outboxOrigin: webhookUrl.origin,
+        publicWebOrigin: publicWebUrl.origin,
+        outboxDeliveryMode: config.outboxDeliveryRequired ? "HTTP_REQUIRED" : "DEFERRED",
+        outboxOrigin: config.outboxDeliveryRequired ? (webhookUrl?.origin ?? null) : null,
       })
     : fail("environment", "Release configuration is not safe.", { problems });
 }
 
+async function collectPublicSurfaceChecks(publicWeb: PublicWebProbe) {
+  const checks: LaunchGateCheck[] = [];
+  checks.push(
+    await checked("public_home", async () => {
+      const result = await publicWeb.home();
+      return result.statusCode === 200 && result.isHtml
+        ? pass("public_home", "Public Web returns an HTML page.")
+        : fail("public_home", "Public Web home check failed.", result);
+    }),
+  );
+  checks.push(
+    await checked("public_feed", async () => {
+      const result = await publicWeb.feed();
+      return result.statusCode === 200 && result.itemCount !== null && result.itemCount > 0
+        ? pass("public_feed", "Public Feed contains at least one launchable Issue.", result)
+        : fail("public_feed", "Public Feed has no launchable Issue.", result);
+    }),
+  );
+  checks.push(
+    await checked("google_oauth_start", async () => {
+      const result = await publicWeb.googleOAuthStart();
+      const redirectStatus = [302, 303, 307, 308].includes(result.statusCode);
+      return redirectStatus && result.providerHost === "accounts.google.com"
+        ? pass("google_oauth_start", "Google OAuth starts at the expected provider.", result)
+        : fail("google_oauth_start", "Google OAuth start check failed.", result);
+    }),
+  );
+  return checks;
+}
+
+export async function runPublicSurfaceGate(
+  publicWebUrl: string,
+  publicWeb: PublicWebProbe,
+  now: () => Date = () => new Date(),
+): Promise<PublicSurfaceReport> {
+  const checks = await collectPublicSurfaceChecks(publicWeb);
+  return {
+    schemaVersion: 1,
+    gate: "PUBLIC_SURFACE_V1",
+    publicWebUrl,
+    checkedAt: now().toISOString(),
+    verdict: checks.every((check) => check.status === "PASS") ? "GO" : "NO_GO",
+    checks,
+  };
+}
+
 export async function runLaunchGate(
   config: LaunchGateConfig,
-  dependencies: { store: LaunchGateStore; api: LaunchGateApiProbe; now?: () => Date },
+  dependencies: {
+    store: LaunchGateStore;
+    api: LaunchGateApiProbe;
+    publicWeb: PublicWebProbe;
+    now?: () => Date;
+  },
 ): Promise<LaunchGateReport> {
   const checks: LaunchGateCheck[] = [environmentCheck(config)];
 
@@ -123,10 +189,20 @@ export async function runLaunchGate(
       const health = await dependencies.store.readOutboxHealth();
       const deadLettersOk = health.failed <= config.maxDeadLetters;
       const pendingAgeOk =
+        !config.outboxDeliveryRequired ||
         health.oldestPendingAgeSeconds === null ||
         health.oldestPendingAgeSeconds <= config.maxPendingAgeSeconds;
       return deadLettersOk && pendingAgeOk
-        ? pass("outbox_health", "Outbox backlog is within release thresholds.", health)
+        ? pass(
+            "outbox_health",
+            config.outboxDeliveryRequired
+              ? "Outbox backlog is within release thresholds."
+              : "Outbox delivery is deferred; pending Events remain preserved.",
+            {
+              ...health,
+              deliveryMode: config.outboxDeliveryRequired ? "HTTP_REQUIRED" : "DEFERRED",
+            },
+          )
         : fail("outbox_health", "Outbox backlog exceeds release thresholds.", {
             ...health,
             maxDeadLetters: config.maxDeadLetters,
@@ -134,6 +210,8 @@ export async function runLaunchGate(
           });
     }),
   );
+
+  checks.push(...(await collectPublicSurfaceChecks(dependencies.publicWeb)));
 
   checks.push(
     await checked("vote_reconciliation", async () => {
@@ -191,7 +269,12 @@ export async function createRollbackSnapshot(
 
 export async function verifyRollback(
   snapshot: RollbackSnapshot,
-  dependencies: { store: LaunchGateStore; api: LaunchGateApiProbe; now?: () => Date },
+  dependencies: {
+    store: LaunchGateStore;
+    api: LaunchGateApiProbe;
+    publicWeb: PublicWebProbe;
+    now?: () => Date;
+  },
 ): Promise<RollbackVerificationReport> {
   const checks: LaunchGateCheck[] = [];
   checks.push(
@@ -287,6 +370,7 @@ export async function verifyRollback(
         : fail("vote_reconciliation", "Vote reconciliation failed after rollback.", result);
     }),
   );
+  checks.push(...(await collectPublicSurfaceChecks(dependencies.publicWeb)));
 
   return {
     schemaVersion: 1,
