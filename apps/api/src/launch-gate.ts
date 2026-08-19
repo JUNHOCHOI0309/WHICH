@@ -8,11 +8,15 @@ import { z } from "zod";
 
 import { getLaunchGateConfig } from "./modules/launch-gate/config.js";
 import type { MigrationExpectation, RollbackSnapshot } from "./modules/launch-gate/contracts.js";
-import { createHttpLaunchGateProbe } from "./modules/launch-gate/http-probe.js";
+import {
+  createHttpLaunchGateProbe,
+  createHttpPublicWebProbe,
+} from "./modules/launch-gate/http-probe.js";
 import { createPostgresLaunchGateStore } from "./modules/launch-gate/postgres-store.js";
 import {
   createRollbackSnapshot,
   runLaunchGate,
+  runPublicSurfaceGate,
   verifyRollback,
 } from "./modules/launch-gate/service.js";
 
@@ -74,6 +78,7 @@ async function saveJson(path: string | undefined, value: unknown) {
 function usage() {
   return [
     "Usage:",
+    "  launch-gate public <public-web-url> [report.json]",
     "  launch-gate run [report.json]",
     "  launch-gate snapshot <snapshot.json> <rollback-target-release-id>",
     "  launch-gate verify <snapshot.json> [report.json]",
@@ -82,6 +87,18 @@ function usage() {
 
 async function main() {
   const command = process.argv[2] ?? "run";
+  if (command === "public") {
+    const publicWebUrl = z
+      .string()
+      .url()
+      .parse(process.argv[3] ?? process.env.LAUNCH_GATE_PUBLIC_WEB_URL ?? process.env.WEB_ORIGIN);
+    const publicWeb = createHttpPublicWebProbe({ publicWebUrl });
+    const report = await runPublicSurfaceGate(publicWebUrl, publicWeb);
+    await saveJson(process.argv[4], report);
+    if (report.verdict !== "GO") process.exitCode = 1;
+    return;
+  }
+
   const expectedMigrations = await loadExpectedMigrations();
   const config = getLaunchGateConfig(process.env, expectedMigrations);
   const databaseUrl = z.string().url().parse(process.env.DATABASE_URL);
@@ -93,10 +110,11 @@ async function main() {
     issueId: config.issueId,
     issueVersion: config.issueVersion,
   });
+  const publicWeb = createHttpPublicWebProbe({ publicWebUrl: config.publicWebUrl });
 
   try {
     if (command === "run") {
-      const report = await runLaunchGate(config, { store, api });
+      const report = await runLaunchGate(config, { store, api, publicWeb });
       await saveJson(process.argv[3], report);
       if (report.verdict !== "GO") process.exitCode = 1;
       return;
@@ -115,7 +133,7 @@ async function main() {
       const snapshot = rollbackSnapshotSchema.parse(
         JSON.parse(await readFile(resolve(snapshotPath), "utf8")),
       );
-      const report = await verifyRollback(snapshot, { store, api });
+      const report = await verifyRollback(snapshot, { store, api, publicWeb });
       await saveJson(process.argv[4], report);
       if (report.verdict !== "VERIFIED") process.exitCode = 1;
       return;

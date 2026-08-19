@@ -38,10 +38,12 @@ export type RollbackBaseline = {
 export type LaunchGateConfig = {
   targetEnvironment: "development" | "staging" | "production";
   apiBaseUrl: string;
+  publicWebUrl: string;
   expectedReleaseId: string;
   internalAuthSecret: string;
-  outboxWebhookUrl: string;
-  outboxWebhookSecret: string;
+  outboxDeliveryRequired: boolean;
+  outboxWebhookUrl: string | null;
+  outboxWebhookSecret: string | null;
   issueId: string;
   issueVersion: number;
   maxDeadLetters: number;
@@ -70,11 +72,32 @@ export type ReconciliationProbe = {
   mismatchCount: number | null;
 };
 
+export type PublicHomeProbe = {
+  statusCode: number;
+  isHtml: boolean;
+};
+
+export type PublicFeedProbe = {
+  statusCode: number;
+  itemCount: number | null;
+};
+
+export type OAuthStartProbe = {
+  statusCode: number;
+  providerHost: string | null;
+};
+
 export interface LaunchGateApiProbe {
   live(): Promise<HealthProbe>;
   ready(): Promise<HealthProbe>;
   meta(): Promise<MetaProbe>;
   reconcile(): Promise<ReconciliationProbe>;
+}
+
+export interface PublicWebProbe {
+  home(): Promise<PublicHomeProbe>;
+  feed(): Promise<PublicFeedProbe>;
+  googleOAuthStart(): Promise<OAuthStartProbe>;
 }
 
 export interface LaunchGateStore {
@@ -89,6 +112,15 @@ export type LaunchGateReport = {
   gate: "PUBLIC_MVP_V1";
   targetEnvironment: LaunchGateConfig["targetEnvironment"];
   expectedReleaseId: string;
+  checkedAt: string;
+  verdict: "GO" | "NO_GO";
+  checks: LaunchGateCheck[];
+};
+
+export type PublicSurfaceReport = {
+  schemaVersion: 1;
+  gate: "PUBLIC_SURFACE_V1";
+  publicWebUrl: string;
   checkedAt: string;
   verdict: "GO" | "NO_GO";
   checks: LaunchGateCheck[];

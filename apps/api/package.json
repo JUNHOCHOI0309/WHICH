@@ -12,6 +12,7 @@
     "dev": "tsx watch src/server.ts",
     "lint": "eslint .",
     "launch:gate": "tsx src/launch-gate.ts run",
+    "launch:public-smoke": "tsx src/launch-gate.ts public",
     "launch:rollback-snapshot": "tsx src/launch-gate.ts snapshot",
     "launch:rollback-verify": "tsx src/launch-gate.ts verify",
     "outbox:dead-letters": "tsx src/outbox-worker.ts dead-letters",
