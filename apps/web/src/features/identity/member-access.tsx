@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import { loginHref } from "@/lib/auth";
+
 import styles from "./member-access.module.css";
 
 type Session = {
@@ -30,9 +32,12 @@ export function MemberAccess({ issueId }: { issueId: string }) {
       .catch(() => setState("error"));
   }, []);
 
-  const loginHref = useMemo(() => {
+  const loginHrefs = useMemo(() => {
     const returnTo = `/issues/${issueId}#member-access`;
-    return `/api/auth/google/start?returnTo=${encodeURIComponent(returnTo)}`;
+    return {
+      google: loginHref("google", returnTo),
+      x: loginHref("x", returnTo),
+    };
   }, [issueId]);
 
   return (
@@ -47,16 +52,22 @@ export function MemberAccess({ issueId }: { issueId: string }) {
         <p>
           {state === "member"
             ? "현재 Guest 선택 기록이 이 계정과 연결되어 있습니다. 원래 투표 기록은 감사 가능하게 유지됩니다."
-            : "Google 로그인 후에도 이 질문과 결과 화면으로 돌아오며, Guest 선택은 중복 집계 없이 계정에 연결됩니다."}
+            : "Google 또는 X 로그인 후에도 이 질문과 결과 화면으로 돌아오며, Guest 선택은 중복 집계 없이 계정에 연결됩니다."}
         </p>
       </div>
 
       {state === "loading" ? <span className={styles.status}>로그인 상태 확인 중…</span> : null}
       {state === "guest" || state === "error" ? (
-        <a className={styles.login} href={loginHref}>
-          Google로 이어서 로그인
-          <span aria-hidden="true">→</span>
-        </a>
+        <div className={styles.loginOptions} aria-label="로그인 제공자 선택">
+          <a className={styles.login} href={loginHrefs.google}>
+            Google로 이어서 로그인
+            <span aria-hidden="true">→</span>
+          </a>
+          <a className={`${styles.login} ${styles.xLogin}`} href={loginHrefs.x}>
+            X로 이어서 로그인
+            <span aria-hidden="true">→</span>
+          </a>
+        </div>
       ) : null}
       {state === "member" ? (
         <button
@@ -87,7 +98,7 @@ export function MemberAccess({ issueId }: { issueId: string }) {
         </p>
       ) : null}
       {authOutcome === "unavailable" ? (
-        <p className={styles.notice}>Google OIDC 환경 변수가 아직 설정되지 않았어요.</p>
+        <p className={styles.notice}>선택한 로그인 제공자의 환경 변수가 아직 설정되지 않았어요.</p>
       ) : null}
     </section>
   );

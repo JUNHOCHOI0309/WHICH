@@ -1,15 +1,17 @@
-import * as oidc from "openid-client";
 import { NextResponse } from "next/server";
 
 import {
   AUTH_FLOW_COOKIE,
   AUTH_FLOW_COOKIE_PATH,
   authBaseUrl,
+  calculateS256CodeChallenge,
   encodeAuthFlow,
-  googleOidcCredentials,
+  randomOAuthValue,
   sanitizeReturnTo,
   withAuthOutcome,
+  xOAuthCredentials,
 } from "@/lib/server/member-auth";
+import { buildXAuthorizationUrl } from "@/lib/server/x-oauth";
 
 export const runtime = "nodejs";
 
@@ -17,40 +19,29 @@ export async function GET(request: Request) {
   const requestUrl = new URL(request.url);
   const returnTo = sanitizeReturnTo(requestUrl.searchParams.get("returnTo"));
   const baseUrl = authBaseUrl(request.url);
-  const credentials = googleOidcCredentials();
+  const credentials = xOAuthCredentials();
 
   if (!credentials) {
     return NextResponse.redirect(new URL(withAuthOutcome(returnTo, "unavailable"), baseUrl));
   }
 
   try {
-    const config = await oidc.discovery(
-      new URL("https://accounts.google.com"),
-      credentials.clientId,
-      credentials.clientSecret,
-    );
-    const codeVerifier = oidc.randomPKCECodeVerifier();
-    const codeChallenge = await oidc.calculatePKCECodeChallenge(codeVerifier);
-    const state = oidc.randomState();
-    const nonce = oidc.randomNonce();
-    const redirectUri = new URL("/api/auth/google/callback", baseUrl).toString();
-    const authorizationUrl = oidc.buildAuthorizationUrl(config, {
-      redirect_uri: redirectUri,
-      scope: "openid profile",
-      response_type: "code",
-      code_challenge: codeChallenge,
-      code_challenge_method: "S256",
+    const codeVerifier = randomOAuthValue();
+    const codeChallenge = calculateS256CodeChallenge(codeVerifier);
+    const state = randomOAuthValue();
+    const redirectUri = new URL("/api/auth/x/callback", baseUrl).toString();
+    const authorizationUrl = buildXAuthorizationUrl({
+      clientId: credentials.clientId,
+      redirectUri,
       state,
-      nonce,
+      codeChallenge,
     });
-
     const response = NextResponse.redirect(authorizationUrl);
     response.cookies.set({
       name: AUTH_FLOW_COOKIE,
       value: encodeAuthFlow({
-        provider: "GOOGLE",
+        provider: "X",
         state,
-        nonce,
         codeVerifier,
         returnTo,
         createdAt: Date.now(),
