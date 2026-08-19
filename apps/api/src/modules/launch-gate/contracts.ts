@@ -98,6 +98,7 @@ export interface PublicWebProbe {
   home(): Promise<PublicHomeProbe>;
   feed(): Promise<PublicFeedProbe>;
   googleOAuthStart(): Promise<OAuthStartProbe>;
+  xOAuthStart(): Promise<OAuthStartProbe>;
 }
 
 export interface LaunchGateStore {

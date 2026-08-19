@@ -58,6 +58,19 @@ export function createHttpPublicWebProbe(options: {
       }
       return { statusCode: response.status, providerHost };
     },
+    async xOAuthStart(): Promise<OAuthStartProbe> {
+      const response = await call("/api/auth/x/start", { redirect: "manual" });
+      const location = response.headers.get("location");
+      let providerHost: string | null = null;
+      if (location) {
+        try {
+          providerHost = new URL(location, baseUrl).hostname;
+        } catch {
+          providerHost = null;
+        }
+      }
+      return { statusCode: response.status, providerHost };
+    },
   };
 }
 
