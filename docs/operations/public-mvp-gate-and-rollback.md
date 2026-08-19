@@ -22,8 +22,10 @@ Every deployed API must receive a unique `RELEASE_ID`, preferably an immutable G
 container image digest. `/v1/meta` returns this value. Production startup rejects the default
 `local` value.
 
-The Gate compares `/v1/meta.releaseId` with `LAUNCH_GATE_EXPECTED_RELEASE_ID`. This prevents a
-healthy but stale instance from being approved accidentally.
+The Gate compares `/v1/meta.releaseId` with `LAUNCH_GATE_EXPECTED_RELEASE_ID`. On Render, the Gate
+automatically falls back to the platform-provided `RENDER_GIT_COMMIT`, so the deployed API and Gate
+use the same immutable commit without a duplicated manual value. This prevents a healthy but stale
+instance from being approved accidentally.
 
 ## Configuration
 
@@ -32,8 +34,10 @@ Set the following values in the root `.env` or deployment secret store. Never co
 ```dotenv
 RELEASE_ID=<deployed-commit-or-image-digest>
 LAUNCH_GATE_TARGET_ENVIRONMENT=staging
-LAUNCH_GATE_API_URL=https://staging-api.example.net
+LAUNCH_GATE_API_URL=http://127.0.0.1:4000
+LAUNCH_GATE_PUBLIC_WEB_URL=https://staging.example.net
 LAUNCH_GATE_EXPECTED_RELEASE_ID=<same-deployed-commit-or-image-digest>
+LAUNCH_GATE_OUTBOX_DELIVERY_REQUIRED=true
 LAUNCH_GATE_ISSUE_ID=<stable-low-risk-issue-uuid>
 LAUNCH_GATE_ISSUE_VERSION=1
 LAUNCH_GATE_MAX_DEAD_LETTERS=0
@@ -45,9 +49,32 @@ OUTBOX_WEBHOOK_SECRET=<outbox-delivery-secret>
 DATABASE_URL=<target-postgresql-url>
 ```
 
-For `production`, both API and Outbox URLs must use HTTPS. Placeholder release values, example
-hosts, and local secrets produce `NO_GO`. Reports contain origins and counts only; they never
-include secret values or the complete database URL.
+For `production`, the public Web and an enabled Outbox consumer must use HTTPS. The API may use HTTP
+only on a loopback host such as `127.0.0.1`, which is the private boundary in the Render single-service
+topology. Placeholder release values, example hosts, and local secrets produce `NO_GO`. Reports
+contain origins and counts only; they never include secret values or the complete database URL.
+
+If no real Event consumer exists yet, set `LAUNCH_GATE_OUTBOX_DELIVERY_REQUIRED=false`. The Gate then
+reports `DEFERRED`, preserves Pending Events, and does not apply the Pending-age threshold. Dead
+Letters still produce `NO_GO`. This is an explicit temporary launch mode, not a claim that Events
+were delivered.
+
+## Public Surface Smoke
+
+The public-only command runs from any workstation and does not need database or internal secrets:
+
+```bash
+pnpm --filter @which/api launch:public-smoke https://whichone.site
+```
+
+It requires all three public checks to pass:
+
+1. The canonical home returns an HTML `200` response.
+2. The public Feed returns at least one launchable Issue.
+3. Google OAuth starts with a redirect to `accounts.google.com`.
+
+This command cannot prove database migrations, Release ID, Outbox state, or Vote reconciliation.
+Run the full Gate from a Render Shell for those internal checks.
 
 ## Public MVP Gate
 
@@ -66,8 +93,9 @@ The Gate requires every check to pass:
 2. PostgreSQL migration timestamps match the release artifact exactly.
 3. API liveness and readiness return `200` and `ok`.
 4. The running `RELEASE_ID` matches the expected artifact.
-5. Outbox Dead Letters and oldest Pending age stay within thresholds.
-6. The selected Issue Version returns `CONSISTENT` from reconciliation `DRY_RUN`.
+5. Outbox Dead Letters stay within threshold; Pending age also applies when HTTP delivery is enabled.
+6. The public home, non-empty Feed, and Google OAuth start all pass.
+7. The selected Issue Version returns `CONSISTENT` from reconciliation `DRY_RUN`.
 
 Feature flags are captured in the release identity check for review. Political Vote and Comment
 flags remain hard-disabled by the API contract.
@@ -144,3 +172,5 @@ The same write paths are also covered by PostgreSQL integration tests in `pnpm c
 - The Gate samples one explicitly configured Issue Version; it does not reconcile every aggregate.
 - Schema compatibility of the previous artifact must be established when that artifact is built.
 - Reports are local artifacts by default and must be copied to the release or incident record.
+- Render does not provide a Blueprint hook after every successful deploy, so the full Gate remains a
+  manual Render Shell release step in v1.1.
