@@ -37,6 +37,7 @@ function createPublicWeb(overrides: Partial<PublicWebProbe> = {}): PublicWebProb
     feed: () => Promise.resolve({ statusCode: 200, itemCount: 1 }),
     googleOAuthStart: () =>
       Promise.resolve({ statusCode: 307, providerHost: "accounts.google.com" }),
+    xOAuthStart: () => Promise.resolve({ statusCode: 307, providerHost: "x.com" }),
     ...overrides,
   };
 }
@@ -110,7 +111,7 @@ describe("Public MVP Gate", () => {
     });
 
     expect(report.verdict).toBe("GO");
-    expect(report.checks).toHaveLength(10);
+    expect(report.checks).toHaveLength(11);
     expect(report.checks.every((check) => check.status === "PASS")).toBe(true);
     expect(JSON.stringify(report)).not.toContain(config.internalAuthSecret);
     expect(JSON.stringify(report)).not.toContain(config.outboxWebhookSecret);

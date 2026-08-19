@@ -1,6 +1,6 @@
 # Social Auth 로컬 설정
 
-WHICH의 소셜 로그인 Provider 목표는 Google, X, Instagram입니다. Provider Credential은
+WHICH의 현재 소셜 로그인 Provider는 Google과 X입니다. Provider Credential은
 브라우저에 노출되지 않도록 Next.js Web BFF의 서버 전용 환경 변수로만 관리합니다.
 
 ## 환경 파일 위치
@@ -43,16 +43,23 @@ Provider Console에는 환경에 맞는 정확한 Callback URL을 등록합니�
 
 - Google: `http://localhost:3000/api/auth/google/callback`
 - X: `http://localhost:3000/api/auth/x/callback`
-- Instagram: `http://localhost:3000/api/auth/instagram/callback`
 
 운영에서는 `AUTH_BASE_URL`을 HTTPS 공개 Origin으로 바꾸고 Callback도 같은 Origin으로
 등록해야 합니다.
 
 ## 현재 구현 상태
 
-- Google: Adapter와 Callback 구현 완료
-- X: 환경 변수 자리만 준비됨. Provider Adapter 후속 구현 필요
-- Instagram: 환경 변수 자리만 준비됨. Provider Adapter와 Meta App Review 조건 검증 필요
+- Google: OpenID Connect Adapter와 Callback 구현 완료
+- X: OAuth 2.0 Authorization Code + PKCE Adapter와 Callback 구현 완료
+- Instagram: 현재 제품 범위에서 제외
 
 Credential이 없는 Provider는 로그인 가능 상태로 간주하지 않습니다. Access Token은 사용자
 식별 요청이 끝난 뒤 보관하지 않는 것을 기본 정책으로 합니다.
+
+## X Developer App 설정
+
+X Developer Console에서 OAuth 2.0을 활성화하고 Web App/Confidential Client로 설정합니다.
+Callback URL은 위 주소와 정확히 일치해야 합니다. WHICH는 로그인 식별에 필요한 최소 scope인
+`users.read tweet.read`만 요청하며 `offline.access`를 요청하지 않으므로 Refresh Token을 저장하지
+않습니다. X의 username이 바뀌어도 같은 계정으로 인식할 수 있도록 `/2/users/me`가 반환하는
+User ID만 내부 Provider Subject로 사용합니다.

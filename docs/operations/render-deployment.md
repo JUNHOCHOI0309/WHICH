@@ -36,8 +36,8 @@ and API deploy and restart together.
 3. In Render, create or resync a Blueprint from the repository's root
    `render.yaml` and select the same project/environment as `which-db`.
 4. Confirm that the estimate contains only one Starter service named `which-web`.
-5. Supply the existing Google OAuth client ID and secret when Render prompts for
-   them. These values are not committed.
+5. Supply the existing Google and X OAuth client IDs and secrets when Render
+   prompts for them. These values are not committed.
 6. Deploy the Blueprint. The service runs database migrations before accepting a
    new release.
 
@@ -57,10 +57,12 @@ After `which-web` is healthy at its `onrender.com` address:
    Full (strict) TLS.
 4. Set the Google authorized redirect URI to
    `https://whichone.site/api/auth/google/callback`.
+5. Set the X OAuth 2.0 callback URI to
+   `https://whichone.site/api/auth/x/callback`.
 
 `whichone.site` is the canonical origin. Do not add a second origin to
-`AUTH_BASE_URL` or `WEB_ORIGIN` without updating Google OAuth and testing the
-session cookies.
+`AUTH_BASE_URL` or `WEB_ORIGIN` without updating both OAuth providers and testing
+the session cookies.
 
 ## First-release verification
 

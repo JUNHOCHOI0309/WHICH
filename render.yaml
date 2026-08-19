@@ -91,3 +91,7 @@ services:
         sync: false
       - key: GOOGLE_OIDC_CLIENT_SECRET
         sync: false
+      - key: X_OAUTH_CLIENT_ID
+        sync: false
+      - key: X_OAUTH_CLIENT_SECRET
+        sync: false

@@ -128,6 +128,34 @@
   opacity: 0.55;
 }
 
+.commentLoginChoices {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.commentLoginChoices a {
+  min-height: 42px;
+  border: 1px solid var(--ink);
+  color: var(--ink);
+  display: grid;
+  place-items: center;
+  font-size: 0.78rem;
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.commentLoginChoices a:last-child {
+  background: var(--ink);
+  color: var(--surface);
+}
+
+.commentLoginChoices a:focus-visible {
+  outline: 3px solid var(--a);
+  outline-offset: 2px;
+}
+
 .commentComposerError {
   margin: 11px 0 0;
   color: #9c2f00;
@@ -155,6 +183,10 @@
 
   .commentComposerFooter p {
     grid-column: 1 / -1;
+  }
+
+  .commentLoginChoices {
+    grid-template-columns: 1fr;
   }
 }
 

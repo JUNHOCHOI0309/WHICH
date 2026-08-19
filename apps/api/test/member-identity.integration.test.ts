@@ -11,6 +11,7 @@ import {
   issueChoices,
   issues,
   issueVersions,
+  memberIdentityLinks,
   memberSessions,
   resultSnapshots,
   voteAggregates,
@@ -71,6 +72,7 @@ async function submitGuestVote(anonymousSubjectId: string, issueId: string, choi
 }
 
 function createMemberSession(input: {
+  provider?: "GOOGLE" | "X" | "DEVELOPMENT";
   providerSubject: string;
   anonymousSubjectId?: string;
   email?: string;
@@ -80,7 +82,7 @@ function createMemberSession(input: {
     url: "/v1/internal/member-sessions",
     headers: { "x-internal-auth-secret": INTERNAL_SECRET },
     payload: {
-      provider: "DEVELOPMENT",
+      provider: input.provider ?? "DEVELOPMENT",
       providerSubject: input.providerSubject,
       displayName: "테스트 회원",
       anonymousSubjectId: input.anonymousSubjectId,
@@ -120,6 +122,23 @@ describe("Member identity and Guest vote linking", () => {
     });
     expect(response.statusCode).toBe(401);
     expect(response.json()).toMatchObject({ code: "UNAUTHORIZED" });
+  });
+
+  it("persists an X User ID as a distinct Provider identity", async () => {
+    const providerSubject = `x-user-${randomUUID()}`;
+    const response = await createMemberSession({ provider: "X", providerSubject });
+
+    expect(response.statusCode).toBe(201);
+    const memberId = response.json<{ member: { id: string } }>().member.id;
+    const links = await database.db
+      .select({
+        provider: memberIdentityLinks.provider,
+        providerSubject: memberIdentityLinks.providerSubject,
+      })
+      .from(memberIdentityLinks)
+      .where(eq(memberIdentityLinks.memberId, memberId));
+
+    expect(links).toEqual([{ provider: "X", providerSubject }]);
   });
 
   it("maps the same Provider Subject to one Member and stores only a token hash", async () => {

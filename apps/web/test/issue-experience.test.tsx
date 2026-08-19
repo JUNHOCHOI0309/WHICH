@@ -324,9 +324,15 @@ describe("IssueExperience", () => {
     expect(sessionStorage.getItem(`which:comment-draft:${ISSUE_ID}`)).toBe(
       "로그인 뒤에도 남을 초안",
     );
-    expect(navigation.push).toHaveBeenCalledWith(
+    expect(screen.getByRole("link", { name: "Google로 로그인" })).toHaveAttribute(
+      "href",
       `/api/auth/google/start?returnTo=${encodeURIComponent(`/issues/${ISSUE_ID}#comment-compose`)}`,
     );
+    expect(screen.getByRole("link", { name: "X로 로그인" })).toHaveAttribute(
+      "href",
+      `/api/auth/x/start?returnTo=${encodeURIComponent(`/issues/${ISSUE_ID}#comment-compose`)}`,
+    );
+    expect(navigation.push).not.toHaveBeenCalled();
   });
 
   it("publishes a Member draft with an idempotency key and prepends the Comment", async () => {

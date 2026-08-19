@@ -101,6 +101,15 @@ async function collectPublicSurfaceChecks(publicWeb: PublicWebProbe) {
         : fail("google_oauth_start", "Google OAuth start check failed.", result);
     }),
   );
+  checks.push(
+    await checked("x_oauth_start", async () => {
+      const result = await publicWeb.xOAuthStart();
+      const redirectStatus = [302, 303, 307, 308].includes(result.statusCode);
+      return redirectStatus && result.providerHost === "x.com"
+        ? pass("x_oauth_start", "X OAuth starts at the expected provider.", result)
+        : fail("x_oauth_start", "X OAuth start check failed.", result);
+    }),
+  );
   return checks;
 }
 

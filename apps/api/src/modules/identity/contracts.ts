@@ -1,4 +1,4 @@
-export type IdentityProvider = "GOOGLE" | "DEVELOPMENT";
+export type IdentityProvider = "GOOGLE" | "X" | "DEVELOPMENT";
 
 export type MemberView = {
   id: string;

@@ -67,11 +67,12 @@ The public-only command runs from any workstation and does not need database or 
 pnpm --filter @which/api launch:public-smoke https://whichone.site
 ```
 
-It requires all three public checks to pass:
+It requires all four public checks to pass:
 
 1. The canonical home returns an HTML `200` response.
 2. The public Feed returns at least one launchable Issue.
 3. Google OAuth starts with a redirect to `accounts.google.com`.
+4. X OAuth starts with a redirect to `x.com`.
 
 This command cannot prove database migrations, Release ID, Outbox state, or Vote reconciliation.
 Run the full Gate from a Render Shell for those internal checks.
@@ -94,7 +95,7 @@ The Gate requires every check to pass:
 3. API liveness and readiness return `200` and `ok`.
 4. The running `RELEASE_ID` matches the expected artifact.
 5. Outbox Dead Letters stay within threshold; Pending age also applies when HTTP delivery is enabled.
-6. The public home, non-empty Feed, and Google OAuth start all pass.
+6. The public home, non-empty Feed, Google OAuth start, and X OAuth start all pass.
 7. The selected Issue Version returns `CONSISTENT` from reconciliation `DRY_RUN`.
 
 Feature flags are captured in the release identity check for review. Political Vote and Comment

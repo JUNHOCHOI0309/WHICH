@@ -14,6 +14,7 @@ import type {
   VoteResponse,
 } from "@/lib/contracts";
 import { MemberAccess } from "@/features/identity/member-access";
+import { loginHref } from "@/lib/auth";
 
 import styles from "./issue-experience.module.css";
 import {
@@ -339,7 +340,6 @@ const COMMENT_REPORT_REASONS: Array<{ value: CommentReportReason; label: string 
 ];
 
 function CommentSection({ issueId }: { issueId: string }) {
-  const router = useRouter();
   const [side, setSide] = useState<CommentSide>("ALL");
   const [items, setItems] = useState<PublicComment[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -349,6 +349,7 @@ function CommentSection({ issueId }: { issueId: string }) {
   const [authState, setAuthState] = useState<"loading" | "guest" | "member">("loading");
   const [posting, setPosting] = useState(false);
   const [postError, setPostError] = useState<string | null>(null);
+  const [showLoginChoices, setShowLoginChoices] = useState(false);
   const [reactionError, setReactionError] = useState<string | null>(null);
   const [pendingReactionIds, setPendingReactionIds] = useState<Set<string>>(() => new Set());
   const [reportDraft, setReportDraft] = useState<{
@@ -454,8 +455,7 @@ function CommentSection({ issueId }: { issueId: string }) {
 
     if (authState !== "member") {
       sessionStorage.setItem(draftKey, draft);
-      const returnTo = `/issues/${issueId}#comment-compose`;
-      router.push(`/api/auth/google/start?returnTo=${encodeURIComponent(returnTo)}`);
+      setShowLoginChoices(true);
       return;
     }
 
@@ -646,6 +646,7 @@ function CommentSection({ issueId }: { issueId: string }) {
             draftTouched.current = true;
             setDraft(event.target.value);
             setPostError(null);
+            setShowLoginChoices(false);
           }}
           aria-describedby={`comment-help-${issueId}`}
         />
@@ -660,6 +661,12 @@ function CommentSection({ issueId }: { issueId: string }) {
             {posting ? "게시 중…" : authState === "member" ? "이유 게시" : "로그인하고 게시"}
           </button>
         </div>
+        {showLoginChoices ? (
+          <div className={styles.commentLoginChoices} aria-label="댓글 게시 로그인 제공자 선택">
+            <a href={loginHref("google", `/issues/${issueId}#comment-compose`)}>Google로 로그인</a>
+            <a href={loginHref("x", `/issues/${issueId}#comment-compose`)}>X로 로그인</a>
+          </div>
+        ) : null}
         {postError ? (
           <p className={styles.commentComposerError} role="alert">
             {postError}

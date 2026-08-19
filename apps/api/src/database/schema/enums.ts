@@ -41,7 +41,7 @@ export const memberStatusEnum = pgEnum("member_status", [
   "SUSPENDED",
   "DELETED",
 ]);
-export const identityProviderEnum = pgEnum("identity_provider", ["GOOGLE", "DEVELOPMENT"]);
+export const identityProviderEnum = pgEnum("identity_provider", ["GOOGLE", "X", "DEVELOPMENT"]);
 export const voteRequestStateEnum = pgEnum("vote_request_state", [
   "RECEIVED",
   "VALIDATING",

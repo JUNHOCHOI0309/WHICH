@@ -1,10 +1,14 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
-export const OIDC_FLOW_COOKIE = "which_oidc_flow";
+export const AUTH_FLOW_COOKIE = "which_auth_flow";
+export const AUTH_FLOW_COOKIE_PATH = "/api/auth";
 
-export type OidcFlow = {
+export type AuthProvider = "GOOGLE" | "X";
+
+export type AuthFlow = {
+  provider: AuthProvider;
   state: string;
-  nonce: string;
+  nonce?: string;
   codeVerifier: string;
   returnTo: string;
   createdAt: number;
@@ -39,13 +43,13 @@ function flowSecret() {
   return "which-local-auth-flow-secret-change-me";
 }
 
-export function encodeOidcFlow(flow: OidcFlow) {
+export function encodeAuthFlow(flow: AuthFlow) {
   const payload = Buffer.from(JSON.stringify(flow)).toString("base64url");
   const signature = createHmac("sha256", flowSecret()).update(payload).digest("base64url");
   return `${payload}.${signature}`;
 }
 
-export function decodeOidcFlow(value: string | undefined) {
+export function decodeAuthFlow(value: string | undefined) {
   if (!value) return null;
   const [payload, signature, extra] = value.split(".");
   if (!payload || !signature || extra) return null;
@@ -59,10 +63,12 @@ export function decodeOidcFlow(value: string | undefined) {
     return null;
   }
   try {
-    const flow = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as OidcFlow;
+    const flow = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as AuthFlow;
     if (
+      !["GOOGLE", "X"].includes(flow.provider) ||
       typeof flow.state !== "string" ||
-      typeof flow.nonce !== "string" ||
+      (flow.provider === "GOOGLE" && typeof flow.nonce !== "string") ||
+      (flow.nonce !== undefined && typeof flow.nonce !== "string") ||
       typeof flow.codeVerifier !== "string" ||
       typeof flow.returnTo !== "string" ||
       typeof flow.createdAt !== "number" ||
@@ -76,15 +82,40 @@ export function decodeOidcFlow(value: string | undefined) {
   }
 }
 
+export function authFlowMatches(
+  flow: AuthFlow,
+  provider: AuthProvider,
+  returnedState: string | null,
+) {
+  if (flow.provider !== provider || !returnedState) return false;
+  const expected = Buffer.from(flow.state);
+  const actual = Buffer.from(returnedState);
+  return expected.length === actual.length && timingSafeEqual(expected, actual);
+}
+
+export function randomOAuthValue() {
+  return randomBytes(32).toString("base64url");
+}
+
+export function calculateS256CodeChallenge(codeVerifier: string) {
+  return createHash("sha256").update(codeVerifier).digest("base64url");
+}
+
 export function authBaseUrl(requestUrl: string) {
   const configured = process.env.AUTH_BASE_URL;
   if (configured) return new URL(configured);
-  return new URL(requestUrl).origin;
+  return new URL(new URL(requestUrl).origin);
 }
 
 export function googleOidcCredentials() {
   const clientId = process.env.GOOGLE_OIDC_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_OIDC_CLIENT_SECRET;
+  return clientId && clientSecret ? { clientId, clientSecret } : null;
+}
+
+export function xOAuthCredentials() {
+  const clientId = process.env.X_OAUTH_CLIENT_ID;
+  const clientSecret = process.env.X_OAUTH_CLIENT_SECRET;
   return clientId && clientSecret ? { clientId, clientSecret } : null;
 }
 
