@@ -7,17 +7,25 @@ import {
   setGuestSubjectCookie,
   validGuestSubject,
 } from "@/lib/server/which-api";
+import {
+  analyticsSessionForRequest,
+  setAnalyticsSessionCookie,
+} from "@/lib/server/analytics-session";
 
 export async function POST(request: NextRequest) {
+  const analyticsSession = analyticsSessionForRequest(request);
   const existingSubject = validGuestSubject(request.cookies.get(GUEST_SUBJECT_COOKIE)?.value);
   if (existingSubject) {
-    return NextResponse.json({ status: "ready" }, { status: 200 });
+    const response = NextResponse.json({ status: "ready" }, { status: 200 });
+    setAnalyticsSessionCookie(response, analyticsSession);
+    return response;
   }
 
   try {
     const anonymousSubjectId = await createGuestSubject();
     const response = NextResponse.json({ status: "ready" }, { status: 201 });
     setGuestSubjectCookie(response, anonymousSubjectId);
+    setAnalyticsSessionCookie(response, analyticsSession);
     return response;
   } catch {
     return NextResponse.json(

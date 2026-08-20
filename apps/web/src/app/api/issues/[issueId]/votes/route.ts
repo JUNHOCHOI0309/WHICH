@@ -9,6 +9,10 @@ import {
   setGuestSubjectCookie,
   validGuestSubject,
 } from "@/lib/server/which-api";
+import {
+  analyticsSessionForRequest,
+  setAnalyticsSessionCookie,
+} from "@/lib/server/analytics-session";
 
 type RouteContext = {
   params: Promise<{ issueId: string }>;
@@ -20,7 +24,12 @@ type VoteRequestBody = {
   idempotencyKey?: string;
 };
 
-async function forwardVote(issueId: string, subjectId: string, body: Required<VoteRequestBody>) {
+async function forwardVote(
+  issueId: string,
+  subjectId: string,
+  analyticsSessionId: string,
+  body: Required<VoteRequestBody>,
+) {
   const upstream = await fetchWhichApi(`/v1/issues/${encodeURIComponent(issueId)}/votes`, {
     method: "POST",
     headers: {
@@ -28,6 +37,7 @@ async function forwardVote(issueId: string, subjectId: string, body: Required<Vo
       "content-type": "application/json",
       "idempotency-key": body.idempotencyKey,
       "x-anonymous-subject-id": subjectId,
+      "x-analytics-session-id": analyticsSessionId,
     },
     body: JSON.stringify({ issueVersion: body.issueVersion, choiceId: body.choiceId }),
   });
@@ -56,8 +66,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
 
     const cookieSubject = validGuestSubject(request.cookies.get(GUEST_SUBJECT_COOKIE)?.value);
+    const analyticsSession = analyticsSessionForRequest(request);
     let subjectId = cookieSubject ?? (await createGuestSubject());
-    let vote = await forwardVote(issueId, subjectId, body);
+    let vote = await forwardVote(issueId, subjectId, analyticsSession.id, body);
 
     if (
       cookieSubject &&
@@ -66,13 +77,14 @@ export async function POST(request: NextRequest, context: RouteContext) {
       vote.responseBody.code === "GUEST_SUBJECT_NOT_FOUND"
     ) {
       subjectId = await createGuestSubject();
-      vote = await forwardVote(issueId, subjectId, body);
+      vote = await forwardVote(issueId, subjectId, analyticsSession.id, body);
     }
 
     const response = NextResponse.json(vote.responseBody, { status: vote.upstream.status });
     if (!cookieSubject || subjectId !== cookieSubject) {
       setGuestSubjectCookie(response, subjectId);
     }
+    setAnalyticsSessionCookie(response, analyticsSession);
     return response;
   } catch {
     return NextResponse.json(

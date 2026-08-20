@@ -67,6 +67,8 @@ pnpm --filter @which/api outbox:worker # 독립 Outbox Publisher 실행
 pnpm --filter @which/api outbox:publish-once
 pnpm --filter @which/api launch:gate # 읽기 전용 Public MVP GO/NO-GO 판정
 pnpm --filter @which/api launch:public-smoke https://whichone.site
+pnpm --filter @which/api analytics:summary -- 30
+pnpm --filter @which/api analytics:retention # 일별 집계 후 90일 초과 원시 Event 정리
 ```
 
 `db:seed`는 Production 환경에서 실행되지 않으며, 여러 번 실행해도 같은 Issue, Choice,
@@ -99,6 +101,7 @@ Comment를 중복 생성하거나 기존 Version을 덮어쓰지 않습니다.
 - Deep Navy 기반 Cyan–Orange 선택 디자인 시스템
 - 중복 제출·네트워크 재시도 시 최초 선택 보호
 - 실제 PostgreSQL Integration Test
+- 30분 Session, Viewable Impression, 서버 Vote 원장을 결합한 First-party Analytics
 - CI 검증 경로
 
 Reply, 개인화 Feed Ranking, 강화된 Integrity Challenge와 추천 모델은 후속 Task에서 구현합니다.
@@ -108,4 +111,5 @@ Outbox Worker 운영 방법은
 확인하세요. 운영 Issue Pack 게시 절차는
 [`docs/operations/issue-pack-publication.md`](docs/operations/issue-pack-publication.md), 네이버 로그인과
 유입 경계는 [`docs/product/naver-acquisition-and-login.md`](docs/product/naver-acquisition-and-login.md)에
-기록되어 있습니다.
+기록되어 있습니다. 핵심 지표 정의와 보존·집계 운영은
+[`docs/operations/core-analytics.md`](docs/operations/core-analytics.md)를 확인하세요.

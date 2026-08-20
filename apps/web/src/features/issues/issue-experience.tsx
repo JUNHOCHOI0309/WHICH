@@ -23,6 +23,7 @@ import {
   loadIssueFeed,
   loadPublicIssue,
   reportComment,
+  recordAnalyticsEvent,
   submitMemberComment,
   submitGuestVote,
   toggleHelpfulReaction,
@@ -94,6 +95,40 @@ export function IssueExperience({
   const [result, setResult] = useState<VoteResponse | null>(null);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const submissionLocked = useRef(false);
+  const issueCardRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    const element = issueCardRef.current;
+    if (!element || !issue || screen !== "ready" || !("IntersectionObserver" in window)) return;
+    let timer: number | null = null;
+    let recorded = false;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries.some(
+          (entry) => entry.target === element && entry.intersectionRatio >= 0.5,
+        );
+        if (visible && timer === null && !recorded) {
+          timer = window.setTimeout(() => {
+            recorded = true;
+            void recordAnalyticsEvent({
+              eventType: "ISSUE_VIEWABLE_IMPRESSION",
+              issueId: issue.id,
+              issueVersion: issue.version,
+            }).catch(() => undefined);
+          }, 500);
+        } else if (!visible && timer !== null) {
+          window.clearTimeout(timer);
+          timer = null;
+        }
+      },
+      { threshold: [0.5] },
+    );
+    observer.observe(element);
+    return () => {
+      if (timer !== null) window.clearTimeout(timer);
+      observer.disconnect();
+    };
+  }, [issue, screen]);
 
   const load = useCallback(async () => {
     setLoadError(null);
@@ -141,6 +176,11 @@ export function IssueExperience({
       submissionLocked.current = true;
       setSubmitError(null);
       setScreen("submitting");
+      void recordAnalyticsEvent({
+        eventType: "VOTE_SUBMIT",
+        issueId: issue.id,
+        issueVersion: issue.version,
+      }).catch(() => undefined);
 
       try {
         const vote = await submitGuestVote({
@@ -212,7 +252,7 @@ export function IssueExperience({
 
   return (
     <ExperienceShell>
-      <article className={styles.issueCard} aria-labelledby="issue-question">
+      <article ref={issueCardRef} className={styles.issueCard} aria-labelledby="issue-question">
         <div className={styles.issueMeta}>
           <span>{issue.categoryCode.replaceAll("_", " ")}</span>
           <span aria-hidden="true">•</span>
@@ -298,6 +338,14 @@ function ResultScreen({
   const acceptedBPercent = total === 0 ? 0 : 100 - acceptedAPercent;
   const duplicate = result.outcome === "REJECTED_DUPLICATE";
 
+  useEffect(() => {
+    void recordAnalyticsEvent({
+      eventType: "RESULT_VIEW",
+      issueId: issue.id,
+      issueVersion: issue.version,
+    }).catch(() => undefined);
+  }, [issue.id, issue.version]);
+
   return (
     <ExperienceShell>
       <article className={styles.resultCard} aria-labelledby="result-title" aria-live="polite">
@@ -331,7 +379,7 @@ function ResultScreen({
         <p className={styles.totalCount}>현재 유효한 선택 {total.toLocaleString("ko-KR")}개</p>
         <MemberAccess issueId={issue.id} naverLoginEnabled={naverLoginEnabled} />
         <CommentSection issueId={issue.id} naverLoginEnabled={naverLoginEnabled} />
-        <NextIssueAction currentIssueId={issue.id} />
+        <NextIssueAction currentIssueId={issue.id} currentIssueVersion={issue.version} />
       </article>
     </ExperienceShell>
   );
@@ -913,7 +961,13 @@ function CommentSection({
   );
 }
 
-function NextIssueAction({ currentIssueId }: { currentIssueId: string }) {
+function NextIssueAction({
+  currentIssueId,
+  currentIssueVersion,
+}: {
+  currentIssueId: string;
+  currentIssueVersion: number;
+}) {
   const router = useRouter();
   const [state, setState] = useState<"idle" | "loading" | "empty" | "error">("idle");
 
@@ -926,13 +980,23 @@ function NextIssueAction({ currentIssueId }: { currentIssueId: string }) {
       const nextIssue = feed.items[0];
       if (!nextIssue) {
         setState("empty");
+        void recordAnalyticsEvent({
+          eventType: "NEXT_ISSUE_EXHAUSTED",
+          issueId: currentIssueId,
+          issueVersion: currentIssueVersion,
+        }).catch(() => undefined);
         return;
       }
+      void recordAnalyticsEvent({
+        eventType: "NEXT_ISSUE_OPEN",
+        issueId: currentIssueId,
+        issueVersion: currentIssueVersion,
+      }).catch(() => undefined);
       router.push(`/issues/${nextIssue.id}`);
     } catch {
       setState("error");
     }
-  }, [currentIssueId, router, state]);
+  }, [currentIssueId, currentIssueVersion, router, state]);
 
   return (
     <div className={styles.nextIssue}>

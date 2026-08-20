@@ -4,7 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsup src/server.ts src/outbox-worker.ts src/launch-gate.ts src/issue-publisher.ts --format esm --platform node --target node22 --clean --sourcemap",
+    "build": "tsup src/server.ts src/outbox-worker.ts src/launch-gate.ts src/issue-publisher.ts src/analytics-operator.ts --format esm --platform node --target node22 --clean --sourcemap",
+    "analytics:aggregate": "tsx src/analytics-operator.ts aggregate",
+    "analytics:retention": "tsx src/analytics-operator.ts retention",
+    "analytics:summary": "tsx src/analytics-operator.ts summary",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:seed": "tsx src/database/seed.ts",

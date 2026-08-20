@@ -22,6 +22,33 @@ export class WebApiError extends Error {
   }
 }
 
+export type AnalyticsEventType =
+  | "ISSUE_VIEWABLE_IMPRESSION"
+  | "VOTE_SUBMIT"
+  | "RESULT_VIEW"
+  | "NEXT_ISSUE_OPEN"
+  | "NEXT_ISSUE_EXHAUSTED";
+
+export async function recordAnalyticsEvent(command: {
+  eventType: AnalyticsEventType;
+  issueId: string;
+  issueVersion: number;
+}) {
+  const response = await fetch("/api/analytics/events", {
+    method: "POST",
+    keepalive: true,
+    headers: { accept: "application/json", "content-type": "application/json" },
+    body: JSON.stringify({
+      eventId: crypto.randomUUID(),
+      eventType: command.eventType,
+      issueId: command.issueId,
+      issueVersion: command.issueVersion,
+      occurredAt: new Date().toISOString(),
+    }),
+  });
+  if (!response.ok) throw new Error("Analytics event was not accepted.");
+}
+
 let guestPreparation: Promise<void> | null = null;
 
 async function responseBody<T>(response: Response) {

@@ -4,6 +4,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 
 import type { Database } from "../../database/client.js";
 import {
+  analyticsSessions,
   issueChoices,
   issues,
   issueVersions,
@@ -552,9 +553,26 @@ export function createGuestVoteService(database: Database["db"]): GuestVoteServi
           issueVersion: command.issueVersion,
           choiceId: command.choiceId,
           subjectId: subject.id,
+          analyticsSessionId: command.analyticsSessionId,
           requestState: "PROCESSING",
           requestFingerprint,
         });
+
+        if (command.analyticsSessionId) {
+          const expiresAt = new Date(now.getTime() + 30 * 60 * 1_000);
+          await transaction
+            .insert(analyticsSessions)
+            .values({
+              id: command.analyticsSessionId,
+              startedAt: now,
+              lastActivityAt: now,
+              expiresAt,
+            })
+            .onConflictDoUpdate({
+              target: analyticsSessions.id,
+              set: { lastActivityAt: now, expiresAt, updatedAt: now },
+            });
+        }
 
         const [existingAcceptedVote] = await transaction
           .select({
@@ -585,6 +603,7 @@ export function createGuestVoteService(database: Database["db"]): GuestVoteServi
             issueVersion: command.issueVersion,
             choiceId: command.choiceId,
             subjectId: subject.id,
+            analyticsSessionId: command.analyticsSessionId,
             integrityState: outcome,
             reasonCode,
             userTier: "GUEST",
@@ -693,6 +712,7 @@ export function createGuestVoteService(database: Database["db"]): GuestVoteServi
               choice: effectiveChoice,
               integrity_state: outcome,
               result_version: aggregate.resultVersion,
+              analytics_session_id: command.analyticsSessionId ?? null,
             },
           },
         });

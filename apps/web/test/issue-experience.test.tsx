@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { resetGuestPreparation } from "@/features/issues/client";
@@ -41,6 +41,67 @@ describe("IssueExperience", () => {
     sessionStorage.clear();
     navigation.push.mockReset();
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("records an impression only after 50% visibility lasts for 500ms", async () => {
+    let observerCallback: IntersectionObserverCallback = () => undefined;
+    const analyticsEvents: string[] = [];
+
+    class TestIntersectionObserver {
+      readonly root = null;
+      readonly rootMargin = "0px";
+      readonly thresholds = [0.5];
+      constructor(callback: IntersectionObserverCallback) {
+        observerCallback = callback;
+      }
+      observe() {}
+      disconnect() {}
+      unobserve() {}
+      takeRecords() {
+        return [];
+      }
+    }
+
+    vi.stubGlobal("IntersectionObserver", TestIntersectionObserver);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = String(input);
+        if (url === "/api/guest-subjects") return jsonResponse({ status: "ready" });
+        if (url.endsWith(`/api/issues/${ISSUE_ID}`)) return jsonResponse(issue);
+        if (url === "/api/analytics/events") {
+          const body = JSON.parse(String(init?.body)) as { eventType: string };
+          analyticsEvents.push(body.eventType);
+          return jsonResponse({ accepted: true, duplicate: false });
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      }),
+    );
+
+    render(<IssueExperience issueId={ISSUE_ID} />);
+    await screen.findByRole("button", { name: "A, 아침형 인간" });
+    const article = screen.getByRole("article");
+    const callback = observerCallback;
+
+    act(() => {
+      callback(
+        [{ target: article, intersectionRatio: 0.49 } as unknown as IntersectionObserverEntry],
+        {} as IntersectionObserver,
+      );
+    });
+    await new Promise((resolve) => setTimeout(resolve, 550));
+    expect(analyticsEvents).toHaveLength(0);
+
+    act(() => {
+      callback(
+        [{ target: article, intersectionRatio: 0.5 } as unknown as IntersectionObserverEntry],
+        {} as IntersectionObserver,
+      );
+    });
+    await waitFor(() => expect(analyticsEvents).toEqual(["ISSUE_VIEWABLE_IMPRESSION"]), {
+      timeout: 1_000,
+    });
   });
 
   it("records one vote and reveals results only after selection", async () => {
