@@ -19,6 +19,8 @@ import type { GuestVoteService } from "./modules/voting/contracts.js";
 import { registerVotingRoutes } from "./modules/voting/routes.js";
 import type { AnalyticsService } from "./modules/analytics/contracts.js";
 import { registerAnalyticsRoutes } from "./modules/analytics/routes.js";
+import type { ShareCardService } from "./modules/shares/contracts.js";
+import { registerShareCardRoutes } from "./modules/shares/routes.js";
 
 export type AppDependencies = Pick<Database, "ping" | "close"> & {
   issueReader: IssueReadService;
@@ -27,6 +29,7 @@ export type AppDependencies = Pick<Database, "ping" | "close"> & {
   memberIdentity: MemberIdentityService;
   interestProfiles?: InterestProfileService;
   analytics?: AnalyticsService;
+  shareCards?: ShareCardService;
 };
 
 const statusSchema = Type.Object({
@@ -111,6 +114,9 @@ export async function buildApp(config: AppConfig, database: AppDependencies) {
   }
   if (database.analytics) {
     await registerAnalyticsRoutes(app, database.analytics, config.auth.internalSecret);
+  }
+  if (database.shareCards) {
+    await registerShareCardRoutes(app, database.shareCards, config.auth.internalSecret);
   }
 
   app.addHook("onClose", async () => {

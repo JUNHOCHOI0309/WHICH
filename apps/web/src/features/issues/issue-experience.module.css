@@ -693,6 +693,76 @@
   margin-top: 24px;
 }
 
+.resultShare {
+  margin-top: 30px;
+  border: 1px solid var(--ink);
+  background: color-mix(in srgb, var(--a) 8%, var(--surface));
+  padding: 20px;
+}
+
+.resultShare h2 {
+  margin: 6px 0 0;
+  font-size: clamp(1.25rem, 4vw, 1.8rem);
+  letter-spacing: -0.04em;
+}
+
+.shareChoiceToggle {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 18px;
+  font-size: 0.84rem;
+  font-weight: 850;
+}
+
+.shareChoiceToggle input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--a);
+}
+
+.sharePrivacy,
+.shareMessage {
+  margin: 9px 0 0;
+  color: var(--muted);
+  font-size: 0.74rem;
+  line-height: 1.55;
+}
+
+.shareActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-top: 16px;
+}
+
+.shareActions button {
+  min-height: 44px;
+  border: 1px solid var(--ink);
+  background: var(--ink);
+  color: var(--surface);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 900;
+  padding: 10px 14px;
+}
+
+.shareActions button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.shareActions button:focus-visible {
+  outline: 3px solid var(--a);
+  outline-offset: 2px;
+}
+
+.shareMessage {
+  color: var(--ink);
+  font-weight: 750;
+}
+
 .resultRow {
   border: 1px solid var(--line);
   padding: 16px;

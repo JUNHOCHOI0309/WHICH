@@ -5,6 +5,8 @@ import type {
   InterestProfile,
   PublicIssue,
   PublicIssueFeed,
+  ShareCardResponse,
+  ShareChannel,
   VoteResponse,
 } from "@/contracts";
 
@@ -128,10 +130,14 @@ export function createMobileApiClient(
         | "INTEREST_SELECTION_COMPLETE"
         | "INTEREST_PROMPT_SKIP"
         | "PERSONALIZED_FEED_VIEW"
-        | "PERSONALIZED_ISSUE_OPEN";
+        | "PERSONALIZED_ISSUE_OPEN"
+        | "SHARE_OPEN"
+        | "SHARE_CHOICE_TOGGLE"
+        | "SHARE_COMPLETE";
       issueId: string;
       issueVersion: number;
       recommendationRequestId?: string;
+      shareCardId?: string;
       occurredAt: string;
     }) {
       const response = await request(`${baseUrl}/api/mobile/v1/analytics/events`, {
@@ -147,10 +153,29 @@ export function createMobileApiClient(
           issueId: command.issueId,
           issueVersion: command.issueVersion,
           recommendationRequestId: command.recommendationRequestId,
+          shareCardId: command.shareCardId,
           occurredAt: command.occurredAt,
         }),
       });
       return bodyOrError<{ accepted: true; duplicate: boolean }>(response);
+    },
+
+    async createResultShareCard(command: {
+      issueId: string;
+      issueVersion: number;
+      resultVersion: number;
+      channel: ShareChannel;
+      sharedChoiceCode?: "A" | "B";
+    }) {
+      const response = await request(
+        `${baseUrl}/api/mobile/v1/issues/${encodeURIComponent(command.issueId)}/share-cards`,
+        {
+          method: "POST",
+          headers: { accept: "application/json", "content-type": "application/json" },
+          body: JSON.stringify(command),
+        },
+      );
+      return bodyOrError<ShareCardResponse>(response);
     },
 
     async submitGuestVote(command: {

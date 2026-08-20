@@ -114,4 +114,50 @@ describe("Naver entry attribution", () => {
     expect(response.cookies.get(ENTRY_ATTRIBUTION_COOKIE)).toBeUndefined();
     expect(response.headers.get("set-cookie")).toBeNull();
   });
+
+  it("accepts only complete allowlisted result-share attribution", () => {
+    const capturedAt = Date.UTC(2026, 7, 21);
+    const shareId = "11111111-1111-4111-8111-111111111111";
+    expect(
+      entryAttributionFromSearchParams(
+        new URLSearchParams(
+          `utm_source=share&utm_medium=copy&utm_campaign=result&utm_content=${shareId}`,
+        ),
+        capturedAt,
+      ),
+    ).toEqual({
+      version: 1,
+      source: "share",
+      medium: "copy",
+      campaign: "result",
+      content: shareId,
+      capturedAt,
+    });
+    expect(
+      entryAttributionFromSearchParams(
+        new URLSearchParams("utm_source=share&utm_medium=email&utm_campaign=result"),
+      ),
+    ).toBeNull();
+    expect(
+      entryAttributionFromSearchParams(
+        new URLSearchParams(
+          "utm_source=share&utm_medium=copy&utm_campaign=result&utm_content=not-a-uuid",
+        ),
+      ),
+    ).toBeNull();
+  });
+
+  it("round-trips signed result-share attribution", () => {
+    const capturedAt = Date.UTC(2026, 7, 21);
+    const attribution = entryAttributionFromSearchParams(
+      new URLSearchParams(
+        "utm_source=share&utm_medium=system&utm_campaign=result_with_choice&utm_content=11111111-1111-4111-8111-111111111111",
+      ),
+      capturedAt,
+    );
+    expect(attribution).not.toBeNull();
+    expect(decodeEntryAttribution(encodeEntryAttribution(attribution!), capturedAt)).toEqual(
+      attribution,
+    );
+  });
 });

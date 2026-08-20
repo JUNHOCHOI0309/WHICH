@@ -1,7 +1,15 @@
 import { randomUUID } from "expo-crypto";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  Share,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import type { IssueChoice, PublicIssue, VoteResponse } from "@/contracts";
@@ -21,6 +29,8 @@ export default function IssueScreen() {
   const [loading, setLoading] = useState(true);
   const [submittingChoice, setSubmittingChoice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [includeChoice, setIncludeChoice] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const [nextIssueState, setNextIssueState] = useState<"idle" | "loading" | "empty" | "error">(
     "idle",
   );
@@ -62,6 +72,20 @@ export default function IssueScreen() {
       active = false;
     };
   }, [fetchIssue]);
+
+  useEffect(() => {
+    if (!issue || !vote) return;
+    void mobileApi
+      .recordAnalyticsEvent({
+        sessionId: analyticsSessionId.current,
+        eventId: randomUUID(),
+        eventType: "SHARE_OPEN",
+        issueId: issue.id,
+        issueVersion: issue.version,
+        occurredAt: new Date().toISOString(),
+      })
+      .catch(() => undefined);
+  }, [issue, vote]);
 
   async function submit(choice: IssueChoice) {
     if (!issue || submittingChoice || vote) return;
@@ -119,6 +143,43 @@ export default function IssueScreen() {
       setNextIssueState("idle");
     } catch {
       setNextIssueState("error");
+    }
+  }
+
+  async function shareResult() {
+    if (!issue || !vote || sharing) return;
+    setSharing(true);
+    setError(null);
+    try {
+      const created = await mobileApi.createResultShareCard({
+        issueId: issue.id,
+        issueVersion: issue.version,
+        resultVersion: vote.result.resultVersion,
+        channel: "SYSTEM",
+        ...(includeChoice ? { sharedChoiceCode: vote.choice } : {}),
+      });
+      const outcome = await Share.share({
+        title: issue.question,
+        message: `${issue.question}\n${created.url}`,
+        url: created.url,
+      });
+      if (outcome.action === Share.sharedAction) {
+        void mobileApi
+          .recordAnalyticsEvent({
+            sessionId: analyticsSessionId.current,
+            eventId: randomUUID(),
+            eventType: "SHARE_COMPLETE",
+            issueId: issue.id,
+            issueVersion: issue.version,
+            shareCardId: created.shareCard.id,
+            occurredAt: new Date().toISOString(),
+          })
+          .catch(() => undefined);
+      }
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "공유 링크를 만들지 못했습니다.");
+    } finally {
+      setSharing(false);
     }
   }
 
@@ -206,6 +267,45 @@ export default function IssueScreen() {
                 {result.displayedTotal.toLocaleString("ko-KR")}명 참여
               </Text>
             </View>
+            {vote ? (
+              <View style={styles.shareCard}>
+                <Text style={styles.shareTitle}>결과 공유</Text>
+                <Pressable
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: includeChoice }}
+                  onPress={() => {
+                    setIncludeChoice((current) => !current);
+                    void mobileApi
+                      .recordAnalyticsEvent({
+                        sessionId: analyticsSessionId.current,
+                        eventId: randomUUID(),
+                        eventType: "SHARE_CHOICE_TOGGLE",
+                        issueId: issue.id,
+                        issueVersion: issue.version,
+                        occurredAt: new Date().toISOString(),
+                      })
+                      .catch(() => undefined);
+                  }}
+                  style={styles.shareToggle}
+                >
+                  <Text style={styles.shareToggleMark}>{includeChoice ? "✓" : "○"}</Text>
+                  <Text style={styles.shareToggleText}>내가 고른 {vote.choice}도 함께 공개</Text>
+                </Pressable>
+                <Text style={styles.sharePrivacy}>
+                  기본값은 비공개이며 계정 정보는 링크에 포함되지 않아요.
+                </Text>
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={sharing}
+                  onPress={() => void shareResult()}
+                  style={({ pressed }) => [styles.shareButton, pressed && styles.choicePressed]}
+                >
+                  <Text style={styles.shareButtonText}>
+                    {sharing ? "공유 준비 중…" : "결과 공유하기"}
+                  </Text>
+                </Pressable>
+              </View>
+            ) : null}
             <InterestSelector
               mode="prompt"
               analyticsContext={{ issueId: issue.id, issueVersion: issue.version }}
@@ -304,6 +404,27 @@ const styles = StyleSheet.create({
   track: { backgroundColor: colors.accent, borderRadius: 999, height: 8, overflow: "hidden" },
   trackA: { backgroundColor: colors.cyan, height: "100%" },
   total: { color: colors.muted, fontSize: 13, textAlign: "right" },
+  shareCard: {
+    backgroundColor: colors.panel,
+    borderColor: colors.line,
+    borderRadius: 20,
+    borderWidth: 1,
+    gap: 12,
+    padding: 20,
+  },
+  shareTitle: { color: colors.paper, fontSize: 20, fontWeight: "900" },
+  shareToggle: { alignItems: "center", flexDirection: "row", gap: 9 },
+  shareToggleMark: { color: colors.cyan, fontSize: 20, fontWeight: "900" },
+  shareToggleText: { color: colors.paper, fontSize: 14, fontWeight: "800" },
+  sharePrivacy: { color: colors.muted, fontSize: 12, lineHeight: 18 },
+  shareButton: {
+    alignItems: "center",
+    backgroundColor: colors.accent,
+    borderRadius: 16,
+    minHeight: 52,
+    justifyContent: "center",
+  },
+  shareButtonText: { color: colors.ink, fontSize: 15, fontWeight: "900" },
   nextIssue: {
     alignItems: "center",
     backgroundColor: colors.cyan,

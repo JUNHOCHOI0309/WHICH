@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import "./styles.css";
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.AUTH_BASE_URL ?? "https://whichone.site"),
   title: {
     default: "WHICH",
     template: "%s · WHICH",
