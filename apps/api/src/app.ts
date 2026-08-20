@@ -15,12 +15,15 @@ import type { MemberIdentityService } from "./modules/identity/contracts.js";
 import { registerMemberIdentityRoutes } from "./modules/identity/routes.js";
 import type { GuestVoteService } from "./modules/voting/contracts.js";
 import { registerVotingRoutes } from "./modules/voting/routes.js";
+import type { AnalyticsService } from "./modules/analytics/contracts.js";
+import { registerAnalyticsRoutes } from "./modules/analytics/routes.js";
 
 export type AppDependencies = Pick<Database, "ping" | "close"> & {
   issueReader: IssueReadService;
   guestVotes: GuestVoteService;
   commentReader: CommentService;
   memberIdentity: MemberIdentityService;
+  analytics?: AnalyticsService;
 };
 
 const statusSchema = Type.Object({
@@ -100,6 +103,9 @@ export async function buildApp(config: AppConfig, database: AppDependencies) {
   await registerVotingRoutes(app, database.guestVotes, config.auth.internalSecret);
   await registerCommentRoutes(app, database.commentReader, config.auth.moderationInternalSecret);
   await registerMemberIdentityRoutes(app, database.memberIdentity, config.auth.internalSecret);
+  if (database.analytics) {
+    await registerAnalyticsRoutes(app, database.analytics, config.auth.internalSecret);
+  }
 
   app.addHook("onClose", async () => {
     await database.close();

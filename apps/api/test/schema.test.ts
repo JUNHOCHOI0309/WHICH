@@ -2,6 +2,9 @@ import { getTableConfig } from "drizzle-orm/pg-core";
 import { describe, expect, it } from "vitest";
 
 import {
+  analyticsDailyMetrics,
+  analyticsEvents,
+  analyticsSessions,
   comments,
   commentModerationDecisions,
   commentModerationActionEnum,
@@ -49,6 +52,9 @@ describe("data architecture v1 schema", () => {
       commentReports,
       commentReportAttempts,
       commentModerationDecisions,
+      analyticsSessions,
+      analyticsEvents,
+      analyticsDailyMetrics,
     ].map((table) => getTableConfig(table).name);
 
     expect(tableNames).toEqual([
@@ -71,6 +77,9 @@ describe("data architecture v1 schema", () => {
       "comment_reports",
       "comment_report_attempts",
       "comment_moderation_decisions",
+      "analytics_sessions",
+      "analytics_events",
+      "analytics_daily_metrics",
     ]);
   });
 

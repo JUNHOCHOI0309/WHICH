@@ -22,6 +22,7 @@ import {
 } from "./enums.js";
 import { issueChoices, issueVersions } from "./issues.js";
 import { voterSubjects } from "./subjects.js";
+import { analyticsSessions } from "./analytics.js";
 
 export const voteAttempts = pgTable(
   "vote_attempts",
@@ -34,6 +35,9 @@ export const voteAttempts = pgTable(
     subjectId: uuid("subject_id")
       .notNull()
       .references(() => voterSubjects.id, { onDelete: "restrict" }),
+    analyticsSessionId: uuid("analytics_session_id").references(() => analyticsSessions.id, {
+      onDelete: "set null",
+    }),
     requestState: voteRequestStateEnum("request_state").default("RECEIVED").notNull(),
     requestFingerprint: varchar("request_fingerprint", { length: 64 }).notNull(),
     responseSnapshot: jsonb("response_snapshot").$type<Record<string, unknown>>(),
@@ -69,6 +73,9 @@ export const votes = pgTable(
     subjectId: uuid("subject_id")
       .notNull()
       .references(() => voterSubjects.id, { onDelete: "restrict" }),
+    analyticsSessionId: uuid("analytics_session_id").references(() => analyticsSessions.id, {
+      onDelete: "set null",
+    }),
     integrityState: voteIntegrityStateEnum("integrity_state").notNull(),
     reasonCode: varchar("reason_code", { length: 64 }),
     userTier: varchar("user_tier", { length: 32 }).notNull(),
@@ -104,6 +111,7 @@ export const votes = pgTable(
       table.issueVersion,
       table.integrityState,
     ),
+    index("votes_analytics_session_accepted_idx").on(table.analyticsSessionId, table.acceptedAt),
     check(
       "votes_integrity_timestamps_check",
       sql`(${table.integrityState} = 'ACCEPTED' and ${table.acceptedAt} is not null and ${table.invalidatedAt} is null)

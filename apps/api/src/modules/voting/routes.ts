@@ -104,7 +104,11 @@ const reconciliationResponseSchema = Type.Object({
 
 type VoteRoute = {
   Params: { issueId: string };
-  Headers: { "idempotency-key": string; "x-anonymous-subject-id": string };
+  Headers: {
+    "idempotency-key": string;
+    "x-anonymous-subject-id": string;
+    "x-analytics-session-id"?: string;
+  };
   Body: { issueVersion: number; choiceId: string };
 };
 
@@ -183,6 +187,7 @@ export async function registerVotingRoutes(
             {
               "idempotency-key": uuidSchema,
               "x-anonymous-subject-id": uuidSchema,
+              "x-analytics-session-id": Type.Optional(uuidSchema),
             },
             { additionalProperties: true },
           ),
@@ -206,6 +211,7 @@ export async function registerVotingRoutes(
           issueId: request.params.issueId,
           issueVersion: request.body.issueVersion,
           choiceId: request.body.choiceId,
+          analyticsSessionId: request.headers["x-analytics-session-id"],
         });
 
         return reply.code(result.httpStatus).send(result.body);

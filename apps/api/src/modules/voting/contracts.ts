@@ -27,6 +27,7 @@ export type GuestVoteSubmission = {
   issueId: string;
   issueVersion: number;
   choiceId: string;
+  analyticsSessionId?: string;
 };
 
 export type GuestVoteSubmissionResult = {

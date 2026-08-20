@@ -9,6 +9,7 @@ import { createCommentService } from "./modules/comments/service.js";
 import { createIssueReadService } from "./modules/issues/service.js";
 import { createMemberIdentityService } from "./modules/identity/service.js";
 import { createGuestVoteService } from "./modules/voting/service.js";
+import { createAnalyticsService } from "./modules/analytics/service.js";
 
 loadEnvironment({
   path: [resolve(process.cwd(), "../../.env.local"), resolve(process.cwd(), "../../.env")],
@@ -26,6 +27,7 @@ const app = await buildApp(config, {
     sessionTtlSeconds: config.auth.memberSessionTtlSeconds,
     allowDevelopmentProvider: config.auth.allowDevelopmentProvider,
   }),
+  analytics: createAnalyticsService(database.db),
 });
 
 try {
