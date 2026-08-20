@@ -1,5 +1,6 @@
 import { router } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { randomUUID } from "expo-crypto";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -11,7 +12,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import type { PublicFeedIssue } from "@/contracts";
+import type { PublicFeedIssue, PublicIssueFeed } from "@/contracts";
 import { guestSubjects, mobileApi } from "@/lib/runtime";
 import { colors } from "@/theme";
 
@@ -20,10 +21,33 @@ export default function FeedScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [ranking, setRanking] = useState<PublicIssueFeed["ranking"] | null>(null);
+  const analyticsSessionId = useRef(randomUUID());
+  const viewedRecommendationRequests = useRef(new Set<string>());
 
   const fetchFeed = useCallback(async () => {
     const subjectId = await guestSubjects.getOrCreate();
-    return mobileApi.loadFeed(subjectId, 12);
+    const feed = await mobileApi.loadFeed(subjectId, 12);
+    const firstIssue = feed.items[0];
+    if (
+      firstIssue &&
+      feed.ranking.mode === "PERSONALIZED" &&
+      !viewedRecommendationRequests.current.has(feed.ranking.requestId)
+    ) {
+      viewedRecommendationRequests.current.add(feed.ranking.requestId);
+      void mobileApi
+        .recordAnalyticsEvent({
+          sessionId: analyticsSessionId.current,
+          eventId: randomUUID(),
+          eventType: "PERSONALIZED_FEED_VIEW",
+          issueId: firstIssue.id,
+          issueVersion: firstIssue.version,
+          recommendationRequestId: feed.ranking.requestId,
+          occurredAt: new Date().toISOString(),
+        })
+        .catch(() => undefined);
+    }
+    return feed;
   }, []);
 
   const load = useCallback(
@@ -34,6 +58,7 @@ export default function FeedScreen() {
       try {
         const feed = await fetchFeed();
         setIssues(feed.items);
+        setRanking(feed.ranking);
       } catch (reason) {
         setError(reason instanceof Error ? reason.message : "피드를 불러오지 못했습니다.");
       } finally {
@@ -48,7 +73,10 @@ export default function FeedScreen() {
     let active = true;
     void fetchFeed()
       .then((feed) => {
-        if (active) setIssues(feed.items);
+        if (active) {
+          setIssues(feed.items);
+          setRanking(feed.ranking);
+        }
       })
       .catch((reason: unknown) => {
         if (active) {
@@ -88,6 +116,9 @@ export default function FeedScreen() {
             </View>
             <Text style={styles.eyebrow}>MOBILE FIRST</Text>
             <Text style={styles.title}>고르고, 결과를 보고, 다음 질문으로.</Text>
+            {ranking?.mode === "PERSONALIZED" ? (
+              <Text style={styles.personalizedBadge}>관심사 기반 추천</Text>
+            ) : null}
           </View>
         }
         ListEmptyComponent={
@@ -110,9 +141,22 @@ export default function FeedScreen() {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={`${item.question} 투표 열기`}
-            onPress={() =>
-              router.push({ pathname: "/issues/[issueId]", params: { issueId: item.id } })
-            }
+            onPress={() => {
+              if (ranking?.mode === "PERSONALIZED") {
+                void mobileApi
+                  .recordAnalyticsEvent({
+                    sessionId: analyticsSessionId.current,
+                    eventId: randomUUID(),
+                    eventType: "PERSONALIZED_ISSUE_OPEN",
+                    issueId: item.id,
+                    issueVersion: item.version,
+                    recommendationRequestId: item.recommendation.requestId,
+                    occurredAt: new Date().toISOString(),
+                  })
+                  .catch(() => undefined);
+              }
+              router.push({ pathname: "/issues/[issueId]", params: { issueId: item.id } });
+            }}
             style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
           >
             <View style={styles.cardMeta}>
@@ -147,6 +191,17 @@ const styles = StyleSheet.create({
   interestLink: { color: colors.cyan, fontSize: 13, fontWeight: "900" },
   eyebrow: { color: colors.accent, fontSize: 12, fontWeight: "900", letterSpacing: 2 },
   title: { color: colors.paper, fontSize: 34, fontWeight: "900", lineHeight: 42, maxWidth: 340 },
+  personalizedBadge: {
+    alignSelf: "flex-start",
+    borderColor: colors.cyan,
+    borderRadius: 999,
+    borderWidth: 1,
+    color: colors.cyan,
+    fontSize: 12,
+    fontWeight: "900",
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+  },
   card: {
     backgroundColor: colors.panel,
     borderColor: colors.line,

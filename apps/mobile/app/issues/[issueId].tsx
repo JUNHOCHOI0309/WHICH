@@ -1,5 +1,5 @@
 import { randomUUID } from "expo-crypto";
-import { useLocalSearchParams } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -21,7 +21,11 @@ export default function IssueScreen() {
   const [loading, setLoading] = useState(true);
   const [submittingChoice, setSubmittingChoice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [nextIssueState, setNextIssueState] = useState<"idle" | "loading" | "empty" | "error">(
+    "idle",
+  );
   const attemptKey = useRef(randomUUID());
+  const analyticsSessionId = useRef(randomUUID());
 
   const fetchIssue = useCallback(async () => {
     if (!issueId) throw new Error("질문 ID가 필요합니다.");
@@ -84,6 +88,37 @@ export default function IssueScreen() {
       setError(reason instanceof Error ? reason.message : "투표를 전송하지 못했습니다.");
     } finally {
       setSubmittingChoice(null);
+    }
+  }
+
+  async function moveNext() {
+    if (!issue || nextIssueState === "loading") return;
+    setNextIssueState("loading");
+    try {
+      const subjectId = await guestSubjects.getOrCreate();
+      const feed = await mobileApi.loadFeed(subjectId, 1, issue.id);
+      const nextIssue = feed.items[0];
+      if (!nextIssue) {
+        setNextIssueState("empty");
+        return;
+      }
+      if (feed.ranking.mode === "PERSONALIZED") {
+        void mobileApi
+          .recordAnalyticsEvent({
+            sessionId: analyticsSessionId.current,
+            eventId: randomUUID(),
+            eventType: "PERSONALIZED_ISSUE_OPEN",
+            issueId: nextIssue.id,
+            issueVersion: nextIssue.version,
+            recommendationRequestId: nextIssue.recommendation.requestId,
+            occurredAt: new Date().toISOString(),
+          })
+          .catch(() => undefined);
+      }
+      router.push({ pathname: "/issues/[issueId]", params: { issueId: nextIssue.id } });
+      setNextIssueState("idle");
+    } catch {
+      setNextIssueState("error");
     }
   }
 
@@ -175,6 +210,22 @@ export default function IssueScreen() {
               mode="prompt"
               analyticsContext={{ issueId: issue.id, issueVersion: issue.version }}
             />
+            <Pressable
+              accessibilityRole="button"
+              disabled={nextIssueState === "loading"}
+              onPress={() => void moveNext()}
+              style={({ pressed }) => [styles.nextIssue, pressed && styles.choicePressed]}
+            >
+              <Text style={styles.nextIssueText}>
+                {nextIssueState === "loading" ? "다음 질문을 찾는 중…" : "다음 질문 보기 →"}
+              </Text>
+            </Pressable>
+            {nextIssueState === "empty" ? (
+              <Text style={styles.nextIssueMessage}>지금 참여할 수 있는 질문을 모두 골랐어요.</Text>
+            ) : null}
+            {nextIssueState === "error" ? (
+              <Text style={styles.error}>다음 질문을 찾지 못했습니다. 다시 시도해 주세요.</Text>
+            ) : null}
           </>
         ) : (
           <Text style={styles.locked}>결과는 투표 후 공개됩니다.</Text>
@@ -253,5 +304,15 @@ const styles = StyleSheet.create({
   track: { backgroundColor: colors.accent, borderRadius: 999, height: 8, overflow: "hidden" },
   trackA: { backgroundColor: colors.cyan, height: "100%" },
   total: { color: colors.muted, fontSize: 13, textAlign: "right" },
+  nextIssue: {
+    alignItems: "center",
+    backgroundColor: colors.cyan,
+    borderRadius: 20,
+    minHeight: 60,
+    justifyContent: "center",
+    paddingHorizontal: 20,
+  },
+  nextIssueText: { color: colors.ink, fontSize: 16, fontWeight: "900" },
+  nextIssueMessage: { color: colors.muted, fontSize: 14, textAlign: "center" },
   locked: { color: colors.muted, fontSize: 14, textAlign: "center" },
 });

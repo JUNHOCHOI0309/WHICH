@@ -31,12 +31,15 @@ export type AnalyticsEventType =
   | "INTEREST_PROMPT_VIEW"
   | "INTEREST_SELECTION_COMPLETE"
   | "INTEREST_PROMPT_SKIP"
-  | "INTEREST_PROFILE_RESET";
+  | "INTEREST_PROFILE_RESET"
+  | "PERSONALIZED_FEED_VIEW"
+  | "PERSONALIZED_ISSUE_OPEN";
 
 export async function recordAnalyticsEvent(command: {
   eventType: AnalyticsEventType;
   issueId: string;
   issueVersion: number;
+  recommendationRequestId?: string;
 }) {
   const response = await fetch("/api/analytics/events", {
     method: "POST",
@@ -47,6 +50,7 @@ export async function recordAnalyticsEvent(command: {
       eventType: command.eventType,
       issueId: command.issueId,
       issueVersion: command.issueVersion,
+      recommendationRequestId: command.recommendationRequestId,
       occurredAt: new Date().toISOString(),
     }),
   });

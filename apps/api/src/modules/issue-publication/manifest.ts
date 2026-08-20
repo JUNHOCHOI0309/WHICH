@@ -3,6 +3,8 @@ import { resolve } from "node:path";
 
 import { z } from "zod";
 
+import { INTEREST_CARD_CODES } from "../interests/contracts.js";
+
 import {
   computeIssueContentHash,
   computeIssueSemanticFingerprint,
@@ -39,6 +41,11 @@ const issueSchema = z
     context: normalizedText(1, 500),
     choices: z.tuple([choiceSchema, choiceSchema]),
     primaryCategoryCode: normalizedText(1, 64),
+    interestCardCodes: z
+      .array(z.enum(INTEREST_CARD_CODES))
+      .min(1)
+      .max(3)
+      .refine((codes) => new Set(codes).size === codes.length, "Interest cards must be unique."),
     experienceModeCode: normalizedText(1, 64),
     taxonomyVersion: normalizedText(1, 32),
     riskLevel: z.literal("LOW"),

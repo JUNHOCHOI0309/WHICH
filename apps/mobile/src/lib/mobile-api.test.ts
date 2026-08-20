@@ -14,10 +14,14 @@ describe("mobile API client", () => {
     const request = vi.fn(async () => jsonResponse({ items: [], nextCursor: null }));
     const api = createMobileApiClient({ baseUrl: "https://whichone.site/", request });
 
-    await api.loadFeed("591f2e90-996a-50c5-af46-967dd0793000", 12);
+    await api.loadFeed(
+      "591f2e90-996a-50c5-af46-967dd0793000",
+      12,
+      "93831fba-b70f-598a-88f6-92eb4f70df9c",
+    );
 
     expect(request).toHaveBeenCalledWith(
-      "https://whichone.site/api/mobile/v1/issues/feed?limit=12",
+      "https://whichone.site/api/mobile/v1/issues/feed?limit=12&excludeIssueId=93831fba-b70f-598a-88f6-92eb4f70df9c",
       expect.objectContaining({
         headers: expect.objectContaining({
           "x-anonymous-subject-id": "591f2e90-996a-50c5-af46-967dd0793000",

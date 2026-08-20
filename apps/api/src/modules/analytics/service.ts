@@ -73,6 +73,7 @@ export function createAnalyticsService(database: Database["db"]): AnalyticsServi
             eventType: command.eventType,
             issueId: command.issueId,
             issueVersion: command.issueVersion,
+            recommendationRequestId: command.recommendationRequestId,
             occurredAt,
           })
           .onConflictDoNothing({ target: analyticsEvents.id })

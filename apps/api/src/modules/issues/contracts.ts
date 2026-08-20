@@ -1,3 +1,5 @@
+import type { FeedItemRecommendation, FeedRankingContext } from "../recommendations/contracts.js";
+
 export type PublicIssueChoice = {
   id: string;
   code: "A" | "B";
@@ -33,11 +35,14 @@ export type PublicIssue = {
   };
 };
 
-export type PublicFeedIssue = Omit<PublicIssue, "context" | "experienceModeCode" | "result">;
+export type PublicFeedIssue = Omit<PublicIssue, "context" | "experienceModeCode" | "result"> & {
+  recommendation: FeedItemRecommendation & { requestId: string };
+};
 
 export type PublicIssueFeed = {
   items: PublicFeedIssue[];
   nextCursor: string | null;
+  ranking: FeedRankingContext;
 };
 
 export type GuestIssueFeedQuery = {
@@ -45,6 +50,7 @@ export type GuestIssueFeedQuery = {
   limit: number;
   excludeIssueId?: string;
   anonymousSubjectId?: string;
+  sessionToken?: string;
 };
 
 export interface IssueReadService {

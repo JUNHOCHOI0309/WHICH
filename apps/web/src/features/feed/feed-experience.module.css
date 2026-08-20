@@ -100,6 +100,18 @@
   letter-spacing: -0.045em;
 }
 
+.personalizedBadge {
+  width: fit-content;
+  margin: 10px 0 0;
+  border: 1px solid rgb(20 200 212 / 55%);
+  border-radius: 999px;
+  color: var(--cyan);
+  font-size: 0.7rem;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+  padding: 6px 10px;
+}
+
 .feedHeading span {
   color: var(--muted);
   font-size: 0.78rem;

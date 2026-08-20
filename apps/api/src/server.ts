@@ -21,7 +21,9 @@ const config = getConfig();
 const database = createDatabase(config.databaseUrl);
 const app = await buildApp(config, {
   ...database,
-  issueReader: createIssueReadService(database.db),
+  issueReader: createIssueReadService(database.db, {
+    personalizationEnabled: config.featureFlags.mlRanker,
+  }),
   guestVotes: createGuestVoteService(database.db),
   commentReader: createCommentService(database.db),
   memberIdentity: createMemberIdentityService(database.db, {

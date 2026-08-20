@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import {
   and,
   desc,
@@ -17,18 +19,34 @@ import {
 import type { Database } from "../../database/client.js";
 import {
   issueChoices,
+  issueInterestCards,
   issues,
   issueVersions,
   voteAggregates,
   voterSubjects,
   votes,
 } from "../../database/schema/index.js";
+import type { InterestCardCode } from "../interests/contracts.js";
 import type { IssueReadService, PublicIssueTally } from "./contracts.js";
-import { decodeIssueFeedCursor, encodeIssueFeedCursor } from "./cursor.js";
+import {
+  decodeIssueFeedCursor,
+  encodeIssueFeedCursor,
+  encodePersonalizedIssueFeedCursor,
+} from "./cursor.js";
 import { IssueReadError } from "./errors.js";
 import { isGuestIssueAvailable } from "./policy.js";
+import {
+  RANKING_VERSION,
+  type RankedIssue,
+  type RankingProfile,
+} from "../recommendations/contracts.js";
+import { rankIssues } from "../recommendations/ranker.js";
+import { loadRankingProfile, recordRecommendation } from "../recommendations/service.js";
 
-export function createIssueReadService(database: Database["db"]): IssueReadService {
+export function createIssueReadService(
+  database: Database["db"],
+  options: { personalizationEnabled?: boolean } = {},
+): IssueReadService {
   return {
     async getGuestIssue(issueId) {
       return database.transaction(async (transaction) => {
@@ -145,8 +163,37 @@ export function createIssueReadService(database: Database["db"]): IssueReadServi
 
     async listGuestIssues(query) {
       const cursor = query.cursor ? decodeIssueFeedCursor(query.cursor) : null;
+      let profile: RankingProfile;
+      try {
+        profile = await loadRankingProfile(database, {
+          anonymousSubjectId: query.anonymousSubjectId,
+          sessionToken: query.sessionToken,
+          enabled: options.personalizationEnabled ?? false,
+        });
+      } catch {
+        profile = {
+          subjectId: null,
+          profileVersion: null,
+          selectedCardCodes: [],
+          mode: "RECENCY",
+          reasonCode: "RANKER_FALLBACK",
+        };
+      }
 
-      return database.transaction(async (transaction) => {
+      if (cursor?.mode === "PERSONALIZED") {
+        if (profile.mode !== "PERSONALIZED" || profile.profileVersion !== cursor.profileVersion) {
+          throw new IssueReadError(
+            "STALE_RANKING_CURSOR",
+            409,
+            "The Interest Profile changed. Restart the Feed from the first page.",
+          );
+        }
+      } else if (cursor?.mode === "RECENCY" && profile.mode === "PERSONALIZED") {
+        profile = { ...profile, mode: "RECENCY", reasonCode: "RANKER_FALLBACK" };
+      }
+
+      const rankingRequestId = randomUUID();
+      const result = await database.transaction(async (transaction) => {
         const now = new Date();
         const latestPublishedVersions = transaction
           .selectDistinctOn([issueVersions.issueId], {
@@ -200,7 +247,7 @@ export function createIssueReadService(database: Database["db"]): IssueReadServi
           filters.push(ne(issues.id, query.excludeIssueId));
         }
 
-        if (cursor) {
+        if (cursor?.mode === "RECENCY") {
           filters.push(
             or(
               lt(latestPublishedVersions.publishedAt, cursor.publishedAt),
@@ -212,32 +259,36 @@ export function createIssueReadService(database: Database["db"]): IssueReadServi
           );
         }
 
-        if (query.anonymousSubjectId) {
+        let subjectId = profile.subjectId;
+        if (!subjectId && query.anonymousSubjectId) {
           const [subject] = await transaction
             .select({ id: voterSubjects.id })
             .from(voterSubjects)
             .where(eq(voterSubjects.anonymousSubjectId, query.anonymousSubjectId))
             .limit(1);
 
-          if (subject) {
-            filters.push(
-              notExists(
-                transaction
-                  .select({ id: votes.id })
-                  .from(votes)
-                  .where(
-                    and(
-                      eq(votes.issueId, issues.id),
-                      eq(votes.subjectId, subject.id),
-                      eq(votes.integrityState, "ACCEPTED"),
-                    ),
-                  ),
-              ),
-            );
-          }
+          subjectId = subject?.id ?? null;
         }
 
-        const rows = await transaction
+        if (subjectId) {
+          filters.push(
+            notExists(
+              transaction
+                .select({ id: votes.id })
+                .from(votes)
+                .where(
+                  and(
+                    eq(votes.issueId, issues.id),
+                    eq(votes.subjectId, subjectId),
+                    eq(votes.integrityState, "ACCEPTED"),
+                  ),
+                ),
+            ),
+          );
+        }
+
+        const candidateLimit = profile.mode === "PERSONALIZED" ? 200 : query.limit + 1;
+        const candidateRows = await transaction
           .select({
             id: issues.id,
             version: latestPublishedVersions.version,
@@ -249,10 +300,92 @@ export function createIssueReadService(database: Database["db"]): IssueReadServi
           .innerJoin(latestPublishedVersions, eq(latestPublishedVersions.issueId, issues.id))
           .where(and(...filters))
           .orderBy(desc(latestPublishedVersions.publishedAt), desc(issues.id))
-          .limit(query.limit + 1);
+          .limit(candidateLimit);
 
-        const hasMore = rows.length > query.limit;
-        const pageRows = rows.slice(0, query.limit);
+        const mappingFilters = candidateRows.map((row) =>
+          and(
+            eq(issueInterestCards.issueId, row.id),
+            eq(issueInterestCards.issueVersion, row.version),
+          ),
+        );
+        const mappings = mappingFilters.length
+          ? await transaction
+              .select({
+                issueId: issueInterestCards.issueId,
+                issueVersion: issueInterestCards.issueVersion,
+                cardCode: issueInterestCards.cardCode,
+                weight: issueInterestCards.weight,
+              })
+              .from(issueInterestCards)
+              .where(or(...mappingFilters))
+          : [];
+        const weightsByIssue = new Map<string, RankedIssue["cardWeights"]>();
+        for (const mapping of mappings) {
+          const key = `${mapping.issueId}:${mapping.issueVersion}`;
+          const weights = weightsByIssue.get(key) ?? new Map<InterestCardCode, number>();
+          weights.set(mapping.cardCode as InterestCardCode, mapping.weight);
+          weightsByIssue.set(key, weights);
+        }
+
+        let rankedRows: RankedIssue[];
+        if (profile.mode === "PERSONALIZED") {
+          try {
+            rankedRows = rankIssues(
+              candidateRows.map((row) => ({
+                id: row.id,
+                version: row.version,
+                publishedAt: row.publishedAt!,
+                cardWeights: weightsByIssue.get(`${row.id}:${row.version}`) ?? new Map(),
+              })),
+              profile.selectedCardCodes,
+              subjectId,
+              profile.profileVersion,
+            );
+          } catch {
+            profile = { ...profile, mode: "RECENCY", reasonCode: "RANKER_FALLBACK" };
+            rankedRows = candidateRows.map((row) => ({
+              id: row.id,
+              version: row.version,
+              publishedAt: row.publishedAt!,
+              cardWeights: new Map(),
+              score: 0,
+              explorationScore: 0,
+              reasonCodes: ["RECENT_FALLBACK"],
+              matchedCardCodes: [],
+            }));
+          }
+        } else {
+          rankedRows = candidateRows.map((row) => ({
+            id: row.id,
+            version: row.version,
+            publishedAt: row.publishedAt!,
+            cardWeights: new Map(),
+            score: 0,
+            explorationScore: 0,
+            reasonCodes: ["RECENT_FALLBACK"],
+            matchedCardCodes: [],
+          }));
+        }
+
+        if (cursor?.mode === "PERSONALIZED") {
+          rankedRows = rankedRows.filter(
+            (row) =>
+              row.score < cursor.score ||
+              (row.score === cursor.score && row.publishedAt < cursor.publishedAt) ||
+              (row.score === cursor.score &&
+                row.publishedAt.valueOf() === cursor.publishedAt.valueOf() &&
+                row.id < cursor.issueId),
+          );
+        }
+
+        const hasMore = rankedRows.length > query.limit;
+        const pageRankedRows = rankedRows.slice(0, query.limit);
+        const pageRows = pageRankedRows.map((ranked) => {
+          const row = candidateRows.find(
+            (candidate) => candidate.id === ranked.id && candidate.version === ranked.version,
+          )!;
+          return { ...row, ranked };
+        });
         const choiceFilters = pageRows.map((row) =>
           and(eq(issueChoices.issueId, row.id), eq(issueChoices.issueVersion, row.version)),
         );
@@ -279,20 +412,54 @@ export function createIssueReadService(database: Database["db"]): IssueReadServi
           choices: choices
             .filter((choice) => choice.issueId === row.id && choice.issueVersion === row.version)
             .map(({ id, code, label }) => ({ id, code, label })),
+          recommendation: {
+            requestId: rankingRequestId,
+            score: row.ranked.score,
+            reasonCodes: row.ranked.reasonCodes,
+            matchedCardCodes: row.ranked.matchedCardCodes,
+          },
         }));
         const lastItem = pageRows.at(-1);
+        const ranking = {
+          requestId: rankingRequestId,
+          version: RANKING_VERSION,
+          mode: profile.mode,
+          reasonCode: profile.reasonCode,
+          profileVersion: profile.profileVersion,
+        } as const;
 
         return {
           items,
           nextCursor:
             hasMore && lastItem?.publishedAt
-              ? encodeIssueFeedCursor({
-                  publishedAt: lastItem.publishedAt,
-                  issueId: lastItem.id,
-                })
+              ? profile.mode === "PERSONALIZED" && profile.profileVersion
+                ? encodePersonalizedIssueFeedCursor({
+                    mode: "PERSONALIZED",
+                    rankingVersion: RANKING_VERSION,
+                    profileVersion: profile.profileVersion,
+                    score: lastItem.ranked.score,
+                    publishedAt: lastItem.publishedAt,
+                    issueId: lastItem.id,
+                  })
+                : encodeIssueFeedCursor({
+                    mode: "RECENCY",
+                    publishedAt: lastItem.publishedAt,
+                    issueId: lastItem.id,
+                  })
               : null,
+          ranking,
+          auditItems: pageRankedRows,
+          subjectId,
         };
       });
+
+      await recordRecommendation(
+        database,
+        result.ranking,
+        result.subjectId,
+        result.auditItems,
+      ).catch(() => undefined);
+      return { items: result.items, nextCursor: result.nextCursor, ranking: result.ranking };
     },
   };
 }

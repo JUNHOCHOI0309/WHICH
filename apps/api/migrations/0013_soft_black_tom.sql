@@ -1,0 +1,4 @@
+ALTER TABLE "analytics_events" DROP CONSTRAINT "analytics_events_type_check";--> statement-breakpoint
+ALTER TABLE "analytics_events" ADD COLUMN "recommendation_request_id" uuid;--> statement-breakpoint
+ALTER TABLE "analytics_events" ADD CONSTRAINT "analytics_events_recommendation_request_id_recommendation_requests_recommendation_request_id_fk" FOREIGN KEY ("recommendation_request_id") REFERENCES "public"."recommendation_requests"("recommendation_request_id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "analytics_events" ADD CONSTRAINT "analytics_events_type_check" CHECK ("analytics_events"."event_type" in ('ISSUE_VIEWABLE_IMPRESSION', 'VOTE_SUBMIT', 'RESULT_VIEW', 'NEXT_ISSUE_OPEN', 'NEXT_ISSUE_EXHAUSTED', 'INTEREST_PROMPT_VIEW', 'INTEREST_SELECTION_COMPLETE', 'INTEREST_PROMPT_SKIP', 'INTEREST_PROFILE_RESET', 'PERSONALIZED_FEED_VIEW', 'PERSONALIZED_ISSUE_OPEN'));

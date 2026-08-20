@@ -176,9 +176,22 @@ describe("IssueExperience", () => {
                 publishedAt: "2026-08-18T01:00:00.000Z",
                 categoryCode: "DAILY_LIFE",
                 choices: issue.choices,
+                recommendation: {
+                  requestId: "30000000-0000-4000-8000-000000000001",
+                  score: 0,
+                  reasonCodes: ["RECENT_FALLBACK"],
+                  matchedCardCodes: [],
+                },
               },
             ],
             nextCursor: null,
+            ranking: {
+              requestId: "30000000-0000-4000-8000-000000000001",
+              version: "interest_content_v1",
+              mode: "RECENCY",
+              reasonCode: "PROFILE_NOT_READY",
+              profileVersion: null,
+            },
           });
         }
         throw new Error(`Unexpected request: ${url}`);

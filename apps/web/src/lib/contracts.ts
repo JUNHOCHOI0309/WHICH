@@ -33,11 +33,33 @@ export type PublicIssue = {
   };
 };
 
-export type PublicFeedIssue = Omit<PublicIssue, "context" | "experienceModeCode" | "result">;
+export type RankingMode = "PERSONALIZED" | "RECENCY";
+export type RankingReasonCode =
+  | "INTEREST_PROFILE_MATCH"
+  | "PROFILE_NOT_READY"
+  | "FEATURE_DISABLED"
+  | "IDENTITY_UNAVAILABLE"
+  | "RANKER_FALLBACK";
+
+export type PublicFeedIssue = Omit<PublicIssue, "context" | "experienceModeCode" | "result"> & {
+  recommendation: {
+    requestId: string;
+    score: number;
+    reasonCodes: Array<"INTEREST_MATCH" | "EXPLORATION" | "RECENT_FALLBACK">;
+    matchedCardCodes: InterestCardCode[];
+  };
+};
 
 export type PublicIssueFeed = {
   items: PublicFeedIssue[];
   nextCursor: string | null;
+  ranking: {
+    requestId: string;
+    version: "interest_content_v1";
+    mode: RankingMode;
+    reasonCode: RankingReasonCode;
+    profileVersion: number | null;
+  };
 };
 
 export type CommentSide = "ALL" | "A" | "B";

@@ -13,6 +13,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 import { issueVersions } from "./issues.js";
+import { recommendationRequests } from "./recommendations.js";
 
 export const analyticsSessions = pgTable(
   "analytics_sessions",
@@ -52,6 +53,10 @@ export const analyticsEvents = pgTable(
     eventType: varchar("event_type", { length: 48 }).notNull(),
     issueId: uuid("issue_id").notNull(),
     issueVersion: integer("issue_version").notNull(),
+    recommendationRequestId: uuid("recommendation_request_id").references(
+      () => recommendationRequests.id,
+      { onDelete: "set null" },
+    ),
     occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
     receivedAt: timestamp("received_at", { withTimezone: true }).defaultNow().notNull(),
   },
@@ -65,7 +70,7 @@ export const analyticsEvents = pgTable(
     index("analytics_events_type_occurred_idx").on(table.eventType, table.occurredAt),
     check(
       "analytics_events_type_check",
-      sql`${table.eventType} in ('ISSUE_VIEWABLE_IMPRESSION', 'VOTE_SUBMIT', 'RESULT_VIEW', 'NEXT_ISSUE_OPEN', 'NEXT_ISSUE_EXHAUSTED', 'INTEREST_PROMPT_VIEW', 'INTEREST_SELECTION_COMPLETE', 'INTEREST_PROMPT_SKIP', 'INTEREST_PROFILE_RESET')`,
+      sql`${table.eventType} in ('ISSUE_VIEWABLE_IMPRESSION', 'VOTE_SUBMIT', 'RESULT_VIEW', 'NEXT_ISSUE_OPEN', 'NEXT_ISSUE_EXHAUSTED', 'INTEREST_PROMPT_VIEW', 'INTEREST_SELECTION_COMPLETE', 'INTEREST_PROMPT_SKIP', 'INTEREST_PROFILE_RESET', 'PERSONALIZED_FEED_VIEW', 'PERSONALIZED_ISSUE_OPEN')`,
     ),
   ],
 );
