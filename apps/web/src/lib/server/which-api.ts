@@ -1,4 +1,4 @@
-import type { NextResponse } from "next/server";
+import type { NextRequest, NextResponse } from "next/server";
 
 import type { ApiErrorBody } from "../contracts";
 
@@ -77,4 +77,25 @@ export function clearMemberSessionCookie(response: NextResponse) {
     path: "/",
     maxAge: 0,
   });
+}
+
+export async function interestIdentityForRequest(request: NextRequest) {
+  const sessionToken = request.cookies.get(MEMBER_SESSION_COOKIE)?.value;
+  let anonymousSubjectId = validGuestSubject(request.cookies.get(GUEST_SUBJECT_COOKIE)?.value);
+  let createdGuest = false;
+
+  if (!sessionToken && !anonymousSubjectId) {
+    anonymousSubjectId = await createGuestSubject();
+    createdGuest = true;
+  }
+
+  return {
+    anonymousSubjectId,
+    sessionToken,
+    createdGuest,
+    headers: {
+      ...(sessionToken ? { authorization: `Bearer ${sessionToken}` } : {}),
+      ...(anonymousSubjectId ? { "x-anonymous-subject-id": anonymousSubjectId } : {}),
+    },
+  };
 }

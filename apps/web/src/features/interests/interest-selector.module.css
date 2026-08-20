@@ -1,0 +1,191 @@
+.panel {
+  --interest-ink: #061923;
+  --interest-surface: #f6f8f7;
+  --interest-muted: #5e7076;
+  --interest-line: #bfcfd2;
+  --interest-cyan: #14c8d4;
+  --interest-orange: #ff8a3d;
+  width: min(100%, 760px);
+  margin: 0 auto;
+  border: 1px solid var(--interest-line);
+  background: var(--interest-surface);
+  color: var(--interest-ink);
+  padding: clamp(22px, 5vw, 42px);
+}
+
+.prompt {
+  margin-top: 34px;
+  border-color: var(--interest-ink);
+  box-shadow: 5px 5px 0 var(--interest-cyan);
+}
+
+.eyebrow {
+  margin: 0;
+  color: #007780;
+  font-size: 0.7rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+}
+
+.panel h2 {
+  margin: 9px 0 0;
+  font-size: clamp(1.55rem, 5vw, 2.4rem);
+  letter-spacing: -0.05em;
+  word-break: keep-all;
+}
+
+.description {
+  max-width: 58ch;
+  margin: 14px 0 0;
+  color: var(--interest-muted);
+  line-height: 1.65;
+  word-break: keep-all;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 24px;
+}
+
+.grid button,
+.footer button,
+.mergeNotice button {
+  min-height: 44px;
+  border: 1px solid var(--interest-ink);
+  background: transparent;
+  color: var(--interest-ink);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 850;
+}
+
+.grid button {
+  padding: 10px 8px;
+}
+
+.grid button.active {
+  background: var(--interest-cyan);
+  box-shadow: 3px 3px 0 var(--interest-ink);
+  transform: translate(-2px, -2px);
+}
+
+.grid button:focus-visible,
+.footer button:focus-visible,
+.mergeNotice button:focus-visible {
+  outline: 3px solid var(--interest-orange);
+  outline-offset: 2px;
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 22px;
+}
+
+.footer > span {
+  color: var(--interest-muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.footer > div {
+  display: flex;
+  gap: 8px;
+}
+
+.footer button {
+  padding: 9px 14px;
+}
+
+.footer button.primary {
+  background: var(--interest-ink);
+  color: var(--interest-surface);
+}
+
+.footer button.secondary {
+  border-color: var(--interest-line);
+}
+
+.grid button:disabled,
+.footer button:disabled,
+.mergeNotice button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.mergeNotice {
+  margin-top: 20px;
+  border-left: 5px solid var(--interest-orange);
+  background: #fff1e8;
+  padding: 14px;
+}
+
+.mergeNotice p {
+  margin: 0 0 10px;
+  line-height: 1.55;
+}
+
+.mergeNotice button {
+  padding: 8px 12px;
+}
+
+.mergeCards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-bottom: 11px;
+}
+
+.mergeCards button {
+  min-height: 36px;
+  border-color: var(--interest-line);
+  border-radius: 999px;
+}
+
+.mergeCards button.mergeActive {
+  border-color: var(--interest-ink);
+  background: var(--interest-orange);
+}
+
+.error,
+.message,
+.manage {
+  margin: 14px 0 0;
+  font-size: 0.8rem;
+  font-weight: 750;
+  line-height: 1.55;
+}
+
+.error {
+  color: #9c2f00;
+}
+
+.message {
+  color: #007780;
+}
+
+.manage a {
+  color: var(--interest-ink);
+}
+
+@media (min-width: 620px) {
+  .grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 520px) {
+  .footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .footer > div {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+}

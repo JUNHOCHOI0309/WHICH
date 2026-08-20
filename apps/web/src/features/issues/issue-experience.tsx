@@ -14,6 +14,7 @@ import type {
   VoteResponse,
 } from "@/lib/contracts";
 import { MemberAccess } from "@/features/identity/member-access";
+import { InterestSelector } from "@/features/interests/interest-selector";
 import { loginHref } from "@/lib/auth";
 
 import styles from "./issue-experience.module.css";
@@ -377,6 +378,10 @@ function ResultScreen({
           />
         </div>
         <p className={styles.totalCount}>현재 유효한 선택 {total.toLocaleString("ko-KR")}개</p>
+        <InterestSelector
+          mode="prompt"
+          analyticsContext={{ issueId: issue.id, issueVersion: issue.version }}
+        />
         <MemberAccess issueId={issue.id} naverLoginEnabled={naverLoginEnabled} />
         <CommentSection issueId={issue.id} naverLoginEnabled={naverLoginEnabled} />
         <NextIssueAction currentIssueId={issue.id} currentIssueVersion={issue.version} />

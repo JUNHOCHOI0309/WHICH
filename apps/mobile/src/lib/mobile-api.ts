@@ -1,4 +1,12 @@
-import type { ApiErrorBody, PublicIssue, PublicIssueFeed, VoteResponse } from "@/contracts";
+import type {
+  ApiErrorBody,
+  InterestCardCode,
+  InterestCardRegistry,
+  InterestProfile,
+  PublicIssue,
+  PublicIssueFeed,
+  VoteResponse,
+} from "@/contracts";
 
 export type RequestFunction = (input: string, init?: RequestInit) => Promise<Response>;
 
@@ -66,6 +74,74 @@ export function createMobileApiClient(
         { headers: { accept: "application/json" } },
       );
       return bodyOrError<PublicIssue>(response);
+    },
+
+    async loadInterestCards() {
+      const response = await request(`${baseUrl}/api/mobile/v1/interests/cards`, {
+        headers: { accept: "application/json" },
+      });
+      return bodyOrError<InterestCardRegistry>(response);
+    },
+
+    async loadInterestProfile(subjectId: string) {
+      const response = await request(`${baseUrl}/api/mobile/v1/interest-profile`, {
+        headers: { accept: "application/json", "x-anonymous-subject-id": subjectId },
+      });
+      return bodyOrError<InterestProfile>(response);
+    },
+
+    async saveInterestProfile(command: {
+      subjectId: string;
+      selectedCardCodes: InterestCardCode[];
+      onboardingState: "COMPLETED" | "SKIPPED";
+    }) {
+      const response = await request(`${baseUrl}/api/mobile/v1/interest-profile`, {
+        method: "PUT",
+        headers: {
+          accept: "application/json",
+          "content-type": "application/json",
+          "x-anonymous-subject-id": command.subjectId,
+        },
+        body: JSON.stringify({
+          selectedCardCodes: command.selectedCardCodes,
+          onboardingState: command.onboardingState,
+        }),
+      });
+      return bodyOrError<InterestProfile>(response);
+    },
+
+    async resetInterestProfile(subjectId: string) {
+      const response = await request(`${baseUrl}/api/mobile/v1/interest-profile/reset`, {
+        method: "POST",
+        headers: { accept: "application/json", "x-anonymous-subject-id": subjectId },
+      });
+      return bodyOrError<InterestProfile>(response);
+    },
+
+    async recordAnalyticsEvent(command: {
+      sessionId: string;
+      eventId: string;
+      eventType: "INTEREST_PROMPT_VIEW" | "INTEREST_SELECTION_COMPLETE" | "INTEREST_PROMPT_SKIP";
+      issueId: string;
+      issueVersion: number;
+      occurredAt: string;
+    }) {
+      const response = await request(`${baseUrl}/api/mobile/v1/analytics/events`, {
+        method: "POST",
+        headers: {
+          accept: "application/json",
+          "content-type": "application/json",
+          "x-analytics-session-id": command.sessionId,
+        },
+        body: JSON.stringify({
+          eventId: command.eventId,
+          eventType: command.eventType,
+          issueId: command.issueId,
+          issueVersion: command.issueVersion,
+          occurredAt: command.occurredAt,
+        }),
+      });
+      return bodyOrError<{ accepted: true; duplicate: boolean }>(response);
     },
 
     async submitGuestVote(command: {

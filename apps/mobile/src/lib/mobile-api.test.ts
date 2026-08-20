@@ -69,6 +69,40 @@ describe("mobile API client", () => {
     );
   });
 
+  it("uses one Guest contract for loading and saving Interest Profile", async () => {
+    const requests: { input: string; init?: RequestInit }[] = [];
+    const request: RequestFunction = vi.fn(async (input, init) => {
+      requests.push({ input, init });
+      return jsonResponse({
+        taxonomyVersion: "interest_cards_v1",
+        onboardingState: init?.method === "PUT" ? "COMPLETED" : "NOT_STARTED",
+        selectedCardCodes: init?.method === "PUT" ? ["FOOD", "GAME", "TECH"] : [],
+        canSkip: true,
+        profileVersion: 1,
+        mergeCandidate: null,
+      });
+    });
+    const api = createMobileApiClient({ baseUrl: "https://whichone.site", request });
+    const subjectId = "591f2e90-996a-50c5-af46-967dd0793000";
+
+    await api.loadInterestProfile(subjectId);
+    await api.saveInterestProfile({
+      subjectId,
+      onboardingState: "COMPLETED",
+      selectedCardCodes: ["FOOD", "GAME", "TECH"],
+    });
+
+    expect(requests.map((item) => item.input)).toEqual([
+      "https://whichone.site/api/mobile/v1/interest-profile",
+      "https://whichone.site/api/mobile/v1/interest-profile",
+    ]);
+    expect(new Headers(requests[0]?.init?.headers).get("x-anonymous-subject-id")).toBe(subjectId);
+    expect(JSON.parse(String(requests[1]?.init?.body))).toEqual({
+      onboardingState: "COMPLETED",
+      selectedCardCodes: ["FOOD", "GAME", "TECH"],
+    });
+  });
+
   it("treats the stored duplicate Vote response as a completed result", async () => {
     const api = createMobileApiClient({
       request: async () =>
@@ -101,5 +135,28 @@ describe("mobile API client", () => {
         idempotencyKey: "ce976502-9409-56a2-b975-94c913a20fcf",
       }),
     ).resolves.toMatchObject({ outcome: "REJECTED_DUPLICATE", choice: "A" });
+  });
+
+  it("sends Interest Prompt Analytics with a native session ID", async () => {
+    const request = vi.fn(async () => jsonResponse({ accepted: true, duplicate: false }));
+    const api = createMobileApiClient({ baseUrl: "https://whichone.site", request });
+
+    await api.recordAnalyticsEvent({
+      sessionId: "591f2e90-996a-50c5-af46-967dd0793000",
+      eventId: "93831fba-b70f-598a-88f6-92eb4f70df9c",
+      eventType: "INTEREST_PROMPT_VIEW",
+      issueId: "8c092a45-c446-50f3-b1ac-ac9a018b9105",
+      issueVersion: 1,
+      occurredAt: "2026-08-21T00:00:00.000Z",
+    });
+
+    expect(request).toHaveBeenCalledWith(
+      "https://whichone.site/api/mobile/v1/analytics/events",
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          "x-analytics-session-id": "591f2e90-996a-50c5-af46-967dd0793000",
+        }),
+      }),
+    );
   });
 });

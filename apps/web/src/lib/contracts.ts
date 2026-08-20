@@ -87,3 +87,44 @@ export type ApiErrorBody = {
   code: string;
   message: string;
 };
+
+export type InterestCardCode =
+  | "DAILY_LIFE"
+  | "FOOD"
+  | "TRAVEL"
+  | "RELATIONSHIP"
+  | "WORK"
+  | "ECONOMY_CONSUMPTION"
+  | "TECH"
+  | "GAME"
+  | "MOVIE_DRAMA"
+  | "MUSIC_CONTENT"
+  | "SPORTS"
+  | "EDUCATION"
+  | "SOCIETY"
+  | "HOBBY";
+
+export type InterestCardRegistry = {
+  taxonomyVersion: "interest_cards_v1";
+  minSelections: 3;
+  maxSelections: 8;
+  cards: Array<{
+    code: InterestCardCode;
+    label: string;
+    categoryCodes: string[];
+    topicCodes: string[];
+  }>;
+};
+
+export type InterestProfile = {
+  taxonomyVersion: "interest_cards_v1";
+  onboardingState: "NOT_STARTED" | "COMPLETED" | "SKIPPED" | "RESET";
+  selectedCardCodes: InterestCardCode[];
+  canSkip: boolean;
+  profileVersion: number;
+  mergeCandidate: {
+    anonymousSubjectId: string;
+    guestCardCodes: InterestCardCode[];
+    suggestedCardCodes: InterestCardCode[];
+  } | null;
+};
