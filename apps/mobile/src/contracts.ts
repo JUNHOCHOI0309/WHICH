@@ -19,6 +19,12 @@ export type PublicFeedIssue = {
   publishedAt: string;
   categoryCode: string;
   choices: IssueChoice[];
+  recommendation: {
+    requestId: string;
+    score: number;
+    reasonCodes: ("INTEREST_MATCH" | "EXPLORATION" | "RECENT_FALLBACK")[];
+    matchedCardCodes: InterestCardCode[];
+  };
 };
 
 export type PublicIssue = PublicFeedIssue & {
@@ -33,6 +39,18 @@ export type PublicIssue = PublicFeedIssue & {
 export type PublicIssueFeed = {
   items: PublicFeedIssue[];
   nextCursor: string | null;
+  ranking: {
+    requestId: string;
+    version: "interest_content_v1";
+    mode: "PERSONALIZED" | "RECENCY";
+    reasonCode:
+      | "INTEREST_PROFILE_MATCH"
+      | "PROFILE_NOT_READY"
+      | "FEATURE_DISABLED"
+      | "IDENTITY_UNAVAILABLE"
+      | "RANKER_FALLBACK";
+    profileVersion: number | null;
+  };
 };
 
 export type VoteResponse = {

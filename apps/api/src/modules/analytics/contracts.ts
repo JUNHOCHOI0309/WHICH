@@ -8,6 +8,8 @@ export const ANALYTICS_EVENT_TYPES = [
   "INTEREST_SELECTION_COMPLETE",
   "INTEREST_PROMPT_SKIP",
   "INTEREST_PROFILE_RESET",
+  "PERSONALIZED_FEED_VIEW",
+  "PERSONALIZED_ISSUE_OPEN",
 ] as const;
 
 export type AnalyticsEventType = (typeof ANALYTICS_EVENT_TYPES)[number];
@@ -26,6 +28,7 @@ export type AnalyticsEventCommand = {
   eventType: AnalyticsEventType;
   issueId: string;
   issueVersion: number;
+  recommendationRequestId?: string;
   occurredAt: string;
   attribution?: AcquisitionAttribution;
 };

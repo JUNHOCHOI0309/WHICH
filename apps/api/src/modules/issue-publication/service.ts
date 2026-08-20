@@ -5,6 +5,7 @@ import { and, eq, inArray, or, sql } from "drizzle-orm";
 import type { Database } from "../../database/client.js";
 import {
   issueChoices,
+  issueInterestCards,
   issues,
   issueVersions,
   outboxEvents,
@@ -80,6 +81,17 @@ async function inspectIssueManifest(
     .from(issueVersions)
     .where(inArray(issueVersions.issueId, issueIds));
 
+  const storedInterestCards = await database
+    .select({
+      issueId: issueInterestCards.issueId,
+      issueVersion: issueInterestCards.issueVersion,
+      cardCode: issueInterestCards.cardCode,
+      taxonomyVersion: issueInterestCards.taxonomyVersion,
+      weight: issueInterestCards.weight,
+    })
+    .from(issueInterestCards)
+    .where(inArray(issueInterestCards.issueId, issueIds));
+
   const storedChoices = await database
     .select({
       id: issueChoices.id,
@@ -123,6 +135,13 @@ async function inspectIssueManifest(
     grouped.push(choice);
     choicesByVersion.set(key, grouped);
   }
+  const interestCardsByVersion = new Map<string, typeof storedInterestCards>();
+  for (const card of storedInterestCards) {
+    const key = issueVersionKey(card.issueId, card.issueVersion);
+    const grouped = interestCardsByVersion.get(key) ?? [];
+    grouped.push(card);
+    interestCardsByVersion.set(key, grouped);
+  }
   const choiceById = new Map(storedChoices.map((choice) => [choice.id, choice]));
   const aggregateByKey = new Map(
     storedAggregates.map((aggregate) => [
@@ -144,6 +163,9 @@ async function inspectIssueManifest(
     const versionChoices = [...(choicesByVersion.get(key) ?? [])].sort((left, right) =>
       left.code.localeCompare(right.code),
     );
+    const versionInterestCards = [...(interestCardsByVersion.get(key) ?? [])].sort((left, right) =>
+      left.cardCode.localeCompare(right.cardCode),
+    );
     const storedAggregate = aggregateByKey.get(key);
     const storedBaseline = baselineByKey.get(key);
     const foreignChoiceConflicts = expected.choices.filter((choice) => {
@@ -158,6 +180,7 @@ async function inspectIssueManifest(
       Boolean(storedIssue) ||
       Boolean(storedVersion) ||
       versionChoices.length > 0 ||
+      versionInterestCards.length > 0 ||
       Boolean(storedAggregate) ||
       Boolean(storedBaseline) ||
       foreignChoiceConflicts.length > 0;
@@ -247,6 +270,18 @@ async function inspectIssueManifest(
 
     if (foreignChoiceConflicts.length > 0) {
       reasons.push("One or more Choice IDs are already owned by another Issue Version.");
+    }
+    const expectedInterestCards = [...expected.interestCardCodes].sort();
+    if (
+      versionInterestCards.length !== expectedInterestCards.length ||
+      versionInterestCards.some(
+        (card, index) =>
+          card.cardCode !== expectedInterestCards[index] ||
+          card.taxonomyVersion !== "interest_cards_v1" ||
+          card.weight !== 100,
+      )
+    ) {
+      reasons.push("Issue Interest Card mapping differs from the approved Manifest.");
     }
     if (!storedAggregate) reasons.push("Zero-result Aggregate baseline is missing.");
     if (!storedBaseline) {
@@ -374,6 +409,17 @@ export async function publishIssueManifest(
               issueVersion: issue.version,
               code: choice.code,
               label: choice.label,
+            })),
+          ),
+        );
+        await transaction.insert(issueInterestCards).values(
+          createItems.flatMap((issue) =>
+            issue.interestCardCodes.map((cardCode) => ({
+              issueId: issue.id,
+              issueVersion: issue.version,
+              cardCode,
+              taxonomyVersion: "interest_cards_v1",
+              weight: 100,
             })),
           ),
         );

@@ -11,6 +11,7 @@ export async function GET(request: NextRequest) {
   }
 
   const providedSubject = request.headers.get("x-anonymous-subject-id");
+  const authorization = request.headers.get("authorization");
   const subjectId = validGuestSubject(providedSubject ?? undefined);
   if (providedSubject && !subjectId) {
     return NextResponse.json(
@@ -24,6 +25,7 @@ export async function GET(request: NextRequest) {
       headers: {
         accept: "application/json",
         ...(subjectId ? { "x-anonymous-subject-id": subjectId } : {}),
+        ...(authorization ? { authorization } : {}),
       },
     });
     const body: unknown = await upstream.json();

@@ -58,8 +58,10 @@ export function createMobileApiClient(
       return bodyOrError<{ anonymousSubjectId: string }>(response);
     },
 
-    async loadFeed(subjectId?: string, limit = 10) {
-      const response = await request(`${baseUrl}/api/mobile/v1/issues/feed?limit=${limit}`, {
+    async loadFeed(subjectId?: string, limit = 10, excludeIssueId?: string) {
+      const search = new URLSearchParams({ limit: String(limit) });
+      if (excludeIssueId) search.set("excludeIssueId", excludeIssueId);
+      const response = await request(`${baseUrl}/api/mobile/v1/issues/feed?${search.toString()}`, {
         headers: {
           accept: "application/json",
           ...(subjectId ? { "x-anonymous-subject-id": subjectId } : {}),
@@ -121,9 +123,15 @@ export function createMobileApiClient(
     async recordAnalyticsEvent(command: {
       sessionId: string;
       eventId: string;
-      eventType: "INTEREST_PROMPT_VIEW" | "INTEREST_SELECTION_COMPLETE" | "INTEREST_PROMPT_SKIP";
+      eventType:
+        | "INTEREST_PROMPT_VIEW"
+        | "INTEREST_SELECTION_COMPLETE"
+        | "INTEREST_PROMPT_SKIP"
+        | "PERSONALIZED_FEED_VIEW"
+        | "PERSONALIZED_ISSUE_OPEN";
       issueId: string;
       issueVersion: number;
+      recommendationRequestId?: string;
       occurredAt: string;
     }) {
       const response = await request(`${baseUrl}/api/mobile/v1/analytics/events`, {
@@ -138,6 +146,7 @@ export function createMobileApiClient(
           eventType: command.eventType,
           issueId: command.issueId,
           issueVersion: command.issueVersion,
+          recommendationRequestId: command.recommendationRequestId,
           occurredAt: command.occurredAt,
         }),
       });

@@ -997,6 +997,14 @@ function NextIssueAction({
         issueId: currentIssueId,
         issueVersion: currentIssueVersion,
       }).catch(() => undefined);
+      if (feed.ranking.mode === "PERSONALIZED") {
+        void recordAnalyticsEvent({
+          eventType: "PERSONALIZED_ISSUE_OPEN",
+          issueId: nextIssue.id,
+          issueVersion: nextIssue.version,
+          recommendationRequestId: nextIssue.recommendation.requestId,
+        }).catch(() => undefined);
+      }
       router.push(`/issues/${nextIssue.id}`);
     } catch {
       setState("error");

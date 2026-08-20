@@ -1,7 +1,11 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
-import { fetchWhichApi, GUEST_SUBJECT_COOKIE, validGuestSubject } from "@/lib/server/which-api";
+import {
+  fetchWhichApi,
+  interestIdentityForRequest,
+  setGuestSubjectCookie,
+} from "@/lib/server/which-api";
 
 export async function GET(request: NextRequest) {
   const search = new URLSearchParams();
@@ -10,17 +14,20 @@ export async function GET(request: NextRequest) {
     if (value) search.set(name, value);
   }
 
-  const subjectId = validGuestSubject(request.cookies.get(GUEST_SUBJECT_COOKIE)?.value);
-
   try {
+    const identity = await interestIdentityForRequest(request);
     const upstream = await fetchWhichApi(`/v1/issues/feed?${search.toString()}`, {
       headers: {
         accept: "application/json",
-        ...(subjectId ? { "x-anonymous-subject-id": subjectId } : {}),
+        ...identity.headers,
       },
     });
     const body = (await upstream.json()) as unknown;
-    return NextResponse.json(body, { status: upstream.status });
+    const response = NextResponse.json(body, { status: upstream.status });
+    if (identity.createdGuest && identity.anonymousSubjectId) {
+      setGuestSubjectCookie(response, identity.anonymousSubjectId);
+    }
+    return response;
   } catch {
     return NextResponse.json(
       { code: "API_UNAVAILABLE", message: "질문 목록을 불러오지 못했습니다." },

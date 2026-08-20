@@ -80,6 +80,7 @@ export async function registerAnalyticsRoutes(
             ),
             issueId: uuidSchema,
             issueVersion: Type.Integer({ minimum: 1 }),
+            recommendationRequestId: Type.Optional(uuidSchema),
             occurredAt: Type.String({ format: "date-time" }),
             attribution: Type.Optional(attributionSchema),
           }),
