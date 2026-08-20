@@ -10,17 +10,28 @@ export const ANALYTICS_EVENT_TYPES = [
   "INTEREST_PROFILE_RESET",
   "PERSONALIZED_FEED_VIEW",
   "PERSONALIZED_ISSUE_OPEN",
+  "SHARE_OPEN",
+  "SHARE_CHOICE_TOGGLE",
+  "SHARE_COMPLETE",
 ] as const;
 
 export type AnalyticsEventType = (typeof ANALYTICS_EVENT_TYPES)[number];
 
-export type AcquisitionAttribution = {
-  source: "naver";
-  medium: "choice" | "cafe" | "clip_blog" | "blog_search" | "homefeed_da" | "lounge" | "band";
-  campaign?: string;
-  content?: string;
-  capturedAt: string;
-};
+export type AcquisitionAttribution =
+  | {
+      source: "naver";
+      medium: "choice" | "cafe" | "clip_blog" | "blog_search" | "homefeed_da" | "lounge" | "band";
+      campaign?: string;
+      content?: string;
+      capturedAt: string;
+    }
+  | {
+      source: "share";
+      medium: "copy" | "system" | "x";
+      campaign: "result" | "result_with_choice";
+      content: string;
+      capturedAt: string;
+    };
 
 export type AnalyticsEventCommand = {
   eventId: string;
@@ -29,6 +40,7 @@ export type AnalyticsEventCommand = {
   issueId: string;
   issueVersion: number;
   recommendationRequestId?: string;
+  shareCardId?: string;
   occurredAt: string;
   attribution?: AcquisitionAttribution;
 };

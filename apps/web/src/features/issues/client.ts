@@ -8,6 +8,8 @@ import type {
   PublicCommentPage,
   PublicIssue,
   PublicIssueFeed,
+  ShareCardResponse,
+  ShareChannel,
   VoteResponse,
 } from "@/lib/contracts";
 
@@ -33,13 +35,17 @@ export type AnalyticsEventType =
   | "INTEREST_PROMPT_SKIP"
   | "INTEREST_PROFILE_RESET"
   | "PERSONALIZED_FEED_VIEW"
-  | "PERSONALIZED_ISSUE_OPEN";
+  | "PERSONALIZED_ISSUE_OPEN"
+  | "SHARE_OPEN"
+  | "SHARE_CHOICE_TOGGLE"
+  | "SHARE_COMPLETE";
 
 export async function recordAnalyticsEvent(command: {
   eventType: AnalyticsEventType;
   issueId: string;
   issueVersion: number;
   recommendationRequestId?: string;
+  shareCardId?: string;
 }) {
   const response = await fetch("/api/analytics/events", {
     method: "POST",
@@ -51,10 +57,28 @@ export async function recordAnalyticsEvent(command: {
       issueId: command.issueId,
       issueVersion: command.issueVersion,
       recommendationRequestId: command.recommendationRequestId,
+      shareCardId: command.shareCardId,
       occurredAt: new Date().toISOString(),
     }),
   });
   if (!response.ok) throw new Error("Analytics event was not accepted.");
+}
+
+export async function createResultShareCard(command: {
+  issueId: string;
+  issueVersion: number;
+  resultVersion: number;
+  channel: ShareChannel;
+  sharedChoiceCode?: "A" | "B";
+}) {
+  const response = await fetch(`/api/issues/${encodeURIComponent(command.issueId)}/share-cards`, {
+    method: "POST",
+    headers: { accept: "application/json", "content-type": "application/json" },
+    body: JSON.stringify(command),
+  });
+  const body = await responseBody<ShareCardResponse>(response);
+  if (!response.ok) throwApiError(response, body as ApiErrorBody);
+  return body as ShareCardResponse;
 }
 
 let guestPreparation: Promise<void> | null = null;

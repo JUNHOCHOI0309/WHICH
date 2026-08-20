@@ -19,6 +19,7 @@ import { loginHref } from "@/lib/auth";
 
 import styles from "./issue-experience.module.css";
 import {
+  createResultShareCard,
   ensureGuestSubject,
   loadIssueComments,
   loadIssueFeed,
@@ -378,6 +379,7 @@ function ResultScreen({
           />
         </div>
         <p className={styles.totalCount}>현재 유효한 선택 {total.toLocaleString("ko-KR")}개</p>
+        <ResultSharePanel issue={issue} result={result} />
         <InterestSelector
           mode="prompt"
           analyticsContext={{ issueId: issue.id, issueVersion: issue.version }}
@@ -387,6 +389,105 @@ function ResultScreen({
         <NextIssueAction currentIssueId={issue.id} currentIssueVersion={issue.version} />
       </article>
     </ExperienceShell>
+  );
+}
+
+function ResultSharePanel({ issue, result }: { issue: PublicIssue; result: VoteResponse }) {
+  const [includeChoice, setIncludeChoice] = useState(false);
+  const [pending, setPending] = useState<"COPY" | "SYSTEM" | "X" | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+
+  async function share(channel: "COPY" | "SYSTEM" | "X") {
+    if (pending) return;
+    setPending(channel);
+    setMessage(null);
+    try {
+      const created = await createResultShareCard({
+        issueId: issue.id,
+        issueVersion: issue.version,
+        resultVersion: result.result.resultVersion,
+        channel,
+        ...(includeChoice ? { sharedChoiceCode: result.choice } : {}),
+      });
+      if (channel === "SYSTEM" && navigator.share) {
+        await navigator.share({
+          title: issue.question,
+          text: "WHICH 투표 결과를 확인해 보세요.",
+          url: created.url,
+        });
+      } else if (channel === "X") {
+        window.open(
+          `https://x.com/intent/post?${new URLSearchParams({ text: issue.question, url: created.url })}`,
+          "_blank",
+          "noopener,noreferrer",
+        );
+      } else {
+        await navigator.clipboard.writeText(created.url);
+      }
+      void recordAnalyticsEvent({
+        eventType: "SHARE_COMPLETE",
+        issueId: issue.id,
+        issueVersion: issue.version,
+        shareCardId: created.shareCard.id,
+      }).catch(() => undefined);
+      setMessage(channel === "COPY" ? "공유 링크를 복사했어요." : "공유 화면을 열었어요.");
+    } catch (reason) {
+      if (reason instanceof DOMException && reason.name === "AbortError") return;
+      setMessage("공유 링크를 만들지 못했어요. 결과는 그대로 확인할 수 있습니다.");
+    } finally {
+      setPending(null);
+    }
+  }
+
+  useEffect(() => {
+    void recordAnalyticsEvent({
+      eventType: "SHARE_OPEN",
+      issueId: issue.id,
+      issueVersion: issue.version,
+    }).catch(() => undefined);
+  }, [issue.id, issue.version]);
+
+  return (
+    <section className={styles.resultShare} aria-labelledby="result-share-title">
+      <div>
+        <p className={styles.commentEyebrow}>RESULT SHARE</p>
+        <h2 id="result-share-title">이 결과를 같이 이야기해 보세요.</h2>
+      </div>
+      <label className={styles.shareChoiceToggle}>
+        <input
+          type="checkbox"
+          checked={includeChoice}
+          onChange={(event) => {
+            setIncludeChoice(event.target.checked);
+            void recordAnalyticsEvent({
+              eventType: "SHARE_CHOICE_TOGGLE",
+              issueId: issue.id,
+              issueVersion: issue.version,
+            }).catch(() => undefined);
+          }}
+        />
+        내가 고른 {result.choice}도 함께 공개
+      </label>
+      <p className={styles.sharePrivacy}>
+        선택 공개는 기본으로 꺼져 있으며, 공유 링크에는 계정 정보가 들어가지 않아요.
+      </p>
+      <div className={styles.shareActions}>
+        <button type="button" disabled={Boolean(pending)} onClick={() => void share("COPY")}>
+          {pending === "COPY" ? "링크 생성 중…" : "링크 복사"}
+        </button>
+        <button type="button" disabled={Boolean(pending)} onClick={() => void share("SYSTEM")}>
+          기기로 공유
+        </button>
+        <button type="button" disabled={Boolean(pending)} onClick={() => void share("X")}>
+          X에 공유
+        </button>
+      </div>
+      {message ? (
+        <p className={styles.shareMessage} role="status">
+          {message}
+        </p>
+      ) : null}
+    </section>
   );
 }
 

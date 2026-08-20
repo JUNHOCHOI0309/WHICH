@@ -9,5 +9,6 @@ export * from "./recommendations.js";
 export * from "./reactions.js";
 export * from "./reports.js";
 export * from "./results.js";
+export * from "./shares.js";
 export * from "./subjects.js";
 export * from "./votes.js";

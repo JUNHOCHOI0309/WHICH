@@ -7,21 +7,30 @@ import { ANALYTICS_EVENT_TYPES, type AnalyticsService } from "./contracts.js";
 import { AnalyticsEventError } from "./service.js";
 
 const uuidSchema = Type.String({ format: "uuid" });
-const attributionSchema = Type.Object({
-  source: Type.Literal("naver"),
-  medium: Type.Union([
-    Type.Literal("choice"),
-    Type.Literal("cafe"),
-    Type.Literal("clip_blog"),
-    Type.Literal("blog_search"),
-    Type.Literal("homefeed_da"),
-    Type.Literal("lounge"),
-    Type.Literal("band"),
-  ]),
-  campaign: Type.Optional(Type.String({ minLength: 1, maxLength: 64 })),
-  content: Type.Optional(Type.String({ minLength: 1, maxLength: 96 })),
-  capturedAt: Type.String({ format: "date-time" }),
-});
+const attributionSchema = Type.Union([
+  Type.Object({
+    source: Type.Literal("naver"),
+    medium: Type.Union([
+      Type.Literal("choice"),
+      Type.Literal("cafe"),
+      Type.Literal("clip_blog"),
+      Type.Literal("blog_search"),
+      Type.Literal("homefeed_da"),
+      Type.Literal("lounge"),
+      Type.Literal("band"),
+    ]),
+    campaign: Type.Optional(Type.String({ minLength: 1, maxLength: 64 })),
+    content: Type.Optional(Type.String({ minLength: 1, maxLength: 96 })),
+    capturedAt: Type.String({ format: "date-time" }),
+  }),
+  Type.Object({
+    source: Type.Literal("share"),
+    medium: Type.Union([Type.Literal("copy"), Type.Literal("system"), Type.Literal("x")]),
+    campaign: Type.Union([Type.Literal("result"), Type.Literal("result_with_choice")]),
+    content: uuidSchema,
+    capturedAt: Type.String({ format: "date-time" }),
+  }),
+]);
 
 function secretMatches(provided: string | undefined, expected: string) {
   if (!provided) return false;
@@ -81,6 +90,7 @@ export async function registerAnalyticsRoutes(
             issueId: uuidSchema,
             issueVersion: Type.Integer({ minimum: 1 }),
             recommendationRequestId: Type.Optional(uuidSchema),
+            shareCardId: Type.Optional(uuidSchema),
             occurredAt: Type.String({ format: "date-time" }),
             attribution: Type.Optional(attributionSchema),
           }),

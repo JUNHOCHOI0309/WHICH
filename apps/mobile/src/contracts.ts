@@ -63,6 +63,19 @@ export type VoteResponse = {
   result: IssueTally;
 };
 
+export type ShareChannel = "COPY" | "SYSTEM" | "X";
+
+export type ShareCardResponse = {
+  shareCard: {
+    id: string;
+    version: "result_share_v1";
+    channel: ShareChannel;
+    shareType: "RESULT" | "RESULT_WITH_CHOICE";
+    sharedChoiceCode: "A" | "B" | null;
+  };
+  url: string;
+};
+
 export type ApiErrorBody = {
   code: string;
   message: string;
