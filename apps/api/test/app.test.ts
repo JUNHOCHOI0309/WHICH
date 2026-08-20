@@ -5,6 +5,7 @@ import { getConfig } from "../src/config.js";
 import type { CommentService } from "../src/modules/comments/contracts.js";
 import type { IssueReadService } from "../src/modules/issues/contracts.js";
 import type { MemberIdentityService } from "../src/modules/identity/contracts.js";
+import type { InterestProfileService } from "../src/modules/interests/contracts.js";
 import type { GuestVoteService } from "../src/modules/voting/contracts.js";
 
 const openApps: Array<Awaited<ReturnType<typeof buildApp>>> = [];
@@ -35,6 +36,14 @@ const memberIdentity: MemberIdentityService = {
   revokeSession: vi.fn(),
 };
 
+const interestProfiles: InterestProfileService = {
+  listCards: vi.fn().mockReturnValue([]),
+  getProfile: vi.fn(),
+  saveProfile: vi.fn(),
+  resetProfile: vi.fn(),
+  mergeGuestProfile: vi.fn(),
+};
+
 afterEach(async () => {
   await Promise.all(openApps.splice(0).map(async (app) => app.close()));
 });
@@ -48,6 +57,7 @@ describe("system health", () => {
       guestVotes,
       commentReader,
       memberIdentity,
+      interestProfiles,
     });
     openApps.push(app);
 
@@ -145,6 +155,7 @@ describe("OpenAPI contract", () => {
       guestVotes,
       commentReader,
       memberIdentity,
+      interestProfiles,
     });
     openApps.push(app);
 
@@ -161,5 +172,10 @@ describe("OpenAPI contract", () => {
     expect(document.paths).toHaveProperty(["/v1/comments/{commentId}/reactions/helpful", "post"]);
     expect(document.paths).toHaveProperty(["/v1/member-session", "get"]);
     expect(document.paths).toHaveProperty(["/v1/member-session", "delete"]);
+    expect(document.paths).toHaveProperty(["/v1/interests/cards", "get"]);
+    expect(document.paths).toHaveProperty(["/v1/interest-profile", "get"]);
+    expect(document.paths).toHaveProperty(["/v1/interest-profile", "put"]);
+    expect(document.paths).toHaveProperty(["/v1/interest-profile/reset", "post"]);
+    expect(document.paths).toHaveProperty(["/v1/interest-profile/merge", "post"]);
   });
 });

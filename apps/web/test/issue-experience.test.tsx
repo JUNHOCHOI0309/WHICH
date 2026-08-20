@@ -46,6 +46,10 @@ describe("IssueExperience", () => {
 
   it("records an impression only after 50% visibility lasts for 500ms", async () => {
     let observerCallback: IntersectionObserverCallback = () => undefined;
+    let resolveObserverReady: (() => void) | undefined;
+    const observerReady = new Promise<void>((resolve) => {
+      resolveObserverReady = resolve;
+    });
     const analyticsEvents: string[] = [];
 
     class TestIntersectionObserver {
@@ -54,6 +58,7 @@ describe("IssueExperience", () => {
       readonly thresholds = [0.5];
       constructor(callback: IntersectionObserverCallback) {
         observerCallback = callback;
+        resolveObserverReady?.();
       }
       observe() {}
       disconnect() {}
@@ -81,6 +86,7 @@ describe("IssueExperience", () => {
 
     render(<IssueExperience issueId={ISSUE_ID} />);
     await screen.findByRole("button", { name: "A, 아침형 인간" });
+    await observerReady;
     const article = screen.getByRole("article");
     const callback = observerCallback;
     const scheduledImpressions: Array<() => void> = [];

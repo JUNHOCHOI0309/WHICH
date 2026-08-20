@@ -5,6 +5,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import type { IssueChoice, PublicIssue, VoteResponse } from "@/contracts";
+import { InterestSelector } from "@/features/interests/interest-selector";
 import { MobileApiError } from "@/lib/mobile-api";
 import { guestSubjects, mobileApi } from "@/lib/runtime";
 import { colors } from "@/theme";
@@ -145,28 +146,36 @@ export default function IssueScreen() {
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
         {result ? (
-          <View style={styles.resultCard}>
-            <Text style={styles.resultEyebrow}>
-              {vote?.outcome === "REJECTED_DUPLICATE" ? "이미 반영된 선택" : "실시간 결과"}
-            </Text>
-            <View style={styles.resultRow}>
-              <Text style={styles.resultA}>
-                A {percentage(result.acceptedA, result.displayedTotal)}%
+          <>
+            <View style={styles.resultCard}>
+              <Text style={styles.resultEyebrow}>
+                {vote?.outcome === "REJECTED_DUPLICATE" ? "이미 반영된 선택" : "실시간 결과"}
               </Text>
-              <Text style={styles.resultB}>
-                B {percentage(result.acceptedB, result.displayedTotal)}%
+              <View style={styles.resultRow}>
+                <Text style={styles.resultA}>
+                  A {percentage(result.acceptedA, result.displayedTotal)}%
+                </Text>
+                <Text style={styles.resultB}>
+                  B {percentage(result.acceptedB, result.displayedTotal)}%
+                </Text>
+              </View>
+              <View style={styles.track}>
+                <View
+                  style={[
+                    styles.trackA,
+                    { width: `${percentage(result.acceptedA, result.displayedTotal)}%` },
+                  ]}
+                />
+              </View>
+              <Text style={styles.total}>
+                {result.displayedTotal.toLocaleString("ko-KR")}명 참여
               </Text>
             </View>
-            <View style={styles.track}>
-              <View
-                style={[
-                  styles.trackA,
-                  { width: `${percentage(result.acceptedA, result.displayedTotal)}%` },
-                ]}
-              />
-            </View>
-            <Text style={styles.total}>{result.displayedTotal.toLocaleString("ko-KR")}명 참여</Text>
-          </View>
+            <InterestSelector
+              mode="prompt"
+              analyticsContext={{ issueId: issue.id, issueVersion: issue.version }}
+            />
+          </>
         ) : (
           <Text style={styles.locked}>결과는 투표 후 공개됩니다.</Text>
         )}

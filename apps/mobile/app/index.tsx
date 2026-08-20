@@ -78,9 +78,14 @@ export default function FeedScreen() {
         }
         ListHeaderComponent={
           <View style={styles.header}>
-            <Text accessibilityRole="header" style={styles.brand}>
-              WHICH
-            </Text>
+            <View style={styles.headerRow}>
+              <Text accessibilityRole="header" style={styles.brand}>
+                WHICH
+              </Text>
+              <Pressable accessibilityRole="button" onPress={() => router.push("/interests")}>
+                <Text style={styles.interestLink}>관심사 설정</Text>
+              </Pressable>
+            </View>
             <Text style={styles.eyebrow}>MOBILE FIRST</Text>
             <Text style={styles.title}>고르고, 결과를 보고, 다음 질문으로.</Text>
           </View>
@@ -137,7 +142,9 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: colors.ink },
   content: { flexGrow: 1, paddingHorizontal: 18, paddingBottom: 48 },
   header: { gap: 12, paddingBottom: 32, paddingTop: 18 },
+  headerRow: { alignItems: "center", flexDirection: "row", justifyContent: "space-between" },
   brand: { color: colors.paper, fontSize: 30, fontWeight: "900", letterSpacing: -1 },
+  interestLink: { color: colors.cyan, fontSize: 13, fontWeight: "900" },
   eyebrow: { color: colors.accent, fontSize: 12, fontWeight: "900", letterSpacing: 2 },
   title: { color: colors.paper, fontSize: 34, fontWeight: "900", lineHeight: 42, maxWidth: 340 },
   card: {

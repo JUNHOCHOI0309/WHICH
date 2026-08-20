@@ -27,7 +27,11 @@ export type AnalyticsEventType =
   | "VOTE_SUBMIT"
   | "RESULT_VIEW"
   | "NEXT_ISSUE_OPEN"
-  | "NEXT_ISSUE_EXHAUSTED";
+  | "NEXT_ISSUE_EXHAUSTED"
+  | "INTEREST_PROMPT_VIEW"
+  | "INTEREST_SELECTION_COMPLETE"
+  | "INTEREST_PROMPT_SKIP"
+  | "INTEREST_PROFILE_RESET";
 
 export async function recordAnalyticsEvent(command: {
   eventType: AnalyticsEventType;

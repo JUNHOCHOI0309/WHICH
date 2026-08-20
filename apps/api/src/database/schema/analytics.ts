@@ -65,7 +65,7 @@ export const analyticsEvents = pgTable(
     index("analytics_events_type_occurred_idx").on(table.eventType, table.occurredAt),
     check(
       "analytics_events_type_check",
-      sql`${table.eventType} in ('ISSUE_VIEWABLE_IMPRESSION', 'VOTE_SUBMIT', 'RESULT_VIEW', 'NEXT_ISSUE_OPEN', 'NEXT_ISSUE_EXHAUSTED')`,
+      sql`${table.eventType} in ('ISSUE_VIEWABLE_IMPRESSION', 'VOTE_SUBMIT', 'RESULT_VIEW', 'NEXT_ISSUE_OPEN', 'NEXT_ISSUE_EXHAUSTED', 'INTEREST_PROMPT_VIEW', 'INTEREST_SELECTION_COMPLETE', 'INTEREST_PROMPT_SKIP', 'INTEREST_PROFILE_RESET')`,
     ),
   ],
 );

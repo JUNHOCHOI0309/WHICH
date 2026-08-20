@@ -8,6 +8,7 @@ import { createDatabase } from "./database/client.js";
 import { createCommentService } from "./modules/comments/service.js";
 import { createIssueReadService } from "./modules/issues/service.js";
 import { createMemberIdentityService } from "./modules/identity/service.js";
+import { createInterestProfileService } from "./modules/interests/service.js";
 import { createGuestVoteService } from "./modules/voting/service.js";
 import { createAnalyticsService } from "./modules/analytics/service.js";
 
@@ -27,6 +28,7 @@ const app = await buildApp(config, {
     sessionTtlSeconds: config.auth.memberSessionTtlSeconds,
     allowDevelopmentProvider: config.auth.allowDevelopmentProvider,
   }),
+  interestProfiles: createInterestProfileService(database.db),
   analytics: createAnalyticsService(database.db),
 });
 

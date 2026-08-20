@@ -13,6 +13,8 @@ import type { IssueReadService } from "./modules/issues/contracts.js";
 import { registerIssueRoutes } from "./modules/issues/routes.js";
 import type { MemberIdentityService } from "./modules/identity/contracts.js";
 import { registerMemberIdentityRoutes } from "./modules/identity/routes.js";
+import type { InterestProfileService } from "./modules/interests/contracts.js";
+import { registerInterestRoutes } from "./modules/interests/routes.js";
 import type { GuestVoteService } from "./modules/voting/contracts.js";
 import { registerVotingRoutes } from "./modules/voting/routes.js";
 import type { AnalyticsService } from "./modules/analytics/contracts.js";
@@ -23,6 +25,7 @@ export type AppDependencies = Pick<Database, "ping" | "close"> & {
   guestVotes: GuestVoteService;
   commentReader: CommentService;
   memberIdentity: MemberIdentityService;
+  interestProfiles?: InterestProfileService;
   analytics?: AnalyticsService;
 };
 
@@ -103,6 +106,9 @@ export async function buildApp(config: AppConfig, database: AppDependencies) {
   await registerVotingRoutes(app, database.guestVotes, config.auth.internalSecret);
   await registerCommentRoutes(app, database.commentReader, config.auth.moderationInternalSecret);
   await registerMemberIdentityRoutes(app, database.memberIdentity, config.auth.internalSecret);
+  if (database.interestProfiles) {
+    await registerInterestRoutes(app, database.interestProfiles);
+  }
   if (database.analytics) {
     await registerAnalyticsRoutes(app, database.analytics, config.auth.internalSecret);
   }

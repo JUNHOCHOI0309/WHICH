@@ -1,0 +1,35 @@
+.page {
+  min-height: 100svh;
+  background: #061923;
+  color: #f6f8f7;
+}
+
+.page header {
+  width: min(100%, 960px);
+  margin-inline: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgb(246 248 247 / 14%);
+  padding: 22px clamp(20px, 5vw, 50px);
+}
+
+.page header a {
+  color: #f6f8f7;
+  font-size: 1.2rem;
+  font-weight: 950;
+  text-decoration: none;
+}
+
+.page header span {
+  color: #14c8d4;
+  font-size: 0.68rem;
+  font-weight: 850;
+  letter-spacing: 0.12em;
+}
+
+.stage {
+  width: min(100%, 860px);
+  margin-inline: auto;
+  padding: clamp(30px, 8vw, 76px) clamp(18px, 5vw, 48px);
+}

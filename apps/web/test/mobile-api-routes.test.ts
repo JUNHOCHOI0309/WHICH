@@ -2,6 +2,11 @@ import { NextRequest } from "next/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { POST as createSubject } from "@/app/api/mobile/v1/guest-subjects/route";
+import { POST as recordAnalyticsEvent } from "@/app/api/mobile/v1/analytics/events/route";
+import {
+  GET as loadInterestProfile,
+  PUT as saveInterestProfile,
+} from "@/app/api/mobile/v1/interest-profile/route";
 import { GET as loadFeed } from "@/app/api/mobile/v1/issues/feed/route";
 import { POST as submitVote } from "@/app/api/mobile/v1/issues/[issueId]/votes/route";
 
@@ -14,6 +19,7 @@ function jsonResponse(body: unknown, status = 200) {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 describe("mobile BFF routes", () => {
@@ -120,6 +126,86 @@ describe("mobile BFF routes", () => {
           "idempotency-key": "ce976502-9409-56a2-b975-94c913a20fcf",
           "x-anonymous-subject-id": "8c092a45-c446-50f3-b1ac-ac9a018b9105",
         }),
+      }),
+    );
+  });
+
+  it("forwards the native Guest Subject to the shared Interest Profile API", async () => {
+    const request = vi.fn(async () =>
+      jsonResponse({
+        taxonomyVersion: "interest_cards_v1",
+        onboardingState: "NOT_STARTED",
+        selectedCardCodes: [],
+        canSkip: true,
+        profileVersion: 1,
+        mergeCandidate: null,
+      }),
+    );
+    vi.stubGlobal("fetch", request);
+    const headers = { "x-anonymous-subject-id": "591f2e90-996a-50c5-af46-967dd0793000" };
+
+    expect(
+      (
+        await loadInterestProfile(
+          new NextRequest("https://whichone.site/api/mobile/v1/interest-profile", { headers }),
+        )
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await saveInterestProfile(
+          new NextRequest("https://whichone.site/api/mobile/v1/interest-profile", {
+            method: "PUT",
+            headers: { ...headers, "content-type": "application/json" },
+            body: JSON.stringify({
+              onboardingState: "COMPLETED",
+              selectedCardCodes: ["FOOD", "GAME", "TECH"],
+            }),
+          }),
+        )
+      ).status,
+    ).toBe(200);
+    expect(request).toHaveBeenCalledWith(
+      new URL("http://localhost:4000/v1/interest-profile"),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          "x-anonymous-subject-id": headers["x-anonymous-subject-id"],
+        }),
+      }),
+    );
+  });
+
+  it("keeps the Analytics secret inside the mobile BFF", async () => {
+    vi.stubEnv("AUTH_INTERNAL_SECRET", "mobile-analytics-secret");
+    const request = vi.fn(async () => jsonResponse({ accepted: true, duplicate: false }));
+    vi.stubGlobal("fetch", request);
+    const sessionId = "591f2e90-996a-50c5-af46-967dd0793000";
+
+    const response = await recordAnalyticsEvent(
+      new NextRequest("https://whichone.site/api/mobile/v1/analytics/events", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-analytics-session-id": sessionId,
+        },
+        body: JSON.stringify({
+          eventId: "93831fba-b70f-598a-88f6-92eb4f70df9c",
+          eventType: "INTEREST_PROMPT_VIEW",
+          issueId: "8c092a45-c446-50f3-b1ac-ac9a018b9105",
+          issueVersion: 1,
+          occurredAt: "2026-08-21T00:00:00.000Z",
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(request).toHaveBeenCalledWith(
+      new URL("http://localhost:4000/v1/internal/analytics/events"),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          "x-internal-auth-secret": "mobile-analytics-secret",
+        }),
+        body: expect.stringContaining(`"sessionId":"${sessionId}"`),
       }),
     );
   });
