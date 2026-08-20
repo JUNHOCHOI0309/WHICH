@@ -83,7 +83,11 @@ describe("IssueExperience", () => {
     await screen.findByRole("button", { name: "A, 아침형 인간" });
     const article = screen.getByRole("article");
     const callback = observerCallback;
-    vi.useFakeTimers();
+    const scheduledImpressions: Array<() => void> = [];
+    const setTimeoutSpy = vi.spyOn(window, "setTimeout").mockImplementation((handler, delay) => {
+      if (delay === 500 && typeof handler === "function") scheduledImpressions.push(handler);
+      return 4242 as unknown as ReturnType<typeof window.setTimeout>;
+    });
     try {
       act(() => {
         callback(
@@ -91,7 +95,7 @@ describe("IssueExperience", () => {
           {} as IntersectionObserver,
         );
       });
-      await vi.advanceTimersByTimeAsync(550);
+      expect(scheduledImpressions).toHaveLength(0);
       expect(analyticsEvents).toHaveLength(0);
 
       act(() => {
@@ -100,12 +104,15 @@ describe("IssueExperience", () => {
           {} as IntersectionObserver,
         );
       });
+      expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 500);
+      expect(scheduledImpressions).toHaveLength(1);
       await act(async () => {
-        await vi.advanceTimersByTimeAsync(500);
+        scheduledImpressions[0]?.();
+        await Promise.resolve();
       });
       expect(analyticsEvents).toEqual(["ISSUE_VIEWABLE_IMPRESSION"]);
     } finally {
-      vi.useRealTimers();
+      setTimeoutSpy.mockRestore();
     }
   });
 
