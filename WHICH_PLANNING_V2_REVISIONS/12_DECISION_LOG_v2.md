@@ -108,6 +108,7 @@
 | DEC-UX-010 | CONFIRMED | 색상만으로 A/B와 결과를 구분하지 않고 키보드·스크린리더 경로를 제공한다. | 투표 정확성과 접근성을 보장한다. | 02 Accessibility |
 | DEC-UX-011 | CONFIRMED | 관심사와 가입 Prompt는 첫 가치 이후에만 제안한다. | Guest 외부 유입을 보호한다. | 02, 06, 10 |
 | DEC-UX-012 | PROHIBITED | 결과를 일부 숨기거나 가입해야 결과를 보게 하는 Dark Pattern을 사용하지 않는다. | 결과 보상과 신뢰를 훼손한다. | 02, 10 |
+| DEC-UX-013 | CONFIRMED | 외부 딥링크는 모바일 웹을 유지하고, Expo Android·iOS 앱을 재방문 Feed와 Core Vote의 우선 클라이언트로 추가한다. | 설치 없는 첫 투표와 네이티브 재방문·딥링크·Push 확장성을 함께 보존한다. | ADR-0002, 11 §2 |
 
 ## Issue 공급
 | Decision ID | 상태 | 결정 | 핵심 근거 | Source |

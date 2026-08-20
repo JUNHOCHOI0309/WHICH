@@ -4,6 +4,7 @@ node_modules/
 
 # build output
 .next/
+.expo/
 dist/
 coverage/
 .turbo/
@@ -29,4 +30,3 @@ Thumbs.db
 # test output
 playwright-report/
 test-results/
-
