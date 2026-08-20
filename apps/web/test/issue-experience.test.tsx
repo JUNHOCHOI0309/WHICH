@@ -83,25 +83,30 @@ describe("IssueExperience", () => {
     await screen.findByRole("button", { name: "A, 아침형 인간" });
     const article = screen.getByRole("article");
     const callback = observerCallback;
+    vi.useFakeTimers();
+    try {
+      act(() => {
+        callback(
+          [{ target: article, intersectionRatio: 0.49 } as unknown as IntersectionObserverEntry],
+          {} as IntersectionObserver,
+        );
+      });
+      await vi.advanceTimersByTimeAsync(550);
+      expect(analyticsEvents).toHaveLength(0);
 
-    act(() => {
-      callback(
-        [{ target: article, intersectionRatio: 0.49 } as unknown as IntersectionObserverEntry],
-        {} as IntersectionObserver,
-      );
-    });
-    await new Promise((resolve) => setTimeout(resolve, 550));
-    expect(analyticsEvents).toHaveLength(0);
-
-    act(() => {
-      callback(
-        [{ target: article, intersectionRatio: 0.5 } as unknown as IntersectionObserverEntry],
-        {} as IntersectionObserver,
-      );
-    });
-    await waitFor(() => expect(analyticsEvents).toEqual(["ISSUE_VIEWABLE_IMPRESSION"]), {
-      timeout: 1_000,
-    });
+      act(() => {
+        callback(
+          [{ target: article, intersectionRatio: 0.5 } as unknown as IntersectionObserverEntry],
+          {} as IntersectionObserver,
+        );
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(500);
+      });
+      expect(analyticsEvents).toEqual(["ISSUE_VIEWABLE_IMPRESSION"]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("records one vote and reveals results only after selection", async () => {
