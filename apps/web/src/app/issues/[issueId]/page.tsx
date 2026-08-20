@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { IssueExperience } from "@/features/issues/issue-experience";
+import { naverLoginEnabled } from "@/lib/server/member-auth";
 
 type IssuePageProps = {
   params: Promise<{ issueId: string }>;
@@ -13,5 +14,5 @@ export const metadata: Metadata = {
 
 export default async function IssuePage({ params }: IssuePageProps) {
   const { issueId } = await params;
-  return <IssueExperience issueId={issueId} />;
+  return <IssueExperience issueId={issueId} naverLoginEnabled={naverLoginEnabled()} />;
 }

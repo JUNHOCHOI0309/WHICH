@@ -1,7 +1,7 @@
 import { fetchWhichApi } from "./which-api";
 import { internalAuthSecret } from "./member-auth";
 
-type Provider = "GOOGLE" | "X";
+type Provider = "GOOGLE" | "X" | "NAVER";
 
 type SessionResponse = {
   token: string;

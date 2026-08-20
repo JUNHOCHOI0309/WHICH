@@ -80,7 +80,13 @@ function loadErrorCopy(error: unknown) {
   };
 }
 
-export function IssueExperience({ issueId }: { issueId: string }) {
+export function IssueExperience({
+  issueId,
+  naverLoginEnabled = false,
+}: {
+  issueId: string;
+  naverLoginEnabled?: boolean;
+}) {
   const [screen, setScreen] = useState<Screen>("loading");
   const [issue, setIssue] = useState<PublicIssue | null>(null);
   const [loadError, setLoadError] = useState<unknown>(null);
@@ -199,7 +205,7 @@ export function IssueExperience({ issueId }: { issueId: string }) {
   if (!issue) return null;
 
   if (screen === "result" && result) {
-    return <ResultScreen issue={issue} result={result} />;
+    return <ResultScreen issue={issue} result={result} naverLoginEnabled={naverLoginEnabled} />;
   }
 
   const selectedChoice = pendingAction?.choice;
@@ -278,7 +284,15 @@ export function IssueExperience({ issueId }: { issueId: string }) {
   );
 }
 
-function ResultScreen({ issue, result }: { issue: PublicIssue; result: VoteResponse }) {
+function ResultScreen({
+  issue,
+  result,
+  naverLoginEnabled,
+}: {
+  issue: PublicIssue;
+  result: VoteResponse;
+  naverLoginEnabled: boolean;
+}) {
   const total = result.result.displayedTotal;
   const acceptedAPercent = total === 0 ? 0 : Math.round((result.result.acceptedA / total) * 100);
   const acceptedBPercent = total === 0 ? 0 : 100 - acceptedAPercent;
@@ -315,8 +329,8 @@ function ResultScreen({ issue, result }: { issue: PublicIssue; result: VoteRespo
           />
         </div>
         <p className={styles.totalCount}>현재 유효한 선택 {total.toLocaleString("ko-KR")}개</p>
-        <MemberAccess issueId={issue.id} />
-        <CommentSection issueId={issue.id} />
+        <MemberAccess issueId={issue.id} naverLoginEnabled={naverLoginEnabled} />
+        <CommentSection issueId={issue.id} naverLoginEnabled={naverLoginEnabled} />
         <NextIssueAction currentIssueId={issue.id} />
       </article>
     </ExperienceShell>
@@ -339,7 +353,13 @@ const COMMENT_REPORT_REASONS: Array<{ value: CommentReportReason; label: string 
   { value: "OTHER", label: "기타" },
 ];
 
-function CommentSection({ issueId }: { issueId: string }) {
+function CommentSection({
+  issueId,
+  naverLoginEnabled,
+}: {
+  issueId: string;
+  naverLoginEnabled: boolean;
+}) {
   const [side, setSide] = useState<CommentSide>("ALL");
   const [items, setItems] = useState<PublicComment[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -665,6 +685,9 @@ function CommentSection({ issueId }: { issueId: string }) {
           <div className={styles.commentLoginChoices} aria-label="댓글 게시 로그인 제공자 선택">
             <a href={loginHref("google", `/issues/${issueId}#comment-compose`)}>Google로 로그인</a>
             <a href={loginHref("x", `/issues/${issueId}#comment-compose`)}>X로 로그인</a>
+            {naverLoginEnabled ? (
+              <a href={loginHref("naver", `/issues/${issueId}#comment-compose`)}>네이버로 로그인</a>
+            ) : null}
           </div>
         ) : null}
         {postError ? (

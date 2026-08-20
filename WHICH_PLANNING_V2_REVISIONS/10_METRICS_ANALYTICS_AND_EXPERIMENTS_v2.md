@@ -367,7 +367,10 @@ Session이 강제로 종료되지 않음
 
 | 코드 | 의미 |
 | --- | --- |
-| EXTERNAL_SOCIAL | YouTube·X·Instagram·Threads 등 외부 SNS |
+| EXTERNAL_SOCIAL | YouTube·X 등 외부 SNS |
+| EXTERNAL_NAVER_COMMUNITY | 네이버 CHOiCE·카페·라운지·오픈톡·BAND |
+| EXTERNAL_NAVER_CONTENT | 네이버 클립→블로그·블로그 검색 |
+| EXTERNAL_PAID | 네이버 홈피드DA 등 비용을 지불한 직접 유입 |
 | EXTERNAL_SEARCH | 검색 엔진·SEO |
 | SHARED_LINK | 사용자가 복사·공유한 Issue 링크 |
 | DIRECT_HOME | 직접 Home 진입 |
@@ -376,6 +379,10 @@ Session이 강제로 종료되지 않음
 | CREATOR_PROFILE | 작성자 공개 Profile |
 | CATEGORY_TOPIC | 카테고리·Topic Feed |
 | ADMIN_TEST | 운영·QA 전용, 제품 지표에서 제외 |
+
+네이버 채널의 `utm_source`는 `naver`로 고정하고 `utm_medium`으로 `choice`, `cafe`,
+`clip_blog`, `blog_search`, `homefeed_da`, `lounge`, `band`를 구분한다. 외부 네이버 반응은
+별도 External Signal이며 WHICH의 Accepted Vote나 Result Aggregate에 합산하지 않는다.
 
 ## 3.9 시간과 기준일
 

@@ -11,7 +11,13 @@ type Session = {
   expiresAt: string;
 };
 
-export function MemberAccess({ issueId }: { issueId: string }) {
+export function MemberAccess({
+  issueId,
+  naverLoginEnabled = false,
+}: {
+  issueId: string;
+  naverLoginEnabled?: boolean;
+}) {
   const [session, setSession] = useState<Session | null>(null);
   const [state, setState] = useState<"loading" | "guest" | "member" | "error">("loading");
   const [authOutcome] = useState(() =>
@@ -37,6 +43,7 @@ export function MemberAccess({ issueId }: { issueId: string }) {
     return {
       google: loginHref("google", returnTo),
       x: loginHref("x", returnTo),
+      naver: loginHref("naver", returnTo),
     };
   }, [issueId]);
 
@@ -52,7 +59,7 @@ export function MemberAccess({ issueId }: { issueId: string }) {
         <p>
           {state === "member"
             ? "현재 Guest 선택 기록이 이 계정과 연결되어 있습니다. 원래 투표 기록은 감사 가능하게 유지됩니다."
-            : "Google 또는 X 로그인 후에도 이 질문과 결과 화면으로 돌아오며, Guest 선택은 중복 집계 없이 계정에 연결됩니다."}
+            : `${naverLoginEnabled ? "Google, X 또는 네이버" : "Google 또는 X"} 로그인 후에도 이 질문과 결과 화면으로 돌아오며, Guest 선택은 중복 집계 없이 계정에 연결됩니다.`}
         </p>
       </div>
 
@@ -67,6 +74,12 @@ export function MemberAccess({ issueId }: { issueId: string }) {
             X로 이어서 로그인
             <span aria-hidden="true">→</span>
           </a>
+          {naverLoginEnabled ? (
+            <a className={`${styles.login} ${styles.naverLogin}`} href={loginHrefs.naver}>
+              네이버로 이어서 로그인
+              <span aria-hidden="true">→</span>
+            </a>
+          ) : null}
         </div>
       ) : null}
       {state === "member" ? (

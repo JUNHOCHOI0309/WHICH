@@ -114,7 +114,7 @@ Every Outbox payload uses this envelope:
 }
 ```
 
-Initial event names are `VOTE_ACCEPTED`, `VOTE_REVIEWED`, `VOTE_REJECTED`, `VOTE_INVALIDATED`, `VOTE_RESTORED`, `RESULT_AGGREGATE_REBUILT`, `RESULT_RECONCILIATION_LOCKED`, and `ISSUE_VERSION_LOCKED`. Server-domain events are the analytics source of truth for vote success; client events only describe UI intent and exposure.
+Initial event names are `ISSUE_PUBLISHED`, `VOTE_ACCEPTED`, `VOTE_REVIEWED`, `VOTE_REJECTED`, `VOTE_INVALIDATED`, `VOTE_RESTORED`, `RESULT_AGGREGATE_REBUILT`, `RESULT_RECONCILIATION_LOCKED`, and `ISSUE_VERSION_LOCKED`. Server-domain events are the analytics source of truth for vote success; client events only describe UI intent and exposure.
 
 ## 7. Data classification and retention
 

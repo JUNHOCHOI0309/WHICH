@@ -1,0 +1,385 @@
+{
+  "schemaVersion": 1,
+  "packId": "which-19-initial-low-v1",
+  "target": "production",
+  "taxonomyVersion": "taxonomy_v2.0",
+  "approval": {
+    "status": "APPROVED",
+    "approvedBy": "WHICH_PRODUCT_OWNER",
+    "approvedAt": "2026-08-20T11:15:00.000Z"
+  },
+  "issues": [
+    {
+      "id": "591f2e90-996a-50c5-af46-967dd0793000",
+      "version": 1,
+      "question": "야식으로 둘 중 하나만 고른다면?",
+      "context": "지금 당장 하나만 먹는다고 가정해 주세요.",
+      "choices": [
+        {
+          "id": "89db6a05-1079-57dc-a6c3-a48e32ef7b3d",
+          "code": "A",
+          "label": "치킨"
+        },
+        {
+          "id": "467ae2b4-50bc-5455-a17e-116286b9be56",
+          "code": "B",
+          "label": "라면"
+        }
+      ],
+      "primaryCategoryCode": "LIFE",
+      "experienceModeCode": "PLAYFUL_QUICK",
+      "taxonomyVersion": "taxonomy_v2.0",
+      "riskLevel": "LOW",
+      "isPolitical": false,
+      "lifecycle": "PUBLISHED",
+      "visibility": "VISIBLE",
+      "participation": "VOTING_OPEN",
+      "resultVisibility": "PRE_VOTE_HIDDEN",
+      "feedEligibility": "ELIGIBLE",
+      "publishedAt": "2026-08-20T11:26:00.000Z",
+      "voteOpenAt": "2026-08-20T11:26:00.000Z",
+      "contentHash": "78fdb627401c829493d0bd73fd6258c35a4c9327ed24b21e00efc034d46c0df4"
+    },
+    {
+      "id": "8c092a45-c446-50f3-b1ac-ac9a018b9105",
+      "version": 1,
+      "question": "여행에서 하나만 더 중요하다면?",
+      "context": "여행 예산과 기간은 같다고 가정해 주세요.",
+      "choices": [
+        {
+          "id": "42a6bbd6-0b21-5f0d-ab97-f7f8b2af248f",
+          "code": "A",
+          "label": "숙소의 편안함"
+        },
+        {
+          "id": "b164d2ab-7002-508f-982c-6576c964471e",
+          "code": "B",
+          "label": "먹거리의 만족도"
+        }
+      ],
+      "primaryCategoryCode": "LIFE",
+      "experienceModeCode": "PLAYFUL_QUICK",
+      "taxonomyVersion": "taxonomy_v2.0",
+      "riskLevel": "LOW",
+      "isPolitical": false,
+      "lifecycle": "PUBLISHED",
+      "visibility": "VISIBLE",
+      "participation": "VOTING_OPEN",
+      "resultVisibility": "PRE_VOTE_HIDDEN",
+      "feedEligibility": "ELIGIBLE",
+      "publishedAt": "2026-08-20T11:25:00.000Z",
+      "voteOpenAt": "2026-08-20T11:25:00.000Z",
+      "contentHash": "4d56fc1a739bee0f5f4b72667c9f5dd08739d85ef5acd8dcc3c8863f967e057e"
+    },
+    {
+      "id": "93831fba-b70f-598a-88f6-92eb4f70df9c",
+      "version": 1,
+      "question": "집 정리는 어떤 방식이 더 잘 맞나요?",
+      "context": "집 전체를 정리해야 할 때를 떠올려 주세요.",
+      "choices": [
+        {
+          "id": "aef2728f-dd69-54f4-b614-b6c4e3e52ac2",
+          "code": "A",
+          "label": "조금씩 자주 한다"
+        },
+        {
+          "id": "a9e56556-5668-54df-ba99-9bd7a2dc7cf7",
+          "code": "B",
+          "label": "한번에 몰아서 한다"
+        }
+      ],
+      "primaryCategoryCode": "LIFE",
+      "experienceModeCode": "PLAYFUL_QUICK",
+      "taxonomyVersion": "taxonomy_v2.0",
+      "riskLevel": "LOW",
+      "isPolitical": false,
+      "lifecycle": "PUBLISHED",
+      "visibility": "VISIBLE",
+      "participation": "VOTING_OPEN",
+      "resultVisibility": "PRE_VOTE_HIDDEN",
+      "feedEligibility": "ELIGIBLE",
+      "publishedAt": "2026-08-20T11:24:00.000Z",
+      "voteOpenAt": "2026-08-20T11:24:00.000Z",
+      "contentHash": "0f0dbb630bcb813f67384d60b15d2aafa0df05095855f0a0d09eb7e9e55a9f03"
+    },
+    {
+      "id": "d52dace5-486c-5e34-bb73-5a0b5a779c98",
+      "version": 1,
+      "question": "새 취미를 시작할 때 더 끌리는 쪽은?",
+      "context": "비용과 난이도는 비슷하다고 가정해 주세요.",
+      "choices": [
+        {
+          "id": "fb09600e-b39e-5509-8a50-14a4256a7a41",
+          "code": "A",
+          "label": "혼자 천천히 배운다"
+        },
+        {
+          "id": "df36296b-dc7f-5f8b-962f-6793960cba77",
+          "code": "B",
+          "label": "모임이나 클래스부터 찾는다"
+        }
+      ],
+      "primaryCategoryCode": "LIFE",
+      "experienceModeCode": "PLAYFUL_QUICK",
+      "taxonomyVersion": "taxonomy_v2.0",
+      "riskLevel": "LOW",
+      "isPolitical": false,
+      "lifecycle": "PUBLISHED",
+      "visibility": "VISIBLE",
+      "participation": "VOTING_OPEN",
+      "resultVisibility": "PRE_VOTE_HIDDEN",
+      "feedEligibility": "ELIGIBLE",
+      "publishedAt": "2026-08-20T11:23:00.000Z",
+      "voteOpenAt": "2026-08-20T11:23:00.000Z",
+      "contentHash": "2272fe3df0774ab47d842f873450ab3cd9514b422b472bb0a087ae29b23832af"
+    },
+    {
+      "id": "add8d2eb-a121-5a75-bd02-f7da2a18aae4",
+      "version": 1,
+      "question": "친구와 약속할 때 더 편한 도착 방식은?",
+      "context": "교통 문제 없이 시간 조절이 가능한 날을 기준으로 골라 주세요.",
+      "choices": [
+        {
+          "id": "09b4694c-ca97-5420-a618-1bbfd014b926",
+          "code": "A",
+          "label": "10분쯤 일찍 도착한다"
+        },
+        {
+          "id": "a54f1063-8b9c-52bc-8f5b-736b0fa8cb17",
+          "code": "B",
+          "label": "약속 시간에 맞춰 도착한다"
+        }
+      ],
+      "primaryCategoryCode": "LIFE",
+      "experienceModeCode": "PLAYFUL_QUICK",
+      "taxonomyVersion": "taxonomy_v2.0",
+      "riskLevel": "LOW",
+      "isPolitical": false,
+      "lifecycle": "PUBLISHED",
+      "visibility": "VISIBLE",
+      "participation": "VOTING_OPEN",
+      "resultVisibility": "PRE_VOTE_HIDDEN",
+      "feedEligibility": "ELIGIBLE",
+      "publishedAt": "2026-08-20T11:22:00.000Z",
+      "voteOpenAt": "2026-08-20T11:22:00.000Z",
+      "contentHash": "85e88180f3a67783ca76d541d1cc4eb194a60fc5d2c549be099673e88d3ad82f"
+    },
+    {
+      "id": "ed5d3d01-b902-511f-b1e8-64e5ade5ee8a",
+      "version": 1,
+      "question": "연애 중 하루에 한 번 이상 연락은 꼭 필요할까?",
+      "context": "서로 바쁜 평일에도 적용할 기본 기준을 고른다고 생각해 주세요.",
+      "choices": [
+        {
+          "id": "6d19bb76-328e-5170-8f20-3471d05e1e21",
+          "code": "A",
+          "label": "필요하다"
+        },
+        {
+          "id": "034773ae-9fda-5702-8448-b5a294113a95",
+          "code": "B",
+          "label": "꼭 필요하진 않다"
+        }
+      ],
+      "primaryCategoryCode": "RELATIONSHIP",
+      "experienceModeCode": "RELATABLE_DILEMMA",
+      "taxonomyVersion": "taxonomy_v2.0",
+      "riskLevel": "LOW",
+      "isPolitical": false,
+      "lifecycle": "PUBLISHED",
+      "visibility": "VISIBLE",
+      "participation": "VOTING_OPEN",
+      "resultVisibility": "PRE_VOTE_HIDDEN",
+      "feedEligibility": "ELIGIBLE",
+      "publishedAt": "2026-08-20T11:21:00.000Z",
+      "voteOpenAt": "2026-08-20T11:21:00.000Z",
+      "contentHash": "68dd33c2c51c3c66132926c0b5b0b4ab0b7d5e9e742d1373296efcea0a39c72b"
+    },
+    {
+      "id": "5b3b767c-2944-59b6-8f2b-174353e38993",
+      "version": 1,
+      "question": "친한 친구와 밥값 정산, 1~2천 원 차이도 정확히 나눠야 할까?",
+      "context": "서로 번갈아 사는 관계가 아니라 매번 정산하는 상황을 기준으로 해 주세요.",
+      "choices": [
+        {
+          "id": "b54a26cc-942b-5a01-8388-69137381f71a",
+          "code": "A",
+          "label": "정확히 나눈다"
+        },
+        {
+          "id": "f245878b-30e1-5581-af0a-720e33681966",
+          "code": "B",
+          "label": "작은 차이는 넘긴다"
+        }
+      ],
+      "primaryCategoryCode": "RELATIONSHIP",
+      "experienceModeCode": "RELATABLE_DILEMMA",
+      "taxonomyVersion": "taxonomy_v2.0",
+      "riskLevel": "LOW",
+      "isPolitical": false,
+      "lifecycle": "PUBLISHED",
+      "visibility": "VISIBLE",
+      "participation": "VOTING_OPEN",
+      "resultVisibility": "PRE_VOTE_HIDDEN",
+      "feedEligibility": "ELIGIBLE",
+      "publishedAt": "2026-08-20T11:20:00.000Z",
+      "voteOpenAt": "2026-08-20T11:20:00.000Z",
+      "contentHash": "76db83ae96f3aec0700efda15b0a1fdedd7cf855022c41fc29119a5d4dd41f95"
+    },
+    {
+      "id": "2806555a-b674-5f47-afdd-4e73d10d2678",
+      "version": 1,
+      "question": "처음 보는 영화, 더 좋은 관람 방식은?",
+      "context": "같은 영화를 처음 본다고 가정해 주세요.",
+      "choices": [
+        {
+          "id": "92396932-377a-5068-a8b6-c32a1c23be21",
+          "code": "A",
+          "label": "극장에서 몰입해서 본다"
+        },
+        {
+          "id": "42909a3d-e72e-5d97-918c-4eacf60b5aee",
+          "code": "B",
+          "label": "집에서 편하게 본다"
+        }
+      ],
+      "primaryCategoryCode": "CULTURE_ENT",
+      "experienceModeCode": "CULTURE_PULSE",
+      "taxonomyVersion": "taxonomy_v2.0",
+      "riskLevel": "LOW",
+      "isPolitical": false,
+      "lifecycle": "PUBLISHED",
+      "visibility": "VISIBLE",
+      "participation": "VOTING_OPEN",
+      "resultVisibility": "PRE_VOTE_HIDDEN",
+      "feedEligibility": "ELIGIBLE",
+      "publishedAt": "2026-08-20T11:19:00.000Z",
+      "voteOpenAt": "2026-08-20T11:19:00.000Z",
+      "contentHash": "1cc37f9b19337c3010c68017019dc030c560a144cb6c5f78f8482b5025af9441"
+    },
+    {
+      "id": "05ed42ff-e88f-537e-82b0-43bf0daa64e1",
+      "version": 1,
+      "question": "스토리 중심 게임 첫 플레이, 더 좋은 방식은?",
+      "context": "스포일러를 피하고 싶은 정도는 두 선택에서 같다고 가정해 주세요.",
+      "choices": [
+        {
+          "id": "4d5ff200-6060-5e75-8c40-a200f0fbf7ce",
+          "code": "A",
+          "label": "공략 없이 직접 부딪힌다"
+        },
+        {
+          "id": "32629bb0-2787-5324-8715-bf10b83c69c8",
+          "code": "B",
+          "label": "공략을 참고하며 진행한다"
+        }
+      ],
+      "primaryCategoryCode": "CULTURE_ENT",
+      "experienceModeCode": "CULTURE_PULSE",
+      "taxonomyVersion": "taxonomy_v2.0",
+      "riskLevel": "LOW",
+      "isPolitical": false,
+      "lifecycle": "PUBLISHED",
+      "visibility": "VISIBLE",
+      "participation": "VOTING_OPEN",
+      "resultVisibility": "PRE_VOTE_HIDDEN",
+      "feedEligibility": "ELIGIBLE",
+      "publishedAt": "2026-08-20T11:18:00.000Z",
+      "voteOpenAt": "2026-08-20T11:18:00.000Z",
+      "contentHash": "46cff4cf534794d0e8ec318566db3f3c84b4b5482be13d3b094c19fdab8b743f"
+    },
+    {
+      "id": "ce976502-9409-56a2-b975-94c913a20fcf",
+      "version": 1,
+      "question": "새 스마트폰을 고를 때 하나만 우선한다면?",
+      "context": "가격과 나머지 성능은 비슷하다고 가정해 주세요.",
+      "choices": [
+        {
+          "id": "770db42d-4d4c-56b7-8bc9-d667585ab0a9",
+          "code": "A",
+          "label": "배터리 사용시간"
+        },
+        {
+          "id": "6b9db661-a4e2-51b0-a81d-bbdbb35d803e",
+          "code": "B",
+          "label": "카메라 품질"
+        }
+      ],
+      "primaryCategoryCode": "TECH",
+      "experienceModeCode": "PLAYFUL_QUICK",
+      "taxonomyVersion": "taxonomy_v2.0",
+      "riskLevel": "LOW",
+      "isPolitical": false,
+      "lifecycle": "PUBLISHED",
+      "visibility": "VISIBLE",
+      "participation": "VOTING_OPEN",
+      "resultVisibility": "PRE_VOTE_HIDDEN",
+      "feedEligibility": "ELIGIBLE",
+      "publishedAt": "2026-08-20T11:17:00.000Z",
+      "voteOpenAt": "2026-08-20T11:17:00.000Z",
+      "contentHash": "625813625cd5ebbfa4edeb3a1832491c2ebd195e8551a07167c36ec7e68f5d63"
+    },
+    {
+      "id": "c63532bd-1c4f-5682-af0f-d1714be24d13",
+      "version": 1,
+      "question": "운동할 시간이 30분뿐이라면?",
+      "context": "특별한 부상이나 운동 제한이 없는 날을 가정해 주세요.",
+      "choices": [
+        {
+          "id": "50f300c1-0337-5861-9cd1-4c722e9c1963",
+          "code": "A",
+          "label": "근력 운동"
+        },
+        {
+          "id": "8041fc39-8dd7-5dc1-9223-310502ed8bf6",
+          "code": "B",
+          "label": "유산소 운동"
+        }
+      ],
+      "primaryCategoryCode": "SPORTS",
+      "experienceModeCode": "PLAYFUL_QUICK",
+      "taxonomyVersion": "taxonomy_v2.0",
+      "riskLevel": "LOW",
+      "isPolitical": false,
+      "lifecycle": "PUBLISHED",
+      "visibility": "VISIBLE",
+      "participation": "VOTING_OPEN",
+      "resultVisibility": "PRE_VOTE_HIDDEN",
+      "feedEligibility": "ELIGIBLE",
+      "publishedAt": "2026-08-20T11:16:00.000Z",
+      "voteOpenAt": "2026-08-20T11:16:00.000Z",
+      "contentHash": "c9f03f2badea23f6a45fa699ac7779eb5ed0c63f3cb9a49a1792e3436f83d971"
+    },
+    {
+      "id": "b426e1c7-9932-54c8-b614-f9dfadc9f640",
+      "version": 1,
+      "question": "좋아하는 팀 경기 생방송을 놓쳤다면?",
+      "context": "경기 전체를 다시 볼 시간은 있다고 가정해 주세요.",
+      "choices": [
+        {
+          "id": "be14edd3-95f1-5ce0-b861-1297c2ab6884",
+          "code": "A",
+          "label": "결과부터 보고 하이라이트"
+        },
+        {
+          "id": "c81fbadd-985f-5f7e-bbc3-7517d080ae2f",
+          "code": "B",
+          "label": "결과를 피하고 풀경기 다시보기"
+        }
+      ],
+      "primaryCategoryCode": "SPORTS",
+      "experienceModeCode": "PLAYFUL_QUICK",
+      "taxonomyVersion": "taxonomy_v2.0",
+      "riskLevel": "LOW",
+      "isPolitical": false,
+      "lifecycle": "PUBLISHED",
+      "visibility": "VISIBLE",
+      "participation": "VOTING_OPEN",
+      "resultVisibility": "PRE_VOTE_HIDDEN",
+      "feedEligibility": "ELIGIBLE",
+      "publishedAt": "2026-08-20T11:15:00.000Z",
+      "voteOpenAt": "2026-08-20T11:15:00.000Z",
+      "contentHash": "06da922d18b2d0a9bfbe41826106be71ab63edebd726189a5b39b476a4f66bd2"
+    }
+  ]
+}
