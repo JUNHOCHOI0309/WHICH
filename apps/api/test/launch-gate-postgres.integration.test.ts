@@ -1,4 +1,5 @@
 import { Pool } from "pg";
+import { readFile } from "node:fs/promises";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { outboxEvents } from "../src/database/schema/index.js";
@@ -6,6 +7,10 @@ import { createPostgresLaunchGateStore } from "../src/modules/launch-gate/postgr
 import { createTestDatabase } from "./helpers/test-database.js";
 
 type TestDatabase = Awaited<ReturnType<typeof createTestDatabase>>;
+
+type MigrationJournal = {
+  entries: unknown[];
+};
 
 const databases: TestDatabase[] = [];
 const pools: Pool[] = [];
@@ -36,8 +41,11 @@ describe("PostgreSQL launch gate store", () => {
     const store = createPostgresLaunchGateStore(pool);
     const baseline = await store.captureRollbackBaseline();
     const sameFacts = await store.readProtectedFacts(baseline.capturedAt);
+    const migrationJournal = JSON.parse(
+      await readFile(new URL("../migrations/meta/_journal.json", import.meta.url), "utf8"),
+    ) as MigrationJournal;
 
-    expect(baseline.appliedMigrationTimestamps).toHaveLength(8);
+    expect(baseline.appliedMigrationTimestamps).toHaveLength(migrationJournal.entries.length);
     expect(baseline.outbox).toMatchObject({ total: 1, pending: 1, failed: 0 });
     expect(baseline.protectedFacts).toEqual(sameFacts);
 

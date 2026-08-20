@@ -36,8 +36,12 @@ and API deploy and restart together.
 3. In Render, create or resync a Blueprint from the repository's root
    `render.yaml` and select the same project/environment as `which-db`.
 4. Confirm that the estimate contains only one Starter service named `which-web`.
-5. Supply the existing Google and X OAuth client IDs and secrets when Render
-   prompts for them. These values are not committed.
+5. Supply the Google, X, and Naver OAuth/OIDC client IDs and secrets when Render
+   prompts for them. These values are not committed. Naver can remain unset
+   until its developer-app review is ready because it is not yet a required
+   Launch Gate check. Keep `FEATURE_NAVER_LOGIN_ENABLED=false` until the
+   credentials, production callback, and Naver review are all complete; then
+   switch it to `true` and redeploy to expose the login choice.
 6. Deploy the Blueprint. The service runs database migrations before accepting a
    new release.
 
@@ -59,9 +63,12 @@ After `which-web` is healthy at its `onrender.com` address:
    `https://whichone.site/api/auth/google/callback`.
 5. Set the X OAuth 2.0 callback URI to
    `https://whichone.site/api/auth/x/callback`.
+6. Set the Naver OIDC callback URI to
+   `https://whichone.site/api/auth/naver/callback` and the Naver service URL to
+   `https://whichone.site`.
 
 `whichone.site` is the canonical origin. Do not add a second origin to
-`AUTH_BASE_URL` or `WEB_ORIGIN` without updating both OAuth providers and testing
+`AUTH_BASE_URL` or `WEB_ORIGIN` without updating every OAuth/OIDC provider and testing
 the session cookies.
 
 ## First-release verification
@@ -70,6 +77,8 @@ the session cookies.
    `pnpm --filter @which/api launch:public-smoke https://whichone.site`.
 2. Publish at least one production Issue and set `LAUNCH_GATE_ISSUE_ID` to a
    stable LOW-risk Issue Version used for reconciliation Dry Run.
+   Use the reviewed procedure in `docs/operations/issue-pack-publication.md`;
+   do not run the development Seed or direct SQL against production.
 3. From a Render Shell, run
    `pnpm --filter @which/api launch:gate artifacts/public-mvp-gate.json`.
    `RENDER_GIT_COMMIT` supplies the expected Release ID automatically, and the

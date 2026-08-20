@@ -62,6 +62,7 @@ pnpm infra:down   # 컨테이너 정지 (데이터 볼륨 유지)
 pnpm --filter @which/api db:generate
 pnpm --filter @which/api db:migrate
 pnpm --filter @which/api db:seed       # 멱등 Development Issue·Comment 생성
+pnpm --filter @which/api issues:validate content/issue-packs/which-19-initial-low-v1.json
 pnpm --filter @which/api outbox:worker # 독립 Outbox Publisher 실행
 pnpm --filter @which/api outbox:publish-once
 pnpm --filter @which/api launch:gate # 읽기 전용 Public MVP GO/NO-GO 판정
@@ -88,7 +89,7 @@ Comment를 중복 생성하거나 기존 Version을 덮어쓰지 않습니다.
 - 안정 Cursor를 사용하는 Guest Issue Feed API
 - HttpOnly Guest 식별자를 사용하는 Web BFF
 - Provider Subject 기반 Member Identity와 HttpOnly Member Session
-- Google OIDC·X OAuth 2.0 PKCE Web BFF와 Guest → Member Vote 연결
+- Google·Naver OIDC와 X OAuth 2.0 PKCE Web BFF, Guest → Member Vote 연결
 - 모바일 Guest 투표 화면과 투표 후 결과 공개
 - 이미 참여한 질문을 제외한 Result → Next Issue 이동
 - Issue Version과 작성 당시 A/B 선택을 보존하는 Comment Schema
@@ -104,4 +105,7 @@ Reply, 개인화 Feed Ranking, 강화된 Integrity Challenge와 추천 모델은
 Outbox Worker 운영 방법은
 [`docs/operations/outbox-publisher.md`](docs/operations/outbox-publisher.md), 출시 판정과 복구 훈련은
 [`docs/operations/public-mvp-gate-and-rollback.md`](docs/operations/public-mvp-gate-and-rollback.md)를
-확인하세요.
+확인하세요. 운영 Issue Pack 게시 절차는
+[`docs/operations/issue-pack-publication.md`](docs/operations/issue-pack-publication.md), 네이버 로그인과
+유입 경계는 [`docs/product/naver-acquisition-and-login.md`](docs/product/naver-acquisition-and-login.md)에
+기록되어 있습니다.

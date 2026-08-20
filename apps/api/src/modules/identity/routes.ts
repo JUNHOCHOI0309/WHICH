@@ -67,7 +67,7 @@ export async function registerMemberIdentityRoutes(
     identityApp.post<{
       Headers: { "x-internal-auth-secret"?: string };
       Body: {
-        provider: "GOOGLE" | "X" | "DEVELOPMENT";
+        provider: "GOOGLE" | "X" | "NAVER" | "DEVELOPMENT";
         providerSubject: string;
         displayName: string;
         anonymousSubjectId?: string;
@@ -85,6 +85,7 @@ export async function registerMemberIdentityRoutes(
             provider: Type.Union([
               Type.Literal("GOOGLE"),
               Type.Literal("X"),
+              Type.Literal("NAVER"),
               Type.Literal("DEVELOPMENT"),
             ]),
             providerSubject: Type.String({ minLength: 1, maxLength: 255 }),

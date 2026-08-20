@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsup src/server.ts src/outbox-worker.ts src/launch-gate.ts --format esm --platform node --target node22 --clean --sourcemap",
+    "build": "tsup src/server.ts src/outbox-worker.ts src/launch-gate.ts src/issue-publisher.ts --format esm --platform node --target node22 --clean --sourcemap",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:seed": "tsx src/database/seed.ts",
@@ -15,6 +15,9 @@
     "launch:public-smoke": "tsx src/launch-gate.ts public",
     "launch:rollback-snapshot": "tsx src/launch-gate.ts snapshot",
     "launch:rollback-verify": "tsx src/launch-gate.ts verify",
+    "issues:validate": "tsx src/issue-publisher.ts validate",
+    "issues:dry-run": "tsx src/issue-publisher.ts dry-run",
+    "issues:publish": "tsx src/issue-publisher.ts publish",
     "outbox:dead-letters": "tsx src/outbox-worker.ts dead-letters",
     "outbox:publish-once": "tsx src/outbox-worker.ts once",
     "outbox:requeue": "tsx src/outbox-worker.ts requeue",

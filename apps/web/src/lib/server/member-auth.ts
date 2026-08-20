@@ -3,7 +3,7 @@ import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypt
 export const AUTH_FLOW_COOKIE = "which_auth_flow";
 export const AUTH_FLOW_COOKIE_PATH = "/api/auth";
 
-export type AuthProvider = "GOOGLE" | "X";
+export type AuthProvider = "GOOGLE" | "X" | "NAVER";
 
 export type AuthFlow = {
   provider: AuthProvider;
@@ -65,9 +65,9 @@ export function decodeAuthFlow(value: string | undefined) {
   try {
     const flow = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as AuthFlow;
     if (
-      !["GOOGLE", "X"].includes(flow.provider) ||
+      !["GOOGLE", "X", "NAVER"].includes(flow.provider) ||
       typeof flow.state !== "string" ||
-      (flow.provider === "GOOGLE" && typeof flow.nonce !== "string") ||
+      (["GOOGLE", "NAVER"].includes(flow.provider) && typeof flow.nonce !== "string") ||
       (flow.nonce !== undefined && typeof flow.nonce !== "string") ||
       typeof flow.codeVerifier !== "string" ||
       typeof flow.returnTo !== "string" ||
@@ -117,6 +117,16 @@ export function xOAuthCredentials() {
   const clientId = process.env.X_OAUTH_CLIENT_ID;
   const clientSecret = process.env.X_OAUTH_CLIENT_SECRET;
   return clientId && clientSecret ? { clientId, clientSecret } : null;
+}
+
+export function naverOidcCredentials() {
+  const clientId = process.env.NAVER_OIDC_CLIENT_ID;
+  const clientSecret = process.env.NAVER_OIDC_CLIENT_SECRET;
+  return clientId && clientSecret ? { clientId, clientSecret } : null;
+}
+
+export function naverLoginEnabled() {
+  return process.env.FEATURE_NAVER_LOGIN_ENABLED === "true";
 }
 
 export function internalAuthSecret() {

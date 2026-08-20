@@ -316,7 +316,7 @@ describe("IssueExperience", () => {
       }),
     );
 
-    render(<IssueExperience issueId={ISSUE_ID} />);
+    render(<IssueExperience issueId={ISSUE_ID} naverLoginEnabled />);
     const editor = await screen.findByRole("textbox", { name: "내 선택 이유" });
     fireEvent.change(editor, { target: { value: "로그인 뒤에도 남을 초안" } });
     fireEvent.click(await screen.findByRole("button", { name: "로그인하고 게시" }));
@@ -332,7 +332,57 @@ describe("IssueExperience", () => {
       "href",
       `/api/auth/x/start?returnTo=${encodeURIComponent(`/issues/${ISSUE_ID}#comment-compose`)}`,
     );
+    expect(screen.getByRole("link", { name: "네이버로 로그인" })).toHaveAttribute(
+      "href",
+      `/api/auth/naver/start?returnTo=${encodeURIComponent(`/issues/${ISSUE_ID}#comment-compose`)}`,
+    );
     expect(navigation.push).not.toHaveBeenCalled();
+  });
+
+  it("does not expose an unreviewed Naver login choice by default", async () => {
+    const savedResult: VoteResponse = {
+      outcome: "ACCEPTED",
+      voteAttemptId: "attempt-naver-disabled",
+      voteId: "vote-naver-disabled",
+      issueId: ISSUE_ID,
+      issueVersion: 1,
+      choice: "A",
+      result: {
+        resultVersion: 1,
+        acceptedA: 1,
+        acceptedB: 0,
+        displayedTotal: 1,
+        integrityState: "NORMAL",
+      },
+    };
+    sessionStorage.setItem(`which:vote-result:${ISSUE_ID}`, JSON.stringify(savedResult));
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = String(input);
+        if (url === "/api/guest-subjects") return jsonResponse({ status: "ready" });
+        if (url.endsWith(`/api/issues/${ISSUE_ID}`)) return jsonResponse(issue);
+        if (url === "/api/member-session") {
+          return jsonResponse({ code: "SESSION_INVALID", message: "login" }, 401);
+        }
+        if (url.startsWith(`/api/issues/${ISSUE_ID}/comments?`)) {
+          return jsonResponse({ items: [], nextCursor: null });
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      }),
+    );
+
+    render(<IssueExperience issueId={ISSUE_ID} />);
+
+    expect(await screen.findByRole("link", { name: "Google로 이어서 로그인" })).toBeVisible();
+    expect(screen.queryByRole("link", { name: /네이버로 이어서 로그인/ })).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("textbox", { name: "내 선택 이유" }), {
+      target: { value: "숨김 확인" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "로그인하고 게시" }));
+    expect(screen.queryByRole("link", { name: "네이버로 로그인" })).not.toBeInTheDocument();
   });
 
   it("publishes a Member draft with an idempotency key and prepends the Comment", async () => {

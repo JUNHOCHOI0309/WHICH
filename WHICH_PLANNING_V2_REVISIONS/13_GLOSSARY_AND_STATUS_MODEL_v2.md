@@ -181,6 +181,8 @@
 | Session | 세션 | 연속 사용자 활동을 분석·UX 복원 단위로 묶는 기간. | 로그인 Session과 항상 동일 |
 | Authentication | 인증 | 계정 접근 권한 확인. | Authorization |
 | Authorization | 인가 | 특정 기능·객체에 대한 권한 판정. | 로그인 성공 |
+| Identity Provider | 신원 제공자 | Google·X·Naver처럼 Member가 계정을 통제함을 인증하고 Provider Subject를 제공하는 외부 서비스. | Entry Source, 유입 채널 |
+| Provider Subject | 제공자 주체 식별자 | Provider 내부에서 계정을 안정적으로 구분하는 식별자. `(provider, provider_subject)`로 Member 연결의 유일성을 보장한다. | 이메일 주소, Entry Source |
 | Eligibility | 참여 적격성 | 사용자·Issue·Risk·정책에 따라 현재 Action을 허용할 수 있는지. | 추천 적합성만 |
 | Risk-based Challenge | 위험 기반 추가 확인 | 위험 신호가 있는 요청에만 CAPTCHA·재인증 등을 적용. | 모든 Guest 일괄 CAPTCHA |
 | Device Risk Token | 기기 위험 토큰 | First-party·단기 범위의 자동화·재사용 신호. | 장기 광고 Fingerprint |
@@ -314,6 +316,9 @@
 | Qualified Votes per Session | 세션당 정상 투표 | Qualified Vote 수를 Qualified Session으로 나눈 공동 North Star. | Vote Request/Session |
 | Next Issue Rate | 다음 이슈 전환율 | Result 이후 Next Opportunity 중 실제 Next 이동 비율. | Feed Depth |
 | Entry Source | 진입 출처 | External SNS, Search, Share, Home 등 세션 시작 Context. | Candidate Source |
+| Source Platform | 유입 플랫폼 | NAVER 등 외부 유입이 발생한 상위 플랫폼. 로그인 Provider와 독립적으로 기록한다. | Identity Provider |
+| Source Channel | 유입 채널 | CHOICE, CAFE, CLIP_BLOG, BLOG_SEARCH, HOMEFEED_DA처럼 플랫폼 안의 실제 노출·이동 경로. | OAuth Scope |
+| UTM Attribution | UTM 유입 귀속 | 허용된 `utm_source`, `utm_medium`, `utm_campaign`, `utm_content`로 세션 유입을 분류하는 규칙. | 사용자 신원, Vote Fact |
 | Metric Registry | 지표 등록부 | 분자·분모·제외·Owner·SQL·Version을 관리하는 논리 객체. | Dashboard 이름 |
 | Guardrail | 안전 지표 | Primary 개선과 함께 악화를 금지하는 Guest·Safety·Integrity·Privacy 지표. | Secondary KPI |
 | Experiment Assignment | 실험 할당 | Subject·Issue 등 Randomization Unit을 Variant에 안정적으로 배정. | 실제 Exposure |

@@ -714,15 +714,16 @@ Guest가 쿠키를 삭제하거나 기기를 바꾸면 투표 기록 복구를 �
 
 ## 8.1 기본 가입 방식
 
-MVP 후보:
+MVP Provider 상태:
 
 ```text
-Google OAuth / OIDC
-Naver Login
-Apple Sign in
+Google OIDC — 운영
+X OAuth 2.0 + PKCE — 운영
+Naver OIDC + PKCE — 코드 제공, Client 등록·검수 후 노출
+Apple Sign in — Post-MVP 후보
 ```
 
-정확한 Provider 범위는 인증 문서에서 확정한다.
+Provider는 로그인 수단일 뿐 유입 출처를 뜻하지 않는다. 예를 들어 네이버로 로그인한 사용자를 자동으로 네이버 채널 유입으로 분류하지 않고, 유입은 별도 `entry_source`와 UTM으로 판정한다.
 
 ## 8.2 Social Login 원칙
 
@@ -3379,6 +3380,8 @@ candidate_source
 ```
 
 실제 Impression이 없어도 외부 딥링크 투표는 가능하므로 `entry_source`를 별도 기록한다.
+
+`identity_provider`와 `entry_source`는 서로 독립된 축이다. OAuth/OIDC Provider는 Member 인증의 Source of Truth이고, 네이버 CHOICE·카페·클립·블로그·홈피드 광고 같은 유입 채널은 세션 Attribution의 Source of Truth다. 로그인 토큰을 채널 게시 자동화에 재사용하지 않는다.
 
 ## 39.4 Data Quality
 
