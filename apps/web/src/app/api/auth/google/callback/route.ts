@@ -38,6 +38,7 @@ export async function GET(request: Request) {
   const requestUrl = new URL(request.url);
 
   if (!flow || flow.provider !== "GOOGLE" || !flow.nonce) {
+    console.warn(JSON.stringify({ event: "google_auth_failed", stage: "flow_cookie_invalid" }));
     return NextResponse.redirect(new URL("/?auth=error", baseUrl));
   }
 
@@ -51,6 +52,7 @@ export async function GET(request: Request) {
     return response;
   }
 
+  let stage = "provider_discovery";
   try {
     const credentials = googleOidcCredentials();
     if (!credentials) throw new Error("Google OIDC is not configured.");
@@ -59,16 +61,21 @@ export async function GET(request: Request) {
       credentials.clientId,
       credentials.clientSecret,
     );
+    stage = "token_exchange";
     const tokens = await oidc.authorizationCodeGrant(config, requestUrl, {
       pkceCodeVerifier: flow.codeVerifier,
       expectedState: flow.state,
       expectedNonce: flow.nonce,
       idTokenExpected: true,
     });
+    stage = "claims_validation";
     const claims = tokens.claims();
     if (!claims?.sub) throw new Error("Google OIDC did not return a subject claim.");
 
-    const anonymousSubjectId = validGuestSubject(cookieStore.get(GUEST_SUBJECT_COOKIE)?.value);
+    const anonymousSubjectId =
+      validGuestSubject(flow.anonymousSubjectId) ??
+      validGuestSubject(cookieStore.get(GUEST_SUBJECT_COOKIE)?.value);
+    stage = "member_session";
     const session = await createProviderMemberSession({
       provider: "GOOGLE",
       providerSubject: claims.sub,
@@ -83,6 +90,7 @@ export async function GET(request: Request) {
     clearFlowCookie(response);
     return response;
   } catch {
+    console.warn(JSON.stringify({ event: "google_auth_failed", stage }));
     const response = NextResponse.redirect(
       new URL(withAuthOutcome(flow.returnTo, "error"), baseUrl),
     );

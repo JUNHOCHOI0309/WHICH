@@ -1,15 +1,16 @@
-import * as oidc from "openid-client";
+import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
 import {
-  AUTH_FLOW_COOKIE,
-  AUTH_FLOW_COOKIE_PATH,
   authBaseUrl,
-  encodeAuthFlow,
+  encodeGoogleBrowserHandoff,
   googleOidcCredentials,
+  isEmbeddedUserAgent,
   sanitizeReturnTo,
   withAuthOutcome,
 } from "@/lib/server/member-auth";
+import { googleExternalBrowserPage, startGoogleAuthorization } from "@/lib/server/google-oauth";
+import { GUEST_SUBJECT_COOKIE, validGuestSubject } from "@/lib/server/which-api";
 
 export const runtime = "nodejs";
 
@@ -23,46 +24,26 @@ export async function GET(request: Request) {
     return NextResponse.redirect(new URL(withAuthOutcome(returnTo, "unavailable"), baseUrl));
   }
 
-  try {
-    const config = await oidc.discovery(
-      new URL("https://accounts.google.com"),
-      credentials.clientId,
-      credentials.clientSecret,
-    );
-    const codeVerifier = oidc.randomPKCECodeVerifier();
-    const codeChallenge = await oidc.calculatePKCECodeChallenge(codeVerifier);
-    const state = oidc.randomState();
-    const nonce = oidc.randomNonce();
-    const redirectUri = new URL("/api/auth/google/callback", baseUrl).toString();
-    const authorizationUrl = oidc.buildAuthorizationUrl(config, {
-      redirect_uri: redirectUri,
-      scope: "openid profile",
-      response_type: "code",
-      code_challenge: codeChallenge,
-      code_challenge_method: "S256",
-      state,
-      nonce,
-    });
+  const cookieStore = await cookies();
+  const anonymousSubjectId = validGuestSubject(cookieStore.get(GUEST_SUBJECT_COOKIE)?.value);
 
-    const response = NextResponse.redirect(authorizationUrl);
-    response.cookies.set({
-      name: AUTH_FLOW_COOKIE,
-      value: encodeAuthFlow({
-        provider: "GOOGLE",
-        state,
-        nonce,
-        codeVerifier,
+  if (isEmbeddedUserAgent(request.headers.get("user-agent"))) {
+    try {
+      const ticket = encodeGoogleBrowserHandoff({
         returnTo,
+        anonymousSubjectId: anonymousSubjectId ?? undefined,
         createdAt: Date.now(),
-      }),
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      path: AUTH_FLOW_COOKIE_PATH,
-      maxAge: 10 * 60,
-    });
-    return response;
-  } catch {
-    return NextResponse.redirect(new URL(withAuthOutcome(returnTo, "error"), baseUrl));
+      });
+      return googleExternalBrowserPage(baseUrl, ticket);
+    } catch {
+      console.warn(JSON.stringify({ event: "google_auth_failed", stage: "handoff_create" }));
+      return NextResponse.redirect(new URL(withAuthOutcome(returnTo, "error"), baseUrl));
+    }
   }
+
+  return startGoogleAuthorization({
+    baseUrl,
+    returnTo,
+    anonymousSubjectId: anonymousSubjectId ?? undefined,
+  });
 }
