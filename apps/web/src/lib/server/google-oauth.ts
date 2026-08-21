@@ -11,6 +11,30 @@ import {
   withAuthOutcome,
 } from "./member-auth";
 
+export function googleCallbackUrl(baseUrl: URL) {
+  return new URL("/api/auth/google/callback", baseUrl).toString();
+}
+
+export function googleTokenRequestBody(body: unknown, redirectUri: string) {
+  if (body instanceof URLSearchParams && body.get("grant_type") === "authorization_code") {
+    const pinnedBody = new URLSearchParams(body);
+    pinnedBody.set("redirect_uri", redirectUri);
+    return pinnedBody;
+  }
+
+  return body;
+}
+
+export function pinGoogleTokenRedirectUri(config: oidc.Configuration, redirectUri: string) {
+  config[oidc.customFetch] = (url, options) => {
+    const requestOptions = options as RequestInit;
+    return fetch(url, {
+      ...requestOptions,
+      body: googleTokenRequestBody(options.body, redirectUri) as BodyInit,
+    });
+  };
+}
+
 export async function startGoogleAuthorization(input: {
   baseUrl: URL;
   returnTo: string;
@@ -34,7 +58,7 @@ export async function startGoogleAuthorization(input: {
     const codeChallenge = await oidc.calculatePKCECodeChallenge(codeVerifier);
     const state = input.flow?.state ?? oidc.randomState();
     const nonce = input.flow?.nonce ?? oidc.randomNonce();
-    const redirectUri = new URL("/api/auth/google/callback", input.baseUrl).toString();
+    const redirectUri = googleCallbackUrl(input.baseUrl);
     const authorizationUrl = oidc.buildAuthorizationUrl(config, {
       redirect_uri: redirectUri,
       scope: "openid profile",

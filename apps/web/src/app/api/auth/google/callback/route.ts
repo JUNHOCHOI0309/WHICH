@@ -12,6 +12,7 @@ import {
   withAuthOutcome,
 } from "@/lib/server/member-auth";
 import { createProviderMemberSession } from "@/lib/server/member-session-bridge";
+import { googleCallbackUrl, pinGoogleTokenRedirectUri } from "@/lib/server/google-oauth";
 import {
   GUEST_SUBJECT_COOKIE,
   setMemberSessionCookie,
@@ -95,6 +96,7 @@ export async function GET(request: Request) {
       credentials.clientId,
       credentials.clientSecret,
     );
+    pinGoogleTokenRedirectUri(config, googleCallbackUrl(baseUrl));
     stage = "token_exchange";
     const tokens = await oidc.authorizationCodeGrant(config, requestUrl, {
       pkceCodeVerifier: flow.codeVerifier,

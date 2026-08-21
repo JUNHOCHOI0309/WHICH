@@ -9,6 +9,7 @@ const oidcMocks = vi.hoisted(() => ({
   randomNonce: vi.fn(),
   buildAuthorizationUrl: vi.fn(),
   authorizationCodeGrant: vi.fn(),
+  customFetch: Symbol("openid-client.customFetch"),
 }));
 
 vi.mock("next/headers", () => ({
@@ -26,6 +27,7 @@ import {
   encodeAuthFlow,
   encodeGoogleBrowserHandoff,
 } from "@/lib/server/member-auth";
+import { googleTokenRequestBody } from "@/lib/server/google-oauth";
 import { GUEST_SUBJECT_COOKIE } from "@/lib/server/which-api";
 
 const guestSubjectId = "591f2e90-996a-50c5-af46-967dd0793000";
@@ -38,7 +40,9 @@ describe("Google OIDC routes", () => {
     vi.stubEnv("GOOGLE_OIDC_CLIENT_ID", "google-client");
     vi.stubEnv("GOOGLE_OIDC_CLIENT_SECRET", "google-secret");
     headerMocks.get.mockReset();
-    Object.values(oidcMocks).forEach((mock) => mock.mockReset());
+    Object.values(oidcMocks).forEach((mock) => {
+      if (typeof mock === "function" && "mockReset" in mock) mock.mockReset();
+    });
     oidcMocks.discovery.mockResolvedValue({ issuer: "https://accounts.google.com" });
     oidcMocks.randomPKCECodeVerifier.mockReturnValue("google-verifier");
     oidcMocks.calculatePKCECodeChallenge.mockResolvedValue("google-challenge");
@@ -84,6 +88,24 @@ describe("Google OIDC routes", () => {
     });
     expect(response.headers.get("set-cookie")).toContain(`${AUTH_FLOW_COOKIE}=`);
     expect(response.headers.get("set-cookie")).toContain("HttpOnly");
+  });
+
+  it("pins the public callback URI during Google token exchange", async () => {
+    const body = new URLSearchParams({
+      grant_type: "authorization_code",
+      code: "authorization-code",
+      redirect_uri: "http://127.0.0.1:10000/api/auth/google/callback",
+    });
+    const forwarded = googleTokenRequestBody(
+      body,
+      "https://whichone.site/api/auth/google/callback",
+    );
+
+    expect(forwarded).toBeInstanceOf(URLSearchParams);
+    expect((forwarded as URLSearchParams).get("redirect_uri")).toBe(
+      "https://whichone.site/api/auth/google/callback",
+    );
+    expect(body.get("redirect_uri")).toBe("http://127.0.0.1:10000/api/auth/google/callback");
   });
 
   it("keeps KakaoTalk away from Google and offers an opaque Chrome handoff", async () => {
