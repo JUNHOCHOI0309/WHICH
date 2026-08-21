@@ -19,7 +19,14 @@ import {
   voterSubjects,
   votes,
 } from "../../database/schema/index.js";
-import type { MemberIdentityService, MemberView } from "./contracts.js";
+import type {
+  MemberIdentityService,
+  MemberPrivateProfile,
+  MemberView,
+  MemberVoteHistoryItem,
+  MemberVoteLookupResult,
+} from "./contracts.js";
+import { encodeMemberVoteHistoryCursor } from "./cursor.js";
 import { MemberIdentityError } from "./errors.js";
 
 const LINK_POLICY_VERSION = "guest-member-link-v1";
@@ -36,6 +43,158 @@ function toMemberView(member: typeof members.$inferSelect): MemberView {
 function normalizedDisplayName(value: string) {
   const normalized = value.trim().replace(/\s+/g, " ");
   return normalized.length > 0 ? normalized.slice(0, 80) : "WHICH 회원";
+}
+
+async function activeMemberSession(database: Database["db"], token: string) {
+  const now = new Date();
+  const [session] = await database
+    .select({ session: memberSessions, member: members })
+    .from(memberSessions)
+    .innerJoin(members, eq(memberSessions.memberId, members.id))
+    .where(
+      and(
+        eq(memberSessions.tokenHash, hashToken(token)),
+        isNull(memberSessions.revokedAt),
+        gt(memberSessions.expiresAt, now),
+        eq(members.status, "ACTIVE"),
+      ),
+    )
+    .limit(1);
+  if (!session) return null;
+
+  await database
+    .update(memberSessions)
+    .set({ lastSeenAt: now })
+    .where(eq(memberSessions.id, session.session.id));
+
+  return session;
+}
+
+type PrivateVoteRow = {
+  vote_id: string;
+  vote_attempt_id: string;
+  issue_id: string;
+  issue_version: number;
+  question: string;
+  category_code: string;
+  choice: "A" | "B";
+  choice_label: string;
+  accepted_at: Date | string;
+  result_version: number;
+  accepted_a: number;
+  accepted_b: number;
+  displayed_total: number;
+  result_integrity_state: MemberVoteHistoryItem["result"]["integrityState"];
+};
+
+function toPrivateVoteItem(row: PrivateVoteRow): MemberVoteHistoryItem {
+  const acceptedAt = row.accepted_at instanceof Date ? row.accepted_at : new Date(row.accepted_at);
+  return {
+    voteId: row.vote_id,
+    issueId: row.issue_id,
+    issueVersion: row.issue_version,
+    question: row.question,
+    categoryCode: row.category_code,
+    choice: row.choice,
+    choiceLabel: row.choice_label,
+    acceptedAt: acceptedAt.toISOString(),
+    result: {
+      resultVersion: row.result_version,
+      acceptedA: row.accepted_a,
+      acceptedB: row.accepted_b,
+      displayedTotal: row.displayed_total,
+      integrityState: row.result_integrity_state,
+    },
+  };
+}
+
+async function privateVoteRows(
+  database: Database["db"],
+  memberId: string,
+  options: { limit: number; cursor?: { acceptedAt: Date; voteId: string }; issueId?: string },
+) {
+  const cursorAcceptedAt = options.cursor?.acceptedAt ?? null;
+  const cursorVoteId = options.cursor?.voteId ?? null;
+  const issueId = options.issueId ?? null;
+
+  const result = await database.execute<PrivateVoteRow>(sql`
+    with eligible_subjects as (
+      select subject_id, 1 as subject_priority
+      from voter_subjects
+      where user_id = ${memberId}
+        and subject_kind in ('MEMBER', 'VERIFIED_MEMBER')
+      union all
+      select guest_subject_id, 0 as subject_priority
+      from guest_member_links
+      where member_id = ${memberId}
+    ), canonical_votes as (
+      select distinct on (v.issue_id)
+        v.vote_id,
+        v.vote_attempt_id,
+        v.issue_id,
+        v.issue_version,
+        v.choice_id,
+        v.accepted_at
+      from votes v
+      inner join eligible_subjects es on es.subject_id = v.subject_id
+      where v.integrity_state = 'ACCEPTED'
+        and (${issueId}::uuid is null or v.issue_id = ${issueId}::uuid)
+      order by
+        v.issue_id,
+        es.subject_priority desc,
+        v.accepted_at desc,
+        v.vote_id desc
+    )
+    select
+      cv.vote_id,
+      cv.vote_attempt_id,
+      cv.issue_id,
+      cv.issue_version,
+      iv.question,
+      iv.primary_category_code as category_code,
+      ic.choice_code as choice,
+      ic.label as choice_label,
+      cv.accepted_at,
+      va.result_version,
+      va.accepted_a_count as accepted_a,
+      va.accepted_b_count as accepted_b,
+      va.displayed_vote_count as displayed_total,
+      va.integrity_state as result_integrity_state
+    from canonical_votes cv
+    inner join issue_versions iv
+      on iv.issue_id = cv.issue_id and iv.issue_version = cv.issue_version
+    inner join issue_choices ic on ic.choice_id = cv.choice_id
+    inner join vote_aggregates va
+      on va.issue_id = cv.issue_id and va.issue_version = cv.issue_version
+    where (
+      ${cursorAcceptedAt}::timestamptz is null
+      or (cv.accepted_at, cv.vote_id) < (${cursorAcceptedAt}::timestamptz, ${cursorVoteId}::uuid)
+    )
+    order by cv.accepted_at desc, cv.vote_id desc
+    limit ${options.limit}
+  `);
+
+  return result.rows;
+}
+
+async function privateVoteParticipationCount(database: Database["db"], memberId: string) {
+  const result = await database.execute<{ participation_count: number }>(sql`
+    with eligible_subjects as (
+      select subject_id
+      from voter_subjects
+      where user_id = ${memberId}
+        and subject_kind in ('MEMBER', 'VERIFIED_MEMBER')
+      union
+      select guest_subject_id
+      from guest_member_links
+      where member_id = ${memberId}
+    )
+    select count(distinct v.issue_id)::int as participation_count
+    from votes v
+    inner join eligible_subjects es on es.subject_id = v.subject_id
+    where v.integrity_state = 'ACCEPTED'
+  `);
+  return result.rows[0]?.participation_count ?? 0;
 }
 
 export function createMemberIdentityService(
@@ -459,31 +618,70 @@ export function createMemberIdentityService(
     },
 
     async getSession(token) {
-      const now = new Date();
-      const [session] = await database
-        .select({ session: memberSessions, member: members })
-        .from(memberSessions)
-        .innerJoin(members, eq(memberSessions.memberId, members.id))
-        .where(
-          and(
-            eq(memberSessions.tokenHash, hashToken(token)),
-            isNull(memberSessions.revokedAt),
-            gt(memberSessions.expiresAt, now),
-            eq(members.status, "ACTIVE"),
-          ),
-        )
-        .limit(1);
+      const session = await activeMemberSession(database, token);
       if (!session) return null;
-
-      await database
-        .update(memberSessions)
-        .set({ lastSeenAt: now })
-        .where(eq(memberSessions.id, session.session.id));
 
       return {
         expiresAt: session.session.expiresAt.toISOString(),
         member: toMemberView(session.member),
       };
+    },
+
+    async getPrivateProfile(token, query): Promise<MemberPrivateProfile | null> {
+      const session = await activeMemberSession(database, token);
+      if (!session) return null;
+
+      const [participationCount, rows] = await Promise.all([
+        privateVoteParticipationCount(database, session.member.id),
+        privateVoteRows(database, session.member.id, {
+          limit: query.limit + 1,
+          cursor: query.cursor,
+        }),
+      ]);
+      const hasMore = rows.length > query.limit;
+      const visibleRows = hasMore ? rows.slice(0, query.limit) : rows;
+      const lastRow = visibleRows.at(-1);
+
+      return {
+        member: {
+          ...toMemberView(session.member),
+          joinedAt: session.member.createdAt.toISOString(),
+          participationCount,
+        },
+        votes: {
+          items: visibleRows.map(toPrivateVoteItem),
+          nextCursor:
+            hasMore && lastRow
+              ? encodeMemberVoteHistoryCursor({
+                  acceptedAt:
+                    lastRow.accepted_at instanceof Date
+                      ? lastRow.accepted_at
+                      : new Date(lastRow.accepted_at),
+                  voteId: lastRow.vote_id,
+                })
+              : null,
+        },
+      };
+    },
+
+    async findPrivateVote(token, issueId) {
+      const session = await activeMemberSession(database, token);
+      if (!session) return null;
+
+      const [row] = await privateVoteRows(database, session.member.id, { limit: 1, issueId });
+      const vote: MemberVoteLookupResult | null = row
+        ? {
+            outcome: "ACCEPTED",
+            voteAttemptId: row.vote_attempt_id,
+            voteId: row.vote_id,
+            issueId: row.issue_id,
+            issueVersion: row.issue_version,
+            choice: row.choice,
+            result: toPrivateVoteItem(row).result,
+          }
+        : null;
+
+      return { member: toMemberView(session.member), vote };
     },
 
     async revokeSession(token) {

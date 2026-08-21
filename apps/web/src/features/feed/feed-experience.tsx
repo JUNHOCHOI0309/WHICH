@@ -110,7 +110,12 @@ export function FeedExperience() {
         <Link className={styles.brand} href="/" aria-label="WHICH 홈">
           WHICH<span>.</span>
         </Link>
-        <span className={styles.liveBadge}>LIVE QUESTIONS</span>
+        <div className={styles.headerActions}>
+          <Link className={styles.meLink} href="/me">
+            내 기록
+          </Link>
+          <span className={styles.liveBadge}>LIVE QUESTIONS</span>
+        </div>
       </header>
 
       <section className={styles.hero}>

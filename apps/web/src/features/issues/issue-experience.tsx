@@ -1175,7 +1175,12 @@ function ExperienceShell({ children }: { children: ReactNode }) {
         <Link className={styles.brand} href="/" aria-label="WHICH 홈">
           WHICH<span className={styles.brandDot}>.</span>
         </Link>
-        <span className={styles.openBadge}>OPEN QUESTION</span>
+        <div className={styles.headerActions}>
+          <Link className={styles.meLink} href="/me">
+            내 기록
+          </Link>
+          <span className={styles.openBadge}>OPEN QUESTION</span>
+        </div>
       </header>
       <div className={styles.stage}>{children}</div>
       <footer className={styles.footer}>

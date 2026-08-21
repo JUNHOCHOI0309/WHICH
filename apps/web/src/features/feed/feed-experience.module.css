@@ -51,6 +51,24 @@
   padding: 8px 11px;
 }
 
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.meLink {
+  color: var(--paper);
+  font-size: 0.72rem;
+  font-weight: 850;
+  text-decoration: none;
+}
+
+.meLink:focus-visible {
+  outline: 3px solid var(--orange);
+  outline-offset: 4px;
+}
+
 .hero {
   padding-block: clamp(54px, 10vw, 112px) clamp(42px, 8vw, 84px);
 }

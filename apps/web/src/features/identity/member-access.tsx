@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import { loginHref } from "@/lib/auth";
@@ -83,21 +84,26 @@ export function MemberAccess({
         </div>
       ) : null}
       {state === "member" ? (
-        <button
-          className={styles.logout}
-          type="button"
-          onClick={() => {
-            setState("loading");
-            void fetch("/api/member-session", { method: "DELETE" })
-              .then(() => {
-                setSession(null);
-                setState("guest");
-              })
-              .catch(() => setState("error"));
-          }}
-        >
-          로그아웃
-        </button>
+        <div className={styles.memberActions}>
+          <Link className={styles.profileLink} href="/me">
+            내 기록 보기
+          </Link>
+          <button
+            className={styles.logout}
+            type="button"
+            onClick={() => {
+              setState("loading");
+              void fetch("/api/member-session", { method: "DELETE" })
+                .then(() => {
+                  setSession(null);
+                  setState("guest");
+                })
+                .catch(() => setState("error"));
+            }}
+          >
+            로그아웃
+          </button>
+        </div>
       ) : null}
 
       {authOutcome === "cancelled" ? (

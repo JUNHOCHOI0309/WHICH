@@ -34,6 +34,8 @@ const commentReader: CommentService = {
 const memberIdentity: MemberIdentityService = {
   createSession: vi.fn(),
   getSession: vi.fn(),
+  getPrivateProfile: vi.fn(),
+  findPrivateVote: vi.fn(),
   revokeSession: vi.fn(),
 };
 
@@ -174,6 +176,8 @@ describe("OpenAPI contract", () => {
     expect(document.paths).toHaveProperty(["/v1/comments/{commentId}/reactions/helpful", "post"]);
     expect(document.paths).toHaveProperty(["/v1/member-session", "get"]);
     expect(document.paths).toHaveProperty(["/v1/member-session", "delete"]);
+    expect(document.paths).toHaveProperty(["/v1/me", "get"]);
+    expect(document.paths).toHaveProperty(["/v1/me/votes/{issueId}", "get"]);
     expect(document.paths).toHaveProperty(["/v1/interests/cards", "get"]);
     expect(document.paths).toHaveProperty(["/v1/interest-profile", "get"]);
     expect(document.paths).toHaveProperty(["/v1/interest-profile", "put"]);

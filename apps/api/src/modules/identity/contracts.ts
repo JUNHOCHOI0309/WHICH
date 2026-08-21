@@ -25,8 +25,67 @@ export type MemberSessionResult = {
   };
 };
 
+export type MemberVoteHistoryQuery = {
+  limit: number;
+  cursor?: {
+    acceptedAt: Date;
+    voteId: string;
+  };
+};
+
+export type MemberVoteHistoryItem = {
+  voteId: string;
+  issueId: string;
+  issueVersion: number;
+  question: string;
+  categoryCode: string;
+  choice: "A" | "B";
+  choiceLabel: string;
+  acceptedAt: string;
+  result: {
+    resultVersion: number;
+    acceptedA: number;
+    acceptedB: number;
+    displayedTotal: number;
+    integrityState:
+      "NORMAL" | "MONITORING" | "DEGRADED" | "UNDER_REVIEW" | "RESULT_LOCKED" | "CORRECTED";
+  };
+};
+
+export type MemberPrivateProfile = {
+  member: MemberView & {
+    joinedAt: string;
+    participationCount: number;
+  };
+  votes: {
+    items: MemberVoteHistoryItem[];
+    nextCursor: string | null;
+  };
+};
+
+export type MemberVoteLookupResult = {
+  outcome: "ACCEPTED";
+  voteAttemptId: string;
+  voteId: string;
+  issueId: string;
+  issueVersion: number;
+  choice: "A" | "B";
+  result: MemberVoteHistoryItem["result"];
+};
+
 export interface MemberIdentityService {
   createSession(assertion: IdentityAssertion): Promise<MemberSessionResult>;
   getSession(token: string): Promise<{ expiresAt: string; member: MemberView } | null>;
+  getPrivateProfile(
+    token: string,
+    query: MemberVoteHistoryQuery,
+  ): Promise<MemberPrivateProfile | null>;
+  findPrivateVote(
+    token: string,
+    issueId: string,
+  ): Promise<{
+    member: MemberView;
+    vote: MemberVoteLookupResult | null;
+  } | null>;
   revokeSession(token: string): Promise<boolean>;
 }

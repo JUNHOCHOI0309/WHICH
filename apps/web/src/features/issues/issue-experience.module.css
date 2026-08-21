@@ -470,6 +470,24 @@
   padding: 7px 10px;
 }
 
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.meLink {
+  color: var(--surface);
+  font-size: 0.72rem;
+  font-weight: 850;
+  text-decoration: none;
+}
+
+.meLink:focus-visible {
+  outline: 3px solid var(--b);
+  outline-offset: 4px;
+}
+
 .stage {
   width: min(100%, 860px);
   margin-inline: auto;
