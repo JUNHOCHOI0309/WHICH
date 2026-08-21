@@ -105,6 +105,32 @@ export type VoteResponse = {
   result: IssueTally;
 };
 
+export type MemberPrivateVote = {
+  voteId: string;
+  issueId: string;
+  issueVersion: number;
+  question: string;
+  categoryCode: string;
+  choice: "A" | "B";
+  choiceLabel: string;
+  acceptedAt: string;
+  result: IssueTally;
+};
+
+export type MemberPrivateProfile = {
+  member: {
+    id: string;
+    displayName: string;
+    status: "ACTIVE" | "LIMITED" | "SUSPENDED" | "DELETED";
+    joinedAt: string;
+    participationCount: number;
+  };
+  votes: {
+    items: MemberPrivateVote[];
+    nextCursor: string | null;
+  };
+};
+
 export type ShareChannel = "COPY" | "SYSTEM" | "X";
 
 export type PublicShareCard = {

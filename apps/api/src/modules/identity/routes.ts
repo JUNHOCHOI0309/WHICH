@@ -4,6 +4,7 @@ import { Type } from "@sinclair/typebox";
 import type { FastifyInstance } from "fastify";
 
 import type { MemberIdentityService } from "./contracts.js";
+import { decodeMemberVoteHistoryCursor } from "./cursor.js";
 import { MemberIdentityError } from "./errors.js";
 
 const memberSchema = Type.Object({
@@ -21,6 +22,53 @@ const errorSchema = Type.Object({ code: Type.String(), message: Type.String() })
 const sessionViewSchema = Type.Object({
   expiresAt: Type.String({ format: "date-time" }),
   member: memberSchema,
+});
+const resultSchema = Type.Object({
+  resultVersion: Type.Integer({ minimum: 1 }),
+  acceptedA: Type.Integer({ minimum: 0 }),
+  acceptedB: Type.Integer({ minimum: 0 }),
+  displayedTotal: Type.Integer({ minimum: 0 }),
+  integrityState: Type.Union([
+    Type.Literal("NORMAL"),
+    Type.Literal("MONITORING"),
+    Type.Literal("DEGRADED"),
+    Type.Literal("UNDER_REVIEW"),
+    Type.Literal("RESULT_LOCKED"),
+    Type.Literal("CORRECTED"),
+  ]),
+});
+const privateVoteSchema = Type.Object({
+  voteId: Type.String({ format: "uuid" }),
+  issueId: Type.String({ format: "uuid" }),
+  issueVersion: Type.Integer({ minimum: 1 }),
+  question: Type.String(),
+  categoryCode: Type.String(),
+  choice: Type.Union([Type.Literal("A"), Type.Literal("B")]),
+  choiceLabel: Type.String(),
+  acceptedAt: Type.String({ format: "date-time" }),
+  result: resultSchema,
+});
+const privateProfileSchema = Type.Object({
+  member: Type.Intersect([
+    memberSchema,
+    Type.Object({
+      joinedAt: Type.String({ format: "date-time" }),
+      participationCount: Type.Integer({ minimum: 0 }),
+    }),
+  ]),
+  votes: Type.Object({
+    items: Type.Array(privateVoteSchema),
+    nextCursor: Type.Union([Type.String(), Type.Null()]),
+  }),
+});
+const privateVoteLookupSchema = Type.Object({
+  outcome: Type.Literal("ACCEPTED"),
+  voteAttemptId: Type.String({ format: "uuid" }),
+  voteId: Type.String({ format: "uuid" }),
+  issueId: Type.String({ format: "uuid" }),
+  issueVersion: Type.Integer({ minimum: 1 }),
+  choice: Type.Union([Type.Literal("A"), Type.Literal("B")]),
+  result: resultSchema,
 });
 
 function secretMatches(provided: string | undefined, expected: string) {
@@ -147,6 +195,86 @@ export async function registerMemberIdentityRoutes(
           });
         }
         return reply.send(session);
+      },
+    );
+
+    identityApp.get<{
+      Headers: { authorization?: string };
+      Querystring: { limit?: number; cursor?: string };
+    }>(
+      "/v1/me",
+      {
+        schema: {
+          tags: ["identity"],
+          summary: "Read the current Member private profile and vote history",
+          headers: Type.Object(
+            { authorization: Type.Optional(Type.String()) },
+            { additionalProperties: true },
+          ),
+          querystring: Type.Object({
+            limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 50, default: 12 })),
+            cursor: Type.Optional(Type.String({ minLength: 1, maxLength: 1024 })),
+          }),
+          response: { 200: privateProfileSchema, 400: errorSchema, 401: errorSchema },
+        },
+      },
+      async (request, reply) => {
+        const token = bearerToken(request.headers.authorization);
+        const profile = token
+          ? await service.getPrivateProfile(token, {
+              limit: request.query.limit ?? 12,
+              cursor: request.query.cursor
+                ? decodeMemberVoteHistoryCursor(request.query.cursor)
+                : undefined,
+            })
+          : null;
+        if (!profile) {
+          return reply.code(401).send({
+            code: "SESSION_INVALID",
+            message: "The Member session is invalid or expired.",
+          });
+        }
+        return reply.send(profile);
+      },
+    );
+
+    identityApp.get<{
+      Headers: { authorization?: string };
+      Params: { issueId: string };
+    }>(
+      "/v1/me/votes/:issueId",
+      {
+        schema: {
+          tags: ["identity"],
+          summary: "Restore the current Member's accepted vote for an Issue",
+          params: Type.Object({ issueId: Type.String({ format: "uuid" }) }),
+          headers: Type.Object(
+            { authorization: Type.Optional(Type.String()) },
+            { additionalProperties: true },
+          ),
+          response: {
+            200: privateVoteLookupSchema,
+            401: errorSchema,
+            404: errorSchema,
+          },
+        },
+      },
+      async (request, reply) => {
+        const token = bearerToken(request.headers.authorization);
+        const result = token ? await service.findPrivateVote(token, request.params.issueId) : null;
+        if (!result) {
+          return reply.code(401).send({
+            code: "SESSION_INVALID",
+            message: "The Member session is invalid or expired.",
+          });
+        }
+        if (!result.vote) {
+          return reply.code(404).send({
+            code: "VOTE_NOT_FOUND",
+            message: "No accepted vote exists for this Member and Issue.",
+          });
+        }
+        return reply.send(result.vote);
       },
     );
 

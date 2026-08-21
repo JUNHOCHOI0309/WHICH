@@ -26,7 +26,8 @@
 }
 
 .login,
-.logout {
+.logout,
+.profileLink {
   width: 100%;
   min-height: 48px;
   margin-top: 18px;
@@ -41,6 +42,17 @@
   font-weight: 900;
   padding: 11px 15px;
   text-decoration: none;
+}
+
+.memberActions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.profileLink {
+  background: var(--ink);
+  color: var(--surface);
 }
 
 .loginOptions {
@@ -64,7 +76,8 @@
 }
 
 .login:focus-visible,
-.logout:focus-visible {
+.logout:focus-visible,
+.profileLink:focus-visible {
   outline: 3px solid var(--b);
   outline-offset: 3px;
 }
@@ -79,6 +92,10 @@
 
 @media (max-width: 520px) {
   .loginOptions {
+    grid-template-columns: 1fr;
+  }
+
+  .memberActions {
     grid-template-columns: 1fr;
   }
 }

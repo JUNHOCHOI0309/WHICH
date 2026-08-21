@@ -1,4 +1,5 @@
 export type MemberIdentityErrorCode =
+  | "INVALID_CURSOR"
   | "DEVELOPMENT_PROVIDER_DISABLED"
   | "GUEST_SUBJECT_NOT_FOUND"
   | "GUEST_ALREADY_LINKED"
@@ -7,7 +8,7 @@ export type MemberIdentityErrorCode =
 export class MemberIdentityError extends Error {
   constructor(
     public readonly code: MemberIdentityErrorCode,
-    public readonly statusCode: 403 | 404 | 409,
+    public readonly statusCode: 400 | 403 | 404 | 409,
     message: string,
   ) {
     super(message);
