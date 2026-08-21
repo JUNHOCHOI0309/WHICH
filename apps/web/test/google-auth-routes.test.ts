@@ -112,6 +112,9 @@ describe("Google OIDC routes", () => {
     const ticket = encodeGoogleBrowserHandoff({
       returnTo: "/issues/issue-1#member-access",
       anonymousSubjectId: guestSubjectId,
+      state: "handoff-state-value-with-at-least-32-characters",
+      nonce: "handoff-nonce-value-with-at-least-32-characters",
+      codeVerifier: "handoff-code-verifier-with-at-least-forty-three-characters",
       createdAt: Date.now(),
     });
 
@@ -128,10 +131,45 @@ describe("Google OIDC routes", () => {
     expect(response.headers.get("location")).toContain("https://accounts.google.com/");
     expect(decodeAuthFlow(encodedFlow)).toMatchObject({
       provider: "GOOGLE",
-      state: "google-state",
-      nonce: "google-nonce",
-      codeVerifier: "google-verifier",
+      state: "handoff-state-value-with-at-least-32-characters",
+      nonce: "handoff-nonce-value-with-at-least-32-characters",
+      codeVerifier: "handoff-code-verifier-with-at-least-forty-three-characters",
       anonymousSubjectId: guestSubjectId,
+    });
+  });
+
+  it("keeps duplicate external-browser handoffs on the same OAuth flow", async () => {
+    const ticket = encodeGoogleBrowserHandoff({
+      returnTo: "/issues/issue-1#member-access",
+      anonymousSubjectId: guestSubjectId,
+      state: "duplicate-state-value-with-at-least-32-characters",
+      nonce: "duplicate-nonce-value-with-at-least-32-characters",
+      codeVerifier: "duplicate-code-verifier-with-at-least-forty-three-characters",
+      createdAt: Date.now(),
+    });
+    const request = () =>
+      new Request(
+        `https://whichone.site/api/auth/google/handoff?ticket=${encodeURIComponent(ticket)}`,
+        { headers: { "user-agent": "Mozilla/5.0 Chrome/140 Mobile Safari/537.36" } },
+      );
+
+    const first = await handoff(request());
+    const second = await handoff(request());
+    const flowCookie = (response: Response) => {
+      const setCookie = response.headers.get("set-cookie") ?? "";
+      return decodeAuthFlow(new RegExp(`${AUTH_FLOW_COOKIE}=([^;]+)`).exec(setCookie)?.[1]);
+    };
+
+    expect(first.headers.get("location")).toBe(second.headers.get("location"));
+    expect(flowCookie(first)).toMatchObject({
+      state: "duplicate-state-value-with-at-least-32-characters",
+      nonce: "duplicate-nonce-value-with-at-least-32-characters",
+      codeVerifier: "duplicate-code-verifier-with-at-least-forty-three-characters",
+    });
+    expect(flowCookie(second)).toMatchObject({
+      state: "duplicate-state-value-with-at-least-32-characters",
+      nonce: "duplicate-nonce-value-with-at-least-32-characters",
+      codeVerifier: "duplicate-code-verifier-with-at-least-forty-three-characters",
     });
   });
 

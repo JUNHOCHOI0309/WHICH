@@ -3,13 +3,16 @@ import { NextResponse } from "next/server";
 
 import {
   authBaseUrl,
-  encodeGoogleBrowserHandoff,
   googleOidcCredentials,
   isEmbeddedUserAgent,
   sanitizeReturnTo,
   withAuthOutcome,
 } from "@/lib/server/member-auth";
-import { googleExternalBrowserPage, startGoogleAuthorization } from "@/lib/server/google-oauth";
+import {
+  createGoogleBrowserHandoffTicket,
+  googleExternalBrowserPage,
+  startGoogleAuthorization,
+} from "@/lib/server/google-oauth";
 import { GUEST_SUBJECT_COOKIE, validGuestSubject } from "@/lib/server/which-api";
 
 export const runtime = "nodejs";
@@ -29,10 +32,9 @@ export async function GET(request: Request) {
 
   if (isEmbeddedUserAgent(request.headers.get("user-agent"))) {
     try {
-      const ticket = encodeGoogleBrowserHandoff({
+      const ticket = createGoogleBrowserHandoffTicket({
         returnTo,
         anonymousSubjectId: anonymousSubjectId ?? undefined,
-        createdAt: Date.now(),
       });
       return googleExternalBrowserPage(baseUrl, ticket);
     } catch {

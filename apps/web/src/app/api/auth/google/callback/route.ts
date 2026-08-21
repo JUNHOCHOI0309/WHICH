@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import {
   AUTH_FLOW_COOKIE,
   AUTH_FLOW_COOKIE_PATH,
+  authFlowMatches,
   authBaseUrl,
   decodeAuthFlow,
   googleOidcCredentials,
@@ -31,6 +32,30 @@ function clearFlowCookie(response: NextResponse) {
   });
 }
 
+function safeGoogleAuthError(error: unknown) {
+  if (error instanceof oidc.ResponseBodyError) {
+    return {
+      errorKind: "oauth_response",
+      oauthError: error.error,
+      httpStatus: error.status,
+    };
+  }
+  if (error instanceof oidc.AuthorizationResponseError) {
+    return {
+      errorKind: "authorization_response",
+      oauthError: error.error,
+    };
+  }
+  if (error instanceof Error) {
+    const libraryCode = "code" in error && typeof error.code === "string" ? error.code : undefined;
+    return {
+      errorKind: error.name || "Error",
+      ...(libraryCode ? { libraryCode } : {}),
+    };
+  }
+  return { errorKind: "unknown" };
+}
+
 export async function GET(request: Request) {
   const baseUrl = authBaseUrl(request.url);
   const cookieStore = await cookies();
@@ -40,6 +65,15 @@ export async function GET(request: Request) {
   if (!flow || flow.provider !== "GOOGLE" || !flow.nonce) {
     console.warn(JSON.stringify({ event: "google_auth_failed", stage: "flow_cookie_invalid" }));
     return NextResponse.redirect(new URL("/?auth=error", baseUrl));
+  }
+
+  if (!authFlowMatches(flow, "GOOGLE", requestUrl.searchParams.get("state"))) {
+    console.warn(JSON.stringify({ event: "google_auth_failed", stage: "state_validation" }));
+    const response = NextResponse.redirect(
+      new URL(withAuthOutcome(flow.returnTo, "error"), baseUrl),
+    );
+    clearFlowCookie(response);
+    return response;
   }
 
   const failure = requestUrl.searchParams.get("error");
@@ -89,8 +123,10 @@ export async function GET(request: Request) {
     setMemberSessionCookie(response, session.token, session.expiresAt);
     clearFlowCookie(response);
     return response;
-  } catch {
-    console.warn(JSON.stringify({ event: "google_auth_failed", stage }));
+  } catch (error) {
+    console.warn(
+      JSON.stringify({ event: "google_auth_failed", stage, ...safeGoogleAuthError(error) }),
+    );
     const response = NextResponse.redirect(
       new URL(withAuthOutcome(flow.returnTo, "error"), baseUrl),
     );

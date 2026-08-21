@@ -28,5 +28,10 @@ export async function GET(request: Request) {
     baseUrl,
     returnTo: ticket.returnTo,
     anonymousSubjectId: ticket.anonymousSubjectId,
+    flow: {
+      state: ticket.state,
+      nonce: ticket.nonce,
+      codeVerifier: ticket.codeVerifier,
+    },
   });
 }

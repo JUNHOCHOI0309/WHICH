@@ -4,7 +4,9 @@ import { NextResponse } from "next/server";
 import {
   AUTH_FLOW_COOKIE,
   AUTH_FLOW_COOKIE_PATH,
+  type AuthFlow,
   encodeAuthFlow,
+  encodeGoogleBrowserHandoff,
   googleOidcCredentials,
   withAuthOutcome,
 } from "./member-auth";
@@ -13,6 +15,7 @@ export async function startGoogleAuthorization(input: {
   baseUrl: URL;
   returnTo: string;
   anonymousSubjectId?: string;
+  flow?: Pick<AuthFlow, "state" | "nonce" | "codeVerifier">;
 }) {
   const credentials = googleOidcCredentials();
   if (!credentials) {
@@ -27,10 +30,10 @@ export async function startGoogleAuthorization(input: {
       credentials.clientId,
       credentials.clientSecret,
     );
-    const codeVerifier = oidc.randomPKCECodeVerifier();
+    const codeVerifier = input.flow?.codeVerifier ?? oidc.randomPKCECodeVerifier();
     const codeChallenge = await oidc.calculatePKCECodeChallenge(codeVerifier);
-    const state = oidc.randomState();
-    const nonce = oidc.randomNonce();
+    const state = input.flow?.state ?? oidc.randomState();
+    const nonce = input.flow?.nonce ?? oidc.randomNonce();
     const redirectUri = new URL("/api/auth/google/callback", input.baseUrl).toString();
     const authorizationUrl = oidc.buildAuthorizationUrl(config, {
       redirect_uri: redirectUri,
@@ -66,6 +69,19 @@ export async function startGoogleAuthorization(input: {
     console.warn(JSON.stringify({ event: "google_auth_failed", stage: "authorization_start" }));
     return NextResponse.redirect(new URL(withAuthOutcome(input.returnTo, "error"), input.baseUrl));
   }
+}
+
+export function createGoogleBrowserHandoffTicket(input: {
+  returnTo: string;
+  anonymousSubjectId?: string;
+}) {
+  return encodeGoogleBrowserHandoff({
+    ...input,
+    state: oidc.randomState(),
+    nonce: oidc.randomNonce(),
+    codeVerifier: oidc.randomPKCECodeVerifier(),
+    createdAt: Date.now(),
+  });
 }
 
 function escapeHtml(value: string) {

@@ -22,11 +22,14 @@ export type AuthFlow = {
   createdAt: number;
 };
 
-type GoogleBrowserHandoff = {
+export type GoogleBrowserHandoff = {
   version: 1;
   provider: "GOOGLE";
   returnTo: string;
   anonymousSubjectId?: string;
+  state: string;
+  nonce: string;
+  codeVerifier: string;
   createdAt: number;
 };
 
@@ -115,6 +118,12 @@ export function decodeGoogleBrowserHandoff(
       handoff.provider !== "GOOGLE" ||
       sanitizeReturnTo(handoff.returnTo) !== handoff.returnTo ||
       (handoff.anonymousSubjectId !== undefined && !uuidPattern.test(handoff.anonymousSubjectId)) ||
+      typeof handoff.state !== "string" ||
+      handoff.state.length < 32 ||
+      typeof handoff.nonce !== "string" ||
+      handoff.nonce.length < 32 ||
+      typeof handoff.codeVerifier !== "string" ||
+      handoff.codeVerifier.length < 43 ||
       !Number.isInteger(handoff.createdAt) ||
       handoff.createdAt > now + 30_000 ||
       now - handoff.createdAt > GOOGLE_HANDOFF_MAX_AGE_MILLISECONDS

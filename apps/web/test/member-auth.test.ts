@@ -61,6 +61,9 @@ describe("Member OAuth return flow", () => {
     const encoded = encodeGoogleBrowserHandoff({
       returnTo: "/issues/issue-1#member-access",
       anonymousSubjectId,
+      state: "s".repeat(32),
+      nonce: "n".repeat(32),
+      codeVerifier: "v".repeat(43),
       createdAt,
     });
 
