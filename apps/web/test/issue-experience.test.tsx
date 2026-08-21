@@ -221,6 +221,55 @@ describe("IssueExperience", () => {
     );
   });
 
+  it("restores the server Vote after login instead of showing the voting screen again", async () => {
+    const restoredResult: VoteResponse = {
+      outcome: "ACCEPTED",
+      voteAttemptId: "attempt-restored",
+      voteId: "vote-restored",
+      issueId: ISSUE_ID,
+      issueVersion: 1,
+      choice: "B",
+      result: {
+        resultVersion: 4,
+        acceptedA: 4,
+        acceptedB: 6,
+        displayedTotal: 10,
+        integrityState: "NORMAL",
+      },
+    };
+    const votePosts: RequestInit[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = String(input);
+        if (url === "/api/guest-subjects") return jsonResponse({ status: "ready" });
+        if (url.endsWith(`/api/issues/${ISSUE_ID}`)) return jsonResponse(issue);
+        if (url.endsWith(`/api/issues/${ISSUE_ID}/vote-status`)) {
+          return jsonResponse(restoredResult);
+        }
+        if (url.endsWith(`/api/issues/${ISSUE_ID}/votes`) && init?.method === "POST") {
+          votePosts.push(init);
+          return jsonResponse(restoredResult);
+        }
+        if (url === "/api/member-session") return jsonResponse({ code: "SESSION_INVALID" }, 401);
+        if (url.startsWith(`/api/issues/${ISSUE_ID}/comments?`)) {
+          return jsonResponse({ items: [], nextCursor: null });
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      }),
+    );
+
+    render(<IssueExperience issueId={ISSUE_ID} />);
+
+    expect(await screen.findByText("당신의 선택이 반영됐어요.")).toBeInTheDocument();
+    expect(screen.getByText("60%")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "A, 아침형 인간" })).not.toBeInTheDocument();
+    expect(votePosts).toHaveLength(0);
+    expect(JSON.parse(sessionStorage.getItem(`which:vote-result:${ISSUE_ID}`) ?? "null")).toEqual(
+      restoredResult,
+    );
+  });
+
   it("explains that the first choice remains for a duplicate vote", async () => {
     const duplicateResult: VoteResponse = {
       outcome: "REJECTED_DUPLICATE",

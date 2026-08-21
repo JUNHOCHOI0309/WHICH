@@ -112,6 +112,11 @@ type VoteRoute = {
   Body: { issueVersion: number; choiceId: string };
 };
 
+type VoteLookupRoute = {
+  Params: { issueId: string };
+  Headers: { "x-anonymous-subject-id": string };
+};
+
 type ReconciliationRoute = {
   Params: { issueId: string; issueVersion: number };
   Headers: { "x-internal-auth-secret"?: string };
@@ -215,6 +220,40 @@ export async function registerVotingRoutes(
         });
 
         return reply.code(result.httpStatus).send(result.body);
+      },
+    );
+
+    votingApp.get<VoteLookupRoute>(
+      "/v1/issues/:issueId/votes",
+      {
+        schema: {
+          tags: ["voting"],
+          summary: "Restore the accepted vote for a Guest subject",
+          params: Type.Object({ issueId: uuidSchema }),
+          headers: Type.Object(
+            { "x-anonymous-subject-id": uuidSchema },
+            { additionalProperties: true },
+          ),
+          response: {
+            200: voteResponseSchema,
+            400: errorResponseSchema,
+            404: errorResponseSchema,
+            500: errorResponseSchema,
+          },
+        },
+      },
+      async (request, reply) => {
+        const vote = await service.findGuestVote({
+          anonymousSubjectId: request.headers["x-anonymous-subject-id"],
+          issueId: request.params.issueId,
+        });
+        if (!vote) {
+          return reply.code(404).send({
+            code: "VOTE_NOT_FOUND",
+            message: "No accepted vote exists for this subject and Issue.",
+          });
+        }
+        return reply.code(200).send(vote);
       },
     );
 

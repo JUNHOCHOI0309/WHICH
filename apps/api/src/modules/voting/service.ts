@@ -121,6 +121,68 @@ export function createGuestVoteService(database: Database["db"]): GuestVoteServi
       return { anonymousSubjectId };
     },
 
+    async findGuestVote(query) {
+      const [guestSubject] = await database
+        .select({ id: voterSubjects.id })
+        .from(voterSubjects)
+        .where(
+          and(
+            eq(voterSubjects.kind, "GUEST"),
+            eq(voterSubjects.anonymousSubjectId, query.anonymousSubjectId),
+          ),
+        )
+        .limit(1);
+      if (!guestSubject) return null;
+
+      const [storedVote] = await database
+        .select({
+          voteId: votes.id,
+          voteAttemptId: votes.voteAttemptId,
+          issueVersion: votes.issueVersion,
+          choice: issueChoices.code,
+          resultVersion: voteAggregates.resultVersion,
+          acceptedA: voteAggregates.acceptedACount,
+          acceptedB: voteAggregates.acceptedBCount,
+          displayedTotal: voteAggregates.displayedVoteCount,
+          resultIntegrityState: voteAggregates.integrityState,
+        })
+        .from(votes)
+        .innerJoin(issueChoices, eq(issueChoices.id, votes.choiceId))
+        .innerJoin(
+          voteAggregates,
+          and(
+            eq(voteAggregates.issueId, votes.issueId),
+            eq(voteAggregates.issueVersion, votes.issueVersion),
+          ),
+        )
+        .where(
+          and(
+            eq(votes.issueId, query.issueId),
+            eq(votes.subjectId, guestSubject.id),
+            eq(votes.integrityState, "ACCEPTED"),
+          ),
+        )
+        .orderBy(desc(votes.acceptedAt), desc(votes.id))
+        .limit(1);
+      if (!storedVote) return null;
+
+      return {
+        outcome: "ACCEPTED",
+        voteAttemptId: storedVote.voteAttemptId,
+        voteId: storedVote.voteId,
+        issueId: query.issueId,
+        issueVersion: storedVote.issueVersion,
+        choice: storedVote.choice,
+        result: {
+          resultVersion: storedVote.resultVersion,
+          acceptedA: storedVote.acceptedA,
+          acceptedB: storedVote.acceptedB,
+          displayedTotal: storedVote.displayedTotal,
+          integrityState: storedVote.resultIntegrityState,
+        },
+      };
+    },
+
     async reconcileIssueVersion(command) {
       return database.transaction(async (transaction) => {
         await transaction.execute(

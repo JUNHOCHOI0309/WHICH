@@ -178,6 +178,18 @@ export async function submitGuestVote(command: {
   throwApiError(response, body as ApiErrorBody);
 }
 
+export async function loadExistingVote(issueId: string, signal?: AbortSignal) {
+  const response = await fetch(`/api/issues/${encodeURIComponent(issueId)}/vote-status`, {
+    headers: { accept: "application/json" },
+    cache: "no-store",
+    signal,
+  });
+  if (response.status === 404) return null;
+  const body = await responseBody<VoteResponse>(response);
+  if (!response.ok) throwApiError(response, body as ApiErrorBody);
+  return body as VoteResponse;
+}
+
 export async function loadIssueComments(options: {
   issueId: string;
   side: CommentSide;

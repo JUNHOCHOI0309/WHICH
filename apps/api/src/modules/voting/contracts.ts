@@ -35,6 +35,11 @@ export type GuestVoteSubmissionResult = {
   body: GuestVoteResponse;
 };
 
+export type GuestVoteLookup = {
+  anonymousSubjectId: string;
+  issueId: string;
+};
+
 export type VoteReconciliationMode = "DRY_RUN" | "REPAIR";
 
 export type VoteLedgerCounts = {
@@ -90,6 +95,7 @@ export type VoteReconciliationCommand = {
 
 export interface GuestVoteService {
   createGuestSubject(): Promise<GuestSubject>;
+  findGuestVote(query: GuestVoteLookup): Promise<GuestVoteResponse | null>;
   submitGuestVote(command: GuestVoteSubmission): Promise<GuestVoteSubmissionResult>;
   reconcileIssueVersion(command: VoteReconciliationCommand): Promise<VoteReconciliationResult>;
 }

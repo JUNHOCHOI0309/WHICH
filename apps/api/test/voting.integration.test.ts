@@ -87,6 +87,14 @@ function submitVote(command: {
   });
 }
 
+function findVote(command: { anonymousSubjectId: string; issueId: string }) {
+  return app.inject({
+    method: "GET",
+    url: `/v1/issues/${command.issueId}/votes`,
+    headers: { "x-anonymous-subject-id": command.anonymousSubjectId },
+  });
+}
+
 function reconcileVotes(command: {
   issueId: string;
   mode?: "DRY_RUN" | "REPAIR";
@@ -125,6 +133,33 @@ afterAll(async () => {
 });
 
 describe("guest vote transaction", () => {
+  it("restores the accepted Vote without creating another attempt", async () => {
+    const issue = await createIssue();
+    const anonymousSubjectId = await createGuestSubject();
+    const accepted = await submitVote({
+      idempotencyKey: randomUUID(),
+      anonymousSubjectId,
+      issueId: issue.issueId,
+      choiceId: issue.choiceAId,
+    });
+    expect(accepted.statusCode).toBe(201);
+
+    const restored = await findVote({ anonymousSubjectId, issueId: issue.issueId });
+
+    expect(restored.statusCode).toBe(200);
+    expect(restored.json()).toEqual(accepted.json());
+    const attempts = await database.db
+      .select()
+      .from(voteAttempts)
+      .where(eq(voteAttempts.issueId, issue.issueId));
+    const storedVotes = await database.db
+      .select()
+      .from(votes)
+      .where(eq(votes.issueId, issue.issueId));
+    expect(attempts).toHaveLength(1);
+    expect(storedVotes).toHaveLength(1);
+  });
+
   it("accepts a Vote without linking a missing Analytics Session", async () => {
     const issue = await createIssue();
     const anonymousSubjectId = await createGuestSubject();

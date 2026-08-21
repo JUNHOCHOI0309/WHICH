@@ -23,6 +23,7 @@ import {
   ensureGuestSubject,
   loadIssueComments,
   loadIssueFeed,
+  loadExistingVote,
   loadPublicIssue,
   reportComment,
   recordAnalyticsEvent,
@@ -138,9 +139,13 @@ export function IssueExperience({
     try {
       const [loadedIssue] = await Promise.all([loadPublicIssue(issueId), ensureGuestSubject()]);
       setIssue(loadedIssue);
-      const savedResult = readSavedResult(issueId);
-      if (savedResult) setResult(savedResult);
-      setScreen(savedResult ? "result" : "ready");
+      const restoredResult =
+        readSavedResult(issueId) ?? (await loadExistingVote(issueId).catch(() => null));
+      if (restoredResult) {
+        setResult(restoredResult);
+        saveResult(restoredResult);
+      }
+      setScreen(restoredResult ? "result" : "ready");
     } catch (error) {
       setLoadError(error);
       setScreen("load-error");
@@ -152,12 +157,18 @@ export function IssueExperience({
     const controller = new AbortController();
 
     void Promise.all([loadPublicIssue(issueId, controller.signal), ensureGuestSubject()])
-      .then(([loadedIssue]) => {
+      .then(async ([loadedIssue]) => {
         if (!active) return;
         setIssue(loadedIssue);
-        const savedResult = readSavedResult(issueId);
-        if (savedResult) setResult(savedResult);
-        setScreen(savedResult ? "result" : "ready");
+        const restoredResult =
+          readSavedResult(issueId) ??
+          (await loadExistingVote(issueId, controller.signal).catch(() => null));
+        if (!active) return;
+        if (restoredResult) {
+          setResult(restoredResult);
+          saveResult(restoredResult);
+        }
+        setScreen(restoredResult ? "result" : "ready");
       })
       .catch((error: unknown) => {
         if (!active || (error instanceof DOMException && error.name === "AbortError")) return;
