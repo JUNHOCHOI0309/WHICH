@@ -7,6 +7,7 @@ import { buildApp } from "../src/app.js";
 import { getConfig } from "../src/config.js";
 import type { Database } from "../src/database/client.js";
 import {
+  analyticsSessions,
   issueChoices,
   issues,
   issueVersions,
@@ -70,6 +71,7 @@ function submitVote(command: {
   anonymousSubjectId: string;
   issueId: string;
   choiceId: string;
+  analyticsSessionId?: string;
 }) {
   return app.inject({
     method: "POST",
@@ -77,6 +79,9 @@ function submitVote(command: {
     headers: {
       "idempotency-key": command.idempotencyKey,
       "x-anonymous-subject-id": command.anonymousSubjectId,
+      ...(command.analyticsSessionId
+        ? { "x-analytics-session-id": command.analyticsSessionId }
+        : {}),
     },
     payload: { issueVersion: 1, choiceId: command.choiceId },
   });
@@ -120,6 +125,66 @@ afterAll(async () => {
 });
 
 describe("guest vote transaction", () => {
+  it("accepts a Vote without linking a missing Analytics Session", async () => {
+    const issue = await createIssue();
+    const anonymousSubjectId = await createGuestSubject();
+    const missingSessionId = randomUUID();
+
+    const response = await submitVote({
+      idempotencyKey: randomUUID(),
+      anonymousSubjectId,
+      issueId: issue.issueId,
+      choiceId: issue.choiceAId,
+      analyticsSessionId: missingSessionId,
+    });
+
+    expect(response.statusCode).toBe(201);
+    const [attempt] = await database.db
+      .select({ analyticsSessionId: voteAttempts.analyticsSessionId })
+      .from(voteAttempts)
+      .where(eq(voteAttempts.issueId, issue.issueId));
+    const [storedVote] = await database.db
+      .select({ analyticsSessionId: votes.analyticsSessionId })
+      .from(votes)
+      .where(eq(votes.issueId, issue.issueId));
+    const [event] = await database.db
+      .select({ payload: outboxEvents.payload })
+      .from(outboxEvents)
+      .where(eq(outboxEvents.aggregateId, `${issue.issueId}:1`));
+
+    expect(attempt?.analyticsSessionId).toBeNull();
+    expect(storedVote?.analyticsSessionId).toBeNull();
+    expect(event?.payload.data).toMatchObject({ analytics_session_id: null });
+  });
+
+  it("keeps the Vote link when the Analytics Session already exists", async () => {
+    const issue = await createIssue();
+    const anonymousSubjectId = await createGuestSubject();
+    const analyticsSessionId = randomUUID();
+    const now = new Date();
+    await database.db.insert(analyticsSessions).values({
+      id: analyticsSessionId,
+      startedAt: now,
+      lastActivityAt: now,
+      expiresAt: new Date(now.getTime() + 30 * 60 * 1_000),
+    });
+
+    const response = await submitVote({
+      idempotencyKey: randomUUID(),
+      anonymousSubjectId,
+      issueId: issue.issueId,
+      choiceId: issue.choiceBId,
+      analyticsSessionId,
+    });
+
+    expect(response.statusCode).toBe(201);
+    const [storedVote] = await database.db
+      .select({ analyticsSessionId: votes.analyticsSessionId })
+      .from(votes)
+      .where(eq(votes.issueId, issue.issueId));
+    expect(storedVote?.analyticsSessionId).toBe(analyticsSessionId);
+  });
+
   it("returns the exact stored response for concurrent retries with one Idempotency-Key", async () => {
     const issue = await createIssue();
     const anonymousSubjectId = await createGuestSubject();

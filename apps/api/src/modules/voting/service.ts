@@ -546,6 +546,16 @@ export function createGuestVoteService(database: Database["db"]): GuestVoteServi
           );
         }
 
+        const [analyticsSession] = command.analyticsSessionId
+          ? await transaction
+              .select({ id: analyticsSessions.id })
+              .from(analyticsSessions)
+              .where(eq(analyticsSessions.id, command.analyticsSessionId))
+              .limit(1)
+              .for("key share")
+          : [];
+        const analyticsSessionId = analyticsSession?.id ?? null;
+
         await transaction.insert(voteAttempts).values({
           id: command.idempotencyKey,
           idempotencyKey: command.idempotencyKey,
@@ -553,26 +563,10 @@ export function createGuestVoteService(database: Database["db"]): GuestVoteServi
           issueVersion: command.issueVersion,
           choiceId: command.choiceId,
           subjectId: subject.id,
-          analyticsSessionId: command.analyticsSessionId,
+          analyticsSessionId,
           requestState: "PROCESSING",
           requestFingerprint,
         });
-
-        if (command.analyticsSessionId) {
-          const expiresAt = new Date(now.getTime() + 30 * 60 * 1_000);
-          await transaction
-            .insert(analyticsSessions)
-            .values({
-              id: command.analyticsSessionId,
-              startedAt: now,
-              lastActivityAt: now,
-              expiresAt,
-            })
-            .onConflictDoUpdate({
-              target: analyticsSessions.id,
-              set: { lastActivityAt: now, expiresAt, updatedAt: now },
-            });
-        }
 
         const [existingAcceptedVote] = await transaction
           .select({
@@ -603,7 +597,7 @@ export function createGuestVoteService(database: Database["db"]): GuestVoteServi
             issueVersion: command.issueVersion,
             choiceId: command.choiceId,
             subjectId: subject.id,
-            analyticsSessionId: command.analyticsSessionId,
+            analyticsSessionId,
             integrityState: outcome,
             reasonCode,
             userTier: "GUEST",
@@ -712,7 +706,7 @@ export function createGuestVoteService(database: Database["db"]): GuestVoteServi
               choice: effectiveChoice,
               integrity_state: outcome,
               result_version: aggregate.resultVersion,
-              analytics_session_id: command.analyticsSessionId ?? null,
+              analytics_session_id: analyticsSessionId,
             },
           },
         });

@@ -19,6 +19,17 @@ IP, User-Agent, OAuth Subject, 회원 ID, 선택지 값은 Analytics Session/Eve
 - Vote 성공: Client 이벤트가 아니라 `votes.integrity_state = 'ACCEPTED'`인 서버 원장만 기준으로
   집계합니다. 테스트 Subject는 제외합니다.
 
+## Core Vote 실패 격리
+
+Analytics는 계측용 부가 기능이며 Guest Vote의 선행 조건이 아닙니다. Web BFF는 내부 인증에
+`AUTH_INTERNAL_SECRET`을 우선 사용하고, 단일 Render Service에서는 `INTERNAL_AUTH_SECRET`으로
+Fallback합니다.
+
+Vote Service는 요청으로 받은 Analytics Session UUID를 그대로 FK에 쓰지 않습니다. 같은 Transaction에서
+실제로 존재하는 Session만 확인하고 잠근 뒤 연결합니다. Session이 없거나 앞선 Analytics Event가 실패한
+경우 Vote Attempt, Vote, Outbox의 Analytics Session 값은 `null`로 기록하며 투표·집계·결과 Snapshot은
+정상 처리합니다. 이 경계 때문에 계측 장애가 Core Vote 500 오류로 전파되지 않습니다.
+
 ## 네이버 유입 경계
 
 첫 진입 때 검증하여 서명한 `source`, `medium`, `campaign`, `content`만 Session에 복사합니다.
