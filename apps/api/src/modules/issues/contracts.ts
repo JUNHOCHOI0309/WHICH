@@ -24,6 +24,11 @@ export type PublicIssue = {
   categoryCode: string;
   experienceModeCode: string;
   choices: PublicIssueChoice[];
+  author: {
+    displayName: string;
+    handle: string;
+    avatar: { kind: "INITIALS"; initials: string };
+  } | null;
   result: {
     visibility:
       | "PRE_VOTE_HIDDEN"
@@ -35,7 +40,10 @@ export type PublicIssue = {
   };
 };
 
-export type PublicFeedIssue = Omit<PublicIssue, "context" | "experienceModeCode" | "result"> & {
+export type PublicFeedIssue = Omit<
+  PublicIssue,
+  "context" | "experienceModeCode" | "result" | "author"
+> & {
   recommendation: FeedItemRecommendation & { requestId: string };
 };
 

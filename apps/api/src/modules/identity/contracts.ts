@@ -57,10 +57,48 @@ export type MemberPrivateProfile = {
     joinedAt: string;
     participationCount: number;
   };
+  publicProfile: MemberProfileSettings | null;
   votes: {
     items: MemberVoteHistoryItem[];
     nextCursor: string | null;
   };
+};
+
+export type MemberProfileSettings = {
+  handle: string;
+  bio: string | null;
+  visibility: "PRIVATE" | "PUBLIC";
+  publicUrl: string | null;
+};
+
+export type MemberProfileUpdate = {
+  handle: string;
+  bio: string | null;
+  visibility: "PRIVATE" | "PUBLIC";
+};
+
+export type PublicCreatorIssue = {
+  id: string;
+  version: number;
+  question: string;
+  categoryCode: string;
+  publishedAt: string;
+  acceptedVoteCount: number;
+};
+
+export type PublicCreatorProfile = {
+  creator: {
+    displayName: string;
+    handle: string;
+    bio: string | null;
+    joinedMonth: string;
+    avatar: { kind: "INITIALS"; initials: string };
+  };
+  stats: {
+    publishedIssueCount: number;
+    acceptedVoteCount: number;
+  };
+  issues: PublicCreatorIssue[];
 };
 
 export type MemberVoteLookupResult = {
@@ -80,6 +118,8 @@ export interface MemberIdentityService {
     token: string,
     query: MemberVoteHistoryQuery,
   ): Promise<MemberPrivateProfile | null>;
+  updateProfile(token: string, command: MemberProfileUpdate): Promise<MemberProfileSettings | null>;
+  getPublicCreatorProfile(handle: string): Promise<PublicCreatorProfile | null>;
   findPrivateVote(
     token: string,
     issueId: string,

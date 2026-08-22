@@ -48,6 +48,12 @@ const privateVoteSchema = Type.Object({
   acceptedAt: Type.String({ format: "date-time" }),
   result: resultSchema,
 });
+const memberProfileSettingsSchema = Type.Object({
+  handle: Type.String({ minLength: 3, maxLength: 30 }),
+  bio: Type.Union([Type.String({ maxLength: 160 }), Type.Null()]),
+  visibility: Type.Union([Type.Literal("PRIVATE"), Type.Literal("PUBLIC")]),
+  publicUrl: Type.Union([Type.String(), Type.Null()]),
+});
 const privateProfileSchema = Type.Object({
   member: Type.Intersect([
     memberSchema,
@@ -56,10 +62,34 @@ const privateProfileSchema = Type.Object({
       participationCount: Type.Integer({ minimum: 0 }),
     }),
   ]),
+  publicProfile: Type.Union([memberProfileSettingsSchema, Type.Null()]),
   votes: Type.Object({
     items: Type.Array(privateVoteSchema),
     nextCursor: Type.Union([Type.String(), Type.Null()]),
   }),
+});
+const publicCreatorProfileSchema = Type.Object({
+  creator: Type.Object({
+    displayName: Type.String(),
+    handle: Type.String(),
+    bio: Type.Union([Type.String(), Type.Null()]),
+    joinedMonth: Type.String({ pattern: "^[0-9]{4}-[0-9]{2}$" }),
+    avatar: Type.Object({ kind: Type.Literal("INITIALS"), initials: Type.String() }),
+  }),
+  stats: Type.Object({
+    publishedIssueCount: Type.Integer({ minimum: 0 }),
+    acceptedVoteCount: Type.Integer({ minimum: 0 }),
+  }),
+  issues: Type.Array(
+    Type.Object({
+      id: Type.String({ format: "uuid" }),
+      version: Type.Integer({ minimum: 1 }),
+      question: Type.String(),
+      categoryCode: Type.String(),
+      publishedAt: Type.String({ format: "date-time" }),
+      acceptedVoteCount: Type.Integer({ minimum: 0 }),
+    }),
+  ),
 });
 const privateVoteLookupSchema = Type.Object({
   outcome: Type.Literal("ACCEPTED"),
@@ -232,6 +262,69 @@ export async function registerMemberIdentityRoutes(
           return reply.code(401).send({
             code: "SESSION_INVALID",
             message: "The Member session is invalid or expired.",
+          });
+        }
+        return reply.send(profile);
+      },
+    );
+
+    identityApp.patch<{
+      Headers: { authorization?: string };
+      Body: { handle: string; bio: string | null; visibility: "PRIVATE" | "PUBLIC" };
+    }>(
+      "/v1/me/profile",
+      {
+        schema: {
+          tags: ["identity"],
+          summary: "Create or update the current Member public profile settings",
+          headers: Type.Object(
+            { authorization: Type.Optional(Type.String()) },
+            { additionalProperties: true },
+          ),
+          body: Type.Object({
+            handle: Type.String({ minLength: 3, maxLength: 30, pattern: "^[A-Za-z0-9_]+$" }),
+            bio: Type.Union([Type.String({ maxLength: 160 }), Type.Null()]),
+            visibility: Type.Union([Type.Literal("PRIVATE"), Type.Literal("PUBLIC")]),
+          }),
+          response: {
+            200: memberProfileSettingsSchema,
+            400: errorSchema,
+            401: errorSchema,
+            409: errorSchema,
+          },
+        },
+      },
+      async (request, reply) => {
+        const token = bearerToken(request.headers.authorization);
+        const profile = token ? await service.updateProfile(token, request.body) : null;
+        if (!profile) {
+          return reply.code(401).send({
+            code: "SESSION_INVALID",
+            message: "The Member session is invalid or expired.",
+          });
+        }
+        return reply.send(profile);
+      },
+    );
+
+    identityApp.get<{ Params: { handle: string } }>(
+      "/v1/profiles/:handle",
+      {
+        schema: {
+          tags: ["identity"],
+          summary: "Read a public Creator profile by handle",
+          params: Type.Object({
+            handle: Type.String({ minLength: 3, maxLength: 30, pattern: "^[A-Za-z0-9_]+$" }),
+          }),
+          response: { 200: publicCreatorProfileSchema, 404: errorSchema },
+        },
+      },
+      async (request, reply) => {
+        const profile = await service.getPublicCreatorProfile(request.params.handle);
+        if (!profile) {
+          return reply.code(404).send({
+            code: "PROFILE_NOT_FOUND",
+            message: "The requested public profile does not exist.",
           });
         }
         return reply.send(profile);

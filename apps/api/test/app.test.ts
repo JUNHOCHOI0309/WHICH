@@ -35,6 +35,8 @@ const memberIdentity: MemberIdentityService = {
   createSession: vi.fn(),
   getSession: vi.fn(),
   getPrivateProfile: vi.fn(),
+  updateProfile: vi.fn(),
+  getPublicCreatorProfile: vi.fn(),
   findPrivateVote: vi.fn(),
   revokeSession: vi.fn(),
 };

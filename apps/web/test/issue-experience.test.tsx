@@ -24,6 +24,7 @@ const issue: PublicIssue = {
     { id: "choice-a", code: "A", label: "아침형 인간" },
     { id: "choice-b", code: "B", label: "저녁형 인간" },
   ],
+  author: null,
   experienceModeCode: "CORE_VOTE",
   result: { visibility: "PRE_VOTE_HIDDEN", tally: null },
 };
@@ -42,6 +43,35 @@ describe("IssueExperience", () => {
     navigation.push.mockReset();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+  });
+
+  it("links an authored Issue to its public Creator profile", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = String(input);
+        if (url === "/api/guest-subjects") return jsonResponse({ status: "ready" });
+        if (url.endsWith(`/api/issues/${ISSUE_ID}`)) {
+          return jsonResponse({
+            ...issue,
+            author: {
+              displayName: "테크 질문가",
+              handle: "tech_creator",
+              avatar: { kind: "INITIALS", initials: "테질" },
+            },
+          });
+        }
+        if (url.includes("vote-status")) return jsonResponse({ code: "VOTE_NOT_FOUND" }, 404);
+        return jsonResponse({});
+      }),
+    );
+
+    render(<IssueExperience issueId={ISSUE_ID} />);
+
+    expect(await screen.findByRole("link", { name: /테크 질문가/ })).toHaveAttribute(
+      "href",
+      "/user/tech_creator",
+    );
   });
 
   it("records an impression only after 50% visibility lasts for 500ms", async () => {
