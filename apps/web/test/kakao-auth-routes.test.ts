@@ -112,7 +112,8 @@ describe("Kakao OIDC routes", () => {
     expect(oidcMocks.discovery).not.toHaveBeenCalled();
   });
 
-  it("creates a WHICH session from the verified Kakao Subject", async () => {
+  it("creates a WHICH session from a proxied callback using the canonical public URL", async () => {
+    vi.stubEnv("AUTH_BASE_URL", "https://whichone.site");
     headerMocks.get.mockImplementation((name: string) =>
       name === AUTH_FLOW_COOKIE
         ? { value: flowCookie() }
@@ -137,19 +138,21 @@ describe("Kakao OIDC routes", () => {
     });
     vi.stubGlobal("fetch", request);
 
-    const callbackUrl =
-      "http://localhost:3000/api/auth/kakao/callback?code=authorization-code&state=kakao-state";
-    const response = await callback(new Request(callbackUrl));
+    const proxiedCallbackUrl =
+      "http://which-web:10000/api/auth/kakao/callback?code=authorization-code&state=kakao-state";
+    const canonicalCallbackUrl =
+      "https://whichone.site/api/auth/kakao/callback?code=authorization-code&state=kakao-state";
+    const response = await callback(new Request(proxiedCallbackUrl));
 
     expect(response.headers.get("location")).toBe(
-      "http://localhost:3000/issues/issue-1?auth=success#member-access",
+      "https://whichone.site/issues/issue-1?auth=success#member-access",
     );
     expect(response.headers.get("set-cookie")).toContain("which_member_session=which-session");
     expect(response.headers.get("set-cookie")).toContain("which_guest_subject=");
     expect(response.headers.get("set-cookie")).toContain("Max-Age=0");
     expect(oidcMocks.authorizationCodeGrant).toHaveBeenCalledWith(
       { issuer: "https://kauth.kakao.com" },
-      new URL(callbackUrl),
+      new URL(canonicalCallbackUrl),
       {
         pkceCodeVerifier: "kakao-verifier",
         expectedState: "kakao-state",

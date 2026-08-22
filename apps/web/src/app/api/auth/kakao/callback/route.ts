@@ -87,6 +87,8 @@ export async function GET(request: Request) {
   const cookieStore = await cookies();
   const flow = decodeAuthFlow(cookieStore.get(AUTH_FLOW_COOKIE)?.value);
   const requestUrl = new URL(request.url);
+  const tokenCallbackUrl = new URL("/api/auth/kakao/callback", baseUrl);
+  tokenCallbackUrl.search = requestUrl.search;
 
   if (
     !flow ||
@@ -123,7 +125,7 @@ export async function GET(request: Request) {
       credentials.clientSecret,
     );
     stage = "token_exchange";
-    const tokens = await oidc.authorizationCodeGrant(config, requestUrl, {
+    const tokens = await oidc.authorizationCodeGrant(config, tokenCallbackUrl, {
       pkceCodeVerifier: flow.codeVerifier,
       expectedState: flow.state,
       expectedNonce: flow.nonce,
