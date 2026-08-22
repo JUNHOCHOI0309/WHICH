@@ -141,6 +141,7 @@ describe("Naver OIDC routes", () => {
   });
 
   it("creates a WHICH session from the verified Naver pairwise Subject", async () => {
+    vi.stubEnv("AUTH_BASE_URL", "https://whichone.site");
     headerMocks.get.mockImplementation((name: string) =>
       name === AUTH_FLOW_COOKIE ? { value: flowCookie() } : undefined,
     );
@@ -162,18 +163,20 @@ describe("Naver OIDC routes", () => {
     });
     vi.stubGlobal("fetch", request);
 
-    const callbackUrl =
-      "http://localhost:3000/api/auth/naver/callback?code=authorization-code&state=naver-state";
-    const response = await callback(new Request(callbackUrl));
+    const proxiedCallbackUrl =
+      "http://which-web:10000/api/auth/naver/callback?code=authorization-code&state=naver-state";
+    const canonicalCallbackUrl =
+      "https://whichone.site/api/auth/naver/callback?code=authorization-code&state=naver-state";
+    const response = await callback(new Request(proxiedCallbackUrl));
 
     expect(response.status).toBe(307);
     expect(response.headers.get("location")).toBe(
-      "http://localhost:3000/issues/issue-1?auth=success#member-access",
+      "https://whichone.site/issues/issue-1?auth=success#member-access",
     );
     expect(response.headers.get("set-cookie")).toContain("which_member_session=which-session");
     expect(oidcMocks.authorizationCodeGrant).toHaveBeenCalledWith(
       { issuer: "https://nid.naver.com" },
-      new URL(callbackUrl),
+      new URL(canonicalCallbackUrl),
       {
         pkceCodeVerifier: "naver-verifier",
         expectedState: "naver-state",
