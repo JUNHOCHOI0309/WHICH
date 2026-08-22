@@ -9,6 +9,9 @@ vi.mock("next/headers", () => ({
 import { GET as callback } from "@/app/api/auth/x/callback/route";
 import { GET as start } from "@/app/api/auth/x/start/route";
 import { AUTH_FLOW_COOKIE, encodeAuthFlow } from "@/lib/server/member-auth";
+import { GUEST_SUBJECT_COOKIE } from "@/lib/server/which-api";
+
+const guestSubjectId = "591f2e90-996a-50c5-af46-967dd0793000";
 
 describe("X OAuth routes", () => {
   beforeEach(() => {
@@ -64,7 +67,11 @@ describe("X OAuth routes", () => {
 
   it("creates a WHICH session from the authenticated X User ID", async () => {
     headerMocks.get.mockImplementation((name: string) =>
-      name === AUTH_FLOW_COOKIE ? { value: flowCookie() } : undefined,
+      name === AUTH_FLOW_COOKIE
+        ? { value: flowCookie() }
+        : name === GUEST_SUBJECT_COOKIE
+          ? { value: guestSubjectId }
+          : undefined,
     );
     const requests: string[] = [];
     vi.stubGlobal(
@@ -99,6 +106,8 @@ describe("X OAuth routes", () => {
       "http://localhost:3000/issues/issue-1?auth=success#member-access",
     );
     expect(response.headers.get("set-cookie")).toContain("which_member_session=which-session");
+    expect(response.headers.get("set-cookie")).toContain("which_guest_subject=");
+    expect(response.headers.get("set-cookie")).toContain("Max-Age=0");
     expect(requests).toEqual([
       "https://api.x.com/2/oauth2/token",
       "https://api.x.com/2/users/me",

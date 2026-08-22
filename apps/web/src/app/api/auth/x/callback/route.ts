@@ -12,6 +12,7 @@ import {
 } from "@/lib/server/member-auth";
 import { createProviderMemberSession } from "@/lib/server/member-session-bridge";
 import {
+  clearGuestSubjectCookie,
   GUEST_SUBJECT_COOKIE,
   setMemberSessionCookie,
   validGuestSubject,
@@ -84,6 +85,7 @@ export async function GET(request: Request) {
     });
     const response = redirectWithOutcome(baseUrl, flow.returnTo, "success");
     setMemberSessionCookie(response, session.token, session.expiresAt);
+    if (anonymousSubjectId) clearGuestSubjectCookie(response);
     return response;
   } catch {
     return redirectWithOutcome(baseUrl, flow.returnTo, "error");

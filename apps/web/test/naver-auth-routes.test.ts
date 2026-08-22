@@ -20,6 +20,9 @@ vi.mock("openid-client", () => oidcMocks);
 import { GET as callback } from "@/app/api/auth/naver/callback/route";
 import { GET as start } from "@/app/api/auth/naver/start/route";
 import { AUTH_FLOW_COOKIE, encodeAuthFlow } from "@/lib/server/member-auth";
+import { GUEST_SUBJECT_COOKIE } from "@/lib/server/which-api";
+
+const guestSubjectId = "591f2e90-996a-50c5-af46-967dd0793000";
 
 describe("Naver OIDC routes", () => {
   beforeEach(() => {
@@ -143,7 +146,11 @@ describe("Naver OIDC routes", () => {
   it("creates a WHICH session from the verified Naver pairwise Subject", async () => {
     vi.stubEnv("AUTH_BASE_URL", "https://whichone.site");
     headerMocks.get.mockImplementation((name: string) =>
-      name === AUTH_FLOW_COOKIE ? { value: flowCookie() } : undefined,
+      name === AUTH_FLOW_COOKIE
+        ? { value: flowCookie() }
+        : name === GUEST_SUBJECT_COOKIE
+          ? { value: guestSubjectId }
+          : undefined,
     );
     oidcMocks.authorizationCodeGrant.mockResolvedValue({
       claims: () => ({ sub: "naver-subject-1" }),
@@ -174,6 +181,8 @@ describe("Naver OIDC routes", () => {
       "https://whichone.site/issues/issue-1?auth=success#member-access",
     );
     expect(response.headers.get("set-cookie")).toContain("which_member_session=which-session");
+    expect(response.headers.get("set-cookie")).toContain("which_guest_subject=");
+    expect(response.headers.get("set-cookie")).toContain("Max-Age=0");
     expect(oidcMocks.authorizationCodeGrant).toHaveBeenCalledWith(
       { issuer: "https://nid.naver.com" },
       new URL(canonicalCallbackUrl),

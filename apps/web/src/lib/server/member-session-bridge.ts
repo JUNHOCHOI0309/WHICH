@@ -8,12 +8,18 @@ type SessionResponse = {
   expiresAt: string;
 };
 
-export async function createProviderMemberSession(input: {
+type SessionApiResponse = Partial<SessionResponse> & {
+  code?: string;
+};
+
+type SessionInput = {
   provider: Provider;
   providerSubject: string;
   displayName: string;
   anonymousSubjectId?: string | null;
-}) {
+};
+
+async function requestMemberSession(input: SessionInput, includeGuestSubject: boolean) {
   const upstream = await fetchWhichApi("/v1/internal/member-sessions", {
     method: "POST",
     headers: {
@@ -25,12 +31,28 @@ export async function createProviderMemberSession(input: {
       provider: input.provider,
       providerSubject: input.providerSubject,
       displayName: input.displayName,
-      ...(input.anonymousSubjectId ? { anonymousSubjectId: input.anonymousSubjectId } : {}),
+      ...(includeGuestSubject && input.anonymousSubjectId
+        ? { anonymousSubjectId: input.anonymousSubjectId }
+        : {}),
     }),
   });
-  const session = (await upstream.json()) as Partial<SessionResponse>;
-  if (!upstream.ok || !session.token || !session.expiresAt) {
+  const body = (await upstream.json()) as SessionApiResponse;
+  return { upstream, body };
+}
+
+export async function createProviderMemberSession(input: SessionInput) {
+  let result = await requestMemberSession(input, true);
+
+  if (
+    input.anonymousSubjectId &&
+    result.upstream.status === 409 &&
+    result.body.code === "GUEST_ALREADY_LINKED"
+  ) {
+    result = await requestMemberSession(input, false);
+  }
+
+  if (!result.upstream.ok || !result.body.token || !result.body.expiresAt) {
     throw new Error("WHICH Member session creation failed.");
   }
-  return { token: session.token, expiresAt: session.expiresAt };
+  return { token: result.body.token, expiresAt: result.body.expiresAt };
 }
