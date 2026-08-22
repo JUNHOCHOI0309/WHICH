@@ -15,6 +15,7 @@ import {
   memberProfiles,
   memberSessions,
   members,
+  recommendationRequests,
   resultSnapshots,
   voteAggregates,
   voteAttempts,
@@ -255,7 +256,7 @@ describe("Member identity and Guest vote linking", () => {
     );
   });
 
-  it("merges an existing Provider Member and preserves its linked Guest votes", async () => {
+  it("merges an existing Provider Member with recommendation history and preserves Guest votes", async () => {
     const issue = await createIssue();
     const guestId = await createGuest();
     await submitGuestVote(guestId, issue.issueId, issue.choiceAId);
@@ -267,6 +268,18 @@ describe("Member identity and Guest vote linking", () => {
       anonymousSubjectId: guestId,
     });
     const googleBody = google.json<{ token: string; member: { id: string } }>();
+    const [googleMemberSubject] = await database.db
+      .select({ id: voterSubjects.id })
+      .from(voterSubjects)
+      .where(eq(voterSubjects.userId, googleBody.member.id));
+    const recommendationRequestId = randomUUID();
+    await database.db.insert(recommendationRequests).values({
+      id: recommendationRequestId,
+      subjectId: googleMemberSubject!.id,
+      rankingVersion: "identity-test-v1",
+      rankingMode: "RECENCY",
+      reasonCode: "RECENCY",
+    });
     const naver = await createMemberSession({
       provider: "NAVER",
       providerSubject: `naver-canonical-${randomUUID()}`,
@@ -322,6 +335,11 @@ describe("Member identity and Guest vote linking", () => {
       .from(guestMemberLinks)
       .where(eq(guestMemberLinks.guestSubjectId, guestSubject!.id));
     expect(guestLink?.memberId).toBe(naverMemberId);
+    const [recommendationHistory] = await database.db
+      .select({ subjectId: recommendationRequests.subjectId })
+      .from(recommendationRequests)
+      .where(eq(recommendationRequests.id, recommendationRequestId));
+    expect(recommendationHistory?.subjectId).toBe(googleMemberSubject!.id);
   });
 
   it("requires reviewed merging when the existing Provider Member owns a profile", async () => {

@@ -866,9 +866,6 @@ export function createMemberIdentityService(
                   select 1 from comment_report_attempts where actor_subject_id = ${sourceSubject.id}
                 )
                 or exists (select 1 from interest_profiles where subject_id = ${sourceSubject.id})
-                or exists (
-                  select 1 from recommendation_requests where subject_id = ${sourceSubject.id}
-                )
               ) as direct_activity,
               exists (
                 select 1
