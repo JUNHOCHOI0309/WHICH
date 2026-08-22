@@ -3,12 +3,17 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { DELETE as logout } from "@/app/api/member-session/route";
 
-function logoutRequest(options?: { origin?: string; csrf?: boolean; cookie?: boolean }) {
+function logoutRequest(options?: {
+  origin?: string;
+  csrf?: boolean;
+  cookie?: boolean;
+  url?: string;
+}) {
   const headers = new Headers();
   if (options?.origin !== undefined) headers.set("origin", options.origin);
   if (options?.csrf !== false) headers.set("x-which-csrf", "member-session-logout");
   if (options?.cookie !== false) headers.set("cookie", "which_member_session=member-token");
-  return new NextRequest("https://whichone.site/api/member-session", {
+  return new NextRequest(options?.url ?? "https://whichone.site/api/member-session", {
     method: "DELETE",
     headers,
   });
@@ -16,6 +21,7 @@ function logoutRequest(options?: { origin?: string; csrf?: boolean; cookie?: boo
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 describe("Member session logout BFF", () => {
@@ -80,6 +86,24 @@ describe("Member session logout BFF", () => {
     );
 
     const response = await logout(logoutRequest());
+
+    expect(response.status).toBe(204);
+    expect(response.headers.get("set-cookie")).toContain("Max-Age=0");
+  });
+
+  it("accepts the configured public Origin behind an internal reverse proxy URL", async () => {
+    vi.stubEnv("AUTH_BASE_URL", "https://whichone.site");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(null, { status: 204 })),
+    );
+
+    const response = await logout(
+      logoutRequest({
+        origin: "https://whichone.site",
+        url: "https://which-web.onrender.com/api/member-session",
+      }),
+    );
 
     expect(response.status).toBe(204);
     expect(response.headers.get("set-cookie")).toContain("Max-Age=0");

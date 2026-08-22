@@ -25,10 +25,17 @@ export async function GET() {
 }
 
 export async function DELETE(request: NextRequest) {
-  const requestUrl = new URL(request.url);
   const origin = request.headers.get("origin");
   const csrfHeader = request.headers.get("x-which-csrf");
-  const originMatches = origin === null || origin === "null" || origin === requestUrl.origin;
+  let publicOrigin = request.nextUrl.origin;
+  if (process.env.AUTH_BASE_URL) {
+    try {
+      publicOrigin = new URL(process.env.AUTH_BASE_URL).origin;
+    } catch {
+      // Keep the request origin as a safe fallback when configuration is malformed.
+    }
+  }
+  const originMatches = origin === null || origin === "null" || origin === publicOrigin;
   if (!originMatches || csrfHeader !== "member-session-logout") {
     return NextResponse.json(
       { code: "CSRF_REJECTED", message: "요청 출처를 확인할 수 없습니다." },
