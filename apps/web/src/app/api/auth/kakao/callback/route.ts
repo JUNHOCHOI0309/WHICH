@@ -23,6 +23,47 @@ import {
 
 export const runtime = "nodejs";
 
+type KakaoAuthFailureStage =
+  | "flow_validation"
+  | "provider_response"
+  | "feature_flag"
+  | "credentials"
+  | "discovery"
+  | "token_exchange"
+  | "claims"
+  | "member_session";
+
+function logKakaoAuthFailure(stage: KakaoAuthFailureStage, error?: unknown) {
+  const safeErrorValue = (key: "code" | "error") => {
+    if (!error || typeof error !== "object" || !(key in error)) return undefined;
+    const value = (error as Record<string, unknown>)[key];
+    return typeof value === "string" && /^[a-z0-9_.:-]{1,80}$/i.test(value) ? value : undefined;
+  };
+  const errorCode = safeErrorValue("code");
+  const providerError = safeErrorValue("error");
+  const providerStatus =
+    error &&
+    typeof error === "object" &&
+    "status" in error &&
+    typeof error.status === "number" &&
+    Number.isInteger(error.status) &&
+    error.status >= 400 &&
+    error.status <= 599
+      ? error.status
+      : undefined;
+
+  console.warn(
+    JSON.stringify({
+      event: "kakao_auth_failed",
+      stage,
+      ...(error instanceof Error ? { errorName: error.name } : {}),
+      ...(errorCode ? { errorCode } : {}),
+      ...(providerError ? { providerError } : {}),
+      ...(providerStatus ? { providerStatus } : {}),
+    }),
+  );
+}
+
 function clearFlowCookie(response: NextResponse) {
   response.cookies.set({
     name: AUTH_FLOW_COOKIE,
@@ -53,6 +94,7 @@ export async function GET(request: Request) {
     !flow.nonce ||
     !authFlowMatches(flow, "KAKAO", requestUrl.searchParams.get("state"))
   ) {
+    logKakaoAuthFailure("flow_validation");
     const response = NextResponse.redirect(new URL("/?auth=error", baseUrl));
     clearFlowCookie(response);
     return response;
@@ -60,6 +102,7 @@ export async function GET(request: Request) {
 
   const failure = requestUrl.searchParams.get("error");
   if (failure) {
+    logKakaoAuthFailure("provider_response");
     return redirectWithOutcome(
       baseUrl,
       flow.returnTo,
@@ -67,25 +110,31 @@ export async function GET(request: Request) {
     );
   }
 
+  let stage: KakaoAuthFailureStage = "feature_flag";
   try {
     if (!kakaoLoginEnabled()) throw new Error("Kakao login is disabled.");
+    stage = "credentials";
     const credentials = kakaoOidcCredentials();
     if (!credentials) throw new Error("Kakao OIDC is not configured.");
+    stage = "discovery";
     const config = await oidc.discovery(
       new URL("https://kauth.kakao.com"),
       credentials.clientId,
       credentials.clientSecret,
     );
+    stage = "token_exchange";
     const tokens = await oidc.authorizationCodeGrant(config, requestUrl, {
       pkceCodeVerifier: flow.codeVerifier,
       expectedState: flow.state,
       expectedNonce: flow.nonce,
       idTokenExpected: true,
     });
+    stage = "claims";
     const claims = tokens.claims();
     if (!claims?.sub) throw new Error("Kakao OIDC did not return a subject claim.");
 
     const anonymousSubjectId = validGuestSubject(cookieStore.get(GUEST_SUBJECT_COOKIE)?.value);
+    stage = "member_session";
     const session = await createOAuthMemberSession(flow, {
       provider: "KAKAO",
       providerSubject: claims.sub,
@@ -103,6 +152,7 @@ export async function GET(request: Request) {
     if (anonymousSubjectId) clearGuestSubjectCookie(response);
     return response;
   } catch (error) {
+    logKakaoAuthFailure(stage, error);
     return redirectWithOutcome(baseUrl, flow.returnTo, oauthFailureOutcome(error));
   }
 }
