@@ -32,6 +32,7 @@ export type MemberIdentityLinkResult = {
   identity: {
     provider: IdentityProvider;
     linked: boolean;
+    memberMerged: boolean;
   };
 };
 

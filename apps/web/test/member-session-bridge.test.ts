@@ -3,7 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createOAuthMemberSession,
   createProviderMemberSession,
+  MemberIdentityLinkError,
   memberIdForLinkIntent,
+  oauthFailureOutcome,
 } from "@/lib/server/member-session-bridge";
 
 const guestSubjectId = "591f2e90-996a-50c5-af46-967dd0793000";
@@ -145,5 +147,38 @@ describe("Provider member session bridge", () => {
         displayName: "네이버 회원",
       },
     ]);
+  });
+
+  it("preserves a reviewed-merge outcome for the OAuth callback and UI", async () => {
+    const request = vi.fn(async () =>
+      Response.json(
+        { code: "MEMBER_MERGE_REQUIRES_REVIEW", message: "review required" },
+        { status: 409 },
+      ),
+    );
+    vi.stubGlobal("fetch", request);
+
+    const promise = createOAuthMemberSession(
+      {
+        provider: "GOOGLE",
+        state: "state",
+        nonce: "nonce",
+        codeVerifier: "verifier",
+        returnTo: "/me#connected-accounts",
+        intent: "LINK",
+        linkMemberId: guestSubjectId,
+        createdAt: Date.now(),
+      },
+      {
+        provider: "GOOGLE",
+        providerSubject: "existing-google-subject",
+        displayName: "Google 회원",
+      },
+    );
+
+    await expect(promise).rejects.toBeInstanceOf(MemberIdentityLinkError);
+    await promise.catch((error: unknown) => {
+      expect(oauthFailureOutcome(error)).toBe("merge-review");
+    });
   });
 });

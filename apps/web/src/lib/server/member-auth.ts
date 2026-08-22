@@ -11,6 +11,7 @@ export const AUTH_FLOW_COOKIE = "which_auth_flow";
 export const AUTH_FLOW_COOKIE_PATH = "/api/auth";
 
 export type AuthProvider = "GOOGLE" | "X" | "NAVER" | "KAKAO";
+export type AuthOutcome = "success" | "cancelled" | "error" | "unavailable" | "merge-review";
 
 export type AuthFlow = {
   provider: AuthProvider;
@@ -52,10 +53,7 @@ export function sanitizeReturnTo(value: string | null | undefined) {
   }
 }
 
-export function withAuthOutcome(
-  returnTo: string,
-  outcome: "success" | "cancelled" | "error" | "unavailable",
-) {
+export function withAuthOutcome(returnTo: string, outcome: AuthOutcome) {
   const target = new URL(sanitizeReturnTo(returnTo), "http://which.local");
   target.searchParams.set("auth", outcome);
   return `${target.pathname}${target.search}${target.hash}`;

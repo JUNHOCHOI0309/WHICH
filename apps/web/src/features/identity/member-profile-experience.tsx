@@ -11,6 +11,35 @@ import styles from "./member-profile-experience.module.css";
 import { MemberPublicProfileSettings } from "./member-public-profile-settings";
 
 type Screen = "loading" | "guest" | "ready" | "error";
+type AccountLinkNotice = {
+  tone: "success" | "warning" | "error";
+  message: string;
+};
+
+function readAccountLinkNotice(): AccountLinkNotice | null {
+  if (window.location.hash !== "#connected-accounts") return null;
+
+  const outcome = new URLSearchParams(window.location.search).get("auth");
+  if (outcome === "success") {
+    return {
+      tone: "success",
+      message: "로그인 수단을 연결했습니다. 연결된 Guest 기록도 같은 회원에게 이어집니다.",
+    };
+  }
+  if (outcome === "merge-review") {
+    return {
+      tone: "warning",
+      message: "이 계정에는 별도 활동 또는 충돌이 있어 자동 병합하지 않았습니다.",
+    };
+  }
+  if (outcome === "error") {
+    return {
+      tone: "error",
+      message: "로그인 수단을 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+    };
+  }
+  return null;
+}
 
 async function readProfile(cursor?: string) {
   const query = new URLSearchParams({ limit: "12" });
@@ -60,6 +89,7 @@ export function MemberProfileExperience({
   const [loadingMore, setLoadingMore] = useState(false);
   const [logoutPending, setLogoutPending] = useState(false);
   const [logoutError, setLogoutError] = useState<string | null>(null);
+  const [accountLinkNotice, setAccountLinkNotice] = useState<AccountLinkNotice | null>(null);
 
   const load = useCallback(async () => {
     setScreen("loading");
@@ -79,6 +109,13 @@ export function MemberProfileExperience({
 
   useEffect(() => {
     let active = true;
+    const notice = readAccountLinkNotice();
+    if (notice) {
+      queueMicrotask(() => {
+        if (active) setAccountLinkNotice(notice);
+      });
+    }
+
     void readProfile()
       .then((next) => {
         if (!active) return;
@@ -217,6 +254,15 @@ export function MemberProfileExperience({
               </div>
               <span>어느 수단으로 로그인해도 같은 기록으로 연결됩니다.</span>
             </div>
+            {accountLinkNotice ? (
+              <p
+                className={styles.accountLinkNotice}
+                data-tone={accountLinkNotice.tone}
+                role={accountLinkNotice.tone === "success" ? "status" : "alert"}
+              >
+                {accountLinkNotice.message}
+              </p>
+            ) : null}
             <div className={styles.providerGrid}>
               {socialProviders.map((provider) => {
                 const enabled =
