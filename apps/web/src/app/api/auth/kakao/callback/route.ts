@@ -8,11 +8,12 @@ import {
   authBaseUrl,
   authFlowMatches,
   decodeAuthFlow,
+  type AuthOutcome,
   kakaoLoginEnabled,
   kakaoOidcCredentials,
   withAuthOutcome,
 } from "@/lib/server/member-auth";
-import { createOAuthMemberSession } from "@/lib/server/member-session-bridge";
+import { createOAuthMemberSession, oauthFailureOutcome } from "@/lib/server/member-session-bridge";
 import {
   clearGuestSubjectCookie,
   GUEST_SUBJECT_COOKIE,
@@ -34,11 +35,7 @@ function clearFlowCookie(response: NextResponse) {
   });
 }
 
-function redirectWithOutcome(
-  baseUrl: URL,
-  returnTo: string,
-  outcome: "success" | "cancelled" | "error",
-) {
+function redirectWithOutcome(baseUrl: URL, returnTo: string, outcome: AuthOutcome) {
   const response = NextResponse.redirect(new URL(withAuthOutcome(returnTo, outcome), baseUrl));
   clearFlowCookie(response);
   return response;
@@ -105,7 +102,7 @@ export async function GET(request: Request) {
     setMemberSessionCookie(response, session.token, session.expiresAt);
     if (anonymousSubjectId) clearGuestSubjectCookie(response);
     return response;
-  } catch {
-    return redirectWithOutcome(baseUrl, flow.returnTo, "error");
+  } catch (error) {
+    return redirectWithOutcome(baseUrl, flow.returnTo, oauthFailureOutcome(error));
   }
 }

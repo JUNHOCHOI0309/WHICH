@@ -12,6 +12,7 @@ function jsonResponse(body: unknown, status = 200) {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  window.history.replaceState({}, "", "/");
 });
 
 describe("Member private profile experience", () => {
@@ -99,6 +100,39 @@ describe("Member private profile experience", () => {
       "href",
       "/api/auth/x/start?returnTo=%2Fme%23connected-accounts&intent=link",
     );
+  });
+
+  it("explains when an existing Member needs reviewed account merging", async () => {
+    window.history.replaceState({}, "", "/me?auth=merge-review#connected-accounts");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        jsonResponse({
+          member: {
+            id: "member-1",
+            displayName: "병합 검토 회원",
+            status: "ACTIVE",
+            joinedAt: "2026-08-01T00:00:00.000Z",
+            participationCount: 0,
+          },
+          publicProfile: null,
+          identities: [
+            {
+              provider: "NAVER",
+              linkedAt: "2026-08-01T00:00:00.000Z",
+              lastAuthenticatedAt: "2026-08-22T00:00:00.000Z",
+            },
+          ],
+          votes: { items: [], nextCursor: null },
+        }),
+      ),
+    );
+
+    render(<MemberProfileExperience kakaoLoginEnabled naverLoginEnabled />);
+
+    expect(
+      await screen.findByText("이 계정에는 별도 활동 또는 충돌이 있어 자동 병합하지 않았습니다."),
+    ).toHaveAttribute("role", "alert");
   });
 
   it("creates a public Creator profile from the private Me surface", async () => {

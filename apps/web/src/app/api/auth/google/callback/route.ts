@@ -11,7 +11,7 @@ import {
   googleOidcCredentials,
   withAuthOutcome,
 } from "@/lib/server/member-auth";
-import { createOAuthMemberSession } from "@/lib/server/member-session-bridge";
+import { createOAuthMemberSession, oauthFailureOutcome } from "@/lib/server/member-session-bridge";
 import { googleCallbackUrl, pinGoogleTokenRedirectUri } from "@/lib/server/google-oauth";
 import {
   clearGuestSubjectCookie,
@@ -132,7 +132,7 @@ export async function GET(request: Request) {
       JSON.stringify({ event: "google_auth_failed", stage, ...safeGoogleAuthError(error) }),
     );
     const response = NextResponse.redirect(
-      new URL(withAuthOutcome(flow.returnTo, "error"), baseUrl),
+      new URL(withAuthOutcome(flow.returnTo, oauthFailureOutcome(error)), baseUrl),
     );
     clearFlowCookie(response);
     return response;

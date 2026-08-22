@@ -1,6 +1,6 @@
 import { fetchWhichApi } from "./which-api";
 import { internalAuthSecret } from "./member-auth";
-import type { AuthFlow } from "./member-auth";
+import type { AuthFlow, AuthOutcome } from "./member-auth";
 
 type Provider = "GOOGLE" | "X" | "NAVER" | "KAKAO";
 
@@ -19,6 +19,19 @@ type SessionInput = {
   displayName: string;
   anonymousSubjectId?: string | null;
 };
+
+export class MemberIdentityLinkError extends Error {
+  constructor(public readonly code: string) {
+    super("WHICH Member identity linking failed.");
+    this.name = "MemberIdentityLinkError";
+  }
+}
+
+export function oauthFailureOutcome(error: unknown): AuthOutcome {
+  return error instanceof MemberIdentityLinkError && error.code === "MEMBER_MERGE_REQUIRES_REVIEW"
+    ? "merge-review"
+    : "error";
+}
 
 async function requestMemberSession(input: SessionInput, includeGuestSubject: boolean) {
   const upstream = await fetchWhichApi("/v1/internal/member-sessions", {
@@ -93,7 +106,7 @@ export async function createOAuthMemberSession(flow: AuthFlow, input: SessionInp
   });
   const body = (await upstream.json()) as SessionApiResponse;
   if (!upstream.ok || !body.token || !body.expiresAt) {
-    throw new Error("WHICH Member identity linking failed.");
+    throw new MemberIdentityLinkError(body.code ?? "IDENTITY_LINK_FAILED");
   }
   return { token: body.token, expiresAt: body.expiresAt };
 }

@@ -12,7 +12,9 @@ import {
   issues,
   issueVersions,
   memberIdentityLinks,
+  memberProfiles,
   memberSessions,
+  members,
   resultSnapshots,
   voteAggregates,
   voteAttempts,
@@ -253,21 +255,106 @@ describe("Member identity and Guest vote linking", () => {
     );
   });
 
-  it("refuses to steal a Provider identity from another Member", async () => {
-    const first = await createMemberSession({
+  it("merges an existing Provider Member and preserves its linked Guest votes", async () => {
+    const issue = await createIssue();
+    const guestId = await createGuest();
+    await submitGuestVote(guestId, issue.issueId, issue.choiceAId);
+
+    const googleSubject = `google-duplicate-${randomUUID()}`;
+    const google = await createMemberSession({
+      provider: "GOOGLE",
+      providerSubject: googleSubject,
+      anonymousSubjectId: guestId,
+    });
+    const googleBody = google.json<{ token: string; member: { id: string } }>();
+    const naver = await createMemberSession({
+      provider: "NAVER",
+      providerSubject: `naver-canonical-${randomUUID()}`,
+    });
+    const naverMemberId = naver.json<{ member: { id: string } }>().member.id;
+
+    const response = await linkMemberIdentity({
+      memberId: naverMemberId,
+      provider: "GOOGLE",
+      providerSubject: googleSubject,
+    });
+    expect(response.statusCode).toBe(201);
+    expect(response.json()).toMatchObject({
+      member: { id: naverMemberId },
+      identity: { provider: "GOOGLE", linked: true, memberMerged: true },
+    });
+
+    const googleLogin = await createMemberSession({
+      provider: "GOOGLE",
+      providerSubject: googleSubject,
+    });
+    expect(googleLogin.json()).toMatchObject({ member: { id: naverMemberId } });
+
+    const oldGoogleSession = await app.inject({
+      method: "GET",
+      url: "/v1/member-session",
+      headers: { authorization: `Bearer ${googleBody.token}` },
+    });
+    expect(oldGoogleSession.statusCode).toBe(401);
+
+    const mergedToken = response.json<{ token: string }>().token;
+    const profile = await app.inject({
+      method: "GET",
+      url: "/v1/me",
+      headers: { authorization: `Bearer ${mergedToken}` },
+    });
+    expect(profile.json()).toMatchObject({
+      member: { id: naverMemberId, participationCount: 1 },
+      votes: { items: [expect.objectContaining({ issueId: issue.issueId, choice: "A" })] },
+    });
+
+    const [sourceMember] = await database.db
+      .select({ status: members.status })
+      .from(members)
+      .where(eq(members.id, googleBody.member.id));
+    expect(sourceMember?.status).toBe("DELETED");
+    const [guestSubject] = await database.db
+      .select({ id: voterSubjects.id })
+      .from(voterSubjects)
+      .where(eq(voterSubjects.anonymousSubjectId, guestId));
+    const [guestLink] = await database.db
+      .select({ memberId: guestMemberLinks.memberId })
+      .from(guestMemberLinks)
+      .where(eq(guestMemberLinks.guestSubjectId, guestSubject!.id));
+    expect(guestLink?.memberId).toBe(naverMemberId);
+  });
+
+  it("requires reviewed merging when the existing Provider Member owns a profile", async () => {
+    const target = await createMemberSession({
       provider: "GOOGLE",
       providerSubject: `google-owner-${randomUUID()}`,
     });
-    const secondSubject = `naver-owner-${randomUUID()}`;
-    await createMemberSession({ provider: "NAVER", providerSubject: secondSubject });
+    const sourceSubject = `naver-owner-${randomUUID()}`;
+    const source = await createMemberSession({ provider: "NAVER", providerSubject: sourceSubject });
+    await database.db.insert(memberProfiles).values({
+      memberId: source.json<{ member: { id: string } }>().member.id,
+      handle: `review_${randomUUID().replaceAll("-", "").slice(0, 12)}`,
+    });
 
     const response = await linkMemberIdentity({
-      memberId: first.json<{ member: { id: string } }>().member.id,
+      memberId: target.json<{ member: { id: string } }>().member.id,
       provider: "NAVER",
-      providerSubject: secondSubject,
+      providerSubject: sourceSubject,
     });
     expect(response.statusCode).toBe(409);
-    expect(response.json()).toMatchObject({ code: "IDENTITY_ALREADY_LINKED" });
+    expect(response.json()).toMatchObject({ code: "MEMBER_MERGE_REQUIRES_REVIEW" });
+
+    const sourceMemberId = source.json<{ member: { id: string } }>().member.id;
+    const [sourceAfter] = await database.db
+      .select({ status: members.status })
+      .from(members)
+      .where(eq(members.id, sourceMemberId));
+    const [sourceIdentity] = await database.db
+      .select({ memberId: memberIdentityLinks.memberId })
+      .from(memberIdentityLinks)
+      .where(eq(memberIdentityLinks.providerSubject, sourceSubject));
+    expect(sourceAfter?.status).toBe("ACTIVE");
+    expect(sourceIdentity?.memberId).toBe(sourceMemberId);
   });
 
   it("maps the same Provider Subject to one Member and stores only a token hash", async () => {

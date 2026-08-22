@@ -245,7 +245,11 @@ export async function registerMemberIdentityRoutes(
               token: Type.String(),
               expiresAt: Type.String({ format: "date-time" }),
               member: memberSchema,
-              identity: Type.Object({ provider: identityProviderSchema, linked: Type.Boolean() }),
+              identity: Type.Object({
+                provider: identityProviderSchema,
+                linked: Type.Boolean(),
+                memberMerged: Type.Boolean(),
+              }),
             }),
             400: errorSchema,
             401: errorSchema,

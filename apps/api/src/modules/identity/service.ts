@@ -743,11 +743,28 @@ export function createMemberIdentityService(
 
       return database.transaction(async (transaction) => {
         await transaction.execute(
-          sql`select pg_advisory_xact_lock(hashtextextended(${`member-link:${memberId}`}, 0))`,
-        );
-        await transaction.execute(
           sql`select pg_advisory_xact_lock(hashtextextended(${`${assertion.provider}:${assertion.providerSubject}`}, 0))`,
         );
+
+        const [subjectLink] = await transaction
+          .select()
+          .from(memberIdentityLinks)
+          .where(
+            and(
+              eq(memberIdentityLinks.provider, assertion.provider),
+              eq(memberIdentityLinks.providerSubject, assertion.providerSubject),
+            ),
+          )
+          .limit(1);
+
+        const memberIdsToLock = [
+          ...new Set(subjectLink ? [memberId, subjectLink.memberId] : [memberId]),
+        ].sort((left, right) => left.localeCompare(right));
+        for (const lockedMemberId of memberIdsToLock) {
+          await transaction.execute(
+            sql`select pg_advisory_xact_lock(hashtextextended(${`member-link:${lockedMemberId}`}, 0))`,
+          );
+        }
 
         const [member] = await transaction
           .select()
@@ -780,26 +797,164 @@ export function createMemberIdentityService(
           );
         }
 
-        const [subjectLink] = await transaction
-          .select()
-          .from(memberIdentityLinks)
-          .where(
-            and(
-              eq(memberIdentityLinks.provider, assertion.provider),
-              eq(memberIdentityLinks.providerSubject, assertion.providerSubject),
-            ),
-          )
-          .limit(1);
-        if (subjectLink && subjectLink.memberId !== memberId) {
-          throw new MemberIdentityError(
-            "IDENTITY_ALREADY_LINKED",
-            409,
-            "This provider identity belongs to a different member.",
-          );
-        }
-
         let linked = false;
-        if (subjectLink) {
+        let memberMerged = false;
+        if (subjectLink && subjectLink.memberId !== memberId) {
+          const sourceMemberId = subjectLink.memberId;
+          const [sourceMember] = await transaction
+            .select({ status: members.status })
+            .from(members)
+            .where(eq(members.id, sourceMemberId))
+            .limit(1);
+          const [targetSubject] = await transaction
+            .select({ id: voterSubjects.id })
+            .from(voterSubjects)
+            .where(eq(voterSubjects.userId, memberId))
+            .limit(1);
+          const [sourceSubject] = await transaction
+            .select({ id: voterSubjects.id })
+            .from(voterSubjects)
+            .where(eq(voterSubjects.userId, sourceMemberId))
+            .limit(1);
+
+          if (
+            !sourceMember ||
+            sourceMember.status !== "ACTIVE" ||
+            !targetSubject ||
+            !sourceSubject
+          ) {
+            throw new MemberIdentityError(
+              "MEMBER_MERGE_REQUIRES_REVIEW",
+              409,
+              "The existing member cannot be merged automatically.",
+            );
+          }
+
+          const mergeSafety = await transaction.execute<{
+            provider_conflict: boolean;
+            direct_activity: boolean;
+            duplicate_vote: boolean;
+          }>(sql`
+            select
+              exists (
+                select 1
+                from member_identity_links source_link
+                inner join member_identity_links target_link
+                  on target_link.provider = source_link.provider
+                where source_link.member_id = ${sourceMemberId}
+                  and target_link.member_id = ${memberId}
+              ) as provider_conflict,
+              (
+                exists (select 1 from member_profiles where member_id = ${sourceMemberId})
+                or exists (select 1 from issue_authors where member_id = ${sourceMemberId})
+                or exists (select 1 from comment_write_attempts where member_id = ${sourceMemberId})
+                or exists (select 1 from vote_attempts where subject_id = ${sourceSubject.id})
+                or exists (select 1 from votes where subject_id = ${sourceSubject.id})
+                or exists (select 1 from comments where author_subject_id = ${sourceSubject.id})
+                or exists (
+                  select 1 from comment_reactions
+                  where subject_id = ${sourceSubject.id} or origin_subject_id = ${sourceSubject.id}
+                )
+                or exists (
+                  select 1 from comment_reaction_attempts where actor_subject_id = ${sourceSubject.id}
+                )
+                or exists (
+                  select 1 from comment_reports
+                  where subject_id = ${sourceSubject.id} or origin_subject_id = ${sourceSubject.id}
+                )
+                or exists (
+                  select 1 from comment_report_attempts where actor_subject_id = ${sourceSubject.id}
+                )
+                or exists (select 1 from interest_profiles where subject_id = ${sourceSubject.id})
+                or exists (
+                  select 1 from recommendation_requests where subject_id = ${sourceSubject.id}
+                )
+              ) as direct_activity,
+              exists (
+                select 1
+                from votes source_vote
+                where source_vote.integrity_state = 'ACCEPTED'
+                  and source_vote.subject_id in (
+                    select guest_subject_id from guest_member_links where member_id = ${sourceMemberId}
+                  )
+                  and exists (
+                    select 1
+                    from votes target_vote
+                    where target_vote.issue_id = source_vote.issue_id
+                      and target_vote.integrity_state = 'ACCEPTED'
+                      and target_vote.subject_id in (
+                        select subject_id from voter_subjects where user_id = ${memberId}
+                        union
+                        select guest_subject_id from guest_member_links where member_id = ${memberId}
+                      )
+                  )
+              ) as duplicate_vote
+          `);
+          const safety = mergeSafety.rows[0];
+          if (
+            !safety ||
+            safety.provider_conflict ||
+            safety.direct_activity ||
+            safety.duplicate_vote
+          ) {
+            throw new MemberIdentityError(
+              "MEMBER_MERGE_REQUIRES_REVIEW",
+              409,
+              "The existing member has activity or conflicts that require reviewed merging.",
+            );
+          }
+
+          const transferredGuestLinks = await transaction
+            .update(guestMemberLinks)
+            .set({ memberId, memberSubjectId: targetSubject.id })
+            .where(eq(guestMemberLinks.memberId, sourceMemberId))
+            .returning({ id: guestMemberLinks.id });
+
+          await transaction
+            .update(memberIdentityLinks)
+            .set({ memberId })
+            .where(eq(memberIdentityLinks.memberId, sourceMemberId));
+          await transaction
+            .update(memberIdentityLinks)
+            .set({ lastAuthenticatedAt: now })
+            .where(eq(memberIdentityLinks.id, subjectLink.id));
+          await transaction
+            .update(memberSessions)
+            .set({ revokedAt: now })
+            .where(
+              and(eq(memberSessions.memberId, sourceMemberId), isNull(memberSessions.revokedAt)),
+            );
+          await transaction
+            .update(members)
+            .set({ status: "DELETED", updatedAt: now })
+            .where(eq(members.id, sourceMemberId));
+
+          const eventId = randomUUID();
+          await transaction.insert(outboxEvents).values({
+            id: eventId,
+            aggregateType: "MEMBER",
+            aggregateId: memberId,
+            eventType: "MEMBER_IDENTITIES_MERGED",
+            schemaVersion: EVENT_SCHEMA_VERSION,
+            occurredAt: now,
+            payload: {
+              event_id: eventId,
+              event_type: "MEMBER_IDENTITIES_MERGED",
+              schema_version: EVENT_SCHEMA_VERSION,
+              occurred_at: now.toISOString(),
+              aggregate_type: "MEMBER",
+              aggregate_id: memberId,
+              data: {
+                source_member_id: sourceMemberId,
+                target_member_id: memberId,
+                transferred_guest_links: transferredGuestLinks.length,
+                provider: assertion.provider,
+              },
+            },
+          });
+          linked = true;
+          memberMerged = true;
+        } else if (subjectLink) {
           await transaction
             .update(memberIdentityLinks)
             .set({ lastAuthenticatedAt: now })
@@ -827,7 +982,7 @@ export function createMemberIdentityService(
           token,
           expiresAt: expiresAt.toISOString(),
           member: toMemberView(member),
-          identity: { provider: assertion.provider, linked },
+          identity: { provider: assertion.provider, linked, memberMerged },
         };
       });
     },

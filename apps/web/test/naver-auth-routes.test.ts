@@ -269,6 +269,34 @@ describe("Naver OIDC routes", () => {
     expect(request).toHaveBeenCalledTimes(1);
   });
 
+  it("returns a reviewed-merge outcome when the existing Naver Member has conflicts", async () => {
+    headerMocks.get.mockImplementation((name: string) =>
+      name === AUTH_FLOW_COOKIE ? { value: linkFlowCookie() } : undefined,
+    );
+    oidcMocks.authorizationCodeGrant.mockResolvedValue({
+      claims: () => ({ sub: "existing-naver-subject" }),
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json(
+          { code: "MEMBER_MERGE_REQUIRES_REVIEW", message: "review required" },
+          { status: 409 },
+        ),
+      ),
+    );
+
+    const response = await callback(
+      new Request(
+        "http://localhost:3000/api/auth/naver/callback?code=authorization-code&state=naver-state",
+      ),
+    );
+
+    expect(response.headers.get("location")).toBe(
+      "http://localhost:3000/me?auth=merge-review#connected-accounts",
+    );
+  });
+
   it("rejects a mismatched state before contacting Naver or the WHICH API", async () => {
     headerMocks.get.mockImplementation((name: string) =>
       name === AUTH_FLOW_COOKIE ? { value: flowCookie() } : undefined,
