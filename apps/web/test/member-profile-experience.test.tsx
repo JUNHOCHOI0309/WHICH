@@ -44,6 +44,7 @@ describe("Member private profile experience", () => {
             joinedAt: "2026-08-01T00:00:00.000Z",
             participationCount: 1,
           },
+          publicProfile: null,
           votes: {
             items: [
               {
@@ -83,6 +84,49 @@ describe("Member private profile experience", () => {
     expect(screen.getByText("선택 기록은 공개 프로필과 분리됩니다.")).toBeVisible();
   });
 
+  it("creates a public Creator profile from the private Me surface", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        if (String(input) === "/api/me/profile" && init?.method === "PATCH") {
+          return jsonResponse({
+            handle: "question_maker",
+            bio: "좋은 질문을 만듭니다.",
+            visibility: "PUBLIC",
+            publicUrl: "/user/question_maker",
+          });
+        }
+        return jsonResponse({
+          member: {
+            id: "member-1",
+            displayName: "질문 작성자",
+            status: "ACTIVE",
+            joinedAt: "2026-08-01T00:00:00.000Z",
+            participationCount: 0,
+          },
+          publicProfile: null,
+          votes: { items: [], nextCursor: null },
+        });
+      }),
+    );
+
+    render(<MemberProfileExperience naverLoginEnabled={false} />);
+
+    const handle = await screen.findByRole("textbox", { name: /Handle/ });
+    fireEvent.change(handle, { target: { value: "question_maker" } });
+    fireEvent.change(screen.getByRole("textbox", { name: /짧은 소개/ }), {
+      target: { value: "좋은 질문을 만듭니다." },
+    });
+    fireEvent.click(screen.getByRole("radio", { name: /^공개 —/ }));
+    fireEvent.click(screen.getByRole("button", { name: "프로필 저장" }));
+
+    expect(await screen.findByText("공개 프로필을 저장했어요.")).toBeVisible();
+    expect(screen.getByRole("link", { name: /공개 화면 보기/ })).toHaveAttribute(
+      "href",
+      "/user/question_maker",
+    );
+  });
+
   it("clears the private view after logout", async () => {
     const requests: Array<{ url: string; method: string }> = [];
     vi.stubGlobal(
@@ -98,6 +142,7 @@ describe("Member private profile experience", () => {
             joinedAt: "2026-08-01T00:00:00.000Z",
             participationCount: 0,
           },
+          publicProfile: null,
           votes: { items: [], nextCursor: null },
         });
       }),

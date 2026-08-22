@@ -22,6 +22,11 @@ export type PublicIssue = {
   categoryCode: string;
   experienceModeCode: string;
   choices: IssueChoice[];
+  author: {
+    displayName: string;
+    handle: string;
+    avatar: { kind: "INITIALS"; initials: string };
+  } | null;
   result: {
     visibility:
       | "PRE_VOTE_HIDDEN"
@@ -41,7 +46,10 @@ export type RankingReasonCode =
   | "IDENTITY_UNAVAILABLE"
   | "RANKER_FALLBACK";
 
-export type PublicFeedIssue = Omit<PublicIssue, "context" | "experienceModeCode" | "result"> & {
+export type PublicFeedIssue = Omit<
+  PublicIssue,
+  "context" | "experienceModeCode" | "result" | "author"
+> & {
   recommendation: {
     requestId: string;
     score: number;
@@ -125,10 +133,37 @@ export type MemberPrivateProfile = {
     joinedAt: string;
     participationCount: number;
   };
+  publicProfile: MemberProfileSettings | null;
   votes: {
     items: MemberPrivateVote[];
     nextCursor: string | null;
   };
+};
+
+export type MemberProfileSettings = {
+  handle: string;
+  bio: string | null;
+  visibility: "PRIVATE" | "PUBLIC";
+  publicUrl: string | null;
+};
+
+export type PublicCreatorProfile = {
+  creator: {
+    displayName: string;
+    handle: string;
+    bio: string | null;
+    joinedMonth: string;
+    avatar: { kind: "INITIALS"; initials: string };
+  };
+  stats: { publishedIssueCount: number; acceptedVoteCount: number };
+  issues: Array<{
+    id: string;
+    version: number;
+    question: string;
+    categoryCode: string;
+    publishedAt: string;
+    acceptedVoteCount: number;
+  }>;
 };
 
 export type ShareChannel = "COPY" | "SYSTEM" | "X";

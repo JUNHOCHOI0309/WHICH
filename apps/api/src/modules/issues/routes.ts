@@ -41,6 +41,14 @@ const issueResponseSchema = Type.Object({
   categoryCode: Type.String(),
   experienceModeCode: Type.String(),
   choices: Type.Array(choiceSchema, { minItems: 2, maxItems: 2 }),
+  author: Type.Union([
+    Type.Object({
+      displayName: Type.String(),
+      handle: Type.String(),
+      avatar: Type.Object({ kind: Type.Literal("INITIALS"), initials: Type.String() }),
+    }),
+    Type.Null(),
+  ]),
   result: Type.Object({
     visibility: Type.Union([
       Type.Literal("PRE_VOTE_HIDDEN"),

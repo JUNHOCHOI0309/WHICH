@@ -275,6 +275,16 @@ export function IssueExperience({
           {issue.question}
         </h1>
         {issue.context ? <p className={styles.context}>{issue.context}</p> : null}
+        {issue.author ? (
+          <Link className={styles.authorLink} href={`/user/${issue.author.handle}`}>
+            <span aria-hidden="true">{issue.author.avatar.initials}</span>
+            <span>
+              <small>QUESTION BY</small>
+              <strong>{issue.author.displayName}</strong>
+              <em>@{issue.author.handle}</em>
+            </span>
+          </Link>
+        ) : null}
 
         <div className={styles.choiceGrid} aria-label="선택지">
           {issue.choices.map((choice) => (
@@ -373,6 +383,16 @@ function ResultScreen({
         </p>
 
         <div className={styles.resultQuestion}>{issue.question}</div>
+        {issue.author ? (
+          <Link className={styles.authorLink} href={`/user/${issue.author.handle}`}>
+            <span aria-hidden="true">{issue.author.avatar.initials}</span>
+            <span>
+              <small>QUESTION BY</small>
+              <strong>{issue.author.displayName}</strong>
+              <em>@{issue.author.handle}</em>
+            </span>
+          </Link>
+        ) : null}
         <div className={styles.resultRows}>
           <ResultRow
             code="A"

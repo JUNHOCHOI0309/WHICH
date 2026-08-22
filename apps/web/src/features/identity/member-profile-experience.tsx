@@ -7,6 +7,7 @@ import { loginHref } from "@/lib/auth";
 import type { MemberPrivateProfile, MemberPrivateVote } from "@/lib/contracts";
 
 import styles from "./member-profile-experience.module.css";
+import { MemberPublicProfileSettings } from "./member-public-profile-settings";
 
 type Screen = "loading" | "guest" | "ready" | "error";
 
@@ -175,6 +176,13 @@ export function MemberProfileExperience({ naverLoginEnabled }: { naverLoginEnabl
               <span>참여한 질문</span>
             </div>
           </section>
+
+          <MemberPublicProfileSettings
+            value={profile.publicProfile}
+            onUpdated={(publicProfile) =>
+              setProfile((current) => (current ? { ...current, publicProfile } : current))
+            }
+          />
 
           <section className={styles.history} aria-labelledby="history-title">
             <div className={styles.historyHeading}>

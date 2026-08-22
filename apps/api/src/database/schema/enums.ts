@@ -41,6 +41,7 @@ export const memberStatusEnum = pgEnum("member_status", [
   "SUSPENDED",
   "DELETED",
 ]);
+export const profileVisibilityEnum = pgEnum("profile_visibility", ["PRIVATE", "PUBLIC"]);
 export const identityProviderEnum = pgEnum("identity_provider", [
   "GOOGLE",
   "X",

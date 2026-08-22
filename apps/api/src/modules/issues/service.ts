@@ -19,9 +19,12 @@ import {
 import type { Database } from "../../database/client.js";
 import {
   issueChoices,
+  issueAuthors,
   issueInterestCards,
   issues,
   issueVersions,
+  memberProfiles,
+  members,
   voteAggregates,
   voterSubjects,
   votes,
@@ -34,6 +37,7 @@ import {
   encodePersonalizedIssueFeedCursor,
 } from "./cursor.js";
 import { IssueReadError } from "./errors.js";
+import { publicProfileInitials } from "../identity/profile.js";
 import { isGuestIssueAvailable } from "./policy.js";
 import {
   RANKING_VERSION,
@@ -120,6 +124,23 @@ export function createIssueReadService(
           );
         }
 
+        const [author] = await transaction
+          .select({
+            displayName: members.displayName,
+            handle: memberProfiles.handle,
+          })
+          .from(issueAuthors)
+          .innerJoin(memberProfiles, eq(issueAuthors.memberId, memberProfiles.memberId))
+          .innerJoin(members, eq(issueAuthors.memberId, members.id))
+          .where(
+            and(
+              eq(issueAuthors.issueId, issueId),
+              eq(memberProfiles.visibility, "PUBLIC"),
+              eq(members.status, "ACTIVE"),
+            ),
+          )
+          .limit(1);
+
         let tally: PublicIssueTally | null = null;
         if (issue.resultVisibility === "RESULT_VISIBLE") {
           const [aggregate] = await transaction
@@ -153,6 +174,15 @@ export function createIssueReadService(
           categoryCode: version.categoryCode,
           experienceModeCode: version.experienceModeCode,
           choices,
+          author: author
+            ? {
+                ...author,
+                avatar: {
+                  kind: "INITIALS" as const,
+                  initials: publicProfileInitials(author.displayName),
+                },
+              }
+            : null,
           result: {
             visibility: issue.resultVisibility,
             tally,
