@@ -16,6 +16,7 @@
 .profile,
 .history,
 .message,
+.connectedAccounts,
 .privacyNote,
 .footer {
   width: min(100%, 1080px);
@@ -117,6 +118,94 @@
 
 .history {
   padding-bottom: clamp(60px, 10vw, 110px);
+}
+
+.connectedAccounts {
+  padding-bottom: clamp(48px, 8vw, 86px);
+  scroll-margin-top: 24px;
+}
+
+.connectedAccountsHeading {
+  border-bottom: 1px solid rgb(246 248 247 / 18%);
+  display: grid;
+  gap: 12px;
+  padding-bottom: 18px;
+}
+
+.connectedAccountsHeading p {
+  margin: 0 0 10px;
+  color: var(--orange);
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+}
+
+.connectedAccountsHeading h2 {
+  margin: 0;
+  font-size: clamp(1.7rem, 5vw, 2.8rem);
+  letter-spacing: -0.055em;
+}
+
+.connectedAccountsHeading > span,
+.accountLinkNote {
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.providerGrid {
+  margin-top: 20px;
+  display: grid;
+  gap: 12px;
+}
+
+.providerCard {
+  min-height: 92px;
+  border: 1px solid rgb(246 248 247 / 16%);
+  border-radius: 18px;
+  background: var(--navy-soft);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px;
+}
+
+.providerCard > div {
+  display: grid;
+  gap: 6px;
+}
+
+.providerCard strong {
+  font-size: 1.05rem;
+}
+
+.providerCard span {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.providerCard a,
+.connectedBadge {
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 900;
+  padding: 10px 14px;
+  text-decoration: none;
+}
+
+.providerCard a {
+  background: var(--cyan);
+  color: var(--navy);
+}
+
+.providerCard .connectedBadge {
+  border: 1px solid rgb(20 200 212 / 45%);
+  color: var(--cyan);
+}
+
+.accountLinkNote {
+  margin: 16px 0 0;
+  font-size: 0.76rem;
 }
 
 .historyHeading {
@@ -376,6 +465,7 @@
 }
 
 .feedLink:focus-visible,
+.providerCard a:focus-visible,
 .voteCard a:focus-visible,
 .loginOptions a:focus-visible,
 .message button:focus-visible,
@@ -393,6 +483,15 @@
   }
 
   .voteGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .connectedAccountsHeading {
+    grid-template-columns: 1fr minmax(220px, 0.7fr);
+    align-items: end;
+  }
+
+  .providerGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

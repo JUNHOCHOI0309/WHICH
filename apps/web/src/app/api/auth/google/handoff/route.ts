@@ -28,6 +28,7 @@ export async function GET(request: Request) {
     baseUrl,
     returnTo: ticket.returnTo,
     anonymousSubjectId: ticket.anonymousSubjectId,
+    linkMemberId: ticket.linkMemberId,
     flow: {
       state: ticket.state,
       nonce: ticket.nonce,

@@ -1,5 +1,6 @@
 import { fetchWhichApi } from "./which-api";
 import { internalAuthSecret } from "./member-auth";
+import type { AuthFlow } from "./member-auth";
 
 type Provider = "GOOGLE" | "X" | "NAVER" | "KAKAO";
 
@@ -55,4 +56,44 @@ export async function createProviderMemberSession(input: SessionInput) {
     throw new Error("WHICH Member session creation failed.");
   }
   return { token: result.body.token, expiresAt: result.body.expiresAt };
+}
+
+export async function memberIdForLinkIntent(requestUrl: URL, memberSessionToken?: string) {
+  if (requestUrl.searchParams.get("intent") !== "link") return undefined;
+  if (!memberSessionToken) throw new Error("A Member session is required to link an identity.");
+
+  const upstream = await fetchWhichApi("/v1/member-session", {
+    headers: { accept: "application/json", authorization: `Bearer ${memberSessionToken}` },
+  });
+  const body = (await upstream.json()) as { member?: { id?: string } };
+  if (!upstream.ok || !body.member?.id) {
+    throw new Error("The Member session for identity linking is invalid.");
+  }
+  return body.member.id;
+}
+
+export async function createOAuthMemberSession(flow: AuthFlow, input: SessionInput) {
+  if (flow.intent !== "LINK" || !flow.linkMemberId) {
+    return createProviderMemberSession(input);
+  }
+
+  const upstream = await fetchWhichApi("/v1/internal/member-identity-links", {
+    method: "POST",
+    headers: {
+      accept: "application/json",
+      "content-type": "application/json",
+      "x-internal-auth-secret": internalAuthSecret(),
+    },
+    body: JSON.stringify({
+      memberId: flow.linkMemberId,
+      provider: input.provider,
+      providerSubject: input.providerSubject,
+      displayName: input.displayName,
+    }),
+  });
+  const body = (await upstream.json()) as SessionApiResponse;
+  if (!upstream.ok || !body.token || !body.expiresAt) {
+    throw new Error("WHICH Member identity linking failed.");
+  }
+  return { token: body.token, expiresAt: body.expiresAt };
 }

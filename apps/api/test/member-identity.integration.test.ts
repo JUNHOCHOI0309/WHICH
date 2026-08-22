@@ -91,6 +91,24 @@ function createMemberSession(input: {
   });
 }
 
+function linkMemberIdentity(input: {
+  memberId: string;
+  provider: "GOOGLE" | "X" | "NAVER" | "KAKAO";
+  providerSubject: string;
+}) {
+  return app.inject({
+    method: "POST",
+    url: "/v1/internal/member-identity-links",
+    headers: { "x-internal-auth-secret": INTERNAL_SECRET },
+    payload: {
+      memberId: input.memberId,
+      provider: input.provider,
+      providerSubject: input.providerSubject,
+      displayName: "연결 테스트 회원",
+    },
+  });
+}
+
 beforeAll(async () => {
   const testDatabase = await createTestDatabase();
   database = testDatabase.database;
@@ -191,6 +209,65 @@ describe("Member identity and Guest vote linking", () => {
       .where(eq(memberIdentityLinks.memberId, memberId));
 
     expect(links).toEqual([{ provider: "KAKAO", providerSubject }]);
+  });
+
+  it("links multiple Provider identities to one canonical Member", async () => {
+    const googleSubject = `google-link-${randomUUID()}`;
+    const naverSubject = `naver-link-${randomUUID()}`;
+    const google = await createMemberSession({
+      provider: "GOOGLE",
+      providerSubject: googleSubject,
+    });
+    const memberId = google.json<{ member: { id: string } }>().member.id;
+
+    const linked = await linkMemberIdentity({
+      memberId,
+      provider: "NAVER",
+      providerSubject: naverSubject,
+    });
+    expect(linked.statusCode).toBe(201);
+    expect(linked.json()).toMatchObject({
+      member: { id: memberId },
+      identity: { provider: "NAVER", linked: true },
+    });
+
+    const naverLogin = await createMemberSession({
+      provider: "NAVER",
+      providerSubject: naverSubject,
+    });
+    expect(naverLogin.statusCode).toBe(201);
+    expect(naverLogin.json()).toMatchObject({ member: { id: memberId } });
+
+    const token = linked.json<{ token: string }>().token;
+    const profile = await app.inject({
+      method: "GET",
+      url: "/v1/me",
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(profile.statusCode).toBe(200);
+    expect(profile.json<{ identities: Array<{ provider: string }> }>().identities).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ provider: "GOOGLE" }),
+        expect.objectContaining({ provider: "NAVER" }),
+      ]),
+    );
+  });
+
+  it("refuses to steal a Provider identity from another Member", async () => {
+    const first = await createMemberSession({
+      provider: "GOOGLE",
+      providerSubject: `google-owner-${randomUUID()}`,
+    });
+    const secondSubject = `naver-owner-${randomUUID()}`;
+    await createMemberSession({ provider: "NAVER", providerSubject: secondSubject });
+
+    const response = await linkMemberIdentity({
+      memberId: first.json<{ member: { id: string } }>().member.id,
+      provider: "NAVER",
+      providerSubject: secondSubject,
+    });
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({ code: "IDENTITY_ALREADY_LINKED" });
   });
 
   it("maps the same Provider Subject to one Member and stores only a token hash", async () => {

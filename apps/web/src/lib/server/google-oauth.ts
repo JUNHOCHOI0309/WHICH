@@ -39,6 +39,7 @@ export async function startGoogleAuthorization(input: {
   baseUrl: URL;
   returnTo: string;
   anonymousSubjectId?: string;
+  linkMemberId?: string;
   flow?: Pick<AuthFlow, "state" | "nonce" | "codeVerifier">;
 }) {
   const credentials = googleOidcCredentials();
@@ -79,6 +80,9 @@ export async function startGoogleAuthorization(input: {
         codeVerifier,
         returnTo: input.returnTo,
         anonymousSubjectId: input.anonymousSubjectId,
+        ...(input.linkMemberId
+          ? { intent: "LINK" as const, linkMemberId: input.linkMemberId }
+          : {}),
         createdAt: Date.now(),
       }),
       httpOnly: true,
@@ -98,6 +102,7 @@ export async function startGoogleAuthorization(input: {
 export function createGoogleBrowserHandoffTicket(input: {
   returnTo: string;
   anonymousSubjectId?: string;
+  linkMemberId?: string;
 }) {
   return encodeGoogleBrowserHandoff({
     ...input,

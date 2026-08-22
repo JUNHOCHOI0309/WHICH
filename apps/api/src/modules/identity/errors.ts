@@ -6,6 +6,8 @@ export type MemberIdentityErrorCode =
   | "DEVELOPMENT_PROVIDER_DISABLED"
   | "GUEST_SUBJECT_NOT_FOUND"
   | "GUEST_ALREADY_LINKED"
+  | "IDENTITY_ALREADY_LINKED"
+  | "PROVIDER_ALREADY_LINKED"
   | "MEMBER_NOT_ACTIVE";
 
 export class MemberIdentityError extends Error {

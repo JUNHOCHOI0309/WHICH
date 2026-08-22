@@ -23,6 +23,13 @@ const sessionViewSchema = Type.Object({
   expiresAt: Type.String({ format: "date-time" }),
   member: memberSchema,
 });
+const identityProviderSchema = Type.Union([
+  Type.Literal("GOOGLE"),
+  Type.Literal("X"),
+  Type.Literal("NAVER"),
+  Type.Literal("KAKAO"),
+  Type.Literal("DEVELOPMENT"),
+]);
 const resultSchema = Type.Object({
   resultVersion: Type.Integer({ minimum: 1 }),
   acceptedA: Type.Integer({ minimum: 0 }),
@@ -63,6 +70,13 @@ const privateProfileSchema = Type.Object({
     }),
   ]),
   publicProfile: Type.Union([memberProfileSettingsSchema, Type.Null()]),
+  identities: Type.Array(
+    Type.Object({
+      provider: identityProviderSchema,
+      linkedAt: Type.String({ format: "date-time" }),
+      lastAuthenticatedAt: Type.String({ format: "date-time" }),
+    }),
+  ),
   votes: Type.Object({
     items: Type.Array(privateVoteSchema),
     nextCursor: Type.Union([Type.String(), Type.Null()]),
@@ -200,6 +214,55 @@ export async function registerMemberIdentityRoutes(
         }
         const session = await service.createSession(request.body);
         return reply.code(201).send(session);
+      },
+    );
+
+    identityApp.post<{
+      Headers: { "x-internal-auth-secret"?: string };
+      Body: {
+        memberId: string;
+        provider: "GOOGLE" | "X" | "NAVER" | "KAKAO" | "DEVELOPMENT";
+        providerSubject: string;
+        displayName: string;
+      };
+    }>(
+      "/v1/internal/member-identity-links",
+      {
+        schema: {
+          hide: true,
+          headers: Type.Object(
+            { "x-internal-auth-secret": Type.Optional(Type.String()) },
+            { additionalProperties: true },
+          ),
+          body: Type.Object({
+            memberId: Type.String({ format: "uuid" }),
+            provider: identityProviderSchema,
+            providerSubject: Type.String({ minLength: 1, maxLength: 255 }),
+            displayName: Type.String({ minLength: 1, maxLength: 160 }),
+          }),
+          response: {
+            201: Type.Object({
+              token: Type.String(),
+              expiresAt: Type.String({ format: "date-time" }),
+              member: memberSchema,
+              identity: Type.Object({ provider: identityProviderSchema, linked: Type.Boolean() }),
+            }),
+            400: errorSchema,
+            401: errorSchema,
+            403: errorSchema,
+            409: errorSchema,
+            500: errorSchema,
+          },
+        },
+      },
+      async (request, reply) => {
+        if (!secretMatches(request.headers["x-internal-auth-secret"], internalSecret)) {
+          return reply
+            .code(401)
+            .send({ code: "UNAUTHORIZED", message: "Internal authentication failed." });
+        }
+        const result = await service.linkIdentity(request.body.memberId, request.body);
+        return reply.code(201).send(result);
       },
     );
 

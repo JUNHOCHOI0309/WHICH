@@ -19,8 +19,8 @@ vi.mock("openid-client", () => oidcMocks);
 
 import { GET as callback } from "@/app/api/auth/naver/callback/route";
 import { GET as start } from "@/app/api/auth/naver/start/route";
-import { AUTH_FLOW_COOKIE, encodeAuthFlow } from "@/lib/server/member-auth";
-import { GUEST_SUBJECT_COOKIE } from "@/lib/server/which-api";
+import { AUTH_FLOW_COOKIE, decodeAuthFlow, encodeAuthFlow } from "@/lib/server/member-auth";
+import { GUEST_SUBJECT_COOKIE, MEMBER_SESSION_COOKIE } from "@/lib/server/which-api";
 
 const guestSubjectId = "591f2e90-996a-50c5-af46-967dd0793000";
 
@@ -65,6 +65,18 @@ describe("Naver OIDC routes", () => {
     });
   }
 
+  function linkFlowCookie() {
+    return encodeAuthFlow({
+      provider: "NAVER",
+      state: "naver-state",
+      codeVerifier: "naver-verifier",
+      returnTo: "/me#connected-accounts",
+      intent: "LINK",
+      linkMemberId: guestSubjectId,
+      createdAt: Date.now(),
+    });
+  }
+
   it("starts at Naver with OIDC, PKCE, state, and a signed HttpOnly flow cookie", async () => {
     const response = await start(
       new Request("http://localhost:3000/api/auth/naver/start?returnTo=/issues/issue-1"),
@@ -91,6 +103,32 @@ describe("Naver OIDC routes", () => {
     expect(response.headers.get("set-cookie")).toContain(`${AUTH_FLOW_COOKIE}=`);
     expect(response.headers.get("set-cookie")).toContain("HttpOnly");
     expect(response.headers.get("set-cookie")).not.toContain("naver-secret");
+  });
+
+  it("starts a signed account-link flow only from the current Member session", async () => {
+    headerMocks.get.mockImplementation((name: string) =>
+      name === MEMBER_SESSION_COOKIE ? { value: "current-member-session" } : undefined,
+    );
+    const request = vi.fn(async () =>
+      Response.json({ member: { id: guestSubjectId } }, { status: 200 }),
+    );
+    vi.stubGlobal("fetch", request);
+
+    const response = await start(
+      new Request(
+        "http://localhost:3000/api/auth/naver/start?returnTo=/me%23connected-accounts&intent=link",
+      ),
+    );
+    const encodedFlow = new RegExp(`${AUTH_FLOW_COOKIE}=([^;]+)`).exec(
+      response.headers.get("set-cookie") ?? "",
+    )?.[1];
+
+    expect(decodeAuthFlow(encodedFlow)).toMatchObject({
+      intent: "LINK",
+      linkMemberId: guestSubjectId,
+      returnTo: "/me#connected-accounts",
+    });
+    expect(request).toHaveBeenCalledTimes(1);
   });
 
   it("returns to the app when Naver credentials are unavailable", async () => {
@@ -193,6 +231,41 @@ describe("Naver OIDC routes", () => {
       },
       { state: "naver-state" },
     );
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  it("links the verified Naver identity to the canonical Member instead of creating another one", async () => {
+    headerMocks.get.mockImplementation((name: string) =>
+      name === AUTH_FLOW_COOKIE ? { value: linkFlowCookie() } : undefined,
+    );
+    oidcMocks.authorizationCodeGrant.mockResolvedValue({
+      claims: () => ({ sub: "naver-subject-1", name: "네이버 연결 회원" }),
+    });
+    const request = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      expect(String(input)).toBe("http://localhost:4000/v1/internal/member-identity-links");
+      expect(JSON.parse(String(init?.body))).toEqual({
+        memberId: guestSubjectId,
+        provider: "NAVER",
+        providerSubject: "naver-subject-1",
+        displayName: "네이버 연결 회원",
+      });
+      return Response.json(
+        { token: "linked-session", expiresAt: "2026-08-23T00:00:00.000Z" },
+        { status: 201 },
+      );
+    });
+    vi.stubGlobal("fetch", request);
+
+    const response = await callback(
+      new Request(
+        "http://localhost:3000/api/auth/naver/callback?code=authorization-code&state=naver-state",
+      ),
+    );
+
+    expect(response.headers.get("location")).toBe(
+      "http://localhost:3000/me?auth=success#connected-accounts",
+    );
+    expect(response.headers.get("set-cookie")).toContain("which_member_session=linked-session");
     expect(request).toHaveBeenCalledTimes(1);
   });
 

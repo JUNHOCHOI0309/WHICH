@@ -11,7 +11,7 @@ import {
   googleOidcCredentials,
   withAuthOutcome,
 } from "@/lib/server/member-auth";
-import { createProviderMemberSession } from "@/lib/server/member-session-bridge";
+import { createOAuthMemberSession } from "@/lib/server/member-session-bridge";
 import { googleCallbackUrl, pinGoogleTokenRedirectUri } from "@/lib/server/google-oauth";
 import {
   clearGuestSubjectCookie,
@@ -113,7 +113,7 @@ export async function GET(request: Request) {
       validGuestSubject(flow.anonymousSubjectId) ??
       validGuestSubject(cookieStore.get(GUEST_SUBJECT_COOKIE)?.value);
     stage = "member_session";
-    const session = await createProviderMemberSession({
+    const session = await createOAuthMemberSession(flow, {
       provider: "GOOGLE",
       providerSubject: claims.sub,
       displayName: typeof claims.name === "string" ? claims.name : "WHICH 회원",

@@ -49,6 +49,13 @@ describe("Member private profile experience", () => {
             participationCount: 1,
           },
           publicProfile: null,
+          identities: [
+            {
+              provider: "GOOGLE",
+              linkedAt: "2026-08-01T00:00:00.000Z",
+              lastAuthenticatedAt: "2026-08-20T00:00:00.000Z",
+            },
+          ],
           votes: {
             items: [
               {
@@ -86,6 +93,12 @@ describe("Member private profile experience", () => {
       "/issues/591f2e90-996a-50c5-af46-967dd0793000",
     );
     expect(screen.getByText("선택 기록은 공개 프로필과 분리됩니다.")).toBeVisible();
+    expect(screen.getByText("Google").closest("article")).toHaveTextContent("연결됨");
+    expect(screen.getByText("X").closest("article")).toHaveTextContent("연결되지 않음");
+    expect(screen.getByText("X").closest("article")?.querySelector("a")).toHaveAttribute(
+      "href",
+      "/api/auth/x/start?returnTo=%2Fme%23connected-accounts&intent=link",
+    );
   });
 
   it("creates a public Creator profile from the private Me surface", async () => {
@@ -109,6 +122,7 @@ describe("Member private profile experience", () => {
             participationCount: 0,
           },
           publicProfile: null,
+          identities: [],
           votes: { items: [], nextCursor: null },
         });
       }),
@@ -147,6 +161,7 @@ describe("Member private profile experience", () => {
             participationCount: 0,
           },
           publicProfile: null,
+          identities: [],
           votes: { items: [], nextCursor: null },
         });
       }),
@@ -185,6 +200,7 @@ describe("Member private profile experience", () => {
             participationCount: 0,
           },
           publicProfile: null,
+          identities: [],
           votes: { items: [], nextCursor: null },
         });
       }),

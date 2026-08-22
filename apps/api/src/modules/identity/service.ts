@@ -728,11 +728,115 @@ export function createMemberIdentityService(
       };
     },
 
+    async linkIdentity(memberId, assertion) {
+      if (assertion.provider === "DEVELOPMENT" && !options.allowDevelopmentProvider) {
+        throw new MemberIdentityError(
+          "DEVELOPMENT_PROVIDER_DISABLED",
+          403,
+          "The development identity provider is disabled in production.",
+        );
+      }
+
+      const now = new Date();
+      const expiresAt = new Date(now.getTime() + options.sessionTtlSeconds * 1_000);
+      const token = randomBytes(32).toString("base64url");
+
+      return database.transaction(async (transaction) => {
+        await transaction.execute(
+          sql`select pg_advisory_xact_lock(hashtextextended(${`member-link:${memberId}`}, 0))`,
+        );
+        await transaction.execute(
+          sql`select pg_advisory_xact_lock(hashtextextended(${`${assertion.provider}:${assertion.providerSubject}`}, 0))`,
+        );
+
+        const [member] = await transaction
+          .select()
+          .from(members)
+          .where(eq(members.id, memberId))
+          .limit(1);
+        if (!member || member.status !== "ACTIVE") {
+          throw new MemberIdentityError(
+            "MEMBER_NOT_ACTIVE",
+            403,
+            "This member cannot link another identity.",
+          );
+        }
+
+        const [providerLink] = await transaction
+          .select()
+          .from(memberIdentityLinks)
+          .where(
+            and(
+              eq(memberIdentityLinks.memberId, memberId),
+              eq(memberIdentityLinks.provider, assertion.provider),
+            ),
+          )
+          .limit(1);
+        if (providerLink && providerLink.providerSubject !== assertion.providerSubject) {
+          throw new MemberIdentityError(
+            "PROVIDER_ALREADY_LINKED",
+            409,
+            "This member already has a different identity for the provider.",
+          );
+        }
+
+        const [subjectLink] = await transaction
+          .select()
+          .from(memberIdentityLinks)
+          .where(
+            and(
+              eq(memberIdentityLinks.provider, assertion.provider),
+              eq(memberIdentityLinks.providerSubject, assertion.providerSubject),
+            ),
+          )
+          .limit(1);
+        if (subjectLink && subjectLink.memberId !== memberId) {
+          throw new MemberIdentityError(
+            "IDENTITY_ALREADY_LINKED",
+            409,
+            "This provider identity belongs to a different member.",
+          );
+        }
+
+        let linked = false;
+        if (subjectLink) {
+          await transaction
+            .update(memberIdentityLinks)
+            .set({ lastAuthenticatedAt: now })
+            .where(eq(memberIdentityLinks.id, subjectLink.id));
+        } else {
+          await transaction.insert(memberIdentityLinks).values({
+            memberId,
+            provider: assertion.provider,
+            providerSubject: assertion.providerSubject,
+            linkedAt: now,
+            lastAuthenticatedAt: now,
+          });
+          linked = true;
+        }
+
+        await transaction.insert(memberSessions).values({
+          memberId,
+          tokenHash: hashToken(token),
+          expiresAt,
+          createdAt: now,
+          lastSeenAt: now,
+        });
+
+        return {
+          token,
+          expiresAt: expiresAt.toISOString(),
+          member: toMemberView(member),
+          identity: { provider: assertion.provider, linked },
+        };
+      });
+    },
+
     async getPrivateProfile(token, query): Promise<MemberPrivateProfile | null> {
       const session = await activeMemberSession(database, token);
       if (!session) return null;
 
-      const [participationCount, rows, [publicProfile]] = await Promise.all([
+      const [participationCount, rows, [publicProfile], identities] = await Promise.all([
         privateVoteParticipationCount(database, session.member.id),
         privateVoteRows(database, session.member.id, {
           limit: query.limit + 1,
@@ -743,6 +847,14 @@ export function createMemberIdentityService(
           .from(memberProfiles)
           .where(eq(memberProfiles.memberId, session.member.id))
           .limit(1),
+        database
+          .select({
+            provider: memberIdentityLinks.provider,
+            linkedAt: memberIdentityLinks.linkedAt,
+            lastAuthenticatedAt: memberIdentityLinks.lastAuthenticatedAt,
+          })
+          .from(memberIdentityLinks)
+          .where(eq(memberIdentityLinks.memberId, session.member.id)),
       ]);
       const hasMore = rows.length > query.limit;
       const visibleRows = hasMore ? rows.slice(0, query.limit) : rows;
@@ -755,6 +867,11 @@ export function createMemberIdentityService(
           participationCount,
         },
         publicProfile: publicProfile ? profileSettings(publicProfile) : null,
+        identities: identities.map((identity) => ({
+          provider: identity.provider,
+          linkedAt: identity.linkedAt.toISOString(),
+          lastAuthenticatedAt: identity.lastAuthenticatedAt.toISOString(),
+        })),
         votes: {
           items: visibleRows.map(toPrivateVoteItem),
           nextCursor:
