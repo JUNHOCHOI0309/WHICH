@@ -1,5 +1,6 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 
+import { hash as hashPassword, verify as verifyPassword } from "@node-rs/argon2";
 import { alias } from "drizzle-orm/pg-core";
 import { and, eq, gt, isNull, sql } from "drizzle-orm";
 
@@ -9,6 +10,7 @@ import {
   commentReactions,
   commentReports,
   issueChoices,
+  memberCredentials,
   memberIdentityLinks,
   memberProfiles,
   memberSessions,
@@ -36,6 +38,17 @@ import { publicProfileInitials } from "./profile.js";
 const LINK_POLICY_VERSION = "guest-member-link-v1";
 const EVENT_SCHEMA_VERSION = 1;
 const HANDLE_PATTERN = /^[a-z0-9_]{3,30}$/;
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PASSWORD_MIN_LENGTH = 15;
+const PASSWORD_MAX_LENGTH = 128;
+const PASSWORD_HASH_OPTIONS = {
+  algorithm: 2,
+  memoryCost: 19_456,
+  timeCost: 2,
+  parallelism: 1,
+  outputLen: 32,
+} as const;
+const dummyPasswordHash = hashPassword("which-invalid-credential-padding", PASSWORD_HASH_OPTIONS);
 const RESERVED_HANDLES = new Set([
   "admin",
   "api",
@@ -62,6 +75,25 @@ function toMemberView(member: typeof members.$inferSelect): MemberView {
 function normalizedDisplayName(value: string) {
   const normalized = value.trim().replace(/\s+/g, " ");
   return normalized.length > 0 ? normalized.slice(0, 80) : "WHICH 회원";
+}
+
+function normalizeEmail(value: string) {
+  const email = value.trim().normalize("NFKC").toLowerCase();
+  if (email.length > 320 || !EMAIL_PATTERN.test(email)) {
+    throw new MemberIdentityError("EMAIL_INVALID", 400, "A valid email address is required.");
+  }
+  return email;
+}
+
+function validatePassword(value: string) {
+  if (value.length < PASSWORD_MIN_LENGTH || value.length > PASSWORD_MAX_LENGTH) {
+    throw new MemberIdentityError(
+      "PASSWORD_INVALID",
+      400,
+      `The password must be ${PASSWORD_MIN_LENGTH} to ${PASSWORD_MAX_LENGTH} characters.`,
+    );
+  }
+  return value;
 }
 
 function normalizeHandle(value: string) {
@@ -302,7 +334,7 @@ export function createMemberIdentityService(
   database: Database["db"],
   options: { sessionTtlSeconds: number; allowDevelopmentProvider: boolean },
 ): MemberIdentityService {
-  return {
+  const service: MemberIdentityService = {
     async createSession(assertion) {
       if (assertion.provider === "DEVELOPMENT" && !options.allowDevelopmentProvider) {
         throw new MemberIdentityError(
@@ -312,14 +344,40 @@ export function createMemberIdentityService(
         );
       }
 
+      const credential = assertion.credential
+        ? {
+            email: normalizeEmail(assertion.credential.email),
+            passwordHash: await hashPassword(
+              validatePassword(assertion.credential.password),
+              PASSWORD_HASH_OPTIONS,
+            ),
+          }
+        : null;
+      const providerSubject =
+        assertion.provider === "EMAIL"
+          ? normalizeEmail(assertion.providerSubject)
+          : assertion.providerSubject;
+      if (assertion.provider === "EMAIL" && credential && credential.email !== providerSubject) {
+        throw new MemberIdentityError(
+          "EMAIL_INVALID",
+          400,
+          "The credential email must match the email identity.",
+        );
+      }
+
       const now = new Date();
       const expiresAt = new Date(now.getTime() + options.sessionTtlSeconds * 1_000);
       const token = randomBytes(32).toString("base64url");
 
       return database.transaction(async (transaction) => {
         await transaction.execute(
-          sql`select pg_advisory_xact_lock(hashtextextended(${`${assertion.provider}:${assertion.providerSubject}`}, 0))`,
+          sql`select pg_advisory_xact_lock(hashtextextended(${`${assertion.provider}:${providerSubject}`}, 0))`,
         );
+        if (credential) {
+          await transaction.execute(
+            sql`select pg_advisory_xact_lock(hashtextextended(${`credential:${credential.email}`}, 0))`,
+          );
+        }
 
         let [identity] = await transaction
           .select({ link: memberIdentityLinks, member: members })
@@ -328,12 +386,34 @@ export function createMemberIdentityService(
           .where(
             and(
               eq(memberIdentityLinks.provider, assertion.provider),
-              eq(memberIdentityLinks.providerSubject, assertion.providerSubject),
+              eq(memberIdentityLinks.providerSubject, providerSubject),
             ),
           )
           .limit(1);
 
         if (!identity) {
+          if (assertion.createIfMissing === false) {
+            throw new MemberIdentityError(
+              "IDENTITY_SIGNUP_REQUIRED",
+              409,
+              "This identity must complete WHICH registration.",
+            );
+          }
+          if (credential) {
+            const [existingCredential] = await transaction
+              .select({ id: memberCredentials.id })
+              .from(memberCredentials)
+              .where(eq(memberCredentials.emailNormalized, credential.email))
+              .limit(1);
+            if (existingCredential) {
+              throw new MemberIdentityError(
+                "CREDENTIAL_ALREADY_EXISTS",
+                409,
+                "This email is already registered.",
+              );
+            }
+          }
+
           const [member] = await transaction
             .insert(members)
             .values({ displayName: normalizedDisplayName(assertion.displayName) })
@@ -345,16 +425,44 @@ export function createMemberIdentityService(
             .values({
               memberId: member.id,
               provider: assertion.provider,
-              providerSubject: assertion.providerSubject,
+              providerSubject,
               linkedAt: now,
               lastAuthenticatedAt: now,
             })
             .returning();
           if (!link) throw new Error("Identity link insert did not return a row.");
 
+          if (credential) {
+            await transaction.insert(memberCredentials).values({
+              memberId: member.id,
+              emailNormalized: credential.email,
+              passwordHash: credential.passwordHash,
+              emailVerifiedAt: null,
+              passwordChangedAt: now,
+              createdAt: now,
+              updatedAt: now,
+            });
+            if (assertion.provider !== "EMAIL") {
+              await transaction.insert(memberIdentityLinks).values({
+                memberId: member.id,
+                provider: "EMAIL",
+                providerSubject: credential.email,
+                linkedAt: now,
+                lastAuthenticatedAt: now,
+              });
+            }
+          }
+
           await transaction.insert(voterSubjects).values({ kind: "MEMBER", userId: member.id });
           identity = { link, member };
         } else {
+          if (credential) {
+            throw new MemberIdentityError(
+              "CREDENTIAL_ALREADY_EXISTS",
+              409,
+              "This account already exists. Sign in instead.",
+            );
+          }
           await transaction
             .update(memberIdentityLinks)
             .set({ lastAuthenticatedAt: now })
@@ -715,6 +823,91 @@ export function createMemberIdentityService(
             mergedDuplicateReactions,
           },
         };
+      });
+    },
+
+    async createCredentialSession(assertion) {
+      const email = normalizeEmail(assertion.email);
+      const [credential] = await database
+        .select({ credential: memberCredentials, member: members })
+        .from(memberCredentials)
+        .innerJoin(members, eq(memberCredentials.memberId, members.id))
+        .where(eq(memberCredentials.emailNormalized, email))
+        .limit(1);
+      const passwordHash = credential?.credential.passwordHash ?? (await dummyPasswordHash);
+      const passwordMatches = await verifyPassword(passwordHash, assertion.password).catch(
+        () => false,
+      );
+      if (!credential || !passwordMatches || credential.member.status !== "ACTIVE") {
+        throw new MemberIdentityError(
+          "CREDENTIAL_INVALID",
+          401,
+          "The email or password is incorrect.",
+        );
+      }
+
+      return service.createSession({
+        provider: "EMAIL",
+        providerSubject: email,
+        displayName: credential.member.displayName,
+        anonymousSubjectId: assertion.anonymousSubjectId,
+        createIfMissing: false,
+      });
+    },
+
+    async addCredential(memberId, input) {
+      const email = normalizeEmail(input.email);
+      const passwordHash = await hashPassword(
+        validatePassword(input.password),
+        PASSWORD_HASH_OPTIONS,
+      );
+      const now = new Date();
+      return database.transaction(async (transaction) => {
+        await transaction.execute(
+          sql`select pg_advisory_xact_lock(hashtextextended(${`credential:${email}`}, 0))`,
+        );
+        await transaction.execute(
+          sql`select pg_advisory_xact_lock(hashtextextended(${`member-credential:${memberId}`}, 0))`,
+        );
+        const [member] = await transaction
+          .select()
+          .from(members)
+          .where(eq(members.id, memberId))
+          .limit(1);
+        if (!member || member.status !== "ACTIVE") {
+          throw new MemberIdentityError("MEMBER_NOT_ACTIVE", 403, "This member is not active.");
+        }
+        const [existing] = await transaction
+          .select({ id: memberCredentials.id })
+          .from(memberCredentials)
+          .where(
+            sql`${memberCredentials.memberId} = ${memberId} or ${memberCredentials.emailNormalized} = ${email}`,
+          )
+          .limit(1);
+        if (existing) {
+          throw new MemberIdentityError(
+            "CREDENTIAL_ALREADY_EXISTS",
+            409,
+            "This Member or email already has a credential.",
+          );
+        }
+        await transaction.insert(memberCredentials).values({
+          memberId,
+          emailNormalized: email,
+          passwordHash,
+          emailVerifiedAt: null,
+          passwordChangedAt: now,
+          createdAt: now,
+          updatedAt: now,
+        });
+        await transaction.insert(memberIdentityLinks).values({
+          memberId,
+          provider: "EMAIL",
+          providerSubject: email,
+          linkedAt: now,
+          lastAuthenticatedAt: now,
+        });
+        return { member: toMemberView(member), email };
       });
     },
 
@@ -1160,4 +1353,5 @@ export function createMemberIdentityService(
       return Boolean(session);
     },
   };
+  return service;
 }

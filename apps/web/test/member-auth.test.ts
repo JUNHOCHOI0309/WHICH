@@ -4,8 +4,10 @@ import {
   authFlowMatches,
   decodeAuthFlow,
   decodeGoogleBrowserHandoff,
+  decodeSocialSignupTicket,
   encodeAuthFlow,
   encodeGoogleBrowserHandoff,
+  encodeSocialSignupTicket,
   internalAuthSecret,
   isEmbeddedUserAgent,
   sanitizeReturnTo,
@@ -75,6 +77,28 @@ describe("Member OAuth return flow", () => {
     });
     expect(decodeGoogleBrowserHandoff(`${encoded}tampered`, createdAt + 1_000)).toBeNull();
     expect(decodeGoogleBrowserHandoff(encoded, createdAt + 2 * 60 * 1_000 + 1)).toBeNull();
+  });
+
+  it("encrypts and expires the social signup identity without exposing Provider data", () => {
+    const createdAt = Date.now();
+    const encoded = encodeSocialSignupTicket({
+      provider: "KAKAO",
+      providerSubject: "kakao-secret-subject",
+      displayName: "카카오 회원",
+      suggestedEmail: "member@example.com",
+      anonymousSubjectId: "591f2e90-996a-50c5-af46-967dd0793000",
+      returnTo: "/me",
+      createdAt,
+    });
+
+    expect(encoded).not.toContain("kakao-secret-subject");
+    expect(decodeSocialSignupTicket(encoded, createdAt + 1_000)).toMatchObject({
+      provider: "KAKAO",
+      providerSubject: "kakao-secret-subject",
+      returnTo: "/me",
+    });
+    expect(decodeSocialSignupTicket(`${encoded}tampered`, createdAt + 1_000)).toBeNull();
+    expect(decodeSocialSignupTicket(encoded, createdAt + 10 * 60 * 1_000 + 1)).toBeNull();
   });
 
   it("binds the signed flow to its Provider and returned state", () => {

@@ -8,6 +8,7 @@ import {
   authBaseUrl,
   authFlowMatches,
   decodeAuthFlow,
+  encodeSocialSignupTicket,
   type AuthOutcome,
   naverLoginEnabled,
   naverOidcCredentials,
@@ -18,6 +19,7 @@ import {
   clearGuestSubjectCookie,
   GUEST_SUBJECT_COOKIE,
   setMemberSessionCookie,
+  setSocialSignupCookie,
   validGuestSubject,
 } from "@/lib/server/which-api";
 
@@ -144,7 +146,26 @@ export async function GET(request: Request) {
       providerSubject: claims.sub,
       displayName: typeof claims.name === "string" ? claims.name : "네이버 회원",
       anonymousSubjectId,
+      suggestedEmail: typeof claims.email === "string" ? claims.email : undefined,
     });
+
+    if (session.kind === "signup") {
+      const response = NextResponse.redirect(new URL("/signup/social", baseUrl));
+      setSocialSignupCookie(
+        response,
+        encodeSocialSignupTicket({
+          provider: session.input.provider,
+          providerSubject: session.input.providerSubject,
+          displayName: session.input.displayName,
+          suggestedEmail: session.input.suggestedEmail,
+          anonymousSubjectId: session.input.anonymousSubjectId ?? undefined,
+          returnTo: flow.returnTo,
+          createdAt: Date.now(),
+        }),
+      );
+      clearFlowCookie(response);
+      return response;
+    }
 
     const response = redirectWithOutcome(baseUrl, flow.returnTo, "success");
     setMemberSessionCookie(response, session.token, session.expiresAt);

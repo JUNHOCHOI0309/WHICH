@@ -127,6 +127,13 @@
       "when": 1787393806248,
       "tag": "0017_lovely_dragon_man",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1787404488828,
+      "tag": "0018_abnormal_johnny_storm",
+      "breakpoints": true
     }
   ]
 }

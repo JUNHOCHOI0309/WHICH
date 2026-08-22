@@ -1,9 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
-import { loginHref } from "@/lib/auth";
 import { logoutMemberSession, MEMBER_LOGOUT_ERROR } from "@/lib/member-session";
 
 import styles from "./member-access.module.css";
@@ -44,16 +43,6 @@ export function MemberAccess({
       .catch(() => setState("error"));
   }, []);
 
-  const loginHrefs = useMemo(() => {
-    const returnTo = `/issues/${issueId}#member-access`;
-    return {
-      google: loginHref("google", returnTo),
-      x: loginHref("x", returnTo),
-      naver: loginHref("naver", returnTo),
-      kakao: loginHref("kakao", returnTo),
-    };
-  }, [issueId]);
-
   return (
     <section className={styles.access} id="member-access" aria-live="polite">
       <div>
@@ -80,26 +69,13 @@ export function MemberAccess({
       {state === "loading" ? <span className={styles.status}>로그인 상태 확인 중…</span> : null}
       {state === "guest" || state === "error" ? (
         <div className={styles.loginOptions} aria-label="로그인 제공자 선택">
-          <a className={styles.login} href={loginHrefs.google}>
-            Google로 이어서 로그인
+          <Link
+            className={styles.login}
+            href={`/login?returnTo=${encodeURIComponent(`/issues/${issueId}#member-access`)}`}
+          >
+            로그인 또는 빠른 회원가입
             <span aria-hidden="true">→</span>
-          </a>
-          <a className={`${styles.login} ${styles.xLogin}`} href={loginHrefs.x}>
-            X로 이어서 로그인
-            <span aria-hidden="true">→</span>
-          </a>
-          {naverLoginEnabled ? (
-            <a className={`${styles.login} ${styles.naverLogin}`} href={loginHrefs.naver}>
-              네이버로 이어서 로그인
-              <span aria-hidden="true">→</span>
-            </a>
-          ) : null}
-          {kakaoLoginEnabled ? (
-            <a className={`${styles.login} ${styles.kakaoLogin}`} href={loginHrefs.kakao}>
-              카카오로 이어서 로그인
-              <span aria-hidden="true">→</span>
-            </a>
-          ) : null}
+          </Link>
         </div>
       ) : null}
       {state === "member" ? (

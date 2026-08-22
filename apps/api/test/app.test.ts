@@ -33,6 +33,8 @@ const commentReader: CommentService = {
 
 const memberIdentity: MemberIdentityService = {
   createSession: vi.fn(),
+  createCredentialSession: vi.fn(),
+  addCredential: vi.fn(),
   linkIdentity: vi.fn(),
   getSession: vi.fn(),
   getPrivateProfile: vi.fn(),

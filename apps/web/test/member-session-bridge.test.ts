@@ -80,6 +80,47 @@ describe("Provider member session bridge", () => {
     expect(request).toHaveBeenCalledTimes(1);
   });
 
+  it("returns a signup handoff instead of auto-creating an unlinked social Member", async () => {
+    const requestBodies: Record<string, unknown>[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
+        requestBodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+        return Response.json(
+          { code: "IDENTITY_SIGNUP_REQUIRED", message: "registration required" },
+          { status: 409 },
+        );
+      }),
+    );
+
+    await expect(
+      createOAuthMemberSession(
+        {
+          provider: "GOOGLE",
+          state: "state",
+          nonce: "nonce",
+          codeVerifier: "verifier",
+          returnTo: "/me",
+          createdAt: Date.now(),
+        },
+        {
+          provider: "GOOGLE",
+          providerSubject: "new-google-subject",
+          displayName: "새 회원",
+          suggestedEmail: "new@example.com",
+        },
+      ),
+    ).resolves.toMatchObject({ kind: "signup", input: { provider: "GOOGLE" } });
+    expect(requestBodies).toEqual([
+      {
+        provider: "GOOGLE",
+        providerSubject: "new-google-subject",
+        displayName: "새 회원",
+        createIfMissing: false,
+      },
+    ]);
+  });
+
   it("resolves the canonical Member only for an authenticated link intent", async () => {
     const memberId = "591f2e90-996a-50c5-af46-967dd0793000";
     const request = vi.fn(async () => Response.json({ member: { id: memberId } }, { status: 200 }));
@@ -136,6 +177,7 @@ describe("Provider member session bridge", () => {
         },
       ),
     ).resolves.toEqual({
+      kind: "session",
       token: "linked-session",
       expiresAt: "2026-08-23T00:00:00.000Z",
     });

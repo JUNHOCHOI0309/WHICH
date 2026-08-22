@@ -1,4 +1,4 @@
-export type IdentityProvider = "GOOGLE" | "X" | "NAVER" | "KAKAO" | "DEVELOPMENT";
+export type IdentityProvider = "EMAIL" | "GOOGLE" | "X" | "NAVER" | "KAKAO" | "DEVELOPMENT";
 
 export type MemberView = {
   id: string;
@@ -11,6 +11,22 @@ export type IdentityAssertion = {
   providerSubject: string;
   displayName: string;
   anonymousSubjectId?: string;
+  createIfMissing?: boolean;
+  credential?: {
+    email: string;
+    password: string;
+  };
+};
+
+export type CredentialSessionAssertion = {
+  email: string;
+  password: string;
+  anonymousSubjectId?: string;
+};
+
+export type MemberCredentialResult = {
+  member: MemberView;
+  email: string;
 };
 
 export type MemberSessionResult = {
@@ -129,6 +145,11 @@ export type MemberVoteLookupResult = {
 
 export interface MemberIdentityService {
   createSession(assertion: IdentityAssertion): Promise<MemberSessionResult>;
+  createCredentialSession(assertion: CredentialSessionAssertion): Promise<MemberSessionResult>;
+  addCredential(
+    memberId: string,
+    credential: { email: string; password: string },
+  ): Promise<MemberCredentialResult>;
   linkIdentity(
     memberId: string,
     assertion: Omit<IdentityAssertion, "anonymousSubjectId">,

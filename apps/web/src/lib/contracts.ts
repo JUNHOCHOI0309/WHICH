@@ -135,7 +135,7 @@ export type MemberPrivateProfile = {
   };
   publicProfile: MemberProfileSettings | null;
   identities: Array<{
-    provider: "GOOGLE" | "X" | "NAVER" | "KAKAO" | "DEVELOPMENT";
+    provider: "EMAIL" | "GOOGLE" | "X" | "NAVER" | "KAKAO" | "DEVELOPMENT";
     linkedAt: string;
     lastAuthenticatedAt: string;
   }>;

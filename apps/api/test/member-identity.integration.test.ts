@@ -11,6 +11,7 @@ import {
   issueChoices,
   issues,
   issueVersions,
+  memberCredentials,
   memberIdentityLinks,
   memberProfiles,
   memberSessions,
@@ -75,10 +76,11 @@ async function submitGuestVote(anonymousSubjectId: string, issueId: string, choi
 }
 
 function createMemberSession(input: {
-  provider?: "GOOGLE" | "X" | "NAVER" | "KAKAO" | "DEVELOPMENT";
+  provider?: "EMAIL" | "GOOGLE" | "X" | "NAVER" | "KAKAO" | "DEVELOPMENT";
   providerSubject: string;
   anonymousSubjectId?: string;
-  email?: string;
+  createIfMissing?: boolean;
+  credential?: { email: string; password: string };
 }) {
   return app.inject({
     method: "POST",
@@ -89,7 +91,8 @@ function createMemberSession(input: {
       providerSubject: input.providerSubject,
       displayName: "테스트 회원",
       anonymousSubjectId: input.anonymousSubjectId,
-      email: input.email,
+      createIfMissing: input.createIfMissing,
+      credential: input.credential,
     },
   });
 }
@@ -143,6 +146,96 @@ describe("Member identity and Guest vote linking", () => {
     });
     expect(response.statusCode).toBe(401);
     expect(response.json()).toMatchObject({ code: "UNAUTHORIZED" });
+  });
+
+  it("requires registration instead of auto-creating an unlinked OAuth Member", async () => {
+    const before = await database.db.select({ id: members.id }).from(members);
+    const response = await createMemberSession({
+      provider: "GOOGLE",
+      providerSubject: `unlinked-${randomUUID()}`,
+      createIfMissing: false,
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({ code: "IDENTITY_SIGNUP_REQUIRED" });
+    const after = await database.db.select({ id: members.id }).from(members);
+    expect(after).toHaveLength(before.length);
+  });
+
+  it("creates one Member with credential and social identities, then signs in by email", async () => {
+    const email = `Member-${randomUUID()}@Example.com`;
+    const password = "correct horse battery staple";
+    const signup = await createMemberSession({
+      provider: "KAKAO",
+      providerSubject: `kakao-signup-${randomUUID()}`,
+      credential: { email, password },
+    });
+
+    expect(signup.statusCode).toBe(201);
+    const memberId = signup.json<{ member: { id: string } }>().member.id;
+    const credentials = await database.db
+      .select({
+        email: memberCredentials.emailNormalized,
+        passwordHash: memberCredentials.passwordHash,
+      })
+      .from(memberCredentials)
+      .where(eq(memberCredentials.memberId, memberId));
+    expect(credentials).toHaveLength(1);
+    expect(credentials[0]?.email).toBe(email.toLowerCase());
+    expect(credentials[0]?.passwordHash).toMatch(/^\$argon2id\$/);
+    expect(credentials[0]?.passwordHash).not.toContain(password);
+
+    const links = await database.db
+      .select({ provider: memberIdentityLinks.provider })
+      .from(memberIdentityLinks)
+      .where(eq(memberIdentityLinks.memberId, memberId));
+    expect(links).toEqual(expect.arrayContaining([{ provider: "EMAIL" }, { provider: "KAKAO" }]));
+
+    const login = await app.inject({
+      method: "POST",
+      url: "/v1/internal/member-credential-sessions",
+      headers: { "x-internal-auth-secret": INTERNAL_SECRET },
+      payload: { email: email.toUpperCase(), password },
+    });
+    expect(login.statusCode).toBe(201);
+    expect(login.json()).toMatchObject({ member: { id: memberId } });
+
+    const rejected = await app.inject({
+      method: "POST",
+      url: "/v1/internal/member-credential-sessions",
+      headers: { "x-internal-auth-secret": INTERNAL_SECRET },
+      payload: { email, password: "this password is definitely wrong" },
+    });
+    expect(rejected.statusCode).toBe(401);
+    expect(rejected.json()).toMatchObject({ code: "CREDENTIAL_INVALID" });
+  });
+
+  it("lets an existing social-only Member complete email and password login", async () => {
+    const social = await createMemberSession({
+      provider: "NAVER",
+      providerSubject: `naver-complete-${randomUUID()}`,
+    });
+    const memberId = social.json<{ member: { id: string } }>().member.id;
+    const email = `complete-${randomUUID()}@example.com`;
+    const password = "a long existing member passphrase";
+
+    const completed = await app.inject({
+      method: "POST",
+      url: "/v1/internal/member-credentials",
+      headers: { "x-internal-auth-secret": INTERNAL_SECRET },
+      payload: { memberId, email, password },
+    });
+    expect(completed.statusCode).toBe(201);
+    expect(completed.json()).toMatchObject({ member: { id: memberId }, email });
+
+    const login = await app.inject({
+      method: "POST",
+      url: "/v1/internal/member-credential-sessions",
+      headers: { "x-internal-auth-secret": INTERNAL_SECRET },
+      payload: { email, password },
+    });
+    expect(login.statusCode).toBe(201);
+    expect(login.json()).toMatchObject({ member: { id: memberId } });
   });
 
   it("keeps the private Member profile behind the session token", async () => {
@@ -378,11 +471,9 @@ describe("Member identity and Guest vote linking", () => {
   it("maps the same Provider Subject to one Member and stores only a token hash", async () => {
     const first = await createMemberSession({
       providerSubject: "provider-subject-stable",
-      email: "first@example.com",
     });
     const second = await createMemberSession({
       providerSubject: "provider-subject-stable",
-      email: "changed@example.com",
     });
     expect(first.statusCode).toBe(201);
     expect(second.statusCode).toBe(201);
