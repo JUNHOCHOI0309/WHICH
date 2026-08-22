@@ -77,7 +77,7 @@ describe("Kakao OIDC routes", () => {
       client_id: "kakao-client",
       redirect_uri: "http://localhost:3000/api/auth/kakao/callback",
       response_type: "code",
-      scope: "openid profile",
+      scope: "openid",
       state: "kakao-state",
       nonce: "kakao-nonce",
       code_challenge: "kakao-challenge",
