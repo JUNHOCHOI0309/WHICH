@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import { loginHref } from "@/lib/auth";
+import { logoutMemberSession, MEMBER_LOGOUT_ERROR } from "@/lib/member-session";
 
 import styles from "./member-access.module.css";
 
@@ -21,6 +22,8 @@ export function MemberAccess({
 }) {
   const [session, setSession] = useState<Session | null>(null);
   const [state, setState] = useState<"loading" | "guest" | "member" | "error">("loading");
+  const [logoutPending, setLogoutPending] = useState(false);
+  const [logoutError, setLogoutError] = useState<string | null>(null);
   const [authOutcome] = useState(() =>
     typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("auth"),
   );
@@ -91,19 +94,28 @@ export function MemberAccess({
           <button
             className={styles.logout}
             type="button"
+            disabled={logoutPending}
             onClick={() => {
-              setState("loading");
-              void fetch("/api/member-session", { method: "DELETE" })
+              setLogoutPending(true);
+              setLogoutError(null);
+              void logoutMemberSession()
                 .then(() => {
                   setSession(null);
                   setState("guest");
                 })
-                .catch(() => setState("error"));
+                .catch(() => setLogoutError(MEMBER_LOGOUT_ERROR))
+                .finally(() => setLogoutPending(false));
             }}
           >
-            로그아웃
+            {logoutPending ? "로그아웃 중…" : "로그아웃"}
           </button>
         </div>
+      ) : null}
+
+      {logoutError ? (
+        <p className={styles.logoutError} role="alert">
+          {logoutError}
+        </p>
       ) : null}
 
       {authOutcome === "cancelled" ? (

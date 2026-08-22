@@ -19,7 +19,7 @@
   letter-spacing: -0.04em;
 }
 
-.access p:not(.eyebrow, .notice) {
+.access p:not(.eyebrow, .notice, .logoutError) {
   margin: 10px 0 0;
   color: var(--muted);
   line-height: 1.6;
@@ -75,6 +75,11 @@
   background: transparent;
 }
 
+.logout:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
 .login:focus-visible,
 .logout:focus-visible,
 .profileLink:focus-visible {
@@ -103,5 +108,15 @@
 .notice {
   border-left: 4px solid var(--b);
   background: #fff1e8;
+  padding: 10px 12px;
+}
+
+.logoutError {
+  margin: 12px 0 0;
+  border-left: 4px solid var(--b);
+  background: #fff1e8;
+  color: var(--ink);
+  font-size: 0.8rem;
+  font-weight: 800;
   padding: 10px 12px;
 }

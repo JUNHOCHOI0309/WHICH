@@ -128,11 +128,11 @@ describe("Member private profile experience", () => {
   });
 
   it("clears the private view after logout", async () => {
-    const requests: Array<{ url: string; method: string }> = [];
+    const requests: Array<{ url: string; init?: RequestInit }> = [];
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
-        requests.push({ url: String(input), method: init?.method ?? "GET" });
+        requests.push({ url: String(input), init });
         if (init?.method === "DELETE") return new Response(null, { status: 204 });
         return jsonResponse({
           member: {
@@ -152,6 +152,45 @@ describe("Member private profile experience", () => {
     fireEvent.click(await screen.findByRole("button", { name: "로그아웃" }));
 
     await waitFor(() => expect(screen.getByText("로그인하면 내 선택이 이어져요.")).toBeVisible());
-    expect(requests).toContainEqual({ url: "/api/member-session", method: "DELETE" });
+    const logoutRequest = requests.find((request) => request.init?.method === "DELETE");
+    expect(logoutRequest?.url).toBe("/api/member-session");
+    expect(logoutRequest?.init).toMatchObject({
+      method: "DELETE",
+      cache: "no-store",
+      credentials: "same-origin",
+    });
+    expect(new Headers(logoutRequest?.init?.headers).get("x-which-csrf")).toBe(
+      "member-session-logout",
+    );
+  });
+
+  it.each([
+    { name: "HTTP failure", response: () => jsonResponse({ code: "FAILED" }, 502) },
+    { name: "network failure", response: () => Promise.reject(new Error("offline")) },
+  ])("keeps the private view after a $name", async ({ response }) => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
+        if (init?.method === "DELETE") return response();
+        return jsonResponse({
+          member: {
+            id: "member-1",
+            displayName: "로그아웃 유지 회원",
+            status: "ACTIVE",
+            joinedAt: "2026-08-01T00:00:00.000Z",
+            participationCount: 0,
+          },
+          publicProfile: null,
+          votes: { items: [], nextCursor: null },
+        });
+      }),
+    );
+
+    render(<MemberProfileExperience naverLoginEnabled={false} />);
+    fireEvent.click(await screen.findByRole("button", { name: "로그아웃" }));
+
+    expect(await screen.findByText("로그아웃하지 못했습니다. 다시 시도해 주세요.")).toBeVisible();
+    expect(screen.getByRole("heading", { name: "로그아웃 유지 회원님의 선택" })).toBeVisible();
+    expect(screen.queryByText("로그인하면 내 선택이 이어져요.")).not.toBeInTheDocument();
   });
 });

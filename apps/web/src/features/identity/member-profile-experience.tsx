@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { loginHref } from "@/lib/auth";
 import type { MemberPrivateProfile, MemberPrivateVote } from "@/lib/contracts";
+import { logoutMemberSession, MEMBER_LOGOUT_ERROR } from "@/lib/member-session";
 
 import styles from "./member-profile-experience.module.css";
 import { MemberPublicProfileSettings } from "./member-public-profile-settings";
@@ -44,6 +45,8 @@ export function MemberProfileExperience({ naverLoginEnabled }: { naverLoginEnabl
   const [screen, setScreen] = useState<Screen>("loading");
   const [profile, setProfile] = useState<MemberPrivateProfile | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [logoutPending, setLogoutPending] = useState(false);
+  const [logoutError, setLogoutError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setScreen("loading");
@@ -244,18 +247,26 @@ export function MemberProfileExperience({ naverLoginEnabled }: { naverLoginEnabl
             </div>
             <button
               type="button"
+              disabled={logoutPending}
               onClick={() => {
-                setScreen("loading");
-                void fetch("/api/member-session", { method: "DELETE" })
+                setLogoutPending(true);
+                setLogoutError(null);
+                void logoutMemberSession()
                   .then(() => {
                     setProfile(null);
                     setScreen("guest");
                   })
-                  .catch(() => setScreen("error"));
+                  .catch(() => setLogoutError(MEMBER_LOGOUT_ERROR))
+                  .finally(() => setLogoutPending(false));
               }}
             >
-              로그아웃
+              {logoutPending ? "로그아웃 중…" : "로그아웃"}
             </button>
+            {logoutError ? (
+              <p className={styles.logoutError} role="alert">
+                {logoutError}
+              </p>
+            ) : null}
           </section>
         </>
       ) : null}
