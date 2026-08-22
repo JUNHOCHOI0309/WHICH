@@ -26,14 +26,9 @@ describe("Member private profile experience", () => {
 
     expect(await screen.findByText("로그인하면 내 선택이 이어져요.")).toBeVisible();
     expect(screen.getByText(/전체 투표 기록은 다른 사람에게 공개되지 않습니다/)).toBeVisible();
-    expect(screen.getByRole("link", { name: "Google로 로그인" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "로그인 또는 빠른 회원가입" })).toHaveAttribute(
       "href",
-      "/api/auth/google/start?returnTo=%2Fme",
-    );
-    expect(screen.getByRole("link", { name: "네이버로 로그인" })).toBeVisible();
-    expect(screen.getByRole("link", { name: "카카오로 로그인" })).toHaveAttribute(
-      "href",
-      "/api/auth/kakao/start?returnTo=%2Fme",
+      "/login?returnTo=%2Fme",
     );
   });
 

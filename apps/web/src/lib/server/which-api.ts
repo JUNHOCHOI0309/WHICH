@@ -1,6 +1,7 @@
 import type { NextRequest, NextResponse } from "next/server";
 
 import type { ApiErrorBody } from "../contracts";
+import { SOCIAL_SIGNUP_COOKIE } from "./member-auth";
 
 export const GUEST_SUBJECT_COOKIE = "which_guest_subject";
 export const MEMBER_SESSION_COOKIE = "which_member_session";
@@ -58,6 +59,30 @@ export function setGuestSubjectCookie(response: NextResponse, anonymousSubjectId
 export function clearGuestSubjectCookie(response: NextResponse) {
   response.cookies.set({
     name: GUEST_SUBJECT_COOKIE,
+    value: "",
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 0,
+  });
+}
+
+export function setSocialSignupCookie(response: NextResponse, ticket: string) {
+  response.cookies.set({
+    name: SOCIAL_SIGNUP_COOKIE,
+    value: ticket,
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 10 * 60,
+  });
+}
+
+export function clearSocialSignupCookie(response: NextResponse) {
+  response.cookies.set({
+    name: SOCIAL_SIGNUP_COOKIE,
     value: "",
     httpOnly: true,
     sameSite: "lax",

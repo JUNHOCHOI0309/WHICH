@@ -7,6 +7,7 @@ import {
   authBaseUrl,
   authFlowMatches,
   decodeAuthFlow,
+  encodeSocialSignupTicket,
   type AuthOutcome,
   withAuthOutcome,
   xOAuthCredentials,
@@ -16,6 +17,7 @@ import {
   clearGuestSubjectCookie,
   GUEST_SUBJECT_COOKIE,
   setMemberSessionCookie,
+  setSocialSignupCookie,
   validGuestSubject,
 } from "@/lib/server/which-api";
 import { exchangeXAuthorizationCode, fetchXProfile, xDisplayName } from "@/lib/server/x-oauth";
@@ -80,6 +82,23 @@ export async function GET(request: Request) {
       displayName: xDisplayName(profile),
       anonymousSubjectId,
     });
+    if (session.kind === "signup") {
+      const response = NextResponse.redirect(new URL("/signup/social", baseUrl));
+      setSocialSignupCookie(
+        response,
+        encodeSocialSignupTicket({
+          provider: session.input.provider,
+          providerSubject: session.input.providerSubject,
+          displayName: session.input.displayName,
+          suggestedEmail: session.input.suggestedEmail,
+          anonymousSubjectId: session.input.anonymousSubjectId ?? undefined,
+          returnTo: flow.returnTo,
+          createdAt: Date.now(),
+        }),
+      );
+      clearFlowCookie(response);
+      return response;
+    }
     const response = redirectWithOutcome(baseUrl, flow.returnTo, "success");
     setMemberSessionCookie(response, session.token, session.expiresAt);
     if (anonymousSubjectId) clearGuestSubjectCookie(response);

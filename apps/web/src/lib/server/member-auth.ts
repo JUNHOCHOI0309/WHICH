@@ -9,6 +9,7 @@ import {
 
 export const AUTH_FLOW_COOKIE = "which_auth_flow";
 export const AUTH_FLOW_COOKIE_PATH = "/api/auth";
+export const SOCIAL_SIGNUP_COOKIE = "which_social_signup";
 
 export type AuthProvider = "GOOGLE" | "X" | "NAVER" | "KAKAO";
 export type AuthOutcome = "success" | "cancelled" | "error" | "unavailable" | "merge-review";
@@ -37,9 +38,22 @@ export type GoogleBrowserHandoff = {
   createdAt: number;
 };
 
+export type SocialSignupTicket = {
+  version: 1;
+  provider: AuthProvider;
+  providerSubject: string;
+  displayName: string;
+  suggestedEmail?: string;
+  anonymousSubjectId?: string;
+  returnTo: string;
+  createdAt: number;
+};
+
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const GOOGLE_HANDOFF_CONTEXT = "which-google-browser-handoff-v1\0";
+const SOCIAL_SIGNUP_CONTEXT = "which-social-signup-v1\0";
 const GOOGLE_HANDOFF_MAX_AGE_MILLISECONDS = 2 * 60 * 1_000;
+const SOCIAL_SIGNUP_MAX_AGE_MILLISECONDS = 10 * 60 * 1_000;
 
 export function sanitizeReturnTo(value: string | null | undefined) {
   if (!value) return "/";
@@ -69,6 +83,71 @@ function flowSecret() {
 
 function googleHandoffKey() {
   return createHash("sha256").update(GOOGLE_HANDOFF_CONTEXT).update(flowSecret()).digest();
+}
+
+function socialSignupKey() {
+  return createHash("sha256").update(SOCIAL_SIGNUP_CONTEXT).update(flowSecret()).digest();
+}
+
+export function encodeSocialSignupTicket(input: Omit<SocialSignupTicket, "version">) {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", socialSignupKey(), iv);
+  cipher.setAAD(Buffer.from(SOCIAL_SIGNUP_CONTEXT));
+  const plaintext = Buffer.from(
+    JSON.stringify({ version: 1, ...input } satisfies SocialSignupTicket),
+  );
+  const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()]);
+  return [
+    "v1",
+    iv.toString("base64url"),
+    ciphertext.toString("base64url"),
+    cipher.getAuthTag().toString("base64url"),
+  ].join(".");
+}
+
+export function decodeSocialSignupTicket(
+  value: string | null | undefined,
+  now = Date.now(),
+): SocialSignupTicket | null {
+  if (!value) return null;
+  const [version, encodedIv, encodedCiphertext, encodedTag, extra] = value.split(".");
+  if (version !== "v1" || !encodedIv || !encodedCiphertext || !encodedTag || extra) return null;
+  try {
+    const decipher = createDecipheriv(
+      "aes-256-gcm",
+      socialSignupKey(),
+      Buffer.from(encodedIv, "base64url"),
+    );
+    decipher.setAAD(Buffer.from(SOCIAL_SIGNUP_CONTEXT));
+    decipher.setAuthTag(Buffer.from(encodedTag, "base64url"));
+    const plaintext = Buffer.concat([
+      decipher.update(Buffer.from(encodedCiphertext, "base64url")),
+      decipher.final(),
+    ]).toString("utf8");
+    const ticket = JSON.parse(plaintext) as SocialSignupTicket;
+    if (
+      ticket.version !== 1 ||
+      !["GOOGLE", "X", "NAVER", "KAKAO"].includes(ticket.provider) ||
+      typeof ticket.providerSubject !== "string" ||
+      ticket.providerSubject.length < 1 ||
+      ticket.providerSubject.length > 255 ||
+      typeof ticket.displayName !== "string" ||
+      ticket.displayName.length < 1 ||
+      ticket.displayName.length > 160 ||
+      (ticket.suggestedEmail !== undefined &&
+        (typeof ticket.suggestedEmail !== "string" || ticket.suggestedEmail.length > 320)) ||
+      (ticket.anonymousSubjectId !== undefined && !uuidPattern.test(ticket.anonymousSubjectId)) ||
+      sanitizeReturnTo(ticket.returnTo) !== ticket.returnTo ||
+      !Number.isInteger(ticket.createdAt) ||
+      ticket.createdAt > now + 30_000 ||
+      now - ticket.createdAt > SOCIAL_SIGNUP_MAX_AGE_MILLISECONDS
+    ) {
+      return null;
+    }
+    return ticket;
+  } catch {
+    return null;
+  }
 }
 
 export function isEmbeddedUserAgent(userAgent: string | null | undefined) {

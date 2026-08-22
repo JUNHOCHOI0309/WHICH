@@ -9,6 +9,7 @@ import { logoutMemberSession, MEMBER_LOGOUT_ERROR } from "@/lib/member-session";
 
 import styles from "./member-profile-experience.module.css";
 import { MemberPublicProfileSettings } from "./member-public-profile-settings";
+import { MemberCredentialSetup } from "./member-credential-setup";
 
 type Screen = "loading" | "guest" | "ready" | "error";
 type AccountLinkNotice = {
@@ -192,20 +193,7 @@ export function MemberProfileExperience({
             확인할 수 있어요.
           </span>
           <div className={styles.loginOptions} aria-label="로그인 제공자 선택">
-            <a href={loginHref("google", "/me")}>Google로 로그인</a>
-            <a className={styles.xLogin} href={loginHref("x", "/me")}>
-              X로 로그인
-            </a>
-            {naverLoginEnabled ? (
-              <a className={styles.naverLogin} href={loginHref("naver", "/me")}>
-                네이버로 로그인
-              </a>
-            ) : null}
-            {kakaoLoginEnabled ? (
-              <a className={styles.kakaoLogin} href={loginHref("kakao", "/me")}>
-                카카오로 로그인
-              </a>
-            ) : null}
+            <Link href="/login?returnTo=%2Fme">로그인 또는 빠른 회원가입</Link>
           </div>
         </section>
       ) : null}
@@ -241,6 +229,28 @@ export function MemberProfileExperience({
               setProfile((current) => (current ? { ...current, publicProfile } : current))
             }
           />
+
+          {!profile.identities.some((identity) => identity.provider === "EMAIL") ? (
+            <MemberCredentialSetup
+              onCompleted={() =>
+                setProfile((current) =>
+                  current
+                    ? {
+                        ...current,
+                        identities: [
+                          ...current.identities,
+                          {
+                            provider: "EMAIL",
+                            linkedAt: new Date().toISOString(),
+                            lastAuthenticatedAt: new Date().toISOString(),
+                          },
+                        ],
+                      }
+                    : current,
+                )
+              }
+            />
+          ) : null}
 
           <section
             className={styles.connectedAccounts}

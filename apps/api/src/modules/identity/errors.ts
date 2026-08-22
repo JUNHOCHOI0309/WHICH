@@ -4,6 +4,11 @@ export type MemberIdentityErrorCode =
   | "HANDLE_RESERVED"
   | "HANDLE_TAKEN"
   | "DEVELOPMENT_PROVIDER_DISABLED"
+  | "IDENTITY_SIGNUP_REQUIRED"
+  | "CREDENTIAL_INVALID"
+  | "CREDENTIAL_ALREADY_EXISTS"
+  | "EMAIL_INVALID"
+  | "PASSWORD_INVALID"
   | "GUEST_SUBJECT_NOT_FOUND"
   | "GUEST_ALREADY_LINKED"
   | "IDENTITY_ALREADY_LINKED"
@@ -14,7 +19,7 @@ export type MemberIdentityErrorCode =
 export class MemberIdentityError extends Error {
   constructor(
     public readonly code: MemberIdentityErrorCode,
-    public readonly statusCode: 400 | 403 | 404 | 409,
+    public readonly statusCode: 400 | 401 | 403 | 404 | 409,
     message: string,
   ) {
     super(message);

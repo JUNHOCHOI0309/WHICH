@@ -43,6 +43,7 @@ export const memberStatusEnum = pgEnum("member_status", [
 ]);
 export const profileVisibilityEnum = pgEnum("profile_visibility", ["PRIVATE", "PUBLIC"]);
 export const identityProviderEnum = pgEnum("identity_provider", [
+  "EMAIL",
   "GOOGLE",
   "X",
   "NAVER",

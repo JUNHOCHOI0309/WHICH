@@ -45,6 +45,28 @@ export const memberIdentityLinks = pgTable(
   ],
 );
 
+export const memberCredentials = pgTable(
+  "member_credentials",
+  {
+    id: uuid("member_credential_id").defaultRandom().primaryKey(),
+    memberId: uuid("member_id")
+      .notNull()
+      .references(() => members.id, { onDelete: "restrict" }),
+    emailNormalized: varchar("email_normalized", { length: 320 }).notNull(),
+    passwordHash: varchar("password_hash", { length: 512 }).notNull(),
+    emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),
+    passwordChangedAt: timestamp("password_changed_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    unique("member_credentials_member_unique").on(table.memberId),
+    unique("member_credentials_email_unique").on(table.emailNormalized),
+  ],
+);
+
 export const memberSessions = pgTable(
   "member_sessions",
   {

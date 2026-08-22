@@ -550,9 +550,10 @@ describe("IssueExperience", () => {
 
     render(<IssueExperience issueId={ISSUE_ID} />);
 
-    expect(await screen.findByRole("link", { name: "Google로 이어서 로그인" })).toBeVisible();
-    expect(screen.queryByRole("link", { name: /네이버로 이어서 로그인/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: /카카오로 이어서 로그인/ })).not.toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: /로그인 또는 빠른 회원가입/ })).toHaveAttribute(
+      "href",
+      `/login?returnTo=${encodeURIComponent(`/issues/${ISSUE_ID}#member-access`)}`,
+    );
 
     fireEvent.change(screen.getByRole("textbox", { name: "내 선택 이유" }), {
       target: { value: "숨김 확인" },
