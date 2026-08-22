@@ -36,6 +36,7 @@ describe("Naver OIDC routes", () => {
     oidcMocks.calculatePKCECodeChallenge.mockResolvedValue("naver-challenge");
     oidcMocks.randomState.mockReturnValue("naver-state");
     oidcMocks.randomNonce.mockReturnValue("naver-nonce");
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
     oidcMocks.buildAuthorizationUrl.mockImplementation((_config, parameters) => {
       const url = new URL("https://nid.naver.com/oauth2/authorize");
       Object.entries(parameters as Record<string, string>).forEach(([key, value]) => {
@@ -49,6 +50,7 @@ describe("Naver OIDC routes", () => {
   afterEach(() => {
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
   function flowCookie() {
@@ -180,6 +182,7 @@ describe("Naver OIDC routes", () => {
         expectedNonce: "naver-nonce",
         idTokenExpected: true,
       },
+      { state: "naver-state" },
     );
     expect(request).toHaveBeenCalledTimes(1);
   });
@@ -233,6 +236,38 @@ describe("Naver OIDC routes", () => {
 
     expect(response.headers.get("location")).toBe(
       "http://localhost:3000/issues/issue-1?auth=error#member-access",
+    );
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it("logs only the safe failure stage when the Naver token exchange fails", async () => {
+    headerMocks.get.mockImplementation((name: string) =>
+      name === AUTH_FLOW_COOKIE ? { value: flowCookie() } : undefined,
+    );
+    oidcMocks.authorizationCodeGrant.mockRejectedValue(
+      new Error("sensitive authorization code must not be logged"),
+    );
+    const request = vi.fn();
+    vi.stubGlobal("fetch", request);
+
+    const response = await callback(
+      new Request(
+        "http://localhost:3000/api/auth/naver/callback?code=authorization-code&state=naver-state",
+      ),
+    );
+
+    expect(response.headers.get("location")).toBe(
+      "http://localhost:3000/issues/issue-1?auth=error#member-access",
+    );
+    expect(console.warn).toHaveBeenCalledWith(
+      JSON.stringify({
+        event: "naver_auth_failed",
+        stage: "token_exchange",
+        errorName: "Error",
+      }),
+    );
+    expect(JSON.stringify(vi.mocked(console.warn).mock.calls)).not.toContain(
+      "sensitive authorization code",
     );
     expect(request).not.toHaveBeenCalled();
   });

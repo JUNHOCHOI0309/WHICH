@@ -21,6 +21,26 @@ import {
 
 export const runtime = "nodejs";
 
+type NaverAuthFailureStage =
+  | "flow_validation"
+  | "provider_response"
+  | "feature_flag"
+  | "credentials"
+  | "discovery"
+  | "token_exchange"
+  | "claims"
+  | "member_session";
+
+function logNaverAuthFailure(stage: NaverAuthFailureStage, error?: unknown) {
+  console.warn(
+    JSON.stringify({
+      event: "naver_auth_failed",
+      stage,
+      ...(error instanceof Error ? { errorName: error.name } : {}),
+    }),
+  );
+}
+
 function clearFlowCookie(response: NextResponse) {
   response.cookies.set({
     name: AUTH_FLOW_COOKIE,
@@ -55,6 +75,7 @@ export async function GET(request: Request) {
     !flow.nonce ||
     !authFlowMatches(flow, "NAVER", requestUrl.searchParams.get("state"))
   ) {
+    logNaverAuthFailure("flow_validation");
     const response = NextResponse.redirect(new URL("/?auth=error", baseUrl));
     clearFlowCookie(response);
     return response;
@@ -62,6 +83,7 @@ export async function GET(request: Request) {
 
   const failure = requestUrl.searchParams.get("error");
   if (failure) {
+    logNaverAuthFailure("provider_response");
     return redirectWithOutcome(
       baseUrl,
       flow.returnTo,
@@ -69,25 +91,36 @@ export async function GET(request: Request) {
     );
   }
 
+  let stage: NaverAuthFailureStage = "feature_flag";
   try {
     if (!naverLoginEnabled()) throw new Error("Naver login is disabled.");
+    stage = "credentials";
     const credentials = naverOidcCredentials();
     if (!credentials) throw new Error("Naver OIDC is not configured.");
+    stage = "discovery";
     const config = await oidc.discovery(
       new URL("https://nid.naver.com"),
       credentials.clientId,
       credentials.clientSecret,
     );
-    const tokens = await oidc.authorizationCodeGrant(config, requestUrl, {
-      pkceCodeVerifier: flow.codeVerifier,
-      expectedState: flow.state,
-      expectedNonce: flow.nonce,
-      idTokenExpected: true,
-    });
+    stage = "token_exchange";
+    const tokens = await oidc.authorizationCodeGrant(
+      config,
+      requestUrl,
+      {
+        pkceCodeVerifier: flow.codeVerifier,
+        expectedState: flow.state,
+        expectedNonce: flow.nonce,
+        idTokenExpected: true,
+      },
+      { state: flow.state },
+    );
+    stage = "claims";
     const claims = tokens.claims();
     if (!claims?.sub) throw new Error("Naver OIDC did not return a subject claim.");
 
     const anonymousSubjectId = validGuestSubject(cookieStore.get(GUEST_SUBJECT_COOKIE)?.value);
+    stage = "member_session";
     const session = await createProviderMemberSession({
       provider: "NAVER",
       providerSubject: claims.sub,
@@ -98,7 +131,8 @@ export async function GET(request: Request) {
     const response = redirectWithOutcome(baseUrl, flow.returnTo, "success");
     setMemberSessionCookie(response, session.token, session.expiresAt);
     return response;
-  } catch {
+  } catch (error) {
+    logNaverAuthFailure(stage, error);
     return redirectWithOutcome(baseUrl, flow.returnTo, "error");
   }
 }
