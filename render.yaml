@@ -106,6 +106,6 @@ services:
         sync: false
       - key: KAKAO_OIDC_CLIENT_SECRET
         sync: false
-      # Enable only after Kakao Developers setup and a real production callback test.
+      # Kakao Developers credentials and production callback are configured for WHICH-32.
       - key: FEATURE_KAKAO_LOGIN_ENABLED
-        value: "false"
+        value: "true"
