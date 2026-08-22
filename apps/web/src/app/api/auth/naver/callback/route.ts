@@ -32,13 +32,22 @@ type NaverAuthFailureStage =
   | "member_session";
 
 function logNaverAuthFailure(stage: NaverAuthFailureStage, error?: unknown) {
-  const errorCode =
+  const safeErrorValue = (key: "code" | "error") => {
+    if (!error || typeof error !== "object" || !(key in error)) return undefined;
+    const value = (error as Record<string, unknown>)[key];
+    return typeof value === "string" && /^[a-z0-9_.:-]{1,80}$/i.test(value) ? value : undefined;
+  };
+  const errorCode = safeErrorValue("code");
+  const providerError = safeErrorValue("error");
+  const providerStatus =
     error &&
     typeof error === "object" &&
-    "code" in error &&
-    typeof error.code === "string" &&
-    /^[a-z0-9_.:-]{1,80}$/i.test(error.code)
-      ? error.code
+    "status" in error &&
+    typeof error.status === "number" &&
+    Number.isInteger(error.status) &&
+    error.status >= 400 &&
+    error.status <= 599
+      ? error.status
       : undefined;
   console.warn(
     JSON.stringify({
@@ -46,6 +55,8 @@ function logNaverAuthFailure(stage: NaverAuthFailureStage, error?: unknown) {
       stage,
       ...(error instanceof Error ? { errorName: error.name } : {}),
       ...(errorCode ? { errorCode } : {}),
+      ...(providerError ? { providerError } : {}),
+      ...(providerStatus ? { providerStatus } : {}),
     }),
   );
 }

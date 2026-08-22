@@ -244,6 +244,9 @@ describe("Naver OIDC routes", () => {
     oidcMocks.authorizationCodeGrant.mockRejectedValue(
       Object.assign(new Error("sensitive authorization code must not be logged"), {
         code: "OAUTH_JWT_CLAIM_COMPARISON_FAILED",
+        error: "invalid_client",
+        status: 401,
+        error_description: "sensitive client credential detail must not be logged",
       }),
     );
     const request = vi.fn();
@@ -264,10 +267,15 @@ describe("Naver OIDC routes", () => {
         stage: "token_exchange",
         errorName: "Error",
         errorCode: "OAUTH_JWT_CLAIM_COMPARISON_FAILED",
+        providerError: "invalid_client",
+        providerStatus: 401,
       }),
     );
     expect(JSON.stringify(vi.mocked(console.warn).mock.calls)).not.toContain(
       "sensitive authorization code",
+    );
+    expect(JSON.stringify(vi.mocked(console.warn).mock.calls)).not.toContain(
+      "sensitive client credential detail",
     );
     expect(request).not.toHaveBeenCalled();
   });
