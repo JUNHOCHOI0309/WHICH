@@ -160,7 +160,7 @@ export function decodeAuthFlow(value: string | undefined) {
     if (
       !["GOOGLE", "X", "NAVER", "KAKAO"].includes(flow.provider) ||
       typeof flow.state !== "string" ||
-      (["GOOGLE", "NAVER", "KAKAO"].includes(flow.provider) && typeof flow.nonce !== "string") ||
+      (["GOOGLE", "KAKAO"].includes(flow.provider) && typeof flow.nonce !== "string") ||
       (flow.nonce !== undefined && typeof flow.nonce !== "string") ||
       typeof flow.codeVerifier !== "string" ||
       typeof flow.returnTo !== "string" ||

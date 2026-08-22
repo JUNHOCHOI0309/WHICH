@@ -92,16 +92,8 @@ describe("Member OAuth return flow", () => {
     expect(flow && authFlowMatches(flow, "X", "wrong-state")).toBe(false);
   });
 
-  it("accepts a signed Naver OIDC flow only when its nonce is present", () => {
-    const valid = encodeAuthFlow({
-      provider: "NAVER",
-      state: "naver-state",
-      nonce: "naver-nonce",
-      codeVerifier: "verifier",
-      returnTo: "/issues/issue-1#member-access",
-      createdAt: Date.now(),
-    });
-    const missingNonce = encodeAuthFlow({
+  it("accepts a signed Naver OIDC flow without an undocumented nonce", () => {
+    const encoded = encodeAuthFlow({
       provider: "NAVER",
       state: "naver-state",
       codeVerifier: "verifier",
@@ -109,8 +101,7 @@ describe("Member OAuth return flow", () => {
       createdAt: Date.now(),
     });
 
-    expect(decodeAuthFlow(valid)).toMatchObject({ provider: "NAVER", nonce: "naver-nonce" });
-    expect(decodeAuthFlow(missingNonce)).toBeNull();
+    expect(decodeAuthFlow(encoded)).toMatchObject({ provider: "NAVER", state: "naver-state" });
   });
 
   it("accepts a signed Kakao OIDC flow only when its nonce is present", () => {

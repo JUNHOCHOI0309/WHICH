@@ -33,7 +33,6 @@ export async function GET(request: Request) {
     const codeVerifier = oidc.randomPKCECodeVerifier();
     const codeChallenge = await oidc.calculatePKCECodeChallenge(codeVerifier);
     const state = oidc.randomState();
-    const nonce = oidc.randomNonce();
     const redirectUri = new URL("/api/auth/naver/callback", baseUrl).toString();
     const authorizationUrl = oidc.buildAuthorizationUrl(config, {
       redirect_uri: redirectUri,
@@ -42,7 +41,6 @@ export async function GET(request: Request) {
       code_challenge: codeChallenge,
       code_challenge_method: "S256",
       state,
-      nonce,
     });
 
     const response = NextResponse.redirect(authorizationUrl);
@@ -51,7 +49,6 @@ export async function GET(request: Request) {
       value: encodeAuthFlow({
         provider: "NAVER",
         state,
-        nonce,
         codeVerifier,
         returnTo,
         createdAt: Date.now(),
