@@ -719,7 +719,8 @@ MVP Provider 상태:
 ```text
 Google OIDC — 운영
 X OAuth 2.0 + PKCE — 운영
-Naver OIDC + PKCE — 코드 제공, Client 등록·검수 후 노출
+Naver OIDC + PKCE — 운영 Credential·실계정 검증 완료, 운영 노출
+Kakao OIDC + PKCE — 코드 제공, Client 등록·실계정 검증 후 노출
 Apple Sign in — Post-MVP 후보
 ```
 

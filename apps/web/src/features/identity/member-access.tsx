@@ -1,8 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import { loginHref } from "@/lib/auth";
+import { logoutMemberSession, MEMBER_LOGOUT_ERROR } from "@/lib/member-session";
 
 import styles from "./member-access.module.css";
 
@@ -13,13 +15,17 @@ type Session = {
 
 export function MemberAccess({
   issueId,
+  kakaoLoginEnabled = false,
   naverLoginEnabled = false,
 }: {
   issueId: string;
+  kakaoLoginEnabled?: boolean;
   naverLoginEnabled?: boolean;
 }) {
   const [session, setSession] = useState<Session | null>(null);
   const [state, setState] = useState<"loading" | "guest" | "member" | "error">("loading");
+  const [logoutPending, setLogoutPending] = useState(false);
+  const [logoutError, setLogoutError] = useState<string | null>(null);
   const [authOutcome] = useState(() =>
     typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("auth"),
   );
@@ -44,6 +50,7 @@ export function MemberAccess({
       google: loginHref("google", returnTo),
       x: loginHref("x", returnTo),
       naver: loginHref("naver", returnTo),
+      kakao: loginHref("kakao", returnTo),
     };
   }, [issueId]);
 
@@ -59,7 +66,14 @@ export function MemberAccess({
         <p>
           {state === "member"
             ? "현재 Guest 선택 기록이 이 계정과 연결되어 있습니다. 원래 투표 기록은 감사 가능하게 유지됩니다."
-            : `${naverLoginEnabled ? "Google, X 또는 네이버" : "Google 또는 X"} 로그인 후에도 이 질문과 결과 화면으로 돌아오며, Guest 선택은 중복 집계 없이 계정에 연결됩니다.`}
+            : `${[
+                "Google",
+                "X",
+                ...(naverLoginEnabled ? ["네이버"] : []),
+                ...(kakaoLoginEnabled ? ["카카오"] : []),
+              ].join(
+                ", ",
+              )} 로그인 후에도 이 질문과 결과 화면으로 돌아오며, Guest 선택은 중복 집계 없이 계정에 연결됩니다.`}
         </p>
       </div>
 
@@ -80,24 +94,44 @@ export function MemberAccess({
               <span aria-hidden="true">→</span>
             </a>
           ) : null}
+          {kakaoLoginEnabled ? (
+            <a className={`${styles.login} ${styles.kakaoLogin}`} href={loginHrefs.kakao}>
+              카카오로 이어서 로그인
+              <span aria-hidden="true">→</span>
+            </a>
+          ) : null}
         </div>
       ) : null}
       {state === "member" ? (
-        <button
-          className={styles.logout}
-          type="button"
-          onClick={() => {
-            setState("loading");
-            void fetch("/api/member-session", { method: "DELETE" })
-              .then(() => {
-                setSession(null);
-                setState("guest");
-              })
-              .catch(() => setState("error"));
-          }}
-        >
-          로그아웃
-        </button>
+        <div className={styles.memberActions}>
+          <Link className={styles.profileLink} href="/me">
+            내 기록 보기
+          </Link>
+          <button
+            className={styles.logout}
+            type="button"
+            disabled={logoutPending}
+            onClick={() => {
+              setLogoutPending(true);
+              setLogoutError(null);
+              void logoutMemberSession()
+                .then(() => {
+                  setSession(null);
+                  setState("guest");
+                })
+                .catch(() => setLogoutError(MEMBER_LOGOUT_ERROR))
+                .finally(() => setLogoutPending(false));
+            }}
+          >
+            {logoutPending ? "로그아웃 중…" : "로그아웃"}
+          </button>
+        </div>
+      ) : null}
+
+      {logoutError ? (
+        <p className={styles.logoutError} role="alert">
+          {logoutError}
+        </p>
       ) : null}
 
       {authOutcome === "cancelled" ? (

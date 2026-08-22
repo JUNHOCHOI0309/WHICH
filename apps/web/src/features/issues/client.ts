@@ -8,6 +8,8 @@ import type {
   PublicCommentPage,
   PublicIssue,
   PublicIssueFeed,
+  ShareCardResponse,
+  ShareChannel,
   VoteResponse,
 } from "@/lib/contracts";
 
@@ -27,12 +29,23 @@ export type AnalyticsEventType =
   | "VOTE_SUBMIT"
   | "RESULT_VIEW"
   | "NEXT_ISSUE_OPEN"
-  | "NEXT_ISSUE_EXHAUSTED";
+  | "NEXT_ISSUE_EXHAUSTED"
+  | "INTEREST_PROMPT_VIEW"
+  | "INTEREST_SELECTION_COMPLETE"
+  | "INTEREST_PROMPT_SKIP"
+  | "INTEREST_PROFILE_RESET"
+  | "PERSONALIZED_FEED_VIEW"
+  | "PERSONALIZED_ISSUE_OPEN"
+  | "SHARE_OPEN"
+  | "SHARE_CHOICE_TOGGLE"
+  | "SHARE_COMPLETE";
 
 export async function recordAnalyticsEvent(command: {
   eventType: AnalyticsEventType;
   issueId: string;
   issueVersion: number;
+  recommendationRequestId?: string;
+  shareCardId?: string;
 }) {
   const response = await fetch("/api/analytics/events", {
     method: "POST",
@@ -43,10 +56,29 @@ export async function recordAnalyticsEvent(command: {
       eventType: command.eventType,
       issueId: command.issueId,
       issueVersion: command.issueVersion,
+      recommendationRequestId: command.recommendationRequestId,
+      shareCardId: command.shareCardId,
       occurredAt: new Date().toISOString(),
     }),
   });
   if (!response.ok) throw new Error("Analytics event was not accepted.");
+}
+
+export async function createResultShareCard(command: {
+  issueId: string;
+  issueVersion: number;
+  resultVersion: number;
+  channel: ShareChannel;
+  sharedChoiceCode?: "A" | "B";
+}) {
+  const response = await fetch(`/api/issues/${encodeURIComponent(command.issueId)}/share-cards`, {
+    method: "POST",
+    headers: { accept: "application/json", "content-type": "application/json" },
+    body: JSON.stringify(command),
+  });
+  const body = await responseBody<ShareCardResponse>(response);
+  if (!response.ok) throwApiError(response, body as ApiErrorBody);
+  return body as ShareCardResponse;
 }
 
 let guestPreparation: Promise<void> | null = null;
@@ -144,6 +176,18 @@ export async function submitGuestVote(command: {
   }
 
   throwApiError(response, body as ApiErrorBody);
+}
+
+export async function loadExistingVote(issueId: string, signal?: AbortSignal) {
+  const response = await fetch(`/api/issues/${encodeURIComponent(issueId)}/vote-status`, {
+    headers: { accept: "application/json" },
+    cache: "no-store",
+    signal,
+  });
+  if (response.status === 404) return null;
+  const body = await responseBody<VoteResponse>(response);
+  if (!response.ok) throwApiError(response, body as ApiErrorBody);
+  return body as VoteResponse;
 }
 
 export async function loadIssueComments(options: {

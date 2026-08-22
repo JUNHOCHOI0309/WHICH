@@ -14,18 +14,31 @@ export const NAVER_ENTRY_MEDIA = [
 ] as const;
 
 export type NaverEntryMedium = (typeof NAVER_ENTRY_MEDIA)[number];
+export const SHARE_ENTRY_MEDIA = ["copy", "system", "x"] as const;
+export type ShareEntryMedium = (typeof SHARE_ENTRY_MEDIA)[number];
 
-export type EntryAttribution = {
-  version: 1;
-  source: "naver";
-  medium: NaverEntryMedium;
-  campaign?: string;
-  content?: string;
-  capturedAt: number;
-};
+export type EntryAttribution =
+  | {
+      version: 1;
+      source: "naver";
+      medium: NaverEntryMedium;
+      campaign?: string;
+      content?: string;
+      capturedAt: number;
+    }
+  | {
+      version: 1;
+      source: "share";
+      medium: ShareEntryMedium;
+      campaign: "result" | "result_with_choice";
+      content: string;
+      capturedAt: number;
+    };
 
 const allowedNaverMedia = new Set<string>(NAVER_ENTRY_MEDIA);
+const allowedShareMedia = new Set<string>(SHARE_ENTRY_MEDIA);
 const safeUtmToken = /^[a-z0-9][a-z0-9._-]*$/;
+const uuidToken = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const signatureContext = "which-entry-attribution-v1\0";
 
 function signingSecret() {
@@ -64,18 +77,36 @@ export function entryAttributionFromSearchParams(
   capturedAt = Date.now(),
 ): EntryAttribution | null {
   const sourceValue = singleParameter(searchParams, "utm_source", true);
-  if (typeof sourceValue !== "string" || sourceValue.trim().toLowerCase() !== "naver") {
-    return null;
-  }
+  if (typeof sourceValue !== "string") return null;
+  const source = sourceValue.trim().toLowerCase();
 
   const mediumValue = singleParameter(searchParams, "utm_medium", true);
   if (typeof mediumValue !== "string") return null;
   const medium = mediumValue.trim().toLowerCase();
-  if (!allowedNaverMedia.has(medium)) return null;
-
   const campaignValue = singleParameter(searchParams, "utm_campaign", false);
   const contentValue = singleParameter(searchParams, "utm_content", false);
   if (campaignValue === null || contentValue === null) return null;
+
+  if (source === "share") {
+    const campaign = typeof campaignValue === "string" ? campaignValue.trim().toLowerCase() : "";
+    const content = typeof contentValue === "string" ? contentValue.trim().toLowerCase() : "";
+    if (
+      !allowedShareMedia.has(medium) ||
+      (campaign !== "result" && campaign !== "result_with_choice") ||
+      !uuidToken.test(content)
+    ) {
+      return null;
+    }
+    return {
+      version: 1,
+      source: "share",
+      medium: medium as ShareEntryMedium,
+      campaign,
+      content,
+      capturedAt,
+    };
+  }
+  if (source !== "naver" || !allowedNaverMedia.has(medium)) return null;
 
   const campaign = typeof campaignValue === "string" ? safeToken(campaignValue, 64) : undefined;
   const content = typeof contentValue === "string" ? safeToken(contentValue, 96) : undefined;
@@ -119,23 +150,33 @@ export function decodeEntryAttribution(
       Buffer.from(payload, "base64url").toString("utf8"),
     ) as Partial<EntryAttribution>;
     const maxAgeMilliseconds = ENTRY_ATTRIBUTION_MAX_AGE_SECONDS * 1_000;
-    if (
+    const commonInvalid =
       parsed.version !== 1 ||
-      parsed.source !== "naver" ||
       typeof parsed.medium !== "string" ||
-      !allowedNaverMedia.has(parsed.medium) ||
+      typeof parsed.capturedAt !== "number" ||
+      !Number.isInteger(parsed.capturedAt) ||
+      parsed.capturedAt > now + 5 * 60 * 1_000 ||
+      now - parsed.capturedAt > maxAgeMilliseconds;
+    if (commonInvalid) return null;
+    const medium = parsed.medium as string;
+    if (parsed.source === "share") {
+      if (
+        !allowedShareMedia.has(medium) ||
+        (parsed.campaign !== "result" && parsed.campaign !== "result_with_choice") ||
+        typeof parsed.content !== "string" ||
+        !uuidToken.test(parsed.content)
+      )
+        return null;
+    } else if (
+      parsed.source !== "naver" ||
+      !allowedNaverMedia.has(medium) ||
       (parsed.campaign !== undefined &&
         (typeof parsed.campaign !== "string" ||
           safeToken(parsed.campaign, 64) !== parsed.campaign)) ||
       (parsed.content !== undefined &&
-        (typeof parsed.content !== "string" || safeToken(parsed.content, 96) !== parsed.content)) ||
-      typeof parsed.capturedAt !== "number" ||
-      !Number.isInteger(parsed.capturedAt) ||
-      parsed.capturedAt > now + 5 * 60 * 1_000 ||
-      now - parsed.capturedAt > maxAgeMilliseconds
-    ) {
+        (typeof parsed.content !== "string" || safeToken(parsed.content, 96) !== parsed.content))
+    )
       return null;
-    }
     return parsed as EntryAttribution;
   } catch {
     return null;

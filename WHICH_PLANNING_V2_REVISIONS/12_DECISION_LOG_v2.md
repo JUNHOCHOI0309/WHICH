@@ -92,6 +92,7 @@
 | DEC-PROD-009 | CONFIRMED | MVP 성공은 기능 수가 아니라 외부 Guest의 첫 투표와 다음 Issue 반복으로 판단한다. | 핵심 가설 중심 범위를 유지한다. | 11 §1 |
 | DEC-PROD-010 | PROHIBITED | 공식 여론조사·예측시장·도박형 제품으로 포지셔닝하지 않는다. | 제품·법률·신뢰 경계를 유지한다. | 01 §8 |
 | DEC-PROD-011 | CONFIRMED | 한국 초기 Acquisition은 Instagram 직접 유입보다 네이버 CHOiCE·카페·클립→블로그·홈피드DA를 우선하고 네이버 로그인을 별도 인증 수단으로 제공한다. | 국내 초기 도달·검색·커뮤니티 검증과 Guest→Member 연결을 함께 확보하되 유입 신호와 신원을 혼합하지 않는다. | 01 §6.3, 02 §14.6, 05 §8·§39.3, 06 §25.6, 10 §3.8 |
+| DEC-PROD-012 | CONFIRMED | 국내 Member 연결 수단에 Kakao OIDC를 추가하되 이메일 자동 병합 없이 `(KAKAO, sub)`를 독립 신원으로 사용한다. | 국내 사용자의 로그인 접근성을 높이면서 Provider Token·이메일 결합으로 인한 계정 오연결을 피한다. | 05 §8, 11 OD-P0-007 |
 
 ## 핵심 UX
 | Decision ID | 상태 | 결정 | 핵심 근거 | Source |
@@ -108,6 +109,7 @@
 | DEC-UX-010 | CONFIRMED | 색상만으로 A/B와 결과를 구분하지 않고 키보드·스크린리더 경로를 제공한다. | 투표 정확성과 접근성을 보장한다. | 02 Accessibility |
 | DEC-UX-011 | CONFIRMED | 관심사와 가입 Prompt는 첫 가치 이후에만 제안한다. | Guest 외부 유입을 보호한다. | 02, 06, 10 |
 | DEC-UX-012 | PROHIBITED | 결과를 일부 숨기거나 가입해야 결과를 보게 하는 Dark Pattern을 사용하지 않는다. | 결과 보상과 신뢰를 훼손한다. | 02, 10 |
+| DEC-UX-013 | CONFIRMED | 외부 딥링크는 모바일 웹을 유지하고, Expo Android·iOS 앱을 재방문 Feed와 Core Vote의 우선 클라이언트로 추가한다. | 설치 없는 첫 투표와 네이티브 재방문·딥링크·Push 확장성을 함께 보존한다. | ADR-0002, 11 §2 |
 
 ## Issue 공급
 | Decision ID | 상태 | 결정 | 핵심 근거 | Source |

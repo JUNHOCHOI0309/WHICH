@@ -1,0 +1,2 @@
+ALTER TABLE "analytics_events" DROP CONSTRAINT "analytics_events_type_check";--> statement-breakpoint
+ALTER TABLE "analytics_events" ADD CONSTRAINT "analytics_events_type_check" CHECK ("analytics_events"."event_type" in ('ISSUE_VIEWABLE_IMPRESSION', 'VOTE_SUBMIT', 'RESULT_VIEW', 'NEXT_ISSUE_OPEN', 'NEXT_ISSUE_EXHAUSTED', 'INTEREST_PROMPT_VIEW', 'INTEREST_SELECTION_COMPLETE', 'INTEREST_PROMPT_SKIP', 'INTEREST_PROFILE_RESET'));

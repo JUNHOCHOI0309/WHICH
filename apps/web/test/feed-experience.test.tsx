@@ -24,6 +24,12 @@ const feed: PublicIssueFeed = {
         { id: "choice-a", code: "A", label: "미리 계획한다" },
         { id: "choice-b", code: "B", label: "가서 정한다" },
       ],
+      recommendation: {
+        requestId: "20000000-0000-4000-8000-000000000001",
+        score: 0,
+        reasonCodes: ["RECENT_FALLBACK"],
+        matchedCardCodes: [],
+      },
     },
     {
       id: "10000000-0000-4000-8000-000000000002",
@@ -35,9 +41,41 @@ const feed: PublicIssueFeed = {
         { id: "choice-c", code: "A", label: "일단 나간다" },
         { id: "choice-d", code: "B", label: "집에서 쉰다" },
       ],
+      recommendation: {
+        requestId: "20000000-0000-4000-8000-000000000001",
+        score: 0,
+        reasonCodes: ["RECENT_FALLBACK"],
+        matchedCardCodes: [],
+      },
     },
   ],
   nextCursor: null,
+  ranking: {
+    requestId: "20000000-0000-4000-8000-000000000001",
+    version: "interest_content_v1",
+    mode: "RECENCY",
+    reasonCode: "PROFILE_NOT_READY",
+    profileVersion: null,
+  },
+};
+
+const personalizedFeed: PublicIssueFeed = {
+  ...feed,
+  items: feed.items.map((item) => ({
+    ...item,
+    recommendation: {
+      ...item.recommendation,
+      reasonCodes: ["INTEREST_MATCH"],
+      matchedCardCodes: ["TRAVEL"],
+      score: 1000,
+    },
+  })),
+  ranking: {
+    ...feed.ranking,
+    mode: "PERSONALIZED",
+    reasonCode: "INTEREST_PROFILE_MATCH",
+    profileVersion: 1,
+  },
 };
 
 describe("FeedExperience", () => {
@@ -82,7 +120,7 @@ describe("FeedExperience", () => {
         if (feedAttempts === 1) {
           return jsonResponse({ code: "API_UNAVAILABLE", message: "down" }, 502);
         }
-        return jsonResponse({ items: [], nextCursor: null });
+        return jsonResponse({ items: [], nextCursor: null, ranking: feed.ranking });
       }),
     );
 
@@ -91,5 +129,38 @@ describe("FeedExperience", () => {
     fireEvent.click(await screen.findByRole("button", { name: "다시 불러오기" }));
     expect(await screen.findByText("지금 참여할 질문을 모두 골랐어요.")).toBeInTheDocument();
     await waitFor(() => expect(feedAttempts).toBe(2));
+  });
+
+  it("labels personalized results and records feed-view and issue-open attribution", async () => {
+    const analyticsEvents: Array<Record<string, unknown>> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = String(input);
+        if (url === "/api/guest-subjects") return jsonResponse({ status: "ready" });
+        if (url.startsWith("/api/issues/feed?")) return jsonResponse(personalizedFeed);
+        if (url === "/api/analytics/events") {
+          analyticsEvents.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+          return jsonResponse({ accepted: true, duplicate: false });
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      }),
+    );
+
+    render(<FeedExperience />);
+
+    expect(await screen.findByText("관심사 기반 추천")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(analyticsEvents.map((event) => event.eventType)).toContain("PERSONALIZED_FEED_VIEW"),
+    );
+    fireEvent.click(screen.getAllByRole("link", { name: /이 질문에 참여하기/ })[0]!);
+    await waitFor(() =>
+      expect(analyticsEvents.map((event) => event.eventType)).toContain("PERSONALIZED_ISSUE_OPEN"),
+    );
+    expect(
+      analyticsEvents.every(
+        (event) => event.recommendationRequestId === personalizedFeed.ranking.requestId,
+      ),
+    ).toBe(true);
   });
 });

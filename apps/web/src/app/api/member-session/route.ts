@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import { NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 
 import {
   clearMemberSessionCookie,
@@ -24,22 +24,48 @@ export async function GET() {
   return response;
 }
 
-export async function DELETE(request: Request) {
-  const requestUrl = new URL(request.url);
-  if (request.headers.get("origin") !== requestUrl.origin) {
+export async function DELETE(request: NextRequest) {
+  const origin = request.headers.get("origin");
+  const csrfHeader = request.headers.get("x-which-csrf");
+  let publicOrigin = request.nextUrl.origin;
+  if (process.env.AUTH_BASE_URL) {
+    try {
+      publicOrigin = new URL(process.env.AUTH_BASE_URL).origin;
+    } catch {
+      // Keep the request origin as a safe fallback when configuration is malformed.
+    }
+  }
+  const originMatches = origin === null || origin === "null" || origin === publicOrigin;
+  if (!originMatches || csrfHeader !== "member-session-logout") {
     return NextResponse.json(
       { code: "CSRF_REJECTED", message: "요청 출처를 확인할 수 없습니다." },
       { status: 403 },
     );
   }
-  const token = (await cookies()).get(MEMBER_SESSION_COOKIE)?.value;
-  const response = new NextResponse(null, { status: 204 });
+  const token = request.cookies.get(MEMBER_SESSION_COOKIE)?.value;
   if (token) {
-    await fetchWhichApi("/v1/member-session", {
-      method: "DELETE",
-      headers: { authorization: `Bearer ${token}` },
-    });
+    let upstream: Response;
+    try {
+      upstream = await fetchWhichApi("/v1/member-session", {
+        method: "DELETE",
+        headers: { authorization: `Bearer ${token}` },
+      });
+    } catch {
+      return NextResponse.json(
+        { code: "SESSION_REVOKE_FAILED", message: "로그아웃하지 못했습니다." },
+        { status: 502 },
+      );
+    }
+
+    if (upstream.status !== 204 && upstream.status !== 401) {
+      return NextResponse.json(
+        { code: "SESSION_REVOKE_FAILED", message: "로그아웃하지 못했습니다." },
+        { status: 502 },
+      );
+    }
   }
+
+  const response = new NextResponse(null, { status: 204 });
   clearMemberSessionCookie(response);
   return response;
 }

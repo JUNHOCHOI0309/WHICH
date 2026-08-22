@@ -71,6 +71,55 @@
       "when": 1787229339365,
       "tag": "0009_worthless_blonde_phantom",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1787242993938,
+      "tag": "0010_warm_vindicator",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1787243018741,
+      "tag": "0011_bright_kitty_pryde",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1787247752991,
+      "tag": "0012_left_monster_badoon",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1787248141094,
+      "tag": "0013_soft_black_tom",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1787250429011,
+      "tag": "0014_salty_celestials",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1787375864921,
+      "tag": "0015_modern_spectrum",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1787382054061,
+      "tag": "0016_wild_romulus",
+      "breakpoints": true
     }
   ]
 }

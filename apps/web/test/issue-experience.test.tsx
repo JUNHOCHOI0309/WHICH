@@ -24,6 +24,7 @@ const issue: PublicIssue = {
     { id: "choice-a", code: "A", label: "아침형 인간" },
     { id: "choice-b", code: "B", label: "저녁형 인간" },
   ],
+  author: null,
   experienceModeCode: "CORE_VOTE",
   result: { visibility: "PRE_VOTE_HIDDEN", tally: null },
 };
@@ -44,8 +45,41 @@ describe("IssueExperience", () => {
     vi.unstubAllGlobals();
   });
 
+  it("links an authored Issue to its public Creator profile", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = String(input);
+        if (url === "/api/guest-subjects") return jsonResponse({ status: "ready" });
+        if (url.endsWith(`/api/issues/${ISSUE_ID}`)) {
+          return jsonResponse({
+            ...issue,
+            author: {
+              displayName: "테크 질문가",
+              handle: "tech_creator",
+              avatar: { kind: "INITIALS", initials: "테질" },
+            },
+          });
+        }
+        if (url.includes("vote-status")) return jsonResponse({ code: "VOTE_NOT_FOUND" }, 404);
+        return jsonResponse({});
+      }),
+    );
+
+    render(<IssueExperience issueId={ISSUE_ID} />);
+
+    expect(await screen.findByRole("link", { name: /테크 질문가/ })).toHaveAttribute(
+      "href",
+      "/user/tech_creator",
+    );
+  });
+
   it("records an impression only after 50% visibility lasts for 500ms", async () => {
     let observerCallback: IntersectionObserverCallback = () => undefined;
+    let resolveObserverReady: (() => void) | undefined;
+    const observerReady = new Promise<void>((resolve) => {
+      resolveObserverReady = resolve;
+    });
     const analyticsEvents: string[] = [];
 
     class TestIntersectionObserver {
@@ -54,6 +88,7 @@ describe("IssueExperience", () => {
       readonly thresholds = [0.5];
       constructor(callback: IntersectionObserverCallback) {
         observerCallback = callback;
+        resolveObserverReady?.();
       }
       observe() {}
       disconnect() {}
@@ -81,27 +116,40 @@ describe("IssueExperience", () => {
 
     render(<IssueExperience issueId={ISSUE_ID} />);
     await screen.findByRole("button", { name: "A, 아침형 인간" });
+    await observerReady;
     const article = screen.getByRole("article");
     const callback = observerCallback;
+    const scheduledImpressions: Array<() => void> = [];
+    const setTimeoutSpy = vi.spyOn(window, "setTimeout").mockImplementation((handler, delay) => {
+      if (delay === 500 && typeof handler === "function") scheduledImpressions.push(handler);
+      return 4242 as unknown as ReturnType<typeof window.setTimeout>;
+    });
+    try {
+      act(() => {
+        callback(
+          [{ target: article, intersectionRatio: 0.49 } as unknown as IntersectionObserverEntry],
+          {} as IntersectionObserver,
+        );
+      });
+      expect(scheduledImpressions).toHaveLength(0);
+      expect(analyticsEvents).toHaveLength(0);
 
-    act(() => {
-      callback(
-        [{ target: article, intersectionRatio: 0.49 } as unknown as IntersectionObserverEntry],
-        {} as IntersectionObserver,
-      );
-    });
-    await new Promise((resolve) => setTimeout(resolve, 550));
-    expect(analyticsEvents).toHaveLength(0);
-
-    act(() => {
-      callback(
-        [{ target: article, intersectionRatio: 0.5 } as unknown as IntersectionObserverEntry],
-        {} as IntersectionObserver,
-      );
-    });
-    await waitFor(() => expect(analyticsEvents).toEqual(["ISSUE_VIEWABLE_IMPRESSION"]), {
-      timeout: 1_000,
-    });
+      act(() => {
+        callback(
+          [{ target: article, intersectionRatio: 0.5 } as unknown as IntersectionObserverEntry],
+          {} as IntersectionObserver,
+        );
+      });
+      expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 500);
+      expect(scheduledImpressions).toHaveLength(1);
+      await act(async () => {
+        scheduledImpressions[0]?.();
+        await Promise.resolve();
+      });
+      expect(analyticsEvents).toEqual(["ISSUE_VIEWABLE_IMPRESSION"]);
+    } finally {
+      setTimeoutSpy.mockRestore();
+    }
   });
 
   it("records one vote and reveals results only after selection", async () => {
@@ -158,9 +206,22 @@ describe("IssueExperience", () => {
                 publishedAt: "2026-08-18T01:00:00.000Z",
                 categoryCode: "DAILY_LIFE",
                 choices: issue.choices,
+                recommendation: {
+                  requestId: "30000000-0000-4000-8000-000000000001",
+                  score: 0,
+                  reasonCodes: ["RECENT_FALLBACK"],
+                  matchedCardCodes: [],
+                },
               },
             ],
             nextCursor: null,
+            ranking: {
+              requestId: "30000000-0000-4000-8000-000000000001",
+              version: "interest_content_v1",
+              mode: "RECENCY",
+              reasonCode: "PROFILE_NOT_READY",
+              profileVersion: null,
+            },
           });
         }
         throw new Error(`Unexpected request: ${url}`);
@@ -187,6 +248,55 @@ describe("IssueExperience", () => {
     fireEvent.click(screen.getByRole("button", { name: /다음 질문 보기/ }));
     await waitFor(() =>
       expect(navigation.push).toHaveBeenCalledWith("/issues/20000000-0000-4000-8000-000000000001"),
+    );
+  });
+
+  it("restores the server Vote after login instead of showing the voting screen again", async () => {
+    const restoredResult: VoteResponse = {
+      outcome: "ACCEPTED",
+      voteAttemptId: "attempt-restored",
+      voteId: "vote-restored",
+      issueId: ISSUE_ID,
+      issueVersion: 1,
+      choice: "B",
+      result: {
+        resultVersion: 4,
+        acceptedA: 4,
+        acceptedB: 6,
+        displayedTotal: 10,
+        integrityState: "NORMAL",
+      },
+    };
+    const votePosts: RequestInit[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = String(input);
+        if (url === "/api/guest-subjects") return jsonResponse({ status: "ready" });
+        if (url.endsWith(`/api/issues/${ISSUE_ID}`)) return jsonResponse(issue);
+        if (url.endsWith(`/api/issues/${ISSUE_ID}/vote-status`)) {
+          return jsonResponse(restoredResult);
+        }
+        if (url.endsWith(`/api/issues/${ISSUE_ID}/votes`) && init?.method === "POST") {
+          votePosts.push(init);
+          return jsonResponse(restoredResult);
+        }
+        if (url === "/api/member-session") return jsonResponse({ code: "SESSION_INVALID" }, 401);
+        if (url.startsWith(`/api/issues/${ISSUE_ID}/comments?`)) {
+          return jsonResponse({ items: [], nextCursor: null });
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      }),
+    );
+
+    render(<IssueExperience issueId={ISSUE_ID} />);
+
+    expect(await screen.findByText("당신의 선택이 반영됐어요.")).toBeInTheDocument();
+    expect(screen.getByText("60%")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "A, 아침형 인간" })).not.toBeInTheDocument();
+    expect(votePosts).toHaveLength(0);
+    expect(JSON.parse(sessionStorage.getItem(`which:vote-result:${ISSUE_ID}`) ?? "null")).toEqual(
+      restoredResult,
     );
   });
 
@@ -377,7 +487,7 @@ describe("IssueExperience", () => {
       }),
     );
 
-    render(<IssueExperience issueId={ISSUE_ID} naverLoginEnabled />);
+    render(<IssueExperience issueId={ISSUE_ID} kakaoLoginEnabled naverLoginEnabled />);
     const editor = await screen.findByRole("textbox", { name: "내 선택 이유" });
     fireEvent.change(editor, { target: { value: "로그인 뒤에도 남을 초안" } });
     fireEvent.click(await screen.findByRole("button", { name: "로그인하고 게시" }));
@@ -396,6 +506,10 @@ describe("IssueExperience", () => {
     expect(screen.getByRole("link", { name: "네이버로 로그인" })).toHaveAttribute(
       "href",
       `/api/auth/naver/start?returnTo=${encodeURIComponent(`/issues/${ISSUE_ID}#comment-compose`)}`,
+    );
+    expect(screen.getByRole("link", { name: "카카오로 로그인" })).toHaveAttribute(
+      "href",
+      `/api/auth/kakao/start?returnTo=${encodeURIComponent(`/issues/${ISSUE_ID}#comment-compose`)}`,
     );
     expect(navigation.push).not.toHaveBeenCalled();
   });
@@ -438,12 +552,14 @@ describe("IssueExperience", () => {
 
     expect(await screen.findByRole("link", { name: "Google로 이어서 로그인" })).toBeVisible();
     expect(screen.queryByRole("link", { name: /네이버로 이어서 로그인/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /카카오로 이어서 로그인/ })).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByRole("textbox", { name: "내 선택 이유" }), {
       target: { value: "숨김 확인" },
     });
     fireEvent.click(screen.getByRole("button", { name: "로그인하고 게시" }));
     expect(screen.queryByRole("link", { name: "네이버로 로그인" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "카카오로 로그인" })).not.toBeInTheDocument();
   });
 
   it("publishes a Member draft with an idempotency key and prepends the Comment", async () => {

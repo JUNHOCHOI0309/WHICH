@@ -6,6 +6,7 @@ import {
   analyticsSessionForRequest,
   setAnalyticsSessionCookie,
 } from "@/lib/server/analytics-session";
+import { internalAuthSecret } from "@/lib/server/member-auth";
 import { fetchWhichApi } from "@/lib/server/which-api";
 
 type EventBody = {
@@ -37,7 +38,7 @@ export async function POST(request: NextRequest) {
       headers: {
         accept: "application/json",
         "content-type": "application/json",
-        "x-internal-auth-secret": process.env.AUTH_INTERNAL_SECRET ?? "",
+        "x-internal-auth-secret": internalAuthSecret(),
       },
       body: JSON.stringify({
         ...body,

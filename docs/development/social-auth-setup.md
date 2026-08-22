@@ -1,6 +1,6 @@
 # Social Auth 로컬 설정
 
-WHICH의 소셜 로그인 Provider는 Google, X, 네이버입니다. Provider Credential은
+WHICH의 소셜 로그인 Provider는 Google, X, 네이버, 카카오입니다. Provider Credential은
 브라우저에 노출되지 않도록 Next.js Web BFF의 서버 전용 환경 변수로만 관리합니다.
 
 ## 환경 파일 위치
@@ -44,6 +44,7 @@ Provider Console에는 환경에 맞는 정확한 Callback URL을 등록합니�
 - Google: `http://localhost:3000/api/auth/google/callback`
 - X: `http://localhost:3000/api/auth/x/callback`
 - Naver: `http://localhost:3000/api/auth/naver/callback`
+- Kakao: `http://localhost:3000/api/auth/kakao/callback`
 
 운영에서는 `AUTH_BASE_URL`을 HTTPS 공개 Origin으로 바꾸고 Callback도 같은 Origin으로
 등록해야 합니다.
@@ -53,6 +54,7 @@ Provider Console에는 환경에 맞는 정확한 Callback URL을 등록합니�
 - Google: OpenID Connect Adapter와 Callback 구현 완료
 - X: OAuth 2.0 Authorization Code + PKCE Adapter와 Callback 구현 완료
 - Naver: OpenID Connect Authorization Code + PKCE Adapter와 Callback 구현 완료
+- Kakao: OpenID Connect Authorization Code + PKCE Adapter와 Callback 구현 완료, 운영 Credential 설정 대기
 - Instagram: 현재 제품 범위에서 제외
 
 Credential이 없는 Provider는 로그인 가능 상태로 간주하지 않습니다. Access Token은 사용자
@@ -94,3 +96,37 @@ FEATURE_NAVER_LOGIN_ENABLED=false
 이 상태에서는 로그인 UI가 노출되지 않고 Start Route도 `auth=unavailable`로 안전하게 돌아옵니다.
 Credential, 운영 Callback, 검수를 모두 확인한 뒤에만 Render와 로컬 환경에서 값을 `true`로
 전환합니다. 네이버는 현재 Public Launch Gate의 필수 Provider 검사에는 포함하지 않습니다.
+
+WHICH-20에서 운영 Credential, Callback, 실제 네이버 계정 로그인을 검증했고 WHICH-32부터 Render의
+`FEATURE_NAVER_LOGIN_ENABLED=true`를 적용합니다. 네이버 개발자센터의 검수 상태나 제공 정책이
+바뀌면 이 Flag를 다시 `false`로 내려 Provider 호출과 UI를 함께 중단할 수 있습니다.
+
+## Kakao Developers App 설정
+
+Kakao Developers에서 Web용 앱을 만들고 다음 순서로 설정합니다.
+
+1. **카카오 로그인 → 사용 설정**을 `ON`으로 전환합니다.
+2. **OpenID Connect**를 `ON`으로 전환합니다.
+3. REST API 키의 Redirect URI에 아래 Callback을 등록합니다.
+4. REST API 키의 Client Secret을 생성하고 활성화합니다.
+5. 동의항목은 프로필 정보만 사용하며 이메일은 필수로 요청하지 않습니다.
+
+- 개발 Callback: `http://localhost:3000/api/auth/kakao/callback`
+- 운영 Callback: `https://whichone.site/api/auth/kakao/callback`
+
+서버 전용 환경 변수에는 REST API 키와 Client Secret을 입력합니다.
+
+```text
+KAKAO_OIDC_CLIENT_ID=<kakao-rest-api-key>
+KAKAO_OIDC_CLIENT_SECRET=<kakao-client-secret>
+FEATURE_KAKAO_LOGIN_ENABLED=false
+```
+
+WHICH는 Kakao OIDC Issuer `https://kauth.kakao.com`의 Discovery Metadata와 Authorization
+Code + PKCE S256을 사용합니다. 검증된 ID Token의 `sub`를 Provider Subject로 사용하고
+`nickname`은 최초 표시 이름에만 사용합니다. Access·Refresh·ID Token은 저장하지 않으며 이메일로
+Google·X·Naver 계정과 자동 병합하지 않습니다.
+
+Credential 등록과 운영 Callback 실제 계정 QA가 끝날 때까지
+`FEATURE_KAKAO_LOGIN_ENABLED=false`를 유지합니다. 이 상태에서는 로그인 버튼이 숨겨지고 Start
+Route가 `auth=unavailable`로 돌아옵니다. 실제 QA를 마친 뒤 Render에서 `true`로 바꾸고 재배포합니다.

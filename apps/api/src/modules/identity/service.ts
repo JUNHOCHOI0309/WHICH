@@ -10,6 +10,7 @@ import {
   commentReports,
   issueChoices,
   memberIdentityLinks,
+  memberProfiles,
   memberSessions,
   members,
   outboxEvents,
@@ -19,11 +20,36 @@ import {
   voterSubjects,
   votes,
 } from "../../database/schema/index.js";
-import type { MemberIdentityService, MemberView } from "./contracts.js";
+import type {
+  MemberIdentityService,
+  MemberPrivateProfile,
+  MemberProfileSettings,
+  PublicCreatorProfile,
+  MemberView,
+  MemberVoteHistoryItem,
+  MemberVoteLookupResult,
+} from "./contracts.js";
+import { encodeMemberVoteHistoryCursor } from "./cursor.js";
 import { MemberIdentityError } from "./errors.js";
+import { publicProfileInitials } from "./profile.js";
 
 const LINK_POLICY_VERSION = "guest-member-link-v1";
 const EVENT_SCHEMA_VERSION = 1;
+const HANDLE_PATTERN = /^[a-z0-9_]{3,30}$/;
+const RESERVED_HANDLES = new Set([
+  "admin",
+  "api",
+  "auth",
+  "help",
+  "issues",
+  "me",
+  "moderator",
+  "official",
+  "operator",
+  "settings",
+  "support",
+  "which",
+]);
 
 function hashToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
@@ -36,6 +62,240 @@ function toMemberView(member: typeof members.$inferSelect): MemberView {
 function normalizedDisplayName(value: string) {
   const normalized = value.trim().replace(/\s+/g, " ");
   return normalized.length > 0 ? normalized.slice(0, 80) : "WHICH 회원";
+}
+
+function normalizeHandle(value: string) {
+  const handle = value.trim().toLowerCase();
+  if (!HANDLE_PATTERN.test(handle)) {
+    throw new MemberIdentityError(
+      "HANDLE_INVALID",
+      400,
+      "A handle must be 3 to 30 lowercase letters, numbers, or underscores.",
+    );
+  }
+  if (RESERVED_HANDLES.has(handle)) {
+    throw new MemberIdentityError("HANDLE_RESERVED", 400, "This handle is reserved.");
+  }
+  return handle;
+}
+
+function normalizeBio(value: string | null) {
+  if (value === null) return null;
+  const withoutControls = Array.from(value.trim(), (character) => {
+    const code = character.charCodeAt(0);
+    return code <= 31 || code === 127 ? " " : character;
+  }).join("");
+  const bio = withoutControls.replace(/\s+/g, " ");
+  return bio.length > 0 ? bio.slice(0, 160) : null;
+}
+
+function profileSettings(profile: typeof memberProfiles.$inferSelect): MemberProfileSettings {
+  return {
+    handle: profile.handle,
+    bio: profile.bio,
+    visibility: profile.visibility,
+    publicUrl: profile.visibility === "PUBLIC" ? `/user/${profile.handle}` : null,
+  };
+}
+
+type PublicCreatorIssueRow = {
+  issue_id: string;
+  issue_version: number;
+  question: string;
+  category_code: string;
+  published_at: Date | string;
+  accepted_vote_count: number;
+};
+
+async function publicCreatorIssueRows(database: Database["db"], memberId: string) {
+  const result = await database.execute<PublicCreatorIssueRow>(sql`
+    with latest_published_versions as (
+      select distinct on (iv.issue_id)
+        iv.issue_id,
+        iv.issue_version,
+        iv.question,
+        iv.primary_category_code,
+        iv.published_at
+      from issue_versions iv
+      where iv.published_at is not null
+        and iv.published_at <= now()
+      order by iv.issue_id, iv.issue_version desc
+    )
+    select
+      i.issue_id,
+      lpv.issue_version,
+      lpv.question,
+      lpv.primary_category_code as category_code,
+      lpv.published_at,
+      coalesce(va.accepted_vote_count, 0)::int as accepted_vote_count
+    from issue_authors ia
+    inner join issues i on i.issue_id = ia.issue_id
+    inner join latest_published_versions lpv on lpv.issue_id = i.issue_id
+    left join vote_aggregates va
+      on va.issue_id = i.issue_id and va.issue_version = lpv.issue_version
+    where ia.member_id = ${memberId}
+      and i.lifecycle = 'PUBLISHED'
+      and i.visibility = 'VISIBLE'
+      and i.participation = 'VOTING_OPEN'
+      and i.risk_level = 'LOW'
+      and i.is_political = false
+      and (i.vote_open_at is null or i.vote_open_at <= now())
+      and (i.vote_close_at is null or i.vote_close_at > now())
+    order by lpv.published_at desc, i.issue_id desc
+  `);
+  return result.rows;
+}
+
+async function activeMemberSession(database: Database["db"], token: string) {
+  const now = new Date();
+  const [session] = await database
+    .select({ session: memberSessions, member: members })
+    .from(memberSessions)
+    .innerJoin(members, eq(memberSessions.memberId, members.id))
+    .where(
+      and(
+        eq(memberSessions.tokenHash, hashToken(token)),
+        isNull(memberSessions.revokedAt),
+        gt(memberSessions.expiresAt, now),
+        eq(members.status, "ACTIVE"),
+      ),
+    )
+    .limit(1);
+  if (!session) return null;
+
+  await database
+    .update(memberSessions)
+    .set({ lastSeenAt: now })
+    .where(eq(memberSessions.id, session.session.id));
+
+  return session;
+}
+
+type PrivateVoteRow = {
+  vote_id: string;
+  vote_attempt_id: string;
+  issue_id: string;
+  issue_version: number;
+  question: string;
+  category_code: string;
+  choice: "A" | "B";
+  choice_label: string;
+  accepted_at: Date | string;
+  result_version: number;
+  accepted_a: number;
+  accepted_b: number;
+  displayed_total: number;
+  result_integrity_state: MemberVoteHistoryItem["result"]["integrityState"];
+};
+
+function toPrivateVoteItem(row: PrivateVoteRow): MemberVoteHistoryItem {
+  const acceptedAt = row.accepted_at instanceof Date ? row.accepted_at : new Date(row.accepted_at);
+  return {
+    voteId: row.vote_id,
+    issueId: row.issue_id,
+    issueVersion: row.issue_version,
+    question: row.question,
+    categoryCode: row.category_code,
+    choice: row.choice,
+    choiceLabel: row.choice_label,
+    acceptedAt: acceptedAt.toISOString(),
+    result: {
+      resultVersion: row.result_version,
+      acceptedA: row.accepted_a,
+      acceptedB: row.accepted_b,
+      displayedTotal: row.displayed_total,
+      integrityState: row.result_integrity_state,
+    },
+  };
+}
+
+async function privateVoteRows(
+  database: Database["db"],
+  memberId: string,
+  options: { limit: number; cursor?: { acceptedAt: Date; voteId: string }; issueId?: string },
+) {
+  const cursorAcceptedAt = options.cursor?.acceptedAt ?? null;
+  const cursorVoteId = options.cursor?.voteId ?? null;
+  const issueId = options.issueId ?? null;
+
+  const result = await database.execute<PrivateVoteRow>(sql`
+    with eligible_subjects as (
+      select subject_id, 1 as subject_priority
+      from voter_subjects
+      where user_id = ${memberId}
+        and subject_kind in ('MEMBER', 'VERIFIED_MEMBER')
+      union all
+      select guest_subject_id, 0 as subject_priority
+      from guest_member_links
+      where member_id = ${memberId}
+    ), canonical_votes as (
+      select distinct on (v.issue_id)
+        v.vote_id,
+        v.vote_attempt_id,
+        v.issue_id,
+        v.issue_version,
+        v.choice_id,
+        v.accepted_at
+      from votes v
+      inner join eligible_subjects es on es.subject_id = v.subject_id
+      where v.integrity_state = 'ACCEPTED'
+        and (${issueId}::uuid is null or v.issue_id = ${issueId}::uuid)
+      order by
+        v.issue_id,
+        es.subject_priority desc,
+        v.accepted_at desc,
+        v.vote_id desc
+    )
+    select
+      cv.vote_id,
+      cv.vote_attempt_id,
+      cv.issue_id,
+      cv.issue_version,
+      iv.question,
+      iv.primary_category_code as category_code,
+      ic.choice_code as choice,
+      ic.label as choice_label,
+      cv.accepted_at,
+      va.result_version,
+      va.accepted_a_count as accepted_a,
+      va.accepted_b_count as accepted_b,
+      va.displayed_vote_count as displayed_total,
+      va.integrity_state as result_integrity_state
+    from canonical_votes cv
+    inner join issue_versions iv
+      on iv.issue_id = cv.issue_id and iv.issue_version = cv.issue_version
+    inner join issue_choices ic on ic.choice_id = cv.choice_id
+    inner join vote_aggregates va
+      on va.issue_id = cv.issue_id and va.issue_version = cv.issue_version
+    where (
+      ${cursorAcceptedAt}::timestamptz is null
+      or (cv.accepted_at, cv.vote_id) < (${cursorAcceptedAt}::timestamptz, ${cursorVoteId}::uuid)
+    )
+    order by cv.accepted_at desc, cv.vote_id desc
+    limit ${options.limit}
+  `);
+
+  return result.rows;
+}
+
+async function privateVoteParticipationCount(database: Database["db"], memberId: string) {
+  const result = await database.execute<{ participation_count: number }>(sql`
+    with eligible_subjects as (
+      select subject_id
+      from voter_subjects
+      where user_id = ${memberId}
+        and subject_kind in ('MEMBER', 'VERIFIED_MEMBER')
+      union
+      select guest_subject_id
+      from guest_member_links
+      where member_id = ${memberId}
+    )
+    select count(distinct v.issue_id)::int as participation_count
+    from votes v
+    inner join eligible_subjects es on es.subject_id = v.subject_id
+    where v.integrity_state = 'ACCEPTED'
+  `);
+  return result.rows[0]?.participation_count ?? 0;
 }
 
 export function createMemberIdentityService(
@@ -459,31 +719,165 @@ export function createMemberIdentityService(
     },
 
     async getSession(token) {
-      const now = new Date();
-      const [session] = await database
-        .select({ session: memberSessions, member: members })
-        .from(memberSessions)
-        .innerJoin(members, eq(memberSessions.memberId, members.id))
-        .where(
-          and(
-            eq(memberSessions.tokenHash, hashToken(token)),
-            isNull(memberSessions.revokedAt),
-            gt(memberSessions.expiresAt, now),
-            eq(members.status, "ACTIVE"),
-          ),
-        )
-        .limit(1);
+      const session = await activeMemberSession(database, token);
       if (!session) return null;
-
-      await database
-        .update(memberSessions)
-        .set({ lastSeenAt: now })
-        .where(eq(memberSessions.id, session.session.id));
 
       return {
         expiresAt: session.session.expiresAt.toISOString(),
         member: toMemberView(session.member),
       };
+    },
+
+    async getPrivateProfile(token, query): Promise<MemberPrivateProfile | null> {
+      const session = await activeMemberSession(database, token);
+      if (!session) return null;
+
+      const [participationCount, rows, [publicProfile]] = await Promise.all([
+        privateVoteParticipationCount(database, session.member.id),
+        privateVoteRows(database, session.member.id, {
+          limit: query.limit + 1,
+          cursor: query.cursor,
+        }),
+        database
+          .select()
+          .from(memberProfiles)
+          .where(eq(memberProfiles.memberId, session.member.id))
+          .limit(1),
+      ]);
+      const hasMore = rows.length > query.limit;
+      const visibleRows = hasMore ? rows.slice(0, query.limit) : rows;
+      const lastRow = visibleRows.at(-1);
+
+      return {
+        member: {
+          ...toMemberView(session.member),
+          joinedAt: session.member.createdAt.toISOString(),
+          participationCount,
+        },
+        publicProfile: publicProfile ? profileSettings(publicProfile) : null,
+        votes: {
+          items: visibleRows.map(toPrivateVoteItem),
+          nextCursor:
+            hasMore && lastRow
+              ? encodeMemberVoteHistoryCursor({
+                  acceptedAt:
+                    lastRow.accepted_at instanceof Date
+                      ? lastRow.accepted_at
+                      : new Date(lastRow.accepted_at),
+                  voteId: lastRow.vote_id,
+                })
+              : null,
+        },
+      };
+    },
+
+    async updateProfile(token, command) {
+      const session = await activeMemberSession(database, token);
+      if (!session) return null;
+
+      const handle = normalizeHandle(command.handle);
+      const bio = normalizeBio(command.bio);
+      const now = new Date();
+
+      return database.transaction(async (transaction) => {
+        await transaction.execute(
+          sql`select pg_advisory_xact_lock(hashtextextended(${handle}, 0))`,
+        );
+        const [owner] = await transaction
+          .select({ memberId: memberProfiles.memberId })
+          .from(memberProfiles)
+          .where(sql`lower(${memberProfiles.handle}) = ${handle}`)
+          .limit(1);
+        if (owner && owner.memberId !== session.member.id) {
+          throw new MemberIdentityError("HANDLE_TAKEN", 409, "This handle is already in use.");
+        }
+
+        const [profile] = await transaction
+          .insert(memberProfiles)
+          .values({
+            memberId: session.member.id,
+            handle,
+            bio,
+            visibility: command.visibility,
+            createdAt: now,
+            updatedAt: now,
+          })
+          .onConflictDoUpdate({
+            target: memberProfiles.memberId,
+            set: { handle, bio, visibility: command.visibility, updatedAt: now },
+          })
+          .returning();
+        if (!profile) throw new Error("Member profile update did not return a row.");
+        return profileSettings(profile);
+      });
+    },
+
+    async getPublicCreatorProfile(rawHandle): Promise<PublicCreatorProfile | null> {
+      const handle = rawHandle.trim().toLowerCase();
+      if (!HANDLE_PATTERN.test(handle)) return null;
+
+      const [profile] = await database
+        .select({ profile: memberProfiles, member: members })
+        .from(memberProfiles)
+        .innerJoin(members, eq(memberProfiles.memberId, members.id))
+        .where(
+          and(
+            sql`lower(${memberProfiles.handle}) = ${handle}`,
+            eq(memberProfiles.visibility, "PUBLIC"),
+            eq(members.status, "ACTIVE"),
+          ),
+        )
+        .limit(1);
+      if (!profile) return null;
+
+      const rows = await publicCreatorIssueRows(database, profile.member.id);
+      return {
+        creator: {
+          displayName: profile.member.displayName,
+          handle: profile.profile.handle,
+          bio: profile.profile.bio,
+          joinedMonth: profile.member.createdAt.toISOString().slice(0, 7),
+          avatar: {
+            kind: "INITIALS",
+            initials: publicProfileInitials(profile.member.displayName),
+          },
+        },
+        stats: {
+          publishedIssueCount: rows.length,
+          acceptedVoteCount: rows.reduce((total, row) => total + row.accepted_vote_count, 0),
+        },
+        issues: rows.slice(0, 12).map((row) => ({
+          id: row.issue_id,
+          version: row.issue_version,
+          question: row.question,
+          categoryCode: row.category_code,
+          publishedAt:
+            row.published_at instanceof Date
+              ? row.published_at.toISOString()
+              : new Date(row.published_at).toISOString(),
+          acceptedVoteCount: row.accepted_vote_count,
+        })),
+      };
+    },
+
+    async findPrivateVote(token, issueId) {
+      const session = await activeMemberSession(database, token);
+      if (!session) return null;
+
+      const [row] = await privateVoteRows(database, session.member.id, { limit: 1, issueId });
+      const vote: MemberVoteLookupResult | null = row
+        ? {
+            outcome: "ACCEPTED",
+            voteAttemptId: row.vote_attempt_id,
+            voteId: row.vote_id,
+            issueId: row.issue_id,
+            issueVersion: row.issue_version,
+            choice: row.choice,
+            result: toPrivateVoteItem(row).result,
+          }
+        : null;
+
+      return { member: toMemberView(session.member), vote };
     },
 
     async revokeSession(token) {

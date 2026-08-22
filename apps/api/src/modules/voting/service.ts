@@ -121,6 +121,68 @@ export function createGuestVoteService(database: Database["db"]): GuestVoteServi
       return { anonymousSubjectId };
     },
 
+    async findGuestVote(query) {
+      const [guestSubject] = await database
+        .select({ id: voterSubjects.id })
+        .from(voterSubjects)
+        .where(
+          and(
+            eq(voterSubjects.kind, "GUEST"),
+            eq(voterSubjects.anonymousSubjectId, query.anonymousSubjectId),
+          ),
+        )
+        .limit(1);
+      if (!guestSubject) return null;
+
+      const [storedVote] = await database
+        .select({
+          voteId: votes.id,
+          voteAttemptId: votes.voteAttemptId,
+          issueVersion: votes.issueVersion,
+          choice: issueChoices.code,
+          resultVersion: voteAggregates.resultVersion,
+          acceptedA: voteAggregates.acceptedACount,
+          acceptedB: voteAggregates.acceptedBCount,
+          displayedTotal: voteAggregates.displayedVoteCount,
+          resultIntegrityState: voteAggregates.integrityState,
+        })
+        .from(votes)
+        .innerJoin(issueChoices, eq(issueChoices.id, votes.choiceId))
+        .innerJoin(
+          voteAggregates,
+          and(
+            eq(voteAggregates.issueId, votes.issueId),
+            eq(voteAggregates.issueVersion, votes.issueVersion),
+          ),
+        )
+        .where(
+          and(
+            eq(votes.issueId, query.issueId),
+            eq(votes.subjectId, guestSubject.id),
+            eq(votes.integrityState, "ACCEPTED"),
+          ),
+        )
+        .orderBy(desc(votes.acceptedAt), desc(votes.id))
+        .limit(1);
+      if (!storedVote) return null;
+
+      return {
+        outcome: "ACCEPTED",
+        voteAttemptId: storedVote.voteAttemptId,
+        voteId: storedVote.voteId,
+        issueId: query.issueId,
+        issueVersion: storedVote.issueVersion,
+        choice: storedVote.choice,
+        result: {
+          resultVersion: storedVote.resultVersion,
+          acceptedA: storedVote.acceptedA,
+          acceptedB: storedVote.acceptedB,
+          displayedTotal: storedVote.displayedTotal,
+          integrityState: storedVote.resultIntegrityState,
+        },
+      };
+    },
+
     async reconcileIssueVersion(command) {
       return database.transaction(async (transaction) => {
         await transaction.execute(
@@ -546,6 +608,16 @@ export function createGuestVoteService(database: Database["db"]): GuestVoteServi
           );
         }
 
+        const [analyticsSession] = command.analyticsSessionId
+          ? await transaction
+              .select({ id: analyticsSessions.id })
+              .from(analyticsSessions)
+              .where(eq(analyticsSessions.id, command.analyticsSessionId))
+              .limit(1)
+              .for("key share")
+          : [];
+        const analyticsSessionId = analyticsSession?.id ?? null;
+
         await transaction.insert(voteAttempts).values({
           id: command.idempotencyKey,
           idempotencyKey: command.idempotencyKey,
@@ -553,26 +625,10 @@ export function createGuestVoteService(database: Database["db"]): GuestVoteServi
           issueVersion: command.issueVersion,
           choiceId: command.choiceId,
           subjectId: subject.id,
-          analyticsSessionId: command.analyticsSessionId,
+          analyticsSessionId,
           requestState: "PROCESSING",
           requestFingerprint,
         });
-
-        if (command.analyticsSessionId) {
-          const expiresAt = new Date(now.getTime() + 30 * 60 * 1_000);
-          await transaction
-            .insert(analyticsSessions)
-            .values({
-              id: command.analyticsSessionId,
-              startedAt: now,
-              lastActivityAt: now,
-              expiresAt,
-            })
-            .onConflictDoUpdate({
-              target: analyticsSessions.id,
-              set: { lastActivityAt: now, expiresAt, updatedAt: now },
-            });
-        }
 
         const [existingAcceptedVote] = await transaction
           .select({
@@ -603,7 +659,7 @@ export function createGuestVoteService(database: Database["db"]): GuestVoteServi
             issueVersion: command.issueVersion,
             choiceId: command.choiceId,
             subjectId: subject.id,
-            analyticsSessionId: command.analyticsSessionId,
+            analyticsSessionId,
             integrityState: outcome,
             reasonCode,
             userTier: "GUEST",
@@ -712,7 +768,7 @@ export function createGuestVoteService(database: Database["db"]): GuestVoteServi
               choice: effectiveChoice,
               integrity_state: outcome,
               result_version: aggregate.resultVersion,
-              analytics_session_id: command.analyticsSessionId ?? null,
+              analytics_session_id: analyticsSessionId,
             },
           },
         });

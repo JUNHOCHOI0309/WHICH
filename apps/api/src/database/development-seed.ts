@@ -4,6 +4,7 @@ import type { Database } from "./client.js";
 import {
   comments,
   issueChoices,
+  issueInterestCards,
   issues,
   issueVersions,
   voterSubjects,
@@ -25,6 +26,7 @@ type DevelopmentIssue = {
   publishedAt: Date;
   voteOpenAt: Date;
   categoryCode: string;
+  interestCardCodes: string[];
   choices: readonly [DevelopmentChoice, DevelopmentChoice];
 };
 
@@ -37,6 +39,7 @@ export const DEVELOPMENT_ISSUES = Object.freeze([
     publishedAt: new Date("2026-08-17T00:00:00.000Z"),
     voteOpenAt: new Date("2026-01-01T00:00:00.000Z"),
     categoryCode: "DAILY_LIFE",
+    interestCardCodes: ["MUSIC_CONTENT", "WORK", "EDUCATION"],
     choices: [
       {
         id: "10000000-0000-4000-8000-000000000101",
@@ -58,6 +61,7 @@ export const DEVELOPMENT_ISSUES = Object.freeze([
     publishedAt: new Date("2026-08-17T01:00:00.000Z"),
     voteOpenAt: new Date("2026-01-01T00:00:00.000Z"),
     categoryCode: "DAILY_LIFE",
+    interestCardCodes: ["DAILY_LIFE", "HOBBY"],
     choices: [
       {
         id: "10000000-0000-4000-8000-000000000201",
@@ -79,6 +83,7 @@ export const DEVELOPMENT_ISSUES = Object.freeze([
     publishedAt: new Date("2026-08-17T02:00:00.000Z"),
     voteOpenAt: new Date("2026-01-01T00:00:00.000Z"),
     categoryCode: "TRAVEL",
+    interestCardCodes: ["TRAVEL"],
     choices: [
       {
         id: "10000000-0000-4000-8000-000000000301",
@@ -211,6 +216,21 @@ export async function seedDevelopmentIssues(database: Database["db"]) {
             issueVersion: issue.version,
             code: choice.code,
             label: choice.label,
+          })),
+        ),
+      )
+      .onConflictDoNothing();
+
+    await transaction
+      .insert(issueInterestCards)
+      .values(
+        DEVELOPMENT_ISSUES.flatMap((issue) =>
+          issue.interestCardCodes.map((cardCode) => ({
+            issueId: issue.id,
+            issueVersion: issue.version,
+            cardCode,
+            taxonomyVersion: "interest_cards_v1",
+            weight: 100,
           })),
         ),
       )

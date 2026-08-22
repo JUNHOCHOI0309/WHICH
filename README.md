@@ -8,6 +8,7 @@ Guest Comment Read Flow까지 구현되어 있습니다.
 
 - pnpm + Turborepo 모노레포
 - Next.js App Router 웹 (`apps/web`)
+- Expo/React Native Android·iOS 앱 (`apps/mobile`)
 - Fastify API와 OpenAPI 문서 (`apps/api`)
 - PostgreSQL + Drizzle 마이그레이션 기반
 - Docker Compose 로컬 인프라
@@ -16,6 +17,9 @@ Guest Comment Read Flow까지 구현되어 있습니다.
 결정 배경과 교체 경계는
 [`docs/architecture/adr/0001-platform-foundation.md`](docs/architecture/adr/0001-platform-foundation.md)에
 기록되어 있습니다.
+네이티브 모바일 확장 결정은
+[`docs/architecture/adr/0002-native-mobile-client.md`](docs/architecture/adr/0002-native-mobile-client.md)를
+확인하세요.
 
 ## 요구 환경
 
@@ -49,6 +53,16 @@ Callback 설정은 [`docs/development/social-auth-setup.md`](docs/development/so
 - OpenAPI UI: <http://localhost:4000/docs>
 - PostgreSQL: `localhost:54329` (기존 로컬 PostgreSQL 기본 포트와 충돌 방지)
 
+Expo 앱은 별도 터미널에서 실행합니다.
+
+```bash
+pnpm --filter @which/mobile start
+```
+
+실기기에서 Local Web BFF에 접근할 때는 `apps/mobile/.env.local`의
+`EXPO_PUBLIC_API_BASE_URL`을 개발 PC의 LAN 주소로 설정합니다. 자세한 경계는
+[`docs/product/native-mobile-foundation.md`](docs/product/native-mobile-foundation.md)를 확인하세요.
+
 PostgreSQL 없이도 API 프로세스와 live check는 실행됩니다. readiness는 데이터베이스 연결이
 없으면 의도대로 `503`을 반환합니다.
 
@@ -69,6 +83,8 @@ pnpm --filter @which/api launch:gate # 읽기 전용 Public MVP GO/NO-GO 판정
 pnpm --filter @which/api launch:public-smoke https://whichone.site
 pnpm --filter @which/api analytics:summary -- 30
 pnpm --filter @which/api analytics:retention # 일별 집계 후 90일 초과 원시 Event 정리
+pnpm --filter @which/mobile start       # Expo QR과 개발 서버
+pnpm --filter @which/mobile typecheck
 ```
 
 `db:seed`는 Production 환경에서 실행되지 않으며, 여러 번 실행해도 같은 Issue, Choice,
@@ -91,7 +107,10 @@ Comment를 중복 생성하거나 기존 Version을 덮어쓰지 않습니다.
 - 안정 Cursor를 사용하는 Guest Issue Feed API
 - HttpOnly Guest 식별자를 사용하는 Web BFF
 - Provider Subject 기반 Member Identity와 HttpOnly Member Session
-- Google·Naver OIDC와 X OAuth 2.0 PKCE Web BFF, Guest → Member Vote 연결
+- Google·Naver·Kakao OIDC와 X OAuth 2.0 PKCE Web BFF, Guest → Member Vote 연결
+- Expo Android·iOS 공통 앱의 Guest Feed → Issue → Vote → Result 기반
+- OS Secure Storage를 사용하는 모바일 Guest Subject
+- 서버 비밀정보를 포함하지 않는 `/api/mobile/v1` 공개 BFF
 - 모바일 Guest 투표 화면과 투표 후 결과 공개
 - 이미 참여한 질문을 제외한 Result → Next Issue 이동
 - Issue Version과 작성 당시 A/B 선택을 보존하는 Comment Schema

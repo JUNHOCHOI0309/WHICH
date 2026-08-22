@@ -14,13 +14,16 @@ import type {
   VoteResponse,
 } from "@/lib/contracts";
 import { MemberAccess } from "@/features/identity/member-access";
+import { InterestSelector } from "@/features/interests/interest-selector";
 import { loginHref } from "@/lib/auth";
 
 import styles from "./issue-experience.module.css";
 import {
+  createResultShareCard,
   ensureGuestSubject,
   loadIssueComments,
   loadIssueFeed,
+  loadExistingVote,
   loadPublicIssue,
   reportComment,
   recordAnalyticsEvent,
@@ -83,9 +86,11 @@ function loadErrorCopy(error: unknown) {
 
 export function IssueExperience({
   issueId,
+  kakaoLoginEnabled = false,
   naverLoginEnabled = false,
 }: {
   issueId: string;
+  kakaoLoginEnabled?: boolean;
   naverLoginEnabled?: boolean;
 }) {
   const [screen, setScreen] = useState<Screen>("loading");
@@ -136,9 +141,13 @@ export function IssueExperience({
     try {
       const [loadedIssue] = await Promise.all([loadPublicIssue(issueId), ensureGuestSubject()]);
       setIssue(loadedIssue);
-      const savedResult = readSavedResult(issueId);
-      if (savedResult) setResult(savedResult);
-      setScreen(savedResult ? "result" : "ready");
+      const restoredResult =
+        readSavedResult(issueId) ?? (await loadExistingVote(issueId).catch(() => null));
+      if (restoredResult) {
+        setResult(restoredResult);
+        saveResult(restoredResult);
+      }
+      setScreen(restoredResult ? "result" : "ready");
     } catch (error) {
       setLoadError(error);
       setScreen("load-error");
@@ -150,12 +159,18 @@ export function IssueExperience({
     const controller = new AbortController();
 
     void Promise.all([loadPublicIssue(issueId, controller.signal), ensureGuestSubject()])
-      .then(([loadedIssue]) => {
+      .then(async ([loadedIssue]) => {
         if (!active) return;
         setIssue(loadedIssue);
-        const savedResult = readSavedResult(issueId);
-        if (savedResult) setResult(savedResult);
-        setScreen(savedResult ? "result" : "ready");
+        const restoredResult =
+          readSavedResult(issueId) ??
+          (await loadExistingVote(issueId, controller.signal).catch(() => null));
+        if (!active) return;
+        if (restoredResult) {
+          setResult(restoredResult);
+          saveResult(restoredResult);
+        }
+        setScreen(restoredResult ? "result" : "ready");
       })
       .catch((error: unknown) => {
         if (!active || (error instanceof DOMException && error.name === "AbortError")) return;
@@ -245,7 +260,14 @@ export function IssueExperience({
   if (!issue) return null;
 
   if (screen === "result" && result) {
-    return <ResultScreen issue={issue} result={result} naverLoginEnabled={naverLoginEnabled} />;
+    return (
+      <ResultScreen
+        issue={issue}
+        result={result}
+        kakaoLoginEnabled={kakaoLoginEnabled}
+        naverLoginEnabled={naverLoginEnabled}
+      />
+    );
   }
 
   const selectedChoice = pendingAction?.choice;
@@ -262,6 +284,16 @@ export function IssueExperience({
           {issue.question}
         </h1>
         {issue.context ? <p className={styles.context}>{issue.context}</p> : null}
+        {issue.author ? (
+          <Link className={styles.authorLink} href={`/user/${issue.author.handle}`}>
+            <span aria-hidden="true">{issue.author.avatar.initials}</span>
+            <span>
+              <small>QUESTION BY</small>
+              <strong>{issue.author.displayName}</strong>
+              <em>@{issue.author.handle}</em>
+            </span>
+          </Link>
+        ) : null}
 
         <div className={styles.choiceGrid} aria-label="선택지">
           {issue.choices.map((choice) => (
@@ -327,10 +359,12 @@ export function IssueExperience({
 function ResultScreen({
   issue,
   result,
+  kakaoLoginEnabled,
   naverLoginEnabled,
 }: {
   issue: PublicIssue;
   result: VoteResponse;
+  kakaoLoginEnabled: boolean;
   naverLoginEnabled: boolean;
 }) {
   const total = result.result.displayedTotal;
@@ -360,6 +394,16 @@ function ResultScreen({
         </p>
 
         <div className={styles.resultQuestion}>{issue.question}</div>
+        {issue.author ? (
+          <Link className={styles.authorLink} href={`/user/${issue.author.handle}`}>
+            <span aria-hidden="true">{issue.author.avatar.initials}</span>
+            <span>
+              <small>QUESTION BY</small>
+              <strong>{issue.author.displayName}</strong>
+              <em>@{issue.author.handle}</em>
+            </span>
+          </Link>
+        ) : null}
         <div className={styles.resultRows}>
           <ResultRow
             code="A"
@@ -377,11 +421,123 @@ function ResultScreen({
           />
         </div>
         <p className={styles.totalCount}>현재 유효한 선택 {total.toLocaleString("ko-KR")}개</p>
-        <MemberAccess issueId={issue.id} naverLoginEnabled={naverLoginEnabled} />
-        <CommentSection issueId={issue.id} naverLoginEnabled={naverLoginEnabled} />
+        <ResultSharePanel issue={issue} result={result} />
+        <InterestSelector
+          mode="prompt"
+          analyticsContext={{ issueId: issue.id, issueVersion: issue.version }}
+        />
+        <MemberAccess
+          issueId={issue.id}
+          kakaoLoginEnabled={kakaoLoginEnabled}
+          naverLoginEnabled={naverLoginEnabled}
+        />
+        <CommentSection
+          issueId={issue.id}
+          kakaoLoginEnabled={kakaoLoginEnabled}
+          naverLoginEnabled={naverLoginEnabled}
+        />
         <NextIssueAction currentIssueId={issue.id} currentIssueVersion={issue.version} />
       </article>
     </ExperienceShell>
+  );
+}
+
+function ResultSharePanel({ issue, result }: { issue: PublicIssue; result: VoteResponse }) {
+  const [includeChoice, setIncludeChoice] = useState(false);
+  const [pending, setPending] = useState<"COPY" | "SYSTEM" | "X" | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+
+  async function share(channel: "COPY" | "SYSTEM" | "X") {
+    if (pending) return;
+    setPending(channel);
+    setMessage(null);
+    try {
+      const created = await createResultShareCard({
+        issueId: issue.id,
+        issueVersion: issue.version,
+        resultVersion: result.result.resultVersion,
+        channel,
+        ...(includeChoice ? { sharedChoiceCode: result.choice } : {}),
+      });
+      if (channel === "SYSTEM" && navigator.share) {
+        await navigator.share({
+          title: issue.question,
+          text: "WHICH 투표 결과를 확인해 보세요.",
+          url: created.url,
+        });
+      } else if (channel === "X") {
+        window.open(
+          `https://x.com/intent/post?${new URLSearchParams({ text: issue.question, url: created.url })}`,
+          "_blank",
+          "noopener,noreferrer",
+        );
+      } else {
+        await navigator.clipboard.writeText(created.url);
+      }
+      void recordAnalyticsEvent({
+        eventType: "SHARE_COMPLETE",
+        issueId: issue.id,
+        issueVersion: issue.version,
+        shareCardId: created.shareCard.id,
+      }).catch(() => undefined);
+      setMessage(channel === "COPY" ? "공유 링크를 복사했어요." : "공유 화면을 열었어요.");
+    } catch (reason) {
+      if (reason instanceof DOMException && reason.name === "AbortError") return;
+      setMessage("공유 링크를 만들지 못했어요. 결과는 그대로 확인할 수 있습니다.");
+    } finally {
+      setPending(null);
+    }
+  }
+
+  useEffect(() => {
+    void recordAnalyticsEvent({
+      eventType: "SHARE_OPEN",
+      issueId: issue.id,
+      issueVersion: issue.version,
+    }).catch(() => undefined);
+  }, [issue.id, issue.version]);
+
+  return (
+    <section className={styles.resultShare} aria-labelledby="result-share-title">
+      <div>
+        <p className={styles.commentEyebrow}>RESULT SHARE</p>
+        <h2 id="result-share-title">이 결과를 같이 이야기해 보세요.</h2>
+      </div>
+      <label className={styles.shareChoiceToggle}>
+        <input
+          type="checkbox"
+          checked={includeChoice}
+          onChange={(event) => {
+            setIncludeChoice(event.target.checked);
+            void recordAnalyticsEvent({
+              eventType: "SHARE_CHOICE_TOGGLE",
+              issueId: issue.id,
+              issueVersion: issue.version,
+            }).catch(() => undefined);
+          }}
+        />
+        내가 고른 {result.choice}도 함께 공개
+      </label>
+      <p className={styles.sharePrivacy}>
+        선택 공개는 기본으로 꺼져 있으며, 공유 링크에는 계정 정보가 들어가지 않아요.
+      </p>
+      <div className={styles.shareActions}>
+        <button type="button" disabled={Boolean(pending)} onClick={() => void share("COPY")}>
+          {pending === "COPY" ? "링크 생성 중…" : "링크 복사"}
+        </button>
+        <button type="button" disabled={Boolean(pending)} onClick={() => void share("SYSTEM")}>
+          기기로 공유
+        </button>
+        <button type="button" disabled={Boolean(pending)} onClick={() => void share("X")}>
+          X에 공유
+        </button>
+      </div>
+      {message ? (
+        <p className={styles.shareMessage} role="status">
+          {message}
+        </p>
+      ) : null}
+    </section>
   );
 }
 
@@ -403,9 +559,11 @@ const COMMENT_REPORT_REASONS: Array<{ value: CommentReportReason; label: string 
 
 function CommentSection({
   issueId,
+  kakaoLoginEnabled,
   naverLoginEnabled,
 }: {
   issueId: string;
+  kakaoLoginEnabled: boolean;
   naverLoginEnabled: boolean;
 }) {
   const [side, setSide] = useState<CommentSide>("ALL");
@@ -736,6 +894,9 @@ function CommentSection({
             {naverLoginEnabled ? (
               <a href={loginHref("naver", `/issues/${issueId}#comment-compose`)}>네이버로 로그인</a>
             ) : null}
+            {kakaoLoginEnabled ? (
+              <a href={loginHref("kakao", `/issues/${issueId}#comment-compose`)}>카카오로 로그인</a>
+            ) : null}
           </div>
         ) : null}
         {postError ? (
@@ -992,6 +1153,14 @@ function NextIssueAction({
         issueId: currentIssueId,
         issueVersion: currentIssueVersion,
       }).catch(() => undefined);
+      if (feed.ranking.mode === "PERSONALIZED") {
+        void recordAnalyticsEvent({
+          eventType: "PERSONALIZED_ISSUE_OPEN",
+          issueId: nextIssue.id,
+          issueVersion: nextIssue.version,
+          recommendationRequestId: nextIssue.recommendation.requestId,
+        }).catch(() => undefined);
+      }
       router.push(`/issues/${nextIssue.id}`);
     } catch {
       setState("error");
@@ -1050,7 +1219,12 @@ function ExperienceShell({ children }: { children: ReactNode }) {
         <Link className={styles.brand} href="/" aria-label="WHICH 홈">
           WHICH<span className={styles.brandDot}>.</span>
         </Link>
-        <span className={styles.openBadge}>OPEN QUESTION</span>
+        <div className={styles.headerActions}>
+          <Link className={styles.meLink} href="/me">
+            내 기록
+          </Link>
+          <span className={styles.openBadge}>OPEN QUESTION</span>
+        </div>
       </header>
       <div className={styles.stage}>{children}</div>
       <footer className={styles.footer}>

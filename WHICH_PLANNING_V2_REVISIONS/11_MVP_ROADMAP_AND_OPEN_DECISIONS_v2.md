@@ -141,6 +141,10 @@ First Value Moment 이전에는 제품 사용에 필수적인 요소만 허용�
 | R8 — Public MVP | 일반 사용자 | 핵심 가설 공개 검증 | 공개 | 비활성 |
 | R9 — Post-MVP Growth | 공개 사용자 | ML v1·Creator·Following·운영 자동화 확장 | 공개 | 별도 Gate |
 
+**[확정] Mobile Client Lane:** 외부 Deep-link는 모바일 웹을 유지하되, R4 이후 Expo 기반
+Android·iOS Guest Core Vote를 병행 검증한다. Native OAuth·Push·Store 공개는 각각 별도 Gate를
+통과해야 하며 Web Launch Gate를 대체하지 않는다.
+
 ## 2.2 단계 승격 원칙
 Release는 기능 구현 완료만으로 승격하지 않는다. 각 Release는 다음 네 축을 모두 통과해야 한다.
 
@@ -164,7 +168,7 @@ Rollback 가능성
 ## 3.1 Public MVP In
 | 영역 | MVP 제공 |
 | --- | --- |
-| Issue 소비 | 독립 URL, 모바일 우선 Issue 화면, 배경·출처, A/B, 결과, 다음 Issue, 뒤로가기 상태 복원 |
+| Issue 소비 | 독립 URL, 모바일 우선 Web·Expo Issue 화면, 배경·출처, A/B, 결과, 다음 Issue, 뒤로가기 상태 복원 |
 | Guest | LOW·허용된 MEDIUM 일반 Issue 즉시 투표, 결과·댓글 읽기·공유 |
 | Member | 소셜 로그인, 닉네임, 비공개 투표 기록, 댓글 작성, 공감, 신고, 차단 |
 | 피드 | For You, 인기, 논쟁, 최신의 MVP 버전과 안전한 Fallback |
@@ -998,7 +1002,7 @@ Next Issue Rate
 | OD-P0-004 | P0 | 투표 UX | A/B 즉시 제출 vs 확인 제출 | Phase 3 | Prototype usability test | 확인 제출 또는 취소 가능한 짧은 상태 비교 |
 | OD-P0-005 | P0 | 투표 | Accepted 후 변경 허용 여부 | Phase 1 | 무결성·UX 결정 | MVP 변경 불가 권고 |
 | OD-P0-006 | P0 | Guest | anonymous subject 만료와 로그아웃 회전 | Phase 1 | 개인정보·무결성 Threat Model | 보존 최소화 초기안 |
-| OD-P0-007 | P0 | Identity | Social Login Provider | Phase 1 | 시장·운영·보안 검토 | Google·X 운영, Naver OIDC는 Client 등록·검수 후 노출 |
+| OD-P0-007 | P0 | Identity | Social Login Provider | Phase 1 | 시장·운영·보안 검토 | Google·X·Naver 운영, Kakao OIDC는 Client 등록·실계정 검증 후 노출 |
 | OD-P0-008 | P0 | Data | PII·Security·Audit 보존기간 | Phase 1 | 법률·보안 검토 | 데이터 등급별 차등 |
 | OD-P0-009 | P0 | Data | 계정 삭제 시 Vote·Comment·Issue 처리 | Phase 1 | 개인정보·제품 정책 | 개인 식별 분리와 법적 보존 구분 |
 | OD-P0-010 | P0 | Analytics | Viewable Impression 기준 | Phase 3 | 프론트·데이터 QA | 50%·500ms 후보 |

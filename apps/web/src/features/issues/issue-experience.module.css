@@ -470,6 +470,24 @@
   padding: 7px 10px;
 }
 
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.meLink {
+  color: var(--surface);
+  font-size: 0.72rem;
+  font-weight: 850;
+  text-decoration: none;
+}
+
+.meLink:focus-visible {
+  outline: 3px solid var(--b);
+  outline-offset: 4px;
+}
+
 .stage {
   width: min(100%, 860px);
   margin-inline: auto;
@@ -524,6 +542,59 @@
   color: var(--muted);
   font-size: clamp(0.98rem, 2.5vw, 1.12rem);
   line-height: 1.75;
+}
+
+.authorLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 11px;
+  margin-top: 20px;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.authorLink > span:first-child {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border: 1px solid var(--a);
+  border-radius: 12px;
+  color: #063f49;
+  background: #a7eff5;
+  font-size: 0.75rem;
+  font-weight: 950;
+}
+
+.authorLink > span:last-child {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: baseline;
+  gap: 2px 8px;
+}
+
+.authorLink small {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 0.58rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+}
+
+.authorLink strong {
+  font-size: 0.8rem;
+}
+
+.authorLink em {
+  color: #0d8297;
+  font-size: 0.7rem;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.authorLink:focus-visible {
+  outline: 3px solid var(--b);
+  outline-offset: 4px;
 }
 
 .choiceGrid {
@@ -691,6 +762,76 @@
   display: grid;
   gap: 12px;
   margin-top: 24px;
+}
+
+.resultShare {
+  margin-top: 30px;
+  border: 1px solid var(--ink);
+  background: color-mix(in srgb, var(--a) 8%, var(--surface));
+  padding: 20px;
+}
+
+.resultShare h2 {
+  margin: 6px 0 0;
+  font-size: clamp(1.25rem, 4vw, 1.8rem);
+  letter-spacing: -0.04em;
+}
+
+.shareChoiceToggle {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 18px;
+  font-size: 0.84rem;
+  font-weight: 850;
+}
+
+.shareChoiceToggle input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--a);
+}
+
+.sharePrivacy,
+.shareMessage {
+  margin: 9px 0 0;
+  color: var(--muted);
+  font-size: 0.74rem;
+  line-height: 1.55;
+}
+
+.shareActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-top: 16px;
+}
+
+.shareActions button {
+  min-height: 44px;
+  border: 1px solid var(--ink);
+  background: var(--ink);
+  color: var(--surface);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 900;
+  padding: 10px 14px;
+}
+
+.shareActions button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.shareActions button:focus-visible {
+  outline: 3px solid var(--a);
+  outline-offset: 2px;
+}
+
+.shareMessage {
+  color: var(--ink);
+  font-weight: 750;
 }
 
 .resultRow {

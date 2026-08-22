@@ -1,0 +1,26 @@
+{
+  "expo": {
+    "name": "WHICH",
+    "slug": "which-mobile",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "which",
+    "userInterfaceStyle": "dark",
+    "ios": {
+      "bundleIdentifier": "site.whichone.app",
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "site.whichone.app",
+      "predictiveBackGestureEnabled": true
+    },
+    "web": {
+      "output": "static"
+    },
+    "plugins": ["expo-router", "expo-secure-store"],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    }
+  }
+}

@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
-import { ensureGuestSubject, loadIssueFeed } from "@/features/issues/client";
-import type { PublicFeedIssue } from "@/lib/contracts";
+import { ensureGuestSubject, loadIssueFeed, recordAnalyticsEvent } from "@/features/issues/client";
+import type { PublicFeedIssue, PublicIssueFeed } from "@/lib/contracts";
 
 import styles from "./feed-experience.module.css";
 
@@ -14,7 +14,9 @@ export function FeedExperience() {
   const [screen, setScreen] = useState<FeedScreen>("loading");
   const [items, setItems] = useState<PublicFeedIssue[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [ranking, setRanking] = useState<PublicIssueFeed["ranking"] | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
+  const viewedRecommendationRequests = useRef(new Set<string>());
 
   const loadInitial = useCallback(async () => {
     setScreen("loading");
@@ -23,6 +25,7 @@ export function FeedExperience() {
       const feed = await loadIssueFeed({ limit: 6 });
       setItems(feed.items);
       setNextCursor(feed.nextCursor);
+      setRanking(feed.ranking);
       setScreen(feed.items.length ? "ready" : "empty");
     } catch {
       setScreen("error");
@@ -39,6 +42,7 @@ export function FeedExperience() {
         if (!active) return;
         setItems(feed.items);
         setNextCursor(feed.nextCursor);
+        setRanking(feed.ranking);
         setScreen(feed.items.length ? "ready" : "empty");
       })
       .catch((error: unknown) => {
@@ -52,6 +56,24 @@ export function FeedExperience() {
     };
   }, []);
 
+  useEffect(() => {
+    const firstIssue = items[0];
+    if (
+      !firstIssue ||
+      ranking?.mode !== "PERSONALIZED" ||
+      viewedRecommendationRequests.current.has(ranking.requestId)
+    ) {
+      return;
+    }
+    viewedRecommendationRequests.current.add(ranking.requestId);
+    void recordAnalyticsEvent({
+      eventType: "PERSONALIZED_FEED_VIEW",
+      issueId: firstIssue.id,
+      issueVersion: firstIssue.version,
+      recommendationRequestId: ranking.requestId,
+    }).catch(() => undefined);
+  }, [items, ranking]);
+
   const loadMore = useCallback(async () => {
     if (!nextCursor || loadingMore) return;
     setLoadingMore(true);
@@ -63,6 +85,20 @@ export function FeedExperience() {
         return [...merged.values()];
       });
       setNextCursor(feed.nextCursor);
+      const firstNewIssue = feed.items[0];
+      if (
+        firstNewIssue &&
+        feed.ranking.mode === "PERSONALIZED" &&
+        !viewedRecommendationRequests.current.has(feed.ranking.requestId)
+      ) {
+        viewedRecommendationRequests.current.add(feed.ranking.requestId);
+        void recordAnalyticsEvent({
+          eventType: "PERSONALIZED_FEED_VIEW",
+          issueId: firstNewIssue.id,
+          issueVersion: firstNewIssue.version,
+          recommendationRequestId: feed.ranking.requestId,
+        }).catch(() => undefined);
+      }
     } finally {
       setLoadingMore(false);
     }
@@ -74,7 +110,12 @@ export function FeedExperience() {
         <Link className={styles.brand} href="/" aria-label="WHICH 홈">
           WHICH<span>.</span>
         </Link>
-        <span className={styles.liveBadge}>LIVE QUESTIONS</span>
+        <div className={styles.headerActions}>
+          <Link className={styles.meLink} href="/me">
+            내 기록
+          </Link>
+          <span className={styles.liveBadge}>LIVE QUESTIONS</span>
+        </div>
       </header>
 
       <section className={styles.hero}>
@@ -85,7 +126,12 @@ export function FeedExperience() {
 
       <section className={styles.feed} aria-labelledby="feed-title">
         <div className={styles.feedHeading}>
-          <h2 id="feed-title">참여 가능한 질문</h2>
+          <div>
+            <h2 id="feed-title">참여 가능한 질문</h2>
+            {screen === "ready" && ranking?.mode === "PERSONALIZED" ? (
+              <p className={styles.personalizedBadge}>관심사 기반 추천</p>
+            ) : null}
+          </div>
           {screen === "ready" ? <span>{items.length}개의 질문</span> : null}
         </div>
 
@@ -110,7 +156,12 @@ export function FeedExperience() {
           <>
             <div className={styles.grid}>
               {items.map((item, index) => (
-                <FeedCard issue={item} priority={index === 0} key={item.id} />
+                <FeedCard
+                  issue={item}
+                  personalized={ranking?.mode === "PERSONALIZED"}
+                  priority={index === 0}
+                  key={item.id}
+                />
               ))}
             </div>
             {nextCursor ? (
@@ -135,7 +186,15 @@ export function FeedExperience() {
   );
 }
 
-function FeedCard({ issue, priority }: { issue: PublicFeedIssue; priority: boolean }) {
+function FeedCard({
+  issue,
+  personalized,
+  priority,
+}: {
+  issue: PublicFeedIssue;
+  personalized: boolean;
+  priority: boolean;
+}) {
   const choiceA = issue.choices.find((choice) => choice.code === "A");
   const choiceB = issue.choices.find((choice) => choice.code === "B");
 
@@ -150,7 +209,19 @@ function FeedCard({ issue, priority }: { issue: PublicFeedIssue; priority: boole
         <span className={styles.choiceA}>A · {choiceA?.label}</span>
         <span className={styles.choiceB}>B · {choiceB?.label}</span>
       </div>
-      <Link className={styles.cardLink} href={`/issues/${issue.id}`}>
+      <Link
+        className={styles.cardLink}
+        href={`/issues/${issue.id}`}
+        onClick={() => {
+          if (!personalized) return;
+          void recordAnalyticsEvent({
+            eventType: "PERSONALIZED_ISSUE_OPEN",
+            issueId: issue.id,
+            issueVersion: issue.version,
+            recommendationRequestId: issue.recommendation.requestId,
+          }).catch(() => undefined);
+        }}
+      >
         이 질문에 참여하기 <span aria-hidden="true">↗</span>
       </Link>
     </article>

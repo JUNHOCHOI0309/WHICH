@@ -5,12 +5,14 @@ import { getConfig } from "../src/config.js";
 import type { CommentService } from "../src/modules/comments/contracts.js";
 import type { IssueReadService } from "../src/modules/issues/contracts.js";
 import type { MemberIdentityService } from "../src/modules/identity/contracts.js";
+import type { InterestProfileService } from "../src/modules/interests/contracts.js";
 import type { GuestVoteService } from "../src/modules/voting/contracts.js";
 
 const openApps: Array<Awaited<ReturnType<typeof buildApp>>> = [];
 
 const guestVotes: GuestVoteService = {
   createGuestSubject: vi.fn(),
+  findGuestVote: vi.fn(),
   submitGuestVote: vi.fn(),
   reconcileIssueVersion: vi.fn(),
 };
@@ -32,7 +34,19 @@ const commentReader: CommentService = {
 const memberIdentity: MemberIdentityService = {
   createSession: vi.fn(),
   getSession: vi.fn(),
+  getPrivateProfile: vi.fn(),
+  updateProfile: vi.fn(),
+  getPublicCreatorProfile: vi.fn(),
+  findPrivateVote: vi.fn(),
   revokeSession: vi.fn(),
+};
+
+const interestProfiles: InterestProfileService = {
+  listCards: vi.fn().mockReturnValue([]),
+  getProfile: vi.fn(),
+  saveProfile: vi.fn(),
+  resetProfile: vi.fn(),
+  mergeGuestProfile: vi.fn(),
 };
 
 afterEach(async () => {
@@ -48,6 +62,7 @@ describe("system health", () => {
       guestVotes,
       commentReader,
       memberIdentity,
+      interestProfiles,
     });
     openApps.push(app);
 
@@ -145,6 +160,7 @@ describe("OpenAPI contract", () => {
       guestVotes,
       commentReader,
       memberIdentity,
+      interestProfiles,
     });
     openApps.push(app);
 
@@ -157,9 +173,17 @@ describe("OpenAPI contract", () => {
     expect(document.paths).toHaveProperty(["/v1/issues/feed", "get"]);
     expect(document.paths).toHaveProperty(["/v1/guest-subjects", "post"]);
     expect(document.paths).toHaveProperty(["/v1/issues/{issueId}/votes", "post"]);
+    expect(document.paths).toHaveProperty(["/v1/issues/{issueId}/votes", "get"]);
     expect(document.paths).toHaveProperty(["/v1/issues/{issueId}/comments", "get"]);
     expect(document.paths).toHaveProperty(["/v1/comments/{commentId}/reactions/helpful", "post"]);
     expect(document.paths).toHaveProperty(["/v1/member-session", "get"]);
     expect(document.paths).toHaveProperty(["/v1/member-session", "delete"]);
+    expect(document.paths).toHaveProperty(["/v1/me", "get"]);
+    expect(document.paths).toHaveProperty(["/v1/me/votes/{issueId}", "get"]);
+    expect(document.paths).toHaveProperty(["/v1/interests/cards", "get"]);
+    expect(document.paths).toHaveProperty(["/v1/interest-profile", "get"]);
+    expect(document.paths).toHaveProperty(["/v1/interest-profile", "put"]);
+    expect(document.paths).toHaveProperty(["/v1/interest-profile/reset", "post"]);
+    expect(document.paths).toHaveProperty(["/v1/interest-profile/merge", "post"]);
   });
 });

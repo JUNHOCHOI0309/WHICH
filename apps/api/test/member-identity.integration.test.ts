@@ -72,7 +72,7 @@ async function submitGuestVote(anonymousSubjectId: string, issueId: string, choi
 }
 
 function createMemberSession(input: {
-  provider?: "GOOGLE" | "X" | "NAVER" | "DEVELOPMENT";
+  provider?: "GOOGLE" | "X" | "NAVER" | "KAKAO" | "DEVELOPMENT";
   providerSubject: string;
   anonymousSubjectId?: string;
   email?: string;
@@ -124,6 +124,24 @@ describe("Member identity and Guest vote linking", () => {
     expect(response.json()).toMatchObject({ code: "UNAUTHORIZED" });
   });
 
+  it("keeps the private Member profile behind the session token", async () => {
+    const response = await app.inject({ method: "GET", url: "/v1/me" });
+    expect(response.statusCode).toBe(401);
+    expect(response.json()).toMatchObject({ code: "SESSION_INVALID" });
+  });
+
+  it("rejects an invalid private vote history cursor", async () => {
+    const session = await createMemberSession({ providerSubject: `cursor-${randomUUID()}` });
+    const token = session.json<{ token: string }>().token;
+    const response = await app.inject({
+      method: "GET",
+      url: "/v1/me?cursor=not-a-cursor",
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ code: "INVALID_CURSOR" });
+  });
+
   it("persists an X User ID as a distinct Provider identity", async () => {
     const providerSubject = `x-user-${randomUUID()}`;
     const response = await createMemberSession({ provider: "X", providerSubject });
@@ -156,6 +174,23 @@ describe("Member identity and Guest vote linking", () => {
       .where(eq(memberIdentityLinks.memberId, memberId));
 
     expect(links).toEqual([{ provider: "NAVER", providerSubject }]);
+  });
+
+  it("persists a Kakao Subject as a distinct Provider identity", async () => {
+    const providerSubject = `kakao-subject-${randomUUID()}`;
+    const response = await createMemberSession({ provider: "KAKAO", providerSubject });
+
+    expect(response.statusCode).toBe(201);
+    const memberId = response.json<{ member: { id: string } }>().member.id;
+    const links = await database.db
+      .select({
+        provider: memberIdentityLinks.provider,
+        providerSubject: memberIdentityLinks.providerSubject,
+      })
+      .from(memberIdentityLinks)
+      .where(eq(memberIdentityLinks.memberId, memberId));
+
+    expect(links).toEqual([{ provider: "KAKAO", providerSubject }]);
   });
 
   it("maps the same Provider Subject to one Member and stores only a token hash", async () => {
@@ -218,6 +253,37 @@ describe("Member identity and Guest vote linking", () => {
     expect(response.json()).toMatchObject({
       guestLink: { linked: true, invalidatedDuplicateVotes: 0 },
     });
+    const token = response.json<{ token: string }>().token;
+
+    const profile = await app.inject({
+      method: "GET",
+      url: "/v1/me?limit=1",
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(profile.statusCode).toBe(200);
+    expect(profile.json()).toMatchObject({
+      member: { displayName: "테스트 회원", participationCount: 1 },
+      votes: {
+        items: [
+          {
+            issueId: issue.issueId,
+            question: "Member identity test issue",
+            categoryCode: "TEST",
+            choice: "A",
+            choiceLabel: "A",
+          },
+        ],
+        nextCursor: null,
+      },
+    });
+
+    const restored = await app.inject({
+      method: "GET",
+      url: `/v1/me/votes/${issue.issueId}`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(restored.statusCode).toBe(200);
+    expect(restored.json()).toMatchObject({ issueId: issue.issueId, choice: "A" });
 
     const [aggregate] = await database.db
       .select()
@@ -316,6 +382,7 @@ describe("Member identity and Guest vote linking", () => {
     expect(linked.json()).toMatchObject({
       guestLink: { linked: true, invalidatedDuplicateVotes: 1 },
     });
+    const linkedToken = linked.json<{ token: string }>().token;
 
     const [aggregate] = await database.db
       .select()
@@ -328,6 +395,19 @@ describe("Member identity and Guest vote linking", () => {
       displayedVoteCount: 1,
       invalidatedVoteCount: 1,
       integrityState: "CORRECTED",
+    });
+
+    const profile = await app.inject({
+      method: "GET",
+      url: "/v1/me",
+      headers: { authorization: `Bearer ${linkedToken}` },
+    });
+    expect(profile.statusCode).toBe(200);
+    expect(profile.json()).toMatchObject({
+      member: { id: memberId, participationCount: 1 },
+      votes: {
+        items: [{ voteId: memberVoteId, issueId: issue.issueId, choice: "B" }],
+      },
     });
 
     const retry = await createMemberSession({ providerSubject, anonymousSubjectId: guestId });

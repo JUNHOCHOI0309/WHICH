@@ -41,6 +41,14 @@ const issueResponseSchema = Type.Object({
   categoryCode: Type.String(),
   experienceModeCode: Type.String(),
   choices: Type.Array(choiceSchema, { minItems: 2, maxItems: 2 }),
+  author: Type.Union([
+    Type.Object({
+      displayName: Type.String(),
+      handle: Type.String(),
+      avatar: Type.Object({ kind: Type.Literal("INITIALS"), initials: Type.String() }),
+    }),
+    Type.Null(),
+  ]),
   result: Type.Object({
     visibility: Type.Union([
       Type.Literal("PRE_VOTE_HIDDEN"),
@@ -62,9 +70,34 @@ const feedResponseSchema = Type.Object({
       publishedAt: Type.String({ format: "date-time" }),
       categoryCode: Type.String(),
       choices: Type.Array(choiceSchema, { minItems: 2, maxItems: 2 }),
+      recommendation: Type.Object({
+        requestId: uuidSchema,
+        score: Type.Integer({ minimum: 0 }),
+        reasonCodes: Type.Array(
+          Type.Union([
+            Type.Literal("INTEREST_MATCH"),
+            Type.Literal("EXPLORATION"),
+            Type.Literal("RECENT_FALLBACK"),
+          ]),
+        ),
+        matchedCardCodes: Type.Array(Type.String()),
+      }),
     }),
   ),
   nextCursor: Type.Union([Type.String(), Type.Null()]),
+  ranking: Type.Object({
+    requestId: uuidSchema,
+    version: Type.Literal("interest_content_v1"),
+    mode: Type.Union([Type.Literal("PERSONALIZED"), Type.Literal("RECENCY")]),
+    reasonCode: Type.Union([
+      Type.Literal("INTEREST_PROFILE_MATCH"),
+      Type.Literal("PROFILE_NOT_READY"),
+      Type.Literal("FEATURE_DISABLED"),
+      Type.Literal("IDENTITY_UNAVAILABLE"),
+      Type.Literal("RANKER_FALLBACK"),
+    ]),
+    profileVersion: Type.Union([Type.Integer({ minimum: 1 }), Type.Null()]),
+  }),
 });
 
 type IssueRoute = {
@@ -73,8 +106,13 @@ type IssueRoute = {
 
 type IssueFeedRoute = {
   Querystring: { cursor?: string; limit?: number; excludeIssueId?: string };
-  Headers: { "x-anonymous-subject-id"?: string };
+  Headers: { "x-anonymous-subject-id"?: string; authorization?: string };
 };
+
+function bearerToken(value: string | undefined) {
+  const match = value?.match(/^Bearer\s+(.+)$/i);
+  return match?.[1];
+}
 
 export async function registerIssueRoutes(app: FastifyInstance, service: IssueReadService) {
   await app.register((issueApp) => {
@@ -114,12 +152,16 @@ export async function registerIssueRoutes(app: FastifyInstance, service: IssueRe
             excludeIssueId: Type.Optional(uuidSchema),
           }),
           headers: Type.Object(
-            { "x-anonymous-subject-id": Type.Optional(uuidSchema) },
+            {
+              "x-anonymous-subject-id": Type.Optional(uuidSchema),
+              authorization: Type.Optional(Type.String({ minLength: 8, maxLength: 4096 })),
+            },
             { additionalProperties: true },
           ),
           response: {
             200: feedResponseSchema,
             400: errorResponseSchema,
+            409: errorResponseSchema,
             500: errorResponseSchema,
           },
         },
@@ -130,6 +172,7 @@ export async function registerIssueRoutes(app: FastifyInstance, service: IssueRe
           limit: request.query.limit ?? 10,
           excludeIssueId: request.query.excludeIssueId,
           anonymousSubjectId: request.headers["x-anonymous-subject-id"],
+          sessionToken: bearerToken(request.headers.authorization),
         }),
     );
 

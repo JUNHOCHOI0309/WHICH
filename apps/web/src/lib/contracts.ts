@@ -22,6 +22,11 @@ export type PublicIssue = {
   categoryCode: string;
   experienceModeCode: string;
   choices: IssueChoice[];
+  author: {
+    displayName: string;
+    handle: string;
+    avatar: { kind: "INITIALS"; initials: string };
+  } | null;
   result: {
     visibility:
       | "PRE_VOTE_HIDDEN"
@@ -33,11 +38,36 @@ export type PublicIssue = {
   };
 };
 
-export type PublicFeedIssue = Omit<PublicIssue, "context" | "experienceModeCode" | "result">;
+export type RankingMode = "PERSONALIZED" | "RECENCY";
+export type RankingReasonCode =
+  | "INTEREST_PROFILE_MATCH"
+  | "PROFILE_NOT_READY"
+  | "FEATURE_DISABLED"
+  | "IDENTITY_UNAVAILABLE"
+  | "RANKER_FALLBACK";
+
+export type PublicFeedIssue = Omit<
+  PublicIssue,
+  "context" | "experienceModeCode" | "result" | "author"
+> & {
+  recommendation: {
+    requestId: string;
+    score: number;
+    reasonCodes: Array<"INTEREST_MATCH" | "EXPLORATION" | "RECENT_FALLBACK">;
+    matchedCardCodes: InterestCardCode[];
+  };
+};
 
 export type PublicIssueFeed = {
   items: PublicFeedIssue[];
   nextCursor: string | null;
+  ranking: {
+    requestId: string;
+    version: "interest_content_v1";
+    mode: RankingMode;
+    reasonCode: RankingReasonCode;
+    profileVersion: number | null;
+  };
 };
 
 export type CommentSide = "ALL" | "A" | "B";
@@ -83,7 +113,121 @@ export type VoteResponse = {
   result: IssueTally;
 };
 
+export type MemberPrivateVote = {
+  voteId: string;
+  issueId: string;
+  issueVersion: number;
+  question: string;
+  categoryCode: string;
+  choice: "A" | "B";
+  choiceLabel: string;
+  acceptedAt: string;
+  result: IssueTally;
+};
+
+export type MemberPrivateProfile = {
+  member: {
+    id: string;
+    displayName: string;
+    status: "ACTIVE" | "LIMITED" | "SUSPENDED" | "DELETED";
+    joinedAt: string;
+    participationCount: number;
+  };
+  publicProfile: MemberProfileSettings | null;
+  votes: {
+    items: MemberPrivateVote[];
+    nextCursor: string | null;
+  };
+};
+
+export type MemberProfileSettings = {
+  handle: string;
+  bio: string | null;
+  visibility: "PRIVATE" | "PUBLIC";
+  publicUrl: string | null;
+};
+
+export type PublicCreatorProfile = {
+  creator: {
+    displayName: string;
+    handle: string;
+    bio: string | null;
+    joinedMonth: string;
+    avatar: { kind: "INITIALS"; initials: string };
+  };
+  stats: { publishedIssueCount: number; acceptedVoteCount: number };
+  issues: Array<{
+    id: string;
+    version: number;
+    question: string;
+    categoryCode: string;
+    publishedAt: string;
+    acceptedVoteCount: number;
+  }>;
+};
+
+export type ShareChannel = "COPY" | "SYSTEM" | "X";
+
+export type PublicShareCard = {
+  id: string;
+  version: "result_share_v1";
+  channel: ShareChannel;
+  shareType: "RESULT" | "RESULT_WITH_CHOICE";
+  sharedChoiceCode: "A" | "B" | null;
+  createdAt: string;
+  issue: {
+    id: string;
+    version: number;
+    question: string;
+    choices: Array<{ code: "A" | "B"; label: string }>;
+  };
+  result: IssueTally;
+};
+
+export type ShareCardResponse = { shareCard: PublicShareCard; url: string };
+
 export type ApiErrorBody = {
   code: string;
   message: string;
+};
+
+export type InterestCardCode =
+  | "DAILY_LIFE"
+  | "FOOD"
+  | "TRAVEL"
+  | "RELATIONSHIP"
+  | "WORK"
+  | "ECONOMY_CONSUMPTION"
+  | "TECH"
+  | "GAME"
+  | "MOVIE_DRAMA"
+  | "MUSIC_CONTENT"
+  | "SPORTS"
+  | "EDUCATION"
+  | "SOCIETY"
+  | "HOBBY";
+
+export type InterestCardRegistry = {
+  taxonomyVersion: "interest_cards_v1";
+  minSelections: 3;
+  maxSelections: 8;
+  cards: Array<{
+    code: InterestCardCode;
+    label: string;
+    categoryCodes: string[];
+    topicCodes: string[];
+  }>;
+};
+
+export type InterestProfile = {
+  taxonomyVersion: "interest_cards_v1";
+  onboardingState: "NOT_STARTED" | "COMPLETED" | "SKIPPED" | "RESET";
+  selectedCardCodes: InterestCardCode[];
+  canSkip: boolean;
+  profileVersion: number;
+  mergeCandidate: {
+    anonymousSubjectId: string;
+    guestCardCodes: InterestCardCode[];
+    suggestedCardCodes: InterestCardCode[];
+  } | null;
 };
