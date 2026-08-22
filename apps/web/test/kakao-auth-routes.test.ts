@@ -39,6 +39,7 @@ describe("Kakao OIDC routes", () => {
     oidcMocks.calculatePKCECodeChallenge.mockResolvedValue("kakao-challenge");
     oidcMocks.randomState.mockReturnValue("kakao-state");
     oidcMocks.randomNonce.mockReturnValue("kakao-nonce");
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
     oidcMocks.buildAuthorizationUrl.mockImplementation((_config, parameters) => {
       const url = new URL("https://kauth.kakao.com/oauth/authorize");
       Object.entries(parameters as Record<string, string>).forEach(([key, value]) => {
@@ -52,6 +53,7 @@ describe("Kakao OIDC routes", () => {
   afterEach(() => {
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
   function flowCookie() {
@@ -171,6 +173,9 @@ describe("Kakao OIDC routes", () => {
     expect(response.headers.get("location")).toBe("http://localhost:3000/?auth=error");
     expect(oidcMocks.authorizationCodeGrant).not.toHaveBeenCalled();
     expect(request).not.toHaveBeenCalled();
+    expect(console.warn).toHaveBeenCalledWith(
+      JSON.stringify({ event: "kakao_auth_failed", stage: "flow_validation" }),
+    );
   });
 
   it("returns a cancellation without exchanging a token", async () => {
@@ -207,6 +212,54 @@ describe("Kakao OIDC routes", () => {
     expect(response.headers.get("location")).toBe(
       "http://localhost:3000/issues/issue-1?auth=error#member-access",
     );
+    expect(request).not.toHaveBeenCalled();
+    expect(console.warn).toHaveBeenCalledWith(
+      JSON.stringify({
+        event: "kakao_auth_failed",
+        stage: "claims",
+        errorName: "Error",
+      }),
+    );
+  });
+
+  it("logs only safe diagnostics when the Kakao token exchange fails", async () => {
+    headerMocks.get.mockImplementation((name: string) =>
+      name === AUTH_FLOW_COOKIE ? { value: flowCookie() } : undefined,
+    );
+    oidcMocks.authorizationCodeGrant.mockRejectedValue(
+      Object.assign(new Error("sensitive authorization code must not be logged"), {
+        code: "OAUTH_JWT_CLAIM_COMPARISON_FAILED",
+        error: "invalid_grant",
+        status: 400,
+        error_description: "sensitive token response must not be logged",
+      }),
+    );
+    const request = vi.fn();
+    vi.stubGlobal("fetch", request);
+
+    const response = await callback(
+      new Request(
+        "http://localhost:3000/api/auth/kakao/callback?code=authorization-code&state=kakao-state",
+      ),
+    );
+
+    expect(response.headers.get("location")).toBe(
+      "http://localhost:3000/issues/issue-1?auth=error#member-access",
+    );
+    expect(console.warn).toHaveBeenCalledWith(
+      JSON.stringify({
+        event: "kakao_auth_failed",
+        stage: "token_exchange",
+        errorName: "Error",
+        errorCode: "OAUTH_JWT_CLAIM_COMPARISON_FAILED",
+        providerError: "invalid_grant",
+        providerStatus: 400,
+      }),
+    );
+    const logged = JSON.stringify(vi.mocked(console.warn).mock.calls);
+    expect(logged).not.toContain("sensitive authorization code");
+    expect(logged).not.toContain("sensitive token response");
+    expect(logged).not.toContain("authorization-code");
     expect(request).not.toHaveBeenCalled();
   });
 });
