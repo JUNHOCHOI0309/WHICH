@@ -88,6 +88,8 @@ export async function GET(request: Request) {
   const cookieStore = await cookies();
   const flow = decodeAuthFlow(cookieStore.get(AUTH_FLOW_COOKIE)?.value);
   const requestUrl = new URL(request.url);
+  const tokenCallbackUrl = new URL("/api/auth/naver/callback", baseUrl);
+  tokenCallbackUrl.search = requestUrl.search;
 
   if (
     !flow ||
@@ -125,7 +127,7 @@ export async function GET(request: Request) {
     stage = "token_exchange";
     const tokens = await oidc.authorizationCodeGrant(
       config,
-      requestUrl,
+      tokenCallbackUrl,
       {
         pkceCodeVerifier: flow.codeVerifier,
         expectedState: flow.state,
