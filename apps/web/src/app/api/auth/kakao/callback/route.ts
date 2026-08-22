@@ -12,7 +12,7 @@ import {
   kakaoOidcCredentials,
   withAuthOutcome,
 } from "@/lib/server/member-auth";
-import { createProviderMemberSession } from "@/lib/server/member-session-bridge";
+import { createOAuthMemberSession } from "@/lib/server/member-session-bridge";
 import {
   clearGuestSubjectCookie,
   GUEST_SUBJECT_COOKIE,
@@ -89,7 +89,7 @@ export async function GET(request: Request) {
     if (!claims?.sub) throw new Error("Kakao OIDC did not return a subject claim.");
 
     const anonymousSubjectId = validGuestSubject(cookieStore.get(GUEST_SUBJECT_COOKIE)?.value);
-    const session = await createProviderMemberSession({
+    const session = await createOAuthMemberSession(flow, {
       provider: "KAKAO",
       providerSubject: claims.sub,
       displayName:

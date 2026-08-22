@@ -134,6 +134,11 @@ export type MemberPrivateProfile = {
     participationCount: number;
   };
   publicProfile: MemberProfileSettings | null;
+  identities: Array<{
+    provider: "GOOGLE" | "X" | "NAVER" | "KAKAO" | "DEVELOPMENT";
+    linkedAt: string;
+    lastAuthenticatedAt: string;
+  }>;
   votes: {
     items: MemberPrivateVote[];
     nextCursor: string | null;

@@ -1,0 +1,1 @@
+ALTER TABLE "member_identity_links" ADD CONSTRAINT "member_identity_links_member_provider_unique" UNIQUE("member_id","provider");

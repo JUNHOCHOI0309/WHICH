@@ -19,6 +19,8 @@ export type AuthFlow = {
   codeVerifier: string;
   returnTo: string;
   anonymousSubjectId?: string;
+  intent?: "LINK";
+  linkMemberId?: string;
   createdAt: number;
 };
 
@@ -27,6 +29,7 @@ export type GoogleBrowserHandoff = {
   provider: "GOOGLE";
   returnTo: string;
   anonymousSubjectId?: string;
+  linkMemberId?: string;
   state: string;
   nonce: string;
   codeVerifier: string;
@@ -118,6 +121,7 @@ export function decodeGoogleBrowserHandoff(
       handoff.provider !== "GOOGLE" ||
       sanitizeReturnTo(handoff.returnTo) !== handoff.returnTo ||
       (handoff.anonymousSubjectId !== undefined && !uuidPattern.test(handoff.anonymousSubjectId)) ||
+      (handoff.linkMemberId !== undefined && !uuidPattern.test(handoff.linkMemberId)) ||
       typeof handoff.state !== "string" ||
       handoff.state.length < 32 ||
       typeof handoff.nonce !== "string" ||
@@ -165,6 +169,9 @@ export function decodeAuthFlow(value: string | undefined) {
       typeof flow.codeVerifier !== "string" ||
       typeof flow.returnTo !== "string" ||
       (flow.anonymousSubjectId !== undefined && !uuidPattern.test(flow.anonymousSubjectId)) ||
+      (flow.intent !== undefined && flow.intent !== "LINK") ||
+      (flow.intent === "LINK") !== (flow.linkMemberId !== undefined) ||
+      (flow.linkMemberId !== undefined && !uuidPattern.test(flow.linkMemberId)) ||
       typeof flow.createdAt !== "number" ||
       Date.now() - flow.createdAt > 10 * 60 * 1_000
     ) {

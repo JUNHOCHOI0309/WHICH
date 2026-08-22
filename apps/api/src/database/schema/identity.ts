@@ -40,6 +40,7 @@ export const memberIdentityLinks = pgTable(
       table.provider,
       table.providerSubject,
     ),
+    unique("member_identity_links_member_provider_unique").on(table.memberId, table.provider),
     index("member_identity_links_member_idx").on(table.memberId),
   ],
 );

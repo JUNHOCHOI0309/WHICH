@@ -41,6 +41,13 @@ function participatedLabel(value: string) {
   }).format(new Date(value));
 }
 
+const socialProviders = [
+  { id: "GOOGLE", login: "google", label: "Google" },
+  { id: "X", login: "x", label: "X" },
+  { id: "NAVER", login: "naver", label: "네이버" },
+  { id: "KAKAO", login: "kakao", label: "카카오" },
+] as const;
+
 export function MemberProfileExperience({
   kakaoLoginEnabled,
   naverLoginEnabled,
@@ -197,6 +204,52 @@ export function MemberProfileExperience({
               setProfile((current) => (current ? { ...current, publicProfile } : current))
             }
           />
+
+          <section
+            className={styles.connectedAccounts}
+            id="connected-accounts"
+            aria-labelledby="connected-accounts-title"
+          >
+            <div className={styles.connectedAccountsHeading}>
+              <div>
+                <p>CONNECTED ACCOUNTS</p>
+                <h2 id="connected-accounts-title">로그인 수단 연결</h2>
+              </div>
+              <span>어느 수단으로 로그인해도 같은 기록으로 연결됩니다.</span>
+            </div>
+            <div className={styles.providerGrid}>
+              {socialProviders.map((provider) => {
+                const enabled =
+                  provider.id === "GOOGLE" ||
+                  provider.id === "X" ||
+                  (provider.id === "NAVER" && naverLoginEnabled) ||
+                  (provider.id === "KAKAO" && kakaoLoginEnabled);
+                if (!enabled) return null;
+                const connected = profile.identities.some(
+                  (identity) => identity.provider === provider.id,
+                );
+                return (
+                  <article className={styles.providerCard} key={provider.id}>
+                    <div>
+                      <strong>{provider.label}</strong>
+                      <span>{connected ? "연결됨" : "연결되지 않음"}</span>
+                    </div>
+                    {connected ? (
+                      <span className={styles.connectedBadge}>CONNECTED</span>
+                    ) : (
+                      <a href={loginHref(provider.login, "/me#connected-accounts", "link")}>
+                        연결하기
+                      </a>
+                    )}
+                  </article>
+                );
+              })}
+            </div>
+            <p className={styles.accountLinkNote}>
+              계정 연결은 현재 로그인된 회원에게만 추가됩니다. 이메일이나 Guest 쿠키만으로 다른
+              회원을 자동 병합하지 않습니다.
+            </p>
+          </section>
 
           <section className={styles.history} aria-labelledby="history-title">
             <div className={styles.historyHeading}>

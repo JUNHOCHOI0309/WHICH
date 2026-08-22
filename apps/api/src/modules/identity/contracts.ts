@@ -25,6 +25,16 @@ export type MemberSessionResult = {
   };
 };
 
+export type MemberIdentityLinkResult = {
+  token: string;
+  expiresAt: string;
+  member: MemberView;
+  identity: {
+    provider: IdentityProvider;
+    linked: boolean;
+  };
+};
+
 export type MemberVoteHistoryQuery = {
   limit: number;
   cursor?: {
@@ -58,6 +68,11 @@ export type MemberPrivateProfile = {
     participationCount: number;
   };
   publicProfile: MemberProfileSettings | null;
+  identities: Array<{
+    provider: IdentityProvider;
+    linkedAt: string;
+    lastAuthenticatedAt: string;
+  }>;
   votes: {
     items: MemberVoteHistoryItem[];
     nextCursor: string | null;
@@ -113,6 +128,10 @@ export type MemberVoteLookupResult = {
 
 export interface MemberIdentityService {
   createSession(assertion: IdentityAssertion): Promise<MemberSessionResult>;
+  linkIdentity(
+    memberId: string,
+    assertion: Omit<IdentityAssertion, "anonymousSubjectId">,
+  ): Promise<MemberIdentityLinkResult>;
   getSession(token: string): Promise<{ expiresAt: string; member: MemberView } | null>;
   getPrivateProfile(
     token: string,

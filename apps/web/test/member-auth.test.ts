@@ -104,6 +104,39 @@ describe("Member OAuth return flow", () => {
     expect(decodeAuthFlow(encoded)).toMatchObject({ provider: "NAVER", state: "naver-state" });
   });
 
+  it("keeps a signed account-link intent bound to its canonical Member", () => {
+    const linkMemberId = "591f2e90-996a-50c5-af46-967dd0793000";
+    const encoded = encodeAuthFlow({
+      provider: "NAVER",
+      state: "naver-state",
+      codeVerifier: "verifier",
+      returnTo: "/me#connected-accounts",
+      intent: "LINK",
+      linkMemberId,
+      createdAt: Date.now(),
+    });
+
+    expect(decodeAuthFlow(encoded)).toMatchObject({ intent: "LINK", linkMemberId });
+  });
+
+  it("rejects incomplete or unsupported account-link intents", () => {
+    const base = {
+      provider: "NAVER" as const,
+      state: "naver-state",
+      codeVerifier: "verifier",
+      returnTo: "/me",
+      createdAt: Date.now(),
+    };
+    const missingMember = encodeAuthFlow({ ...base, intent: "LINK" });
+    const unsupportedIntent = encodeAuthFlow({
+      ...base,
+      intent: "MERGE" as "LINK",
+    });
+
+    expect(decodeAuthFlow(missingMember)).toBeNull();
+    expect(decodeAuthFlow(unsupportedIntent)).toBeNull();
+  });
+
   it("accepts a signed Kakao OIDC flow only when its nonce is present", () => {
     const valid = encodeAuthFlow({
       provider: "KAKAO",

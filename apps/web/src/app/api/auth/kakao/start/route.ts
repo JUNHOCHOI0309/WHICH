@@ -1,4 +1,5 @@
 import * as oidc from "openid-client";
+import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
 import {
@@ -11,6 +12,8 @@ import {
   sanitizeReturnTo,
   withAuthOutcome,
 } from "@/lib/server/member-auth";
+import { memberIdForLinkIntent } from "@/lib/server/member-session-bridge";
+import { MEMBER_SESSION_COOKIE } from "@/lib/server/which-api";
 
 export const runtime = "nodejs";
 
@@ -22,6 +25,17 @@ export async function GET(request: Request) {
 
   if (!kakaoLoginEnabled() || !credentials) {
     return NextResponse.redirect(new URL(withAuthOutcome(returnTo, "unavailable"), baseUrl));
+  }
+
+  const cookieStore = await cookies();
+  let linkMemberId: string | undefined;
+  try {
+    linkMemberId = await memberIdForLinkIntent(
+      requestUrl,
+      cookieStore.get(MEMBER_SESSION_COOKIE)?.value,
+    );
+  } catch {
+    return NextResponse.redirect(new URL(withAuthOutcome(returnTo, "error"), baseUrl));
   }
 
   try {
@@ -54,6 +68,7 @@ export async function GET(request: Request) {
         nonce,
         codeVerifier,
         returnTo,
+        ...(linkMemberId ? { intent: "LINK" as const, linkMemberId } : {}),
         createdAt: Date.now(),
       }),
       httpOnly: true,

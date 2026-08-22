@@ -12,6 +12,9 @@ import {
   xOAuthCredentials,
 } from "@/lib/server/member-auth";
 import { buildXAuthorizationUrl } from "@/lib/server/x-oauth";
+import { memberIdForLinkIntent } from "@/lib/server/member-session-bridge";
+import { MEMBER_SESSION_COOKIE } from "@/lib/server/which-api";
+import { cookies } from "next/headers";
 
 export const runtime = "nodejs";
 
@@ -23,6 +26,17 @@ export async function GET(request: Request) {
 
   if (!credentials) {
     return NextResponse.redirect(new URL(withAuthOutcome(returnTo, "unavailable"), baseUrl));
+  }
+
+  const cookieStore = await cookies();
+  let linkMemberId: string | undefined;
+  try {
+    linkMemberId = await memberIdForLinkIntent(
+      requestUrl,
+      cookieStore.get(MEMBER_SESSION_COOKIE)?.value,
+    );
+  } catch {
+    return NextResponse.redirect(new URL(withAuthOutcome(returnTo, "error"), baseUrl));
   }
 
   try {
@@ -44,6 +58,7 @@ export async function GET(request: Request) {
         state,
         codeVerifier,
         returnTo,
+        ...(linkMemberId ? { intent: "LINK" as const, linkMemberId } : {}),
         createdAt: Date.now(),
       }),
       httpOnly: true,
