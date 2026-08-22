@@ -35,7 +35,6 @@ describe("Naver OIDC routes", () => {
     oidcMocks.randomPKCECodeVerifier.mockReturnValue("naver-verifier");
     oidcMocks.calculatePKCECodeChallenge.mockResolvedValue("naver-challenge");
     oidcMocks.randomState.mockReturnValue("naver-state");
-    oidcMocks.randomNonce.mockReturnValue("naver-nonce");
     vi.spyOn(console, "warn").mockImplementation(() => undefined);
     oidcMocks.buildAuthorizationUrl.mockImplementation((_config, parameters) => {
       const url = new URL("https://nid.naver.com/oauth2/authorize");
@@ -57,14 +56,13 @@ describe("Naver OIDC routes", () => {
     return encodeAuthFlow({
       provider: "NAVER",
       state: "naver-state",
-      nonce: "naver-nonce",
       codeVerifier: "naver-verifier",
       returnTo: "/issues/issue-1#member-access",
       createdAt: Date.now(),
     });
   }
 
-  it("starts at Naver with OIDC, PKCE, nonce, and a signed HttpOnly flow cookie", async () => {
+  it("starts at Naver with OIDC, PKCE, state, and a signed HttpOnly flow cookie", async () => {
     const response = await start(
       new Request("http://localhost:3000/api/auth/naver/start?returnTo=/issues/issue-1"),
     );
@@ -78,10 +76,10 @@ describe("Naver OIDC routes", () => {
       response_type: "code",
       scope: "openid",
       state: "naver-state",
-      nonce: "naver-nonce",
       code_challenge: "naver-challenge",
       code_challenge_method: "S256",
     });
+    expect(location.searchParams.has("nonce")).toBe(false);
     expect(oidcMocks.discovery).toHaveBeenCalledWith(
       new URL("https://nid.naver.com"),
       "naver-client",
@@ -179,7 +177,6 @@ describe("Naver OIDC routes", () => {
       {
         pkceCodeVerifier: "naver-verifier",
         expectedState: "naver-state",
-        expectedNonce: "naver-nonce",
         idTokenExpected: true,
       },
       { state: "naver-state" },
@@ -245,7 +242,9 @@ describe("Naver OIDC routes", () => {
       name === AUTH_FLOW_COOKIE ? { value: flowCookie() } : undefined,
     );
     oidcMocks.authorizationCodeGrant.mockRejectedValue(
-      new Error("sensitive authorization code must not be logged"),
+      Object.assign(new Error("sensitive authorization code must not be logged"), {
+        code: "OAUTH_JWT_CLAIM_COMPARISON_FAILED",
+      }),
     );
     const request = vi.fn();
     vi.stubGlobal("fetch", request);
@@ -264,6 +263,7 @@ describe("Naver OIDC routes", () => {
         event: "naver_auth_failed",
         stage: "token_exchange",
         errorName: "Error",
+        errorCode: "OAUTH_JWT_CLAIM_COMPARISON_FAILED",
       }),
     );
     expect(JSON.stringify(vi.mocked(console.warn).mock.calls)).not.toContain(

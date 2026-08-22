@@ -32,11 +32,20 @@ type NaverAuthFailureStage =
   | "member_session";
 
 function logNaverAuthFailure(stage: NaverAuthFailureStage, error?: unknown) {
+  const errorCode =
+    error &&
+    typeof error === "object" &&
+    "code" in error &&
+    typeof error.code === "string" &&
+    /^[a-z0-9_.:-]{1,80}$/i.test(error.code)
+      ? error.code
+      : undefined;
   console.warn(
     JSON.stringify({
       event: "naver_auth_failed",
       stage,
       ...(error instanceof Error ? { errorName: error.name } : {}),
+      ...(errorCode ? { errorCode } : {}),
     }),
   );
 }
@@ -72,7 +81,6 @@ export async function GET(request: Request) {
   if (
     !flow ||
     flow.provider !== "NAVER" ||
-    !flow.nonce ||
     !authFlowMatches(flow, "NAVER", requestUrl.searchParams.get("state"))
   ) {
     logNaverAuthFailure("flow_validation");
@@ -110,7 +118,6 @@ export async function GET(request: Request) {
       {
         pkceCodeVerifier: flow.codeVerifier,
         expectedState: flow.state,
-        expectedNonce: flow.nonce,
         idTokenExpected: true,
       },
       { state: flow.state },
