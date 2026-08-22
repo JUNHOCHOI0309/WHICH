@@ -86,9 +86,11 @@ function loadErrorCopy(error: unknown) {
 
 export function IssueExperience({
   issueId,
+  kakaoLoginEnabled = false,
   naverLoginEnabled = false,
 }: {
   issueId: string;
+  kakaoLoginEnabled?: boolean;
   naverLoginEnabled?: boolean;
 }) {
   const [screen, setScreen] = useState<Screen>("loading");
@@ -258,7 +260,14 @@ export function IssueExperience({
   if (!issue) return null;
 
   if (screen === "result" && result) {
-    return <ResultScreen issue={issue} result={result} naverLoginEnabled={naverLoginEnabled} />;
+    return (
+      <ResultScreen
+        issue={issue}
+        result={result}
+        kakaoLoginEnabled={kakaoLoginEnabled}
+        naverLoginEnabled={naverLoginEnabled}
+      />
+    );
   }
 
   const selectedChoice = pendingAction?.choice;
@@ -350,10 +359,12 @@ export function IssueExperience({
 function ResultScreen({
   issue,
   result,
+  kakaoLoginEnabled,
   naverLoginEnabled,
 }: {
   issue: PublicIssue;
   result: VoteResponse;
+  kakaoLoginEnabled: boolean;
   naverLoginEnabled: boolean;
 }) {
   const total = result.result.displayedTotal;
@@ -415,8 +426,16 @@ function ResultScreen({
           mode="prompt"
           analyticsContext={{ issueId: issue.id, issueVersion: issue.version }}
         />
-        <MemberAccess issueId={issue.id} naverLoginEnabled={naverLoginEnabled} />
-        <CommentSection issueId={issue.id} naverLoginEnabled={naverLoginEnabled} />
+        <MemberAccess
+          issueId={issue.id}
+          kakaoLoginEnabled={kakaoLoginEnabled}
+          naverLoginEnabled={naverLoginEnabled}
+        />
+        <CommentSection
+          issueId={issue.id}
+          kakaoLoginEnabled={kakaoLoginEnabled}
+          naverLoginEnabled={naverLoginEnabled}
+        />
         <NextIssueAction currentIssueId={issue.id} currentIssueVersion={issue.version} />
       </article>
     </ExperienceShell>
@@ -540,9 +559,11 @@ const COMMENT_REPORT_REASONS: Array<{ value: CommentReportReason; label: string 
 
 function CommentSection({
   issueId,
+  kakaoLoginEnabled,
   naverLoginEnabled,
 }: {
   issueId: string;
+  kakaoLoginEnabled: boolean;
   naverLoginEnabled: boolean;
 }) {
   const [side, setSide] = useState<CommentSide>("ALL");
@@ -872,6 +893,9 @@ function CommentSection({
             <a href={loginHref("x", `/issues/${issueId}#comment-compose`)}>X로 로그인</a>
             {naverLoginEnabled ? (
               <a href={loginHref("naver", `/issues/${issueId}#comment-compose`)}>네이버로 로그인</a>
+            ) : null}
+            {kakaoLoginEnabled ? (
+              <a href={loginHref("kakao", `/issues/${issueId}#comment-compose`)}>카카오로 로그인</a>
             ) : null}
           </div>
         ) : null}

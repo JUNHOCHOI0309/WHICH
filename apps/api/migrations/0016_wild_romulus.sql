@@ -1,0 +1,1 @@
+ALTER TYPE "public"."identity_provider" ADD VALUE 'KAKAO' BEFORE 'DEVELOPMENT';

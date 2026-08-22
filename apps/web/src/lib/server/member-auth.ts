@@ -10,7 +10,7 @@ import {
 export const AUTH_FLOW_COOKIE = "which_auth_flow";
 export const AUTH_FLOW_COOKIE_PATH = "/api/auth";
 
-export type AuthProvider = "GOOGLE" | "X" | "NAVER";
+export type AuthProvider = "GOOGLE" | "X" | "NAVER" | "KAKAO";
 
 export type AuthFlow = {
   provider: AuthProvider;
@@ -158,9 +158,9 @@ export function decodeAuthFlow(value: string | undefined) {
   try {
     const flow = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as AuthFlow;
     if (
-      !["GOOGLE", "X", "NAVER"].includes(flow.provider) ||
+      !["GOOGLE", "X", "NAVER", "KAKAO"].includes(flow.provider) ||
       typeof flow.state !== "string" ||
-      (["GOOGLE", "NAVER"].includes(flow.provider) && typeof flow.nonce !== "string") ||
+      (["GOOGLE", "NAVER", "KAKAO"].includes(flow.provider) && typeof flow.nonce !== "string") ||
       (flow.nonce !== undefined && typeof flow.nonce !== "string") ||
       typeof flow.codeVerifier !== "string" ||
       typeof flow.returnTo !== "string" ||
@@ -221,6 +221,16 @@ export function naverOidcCredentials() {
 
 export function naverLoginEnabled() {
   return process.env.FEATURE_NAVER_LOGIN_ENABLED === "true";
+}
+
+export function kakaoOidcCredentials() {
+  const clientId = process.env.KAKAO_OIDC_CLIENT_ID;
+  const clientSecret = process.env.KAKAO_OIDC_CLIENT_SECRET;
+  return clientId && clientSecret ? { clientId, clientSecret } : null;
+}
+
+export function kakaoLoginEnabled() {
+  return process.env.FEATURE_KAKAO_LOGIN_ENABLED === "true";
 }
 
 export function internalAuthSecret() {

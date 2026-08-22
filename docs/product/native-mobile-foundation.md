@@ -75,7 +75,7 @@ to the later EAS/store distribution gate.
 
 ## Phase 2: native identity
 
-Google, X, and Naver mobile login is deliberately not a Web cookie reuse exercise. Phase 2 must add:
+Google, X, Naver, and Kakao mobile login is deliberately not a Web cookie reuse exercise. Phase 2 must add:
 
 1. System-browser Authorization Code + PKCE.
 2. Provider-specific mobile Redirect URI registrations.

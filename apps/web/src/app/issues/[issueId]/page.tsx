@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 import { IssueExperience } from "@/features/issues/issue-experience";
-import { naverLoginEnabled } from "@/lib/server/member-auth";
+import { kakaoLoginEnabled, naverLoginEnabled } from "@/lib/server/member-auth";
 import type { PublicShareCard } from "@/lib/contracts";
 import { readResultShareCard } from "@/lib/server/result-sharing";
 
@@ -61,5 +61,11 @@ export async function generateMetadata({
 
 export default async function IssuePage({ params }: IssuePageProps) {
   const { issueId } = await params;
-  return <IssueExperience issueId={issueId} naverLoginEnabled={naverLoginEnabled()} />;
+  return (
+    <IssueExperience
+      issueId={issueId}
+      kakaoLoginEnabled={kakaoLoginEnabled()}
+      naverLoginEnabled={naverLoginEnabled()}
+    />
+  );
 }

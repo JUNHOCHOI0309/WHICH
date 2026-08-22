@@ -21,7 +21,7 @@ describe("Member private profile experience", () => {
       vi.fn(async () => jsonResponse({ code: "SESSION_INVALID", message: "login" }, 401)),
     );
 
-    render(<MemberProfileExperience naverLoginEnabled />);
+    render(<MemberProfileExperience kakaoLoginEnabled naverLoginEnabled />);
 
     expect(await screen.findByText("로그인하면 내 선택이 이어져요.")).toBeVisible();
     expect(screen.getByText(/전체 투표 기록은 다른 사람에게 공개되지 않습니다/)).toBeVisible();
@@ -30,6 +30,10 @@ describe("Member private profile experience", () => {
       "/api/auth/google/start?returnTo=%2Fme",
     );
     expect(screen.getByRole("link", { name: "네이버로 로그인" })).toBeVisible();
+    expect(screen.getByRole("link", { name: "카카오로 로그인" })).toHaveAttribute(
+      "href",
+      "/api/auth/kakao/start?returnTo=%2Fme",
+    );
   });
 
   it("shows only the current Member's profile and accepted vote history", async () => {

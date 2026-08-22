@@ -280,6 +280,11 @@
   color: #fff;
 }
 
+.loginOptions .kakaoLogin {
+  background: #fee500;
+  color: #191919;
+}
+
 .empty {
   margin-top: 24px;
   border: 1px solid rgb(246 248 247 / 15%);

@@ -72,7 +72,7 @@ async function submitGuestVote(anonymousSubjectId: string, issueId: string, choi
 }
 
 function createMemberSession(input: {
-  provider?: "GOOGLE" | "X" | "NAVER" | "DEVELOPMENT";
+  provider?: "GOOGLE" | "X" | "NAVER" | "KAKAO" | "DEVELOPMENT";
   providerSubject: string;
   anonymousSubjectId?: string;
   email?: string;
@@ -174,6 +174,23 @@ describe("Member identity and Guest vote linking", () => {
       .where(eq(memberIdentityLinks.memberId, memberId));
 
     expect(links).toEqual([{ provider: "NAVER", providerSubject }]);
+  });
+
+  it("persists a Kakao Subject as a distinct Provider identity", async () => {
+    const providerSubject = `kakao-subject-${randomUUID()}`;
+    const response = await createMemberSession({ provider: "KAKAO", providerSubject });
+
+    expect(response.statusCode).toBe(201);
+    const memberId = response.json<{ member: { id: string } }>().member.id;
+    const links = await database.db
+      .select({
+        provider: memberIdentityLinks.provider,
+        providerSubject: memberIdentityLinks.providerSubject,
+      })
+      .from(memberIdentityLinks)
+      .where(eq(memberIdentityLinks.memberId, memberId));
+
+    expect(links).toEqual([{ provider: "KAKAO", providerSubject }]);
   });
 
   it("maps the same Provider Subject to one Member and stores only a token hash", async () => {

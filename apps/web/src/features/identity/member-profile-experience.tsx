@@ -41,7 +41,13 @@ function participatedLabel(value: string) {
   }).format(new Date(value));
 }
 
-export function MemberProfileExperience({ naverLoginEnabled }: { naverLoginEnabled: boolean }) {
+export function MemberProfileExperience({
+  kakaoLoginEnabled,
+  naverLoginEnabled,
+}: {
+  kakaoLoginEnabled?: boolean;
+  naverLoginEnabled: boolean;
+}) {
   const [screen, setScreen] = useState<Screen>("loading");
   const [profile, setProfile] = useState<MemberPrivateProfile | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -149,6 +155,11 @@ export function MemberProfileExperience({ naverLoginEnabled }: { naverLoginEnabl
             {naverLoginEnabled ? (
               <a className={styles.naverLogin} href={loginHref("naver", "/me")}>
                 네이버로 로그인
+              </a>
+            ) : null}
+            {kakaoLoginEnabled ? (
+              <a className={styles.kakaoLogin} href={loginHref("kakao", "/me")}>
+                카카오로 로그인
               </a>
             ) : null}
           </div>

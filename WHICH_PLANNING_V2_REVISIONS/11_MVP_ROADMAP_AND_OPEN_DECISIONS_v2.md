@@ -1002,7 +1002,7 @@ Next Issue Rate
 | OD-P0-004 | P0 | 투표 UX | A/B 즉시 제출 vs 확인 제출 | Phase 3 | Prototype usability test | 확인 제출 또는 취소 가능한 짧은 상태 비교 |
 | OD-P0-005 | P0 | 투표 | Accepted 후 변경 허용 여부 | Phase 1 | 무결성·UX 결정 | MVP 변경 불가 권고 |
 | OD-P0-006 | P0 | Guest | anonymous subject 만료와 로그아웃 회전 | Phase 1 | 개인정보·무결성 Threat Model | 보존 최소화 초기안 |
-| OD-P0-007 | P0 | Identity | Social Login Provider | Phase 1 | 시장·운영·보안 검토 | Google·X 운영, Naver OIDC는 Client 등록·검수 후 노출 |
+| OD-P0-007 | P0 | Identity | Social Login Provider | Phase 1 | 시장·운영·보안 검토 | Google·X·Naver 운영, Kakao OIDC는 Client 등록·실계정 검증 후 노출 |
 | OD-P0-008 | P0 | Data | PII·Security·Audit 보존기간 | Phase 1 | 법률·보안 검토 | 데이터 등급별 차등 |
 | OD-P0-009 | P0 | Data | 계정 삭제 시 Vote·Comment·Issue 처리 | Phase 1 | 개인정보·제품 정책 | 개인 식별 분리와 법적 보존 구분 |
 | OD-P0-010 | P0 | Analytics | Viewable Impression 기준 | Phase 3 | 프론트·데이터 QA | 50%·500ms 후보 |

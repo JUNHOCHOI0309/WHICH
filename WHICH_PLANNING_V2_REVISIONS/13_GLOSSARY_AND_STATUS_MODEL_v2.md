@@ -181,7 +181,7 @@
 | Session | 세션 | 연속 사용자 활동을 분석·UX 복원 단위로 묶는 기간. | 로그인 Session과 항상 동일 |
 | Authentication | 인증 | 계정 접근 권한 확인. | Authorization |
 | Authorization | 인가 | 특정 기능·객체에 대한 권한 판정. | 로그인 성공 |
-| Identity Provider | 신원 제공자 | Google·X·Naver처럼 Member가 계정을 통제함을 인증하고 Provider Subject를 제공하는 외부 서비스. | Entry Source, 유입 채널 |
+| Identity Provider | 신원 제공자 | Google·X·Naver·Kakao처럼 Member가 계정을 통제함을 인증하고 Provider Subject를 제공하는 외부 서비스. | Entry Source, 유입 채널 |
 | Provider Subject | 제공자 주체 식별자 | Provider 내부에서 계정을 안정적으로 구분하는 식별자. `(provider, provider_subject)`로 Member 연결의 유일성을 보장한다. | 이메일 주소, Entry Source |
 | Eligibility | 참여 적격성 | 사용자·Issue·Risk·정책에 따라 현재 Action을 허용할 수 있는지. | 추천 적합성만 |
 | Risk-based Challenge | 위험 기반 추가 확인 | 위험 신호가 있는 요청에만 CAPTCHA·재인증 등을 적용. | 모든 Guest 일괄 CAPTCHA |

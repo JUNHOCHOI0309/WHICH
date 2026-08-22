@@ -46,6 +46,7 @@ export const identityProviderEnum = pgEnum("identity_provider", [
   "GOOGLE",
   "X",
   "NAVER",
+  "KAKAO",
   "DEVELOPMENT",
 ]);
 export const voteRequestStateEnum = pgEnum("vote_request_state", [

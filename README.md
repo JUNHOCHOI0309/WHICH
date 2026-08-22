@@ -107,7 +107,7 @@ Comment를 중복 생성하거나 기존 Version을 덮어쓰지 않습니다.
 - 안정 Cursor를 사용하는 Guest Issue Feed API
 - HttpOnly Guest 식별자를 사용하는 Web BFF
 - Provider Subject 기반 Member Identity와 HttpOnly Member Session
-- Google·Naver OIDC와 X OAuth 2.0 PKCE Web BFF, Guest → Member Vote 연결
+- Google·Naver·Kakao OIDC와 X OAuth 2.0 PKCE Web BFF, Guest → Member Vote 연결
 - Expo Android·iOS 공통 앱의 Guest Feed → Issue → Vote → Result 기반
 - OS Secure Storage를 사용하는 모바일 Guest Subject
 - 서버 비밀정보를 포함하지 않는 `/api/mobile/v1` 공개 BFF

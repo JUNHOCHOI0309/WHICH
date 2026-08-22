@@ -113,6 +113,27 @@ describe("Member OAuth return flow", () => {
     expect(decodeAuthFlow(missingNonce)).toBeNull();
   });
 
+  it("accepts a signed Kakao OIDC flow only when its nonce is present", () => {
+    const valid = encodeAuthFlow({
+      provider: "KAKAO",
+      state: "kakao-state",
+      nonce: "kakao-nonce",
+      codeVerifier: "verifier",
+      returnTo: "/me",
+      createdAt: Date.now(),
+    });
+    const missingNonce = encodeAuthFlow({
+      provider: "KAKAO",
+      state: "kakao-state",
+      codeVerifier: "verifier",
+      returnTo: "/me",
+      createdAt: Date.now(),
+    });
+
+    expect(decodeAuthFlow(valid)).toMatchObject({ provider: "KAKAO", nonce: "kakao-nonce" });
+    expect(decodeAuthFlow(missingNonce)).toBeNull();
+  });
+
   it("adds the auth outcome without losing query or hash state", () => {
     expect(withAuthOutcome("/issues/issue-1?draft=kept#member-access", "cancelled")).toBe(
       "/issues/issue-1?draft=kept&auth=cancelled#member-access",

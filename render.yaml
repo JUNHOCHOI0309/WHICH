@@ -99,6 +99,13 @@ services:
         sync: false
       - key: NAVER_OIDC_CLIENT_SECRET
         sync: false
-      # Enable only after credentials, real callback testing, and Naver review.
+      # Naver production credentials and real-account callback were verified in WHICH-20.
       - key: FEATURE_NAVER_LOGIN_ENABLED
+        value: "true"
+      - key: KAKAO_OIDC_CLIENT_ID
+        sync: false
+      - key: KAKAO_OIDC_CLIENT_SECRET
+        sync: false
+      # Enable only after Kakao Developers setup and a real production callback test.
+      - key: FEATURE_KAKAO_LOGIN_ENABLED
         value: "false"

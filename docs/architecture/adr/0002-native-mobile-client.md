@@ -21,7 +21,7 @@ treated as the long-term session contract for a native client.
 2. Add an Expo/React Native app as the preferred returning-user client for Android and iOS.
 3. Deliver the native client in three independently gated phases:
    - Phase 1: Guest Feed, Issue, Vote, Result, error recovery.
-   - Phase 2: Google, X, and Naver system-browser OAuth with App/Universal Links.
+   - Phase 2: Google, X, Naver, and Kakao system-browser OAuth with App/Universal Links.
    - Phase 3: Push, store distribution, crash/performance observability.
 4. Keep Vote Facts, Result Aggregates, policy decisions, and identity links in the existing Fastify
    API and PostgreSQL Source of Truth.
