@@ -14,8 +14,8 @@ import {
 import { createProviderMemberSession } from "@/lib/server/member-session-bridge";
 import { googleCallbackUrl, pinGoogleTokenRedirectUri } from "@/lib/server/google-oauth";
 import {
+  clearGuestSubjectCookie,
   GUEST_SUBJECT_COOKIE,
-  setGuestSubjectCookie,
   setMemberSessionCookie,
   validGuestSubject,
 } from "@/lib/server/which-api";
@@ -124,7 +124,7 @@ export async function GET(request: Request) {
       new URL(withAuthOutcome(flow.returnTo, "success"), baseUrl),
     );
     setMemberSessionCookie(response, session.token, session.expiresAt);
-    if (anonymousSubjectId) setGuestSubjectCookie(response, anonymousSubjectId);
+    if (anonymousSubjectId) clearGuestSubjectCookie(response);
     clearFlowCookie(response);
     return response;
   } catch (error) {

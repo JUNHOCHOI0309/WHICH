@@ -55,6 +55,18 @@ export function setGuestSubjectCookie(response: NextResponse, anonymousSubjectId
   });
 }
 
+export function clearGuestSubjectCookie(response: NextResponse) {
+  response.cookies.set({
+    name: GUEST_SUBJECT_COOKIE,
+    value: "",
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 0,
+  });
+}
+
 export function setMemberSessionCookie(response: NextResponse, token: string, expiresAt: string) {
   response.cookies.set({
     name: MEMBER_SESSION_COOKIE,
