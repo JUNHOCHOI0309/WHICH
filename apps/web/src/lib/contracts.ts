@@ -92,6 +92,11 @@ export type PublicCommentPage = {
   nextCursor: string | null;
 };
 
+export type CommentHighlights = {
+  A: PublicComment[];
+  B: PublicComment[];
+};
+
 export type CommentWriteResponse = { comment: PublicComment };
 
 export type HelpfulReactionResponse = {

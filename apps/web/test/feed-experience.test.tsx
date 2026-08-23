@@ -191,6 +191,38 @@ describe("FeedExperience", () => {
           voteRequests.push(init ?? {});
           return jsonResponse(vote);
         }
+        if (url.endsWith("/comment-highlights")) {
+          return jsonResponse({
+            A: [
+              {
+                id: "comment-a",
+                choice: "A",
+                author: { displayName: "계획파" },
+                body: "준비하면 여행이 더 편해요.",
+                visibility: "VISIBLE",
+                threadState: "OPEN",
+                createdAt: "2026-08-17T03:00:00.000Z",
+                editedAt: null,
+                reactions: { helpfulCount: 4, viewerReacted: false },
+                reports: { viewerReported: false, canReport: true },
+              },
+            ],
+            B: [
+              {
+                id: "comment-b",
+                choice: "B",
+                author: { displayName: "즉흥파" },
+                body: "현지에서 정하는 재미가 있어요.",
+                visibility: "VISIBLE",
+                threadState: "OPEN",
+                createdAt: "2026-08-17T02:00:00.000Z",
+                editedAt: null,
+                reactions: { helpfulCount: 3, viewerReacted: false },
+                reports: { viewerReported: false, canReport: true },
+              },
+            ],
+          });
+        }
         if (url === "/api/analytics/events") {
           return jsonResponse({ accepted: true, duplicate: false });
         }
@@ -207,6 +239,8 @@ describe("FeedExperience", () => {
     expect(await screen.findByText("A 선택이 반영됐어요.")).toBeInTheDocument();
     expect(screen.getByText("60%")).toBeInTheDocument();
     expect(screen.getByText("40%")).toBeInTheDocument();
+    expect(await screen.findByText("준비하면 여행이 더 편해요.")).toBeInTheDocument();
+    expect(screen.getByText("현지에서 정하는 재미가 있어요.")).toBeInTheDocument();
     expect(voteRequests).toHaveLength(1);
     expect(JSON.parse(String(voteRequests[0]?.body))).toMatchObject({
       issueVersion: 1,

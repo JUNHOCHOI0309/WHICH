@@ -6,6 +6,7 @@ import { buildApp } from "../src/app.js";
 import { getConfig } from "../src/config.js";
 import type { Database } from "../src/database/client.js";
 import {
+  commentReactions,
   comments,
   issueChoices,
   issues,
@@ -102,7 +103,7 @@ async function createComment(command: {
   body: string;
   createdAt: Date;
   publicationState?: "PUBLISHED" | "PENDING_HUMAN_REVIEW";
-  visibility?: "VISIBLE" | "HIDDEN" | "REMOVED_BY_AUTHOR";
+  visibility?: "VISIBLE" | "DEPRIORITIZED" | "COLLAPSED" | "HIDDEN" | "REMOVED_BY_AUTHOR";
   integrityState?: "NORMAL" | "REVIEW";
   threadState?: "OPEN" | "LOCKED";
   deletedAt?: Date;
@@ -126,6 +127,24 @@ async function createComment(command: {
     createdAt: command.createdAt,
   });
   return id;
+}
+
+async function addHelpfulReactions(commentId: string, total: number) {
+  for (let index = 0; index < total; index += 1) {
+    const subjectId = randomUUID();
+    await database.db.insert(voterSubjects).values({
+      id: subjectId,
+      kind: "GUEST",
+      anonymousSubjectId: randomUUID(),
+    });
+    await database.db.insert(commentReactions).values({
+      commentId,
+      subjectId,
+      originSubjectId: subjectId,
+      code: "HELPFUL",
+      active: true,
+    });
+  }
 }
 
 beforeAll(async () => {
@@ -277,6 +296,60 @@ describe("Guest Comment read API", () => {
         reports: { viewerReported: false, canReport: true },
       },
     ]);
+  });
+
+  it("returns visible A/B highlights ordered by helpful reactions and recency", async () => {
+    const issue = await createIssue();
+    const reader = await createAcceptedVote({ issueId: issue.issueId, choiceId: issue.choiceAId });
+    const newestA = await createComment({
+      issueId: issue.issueId,
+      choiceId: issue.choiceAId,
+      choice: "A",
+      body: "newest A",
+      createdAt: new Date("2026-08-18T04:00:00.000Z"),
+    });
+    const helpfulA = await createComment({
+      issueId: issue.issueId,
+      choiceId: issue.choiceAId,
+      choice: "A",
+      body: "helpful A",
+      createdAt: new Date("2026-08-18T03:00:00.000Z"),
+    });
+    const helpfulB = await createComment({
+      issueId: issue.issueId,
+      choiceId: issue.choiceBId,
+      choice: "B",
+      body: "helpful B",
+      createdAt: new Date("2026-08-18T02:00:00.000Z"),
+    });
+    const collapsedA = await createComment({
+      issueId: issue.issueId,
+      choiceId: issue.choiceAId,
+      choice: "A",
+      body: "collapsed A",
+      createdAt: new Date("2026-08-18T05:00:00.000Z"),
+      visibility: "COLLAPSED",
+    });
+    await addHelpfulReactions(helpfulA, 3);
+    await addHelpfulReactions(helpfulB, 2);
+    await addHelpfulReactions(collapsedA, 5);
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/v1/issues/${issue.issueId}/comment-highlights?limitPerSide=5`,
+      headers: { "x-anonymous-subject-id": reader.anonymousSubjectId },
+    });
+    const highlights = response.json<{
+      A: Array<{ id: string; reactions: { helpfulCount: number } }>;
+      B: Array<{ id: string; reactions: { helpfulCount: number } }>;
+    }>();
+
+    expect(response.statusCode).toBe(200);
+    expect(highlights.A.map((comment) => comment.id)).toEqual([helpfulA, newestA]);
+    expect(highlights.A[0]?.reactions.helpfulCount).toBe(3);
+    expect(highlights.B.map((comment) => comment.id)).toEqual([helpfulB]);
+    expect(highlights.B[0]?.reactions.helpfulCount).toBe(2);
+    expect(highlights.A.map((comment) => comment.id)).not.toContain(collapsedA);
   });
 
   it("rejects malformed cursors", async () => {

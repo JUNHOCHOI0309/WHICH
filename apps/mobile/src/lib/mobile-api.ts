@@ -1,5 +1,6 @@
 import type {
   ApiErrorBody,
+  CommentHighlights,
   InterestCardCode,
   InterestCardRegistry,
   InterestProfile,
@@ -78,6 +79,19 @@ export function createMobileApiClient(
         { headers: { accept: "application/json" } },
       );
       return bodyOrError<PublicIssue>(response);
+    },
+
+    async loadCommentHighlights(subjectId: string, issueId: string) {
+      const response = await request(
+        `${baseUrl}/api/mobile/v1/issues/${encodeURIComponent(issueId)}/comment-highlights`,
+        {
+          headers: {
+            accept: "application/json",
+            "x-anonymous-subject-id": subjectId,
+          },
+        },
+      );
+      return bodyOrError<CommentHighlights>(response);
     },
 
     async loadInterestCards() {

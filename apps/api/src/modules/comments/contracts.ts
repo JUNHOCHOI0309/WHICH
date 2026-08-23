@@ -1,4 +1,5 @@
 export type CommentSide = "ALL" | "A" | "B";
+export type CommentListView = "NEWEST" | "HIGHLIGHT";
 export type CommentReportReason =
   "SPAM" | "HARASSMENT" | "HATE_OR_ABUSE" | "PERSONAL_INFORMATION" | "OTHER";
 export type CommentModerationAction = "COLLAPSE" | "HIDE" | "REMOVE_POLICY" | "RESTORE";
@@ -21,11 +22,17 @@ export type PublicCommentPage = {
   nextCursor: string | null;
 };
 
+export type CommentHighlights = {
+  A: PublicComment[];
+  B: PublicComment[];
+};
+
 export type GuestCommentQuery = {
   issueId: string;
   sessionToken?: string;
   anonymousSubjectId?: string;
   side: CommentSide;
+  view?: CommentListView;
   cursor?: string;
   limit: number;
 };

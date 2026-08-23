@@ -237,6 +237,14 @@ function commentsAvailable(issue: {
 export function createCommentService(database: Database["db"]): CommentService {
   return {
     async listGuestComments(query) {
+      const view = query.view ?? "NEWEST";
+      if (view === "HIGHLIGHT" && query.cursor) {
+        throw new CommentError(
+          "INVALID_CURSOR",
+          400,
+          "Highlight Comments do not support cursor pagination.",
+        );
+      }
       const cursor = query.cursor ? decodeCommentCursor(query.cursor) : null;
 
       return database.transaction(async (transaction) => {
@@ -390,7 +398,9 @@ export function createCommentService(database: Database["db"]): CommentService {
           eq(comments.issueVersion, acceptedVote.issueVersion),
           isNull(comments.parentCommentId),
           eq(comments.publicationState, "PUBLISHED"),
-          inArray(comments.visibility, ["VISIBLE", "DEPRIORITIZED", "COLLAPSED"]),
+          view === "HIGHLIGHT"
+            ? eq(comments.visibility, "VISIBLE")
+            : inArray(comments.visibility, ["VISIBLE", "DEPRIORITIZED", "COLLAPSED"]),
           eq(comments.integrityState, "NORMAL"),
           isNull(comments.deletedAt),
         ];
@@ -405,14 +415,25 @@ export function createCommentService(database: Database["db"]): CommentService {
           );
         }
 
+        const helpfulCountOrder = sql<number>`(
+          select count(*)::int
+          from ${commentReactions}
+          where ${commentReactions.commentId} = ${comments.id}
+            and ${commentReactions.code} = 'HELPFUL'
+            and ${commentReactions.active} = true
+        )`;
         const rows = await transaction
           .select()
           .from(comments)
           .where(and(...filters))
-          .orderBy(desc(comments.createdAt), desc(comments.id))
-          .limit(query.limit + 1);
+          .orderBy(
+            ...(view === "HIGHLIGHT"
+              ? [desc(helpfulCountOrder), desc(comments.createdAt), desc(comments.id)]
+              : [desc(comments.createdAt), desc(comments.id)]),
+          )
+          .limit(view === "HIGHLIGHT" ? query.limit : query.limit + 1);
 
-        const hasMore = rows.length > query.limit;
+        const hasMore = view === "NEWEST" && rows.length > query.limit;
         const pageRows = rows.slice(0, query.limit);
         const lastItem = pageRows.at(-1);
         const commentIds = pageRows.map((row) => row.id);
@@ -479,7 +500,7 @@ export function createCommentService(database: Database["db"]): CommentService {
             );
           }),
           nextCursor:
-            hasMore && lastItem
+            view === "NEWEST" && hasMore && lastItem
               ? encodeCommentCursor({ createdAt: lastItem.createdAt, commentId: lastItem.id })
               : null,
         };
