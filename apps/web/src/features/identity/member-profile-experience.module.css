@@ -1,203 +1,213 @@
 .page {
-  --navy: #061923;
-  --navy-soft: #0c2a35;
-  --cyan: #14c8d4;
-  --orange: #ff8a3d;
-  --paper: #f6f8f7;
-  --muted: #9db2b8;
-  min-height: 100svh;
-  background:
-    radial-gradient(circle at 88% 8%, rgb(255 138 61 / 17%), transparent 28rem),
-    radial-gradient(circle at 12% 28%, rgb(20 200 212 / 12%), transparent 30rem), var(--navy);
-  color: var(--paper);
+  display: grid;
+  gap: 22px;
+  padding-bottom: 52px;
 }
 
-.header,
 .profile,
 .history,
 .message,
 .connectedAccounts,
-.privacyNote,
-.footer {
-  width: min(100%, 1080px);
-  margin-inline: auto;
-  padding-inline: clamp(20px, 5vw, 58px);
-}
-
-.header {
-  min-height: 76px;
-  border-bottom: 1px solid rgb(246 248 247 / 14%);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-}
-
-.brand {
-  color: var(--paper);
-  font-size: 1.28rem;
-  font-weight: 950;
-  letter-spacing: -0.06em;
-  text-decoration: none;
-}
-
-.brand span,
-.profile p,
-.historyHeading p,
-.privacyNote p {
-  color: var(--cyan);
-}
-
-.feedLink {
-  border-bottom: 1px solid rgb(246 248 247 / 35%);
-  color: var(--paper);
-  font-size: 0.76rem;
-  font-weight: 850;
-  padding-block: 8px;
-  text-decoration: none;
+.privacyNote {
+  border: 1px solid var(--which-border);
+  border-radius: 18px;
+  background: var(--which-surface);
+  box-shadow: 0 8px 24px rgb(15 23 42 / 4%);
+  padding: clamp(24px, 5vw, 42px);
 }
 
 .profile {
   display: grid;
-  gap: 30px;
-  padding-block: clamp(58px, 10vw, 104px) clamp(40px, 7vw, 72px);
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 24px;
 }
 
 .profile p,
 .historyHeading p,
+.connectedAccountsHeading p,
 .privacyNote p,
 .message > p {
-  margin: 0 0 12px;
+  margin: 0 0 10px;
+  color: var(--which-cyan-strong);
   font-size: 0.68rem;
   font-weight: 900;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.12em;
 }
 
 .profile h1,
 .message h1 {
-  max-width: 12ch;
+  max-width: 15ch;
   margin: 0;
-  font-size: clamp(2.6rem, 8vw, 5.8rem);
-  letter-spacing: -0.07em;
-  line-height: 1;
+  font-size: clamp(2rem, 5vw, 3.6rem);
+  letter-spacing: -0.065em;
+  line-height: 1.08;
   word-break: keep-all;
 }
 
 .profile > div > span,
 .message > span {
   display: block;
-  margin-top: 20px;
-  color: var(--muted);
+  max-width: 58ch;
+  margin-top: 14px;
+  color: var(--which-text-secondary);
   line-height: 1.65;
+  word-break: keep-all;
 }
 
 .summary {
-  width: min(100%, 240px);
-  border: 1px solid rgb(20 200 212 / 40%);
-  border-radius: 24px;
-  background: rgb(12 42 53 / 82%);
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  padding: 28px;
+  min-width: 150px;
+  border: 1px solid color-mix(in srgb, var(--which-cyan) 45%, var(--which-border));
+  border-radius: 16px;
+  background: var(--which-cyan-soft);
+  padding: 22px;
+}
+
+.summary strong,
+.summary span {
+  display: block;
 }
 
 .summary strong {
-  color: var(--orange);
-  font-size: clamp(3rem, 9vw, 5.3rem);
-  letter-spacing: -0.08em;
+  color: var(--which-cyan-strong);
+  font-size: 2.6rem;
+  letter-spacing: -0.07em;
   line-height: 1;
 }
 
 .summary span {
-  margin-top: 10px;
-  color: var(--muted);
-  font-size: 0.78rem;
+  margin-top: 8px;
+  color: var(--which-text-secondary);
+  font-size: 0.75rem;
   font-weight: 800;
 }
 
+.message {
+  min-height: 420px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.message > p {
+  color: var(--which-orange-strong);
+}
+
+.message button,
+.loginOptions a,
+.moreButton,
+.privacyNote button,
+.empty a {
+  width: fit-content;
+  min-height: 46px;
+  border: 1px solid var(--which-cyan);
+  border-radius: 999px;
+  background: var(--which-cyan);
+  color: var(--which-text);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 900;
+  padding: 10px 18px;
+  text-decoration: none;
+}
+
+.message button,
+.loginOptions {
+  margin-top: 24px;
+}
+
+.loginOptions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.connectedAccounts,
 .history {
-  padding-bottom: clamp(60px, 10vw, 110px);
+  scroll-margin-top: 96px;
 }
 
-.connectedAccounts {
-  padding-bottom: clamp(48px, 8vw, 86px);
-  scroll-margin-top: 24px;
-}
-
-.connectedAccountsHeading {
-  border-bottom: 1px solid rgb(246 248 247 / 18%);
-  display: grid;
-  gap: 12px;
+.connectedAccountsHeading,
+.historyHeading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 20px;
+  border-bottom: 1px solid var(--which-border);
   padding-bottom: 18px;
 }
 
 .connectedAccountsHeading p {
-  margin: 0 0 10px;
-  color: var(--orange);
-  font-size: 0.68rem;
-  font-weight: 900;
-  letter-spacing: 0.14em;
+  color: var(--which-orange-strong);
 }
 
-.connectedAccountsHeading h2 {
+.connectedAccountsHeading h2,
+.historyHeading h2 {
   margin: 0;
-  font-size: clamp(1.7rem, 5vw, 2.8rem);
-  letter-spacing: -0.055em;
+  font-size: clamp(1.55rem, 4vw, 2.25rem);
+  letter-spacing: -0.05em;
 }
 
 .connectedAccountsHeading > span,
+.historyHeading > span,
 .accountLinkNote {
-  color: var(--muted);
+  color: var(--which-text-secondary);
+  font-size: 0.78rem;
   line-height: 1.6;
 }
 
 .accountLinkNotice {
   margin: 18px 0 0;
-  border-left: 4px solid var(--cyan);
-  background: rgb(20 200 212 / 10%);
-  color: var(--paper);
+  border-left: 4px solid var(--which-cyan);
+  border-radius: 8px;
+  background: var(--which-cyan-soft);
+  color: var(--which-text);
   font-size: 0.82rem;
   font-weight: 800;
   line-height: 1.55;
-  padding: 14px 16px;
+  padding: 13px 15px;
 }
 
 .accountLinkNotice[data-tone="warning"],
 .accountLinkNotice[data-tone="error"] {
-  border-left-color: var(--orange);
-  background: rgb(255 132 56 / 11%);
+  border-left-color: var(--which-orange);
+  background: var(--which-orange-soft);
 }
 
 .providerGrid {
-  margin-top: 20px;
   display: grid;
-  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 18px;
 }
 
 .providerCard {
-  min-height: 92px;
-  border: 1px solid rgb(246 248 247 / 16%);
-  border-radius: 18px;
-  background: var(--navy-soft);
+  min-height: 86px;
+  border: 1px solid var(--which-border);
+  border-radius: 14px;
+  background: var(--which-surface-subtle);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 18px 20px;
+  gap: 14px;
+  padding: 16px 18px;
 }
 
 .providerCard > div {
   display: grid;
-  gap: 6px;
+  gap: 5px;
 }
 
 .providerCard strong {
-  font-size: 1.05rem;
+  font-size: 0.96rem;
 }
 
 .providerCard span {
-  color: var(--muted);
+  color: var(--which-text-secondary);
   font-size: 0.72rem;
 }
 
@@ -206,232 +216,145 @@
   border-radius: 999px;
   font-size: 0.7rem;
   font-weight: 900;
-  padding: 10px 14px;
+  padding: 9px 12px;
   text-decoration: none;
+  white-space: nowrap;
 }
 
 .providerCard a {
-  background: var(--cyan);
-  color: var(--navy);
+  background: var(--which-cyan);
+  color: var(--which-text);
 }
 
 .providerCard .connectedBadge {
-  border: 1px solid rgb(20 200 212 / 45%);
-  color: var(--cyan);
+  border: 1px solid var(--which-cyan-strong);
+  color: var(--which-cyan-strong);
 }
 
 .accountLinkNote {
-  margin: 16px 0 0;
-  font-size: 0.76rem;
-}
-
-.historyHeading {
-  border-bottom: 1px solid rgb(246 248 247 / 18%);
-  display: flex;
-  align-items: end;
-  justify-content: space-between;
-  gap: 20px;
-  padding-bottom: 18px;
-}
-
-.historyHeading h2 {
-  margin: 0;
-  font-size: clamp(1.7rem, 5vw, 2.8rem);
-  letter-spacing: -0.055em;
-}
-
-.historyHeading > span {
-  color: var(--muted);
-  font-size: 0.72rem;
+  margin: 14px 0 0;
 }
 
 .voteGrid {
   display: grid;
-  gap: 18px;
-  margin-top: 24px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 20px;
 }
 
 .voteCard {
-  min-height: 320px;
-  border: 1px solid rgb(246 248 247 / 15%);
-  border-radius: 24px;
-  background: var(--navy-soft);
+  min-height: 250px;
+  border: 1px solid var(--which-border);
+  border-radius: 16px;
+  background: var(--which-surface-subtle);
   display: flex;
   flex-direction: column;
-  padding: clamp(22px, 4vw, 32px);
+  padding: 20px;
 }
 
 .voteMeta {
-  color: var(--muted);
+  color: var(--which-text-tertiary);
   display: flex;
   justify-content: space-between;
-  gap: 16px;
-  font-size: 0.63rem;
+  gap: 12px;
+  font-size: 0.66rem;
   font-weight: 850;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
 }
 
 .voteCard h3 {
-  max-width: 18ch;
-  margin: 28px 0;
-  font-size: clamp(1.55rem, 5vw, 2.35rem);
-  letter-spacing: -0.05em;
-  line-height: 1.12;
+  margin: 24px 0 18px;
+  font-size: 1.25rem;
+  letter-spacing: -0.035em;
+  line-height: 1.4;
   word-break: keep-all;
 }
 
 .choice {
-  min-height: 62px;
-  border-radius: 15px;
-  color: var(--navy);
+  min-height: 58px;
+  border: 1px solid currentColor;
+  border-radius: 13px;
   display: grid;
   grid-template-columns: auto 1fr auto;
   align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
+  gap: 10px;
+  padding: 11px 14px;
 }
 
 .choiceA {
-  background: var(--cyan);
+  background: var(--which-cyan-soft);
+  color: var(--which-cyan-strong);
 }
 
 .choiceB {
-  background: var(--orange);
+  background: var(--which-orange-soft);
+  color: var(--which-orange-strong);
 }
 
-.choice > span {
-  font-size: 1.3rem;
-  font-weight: 950;
-}
-
-.choice strong {
-  font-size: 0.85rem;
-}
-
+.choice > span,
 .choice em {
-  font-size: 1.25rem;
+  font-size: 1.15rem;
   font-style: normal;
   font-weight: 950;
 }
 
+.choice strong {
+  color: var(--which-text);
+  font-size: 0.8rem;
+}
+
 .voteCard > a {
-  min-height: 48px;
   margin-top: auto;
-  border-bottom: 1px solid rgb(246 248 247 / 28%);
-  color: var(--paper);
+  border-top: 1px solid var(--which-border);
+  color: var(--which-text);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 0.82rem;
+  padding-top: 16px;
+  text-decoration: none;
+  font-size: 0.8rem;
   font-weight: 850;
-  padding-top: 18px;
-  text-decoration: none;
-}
-
-.message {
-  min-height: calc(100svh - 152px);
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  padding-block: 64px;
-}
-
-.message > p {
-  color: var(--orange);
-}
-
-.message > span {
-  max-width: 52ch;
-}
-
-.message button,
-.loginOptions a,
-.moreButton,
-.privacyNote button,
-.empty a {
-  min-height: 50px;
-  border: 0;
-  border-radius: 999px;
-  background: var(--cyan);
-  color: var(--navy);
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font: inherit;
-  font-weight: 900;
-  padding: 12px 22px;
-  text-decoration: none;
-}
-
-.message button {
-  width: fit-content;
-  margin-top: 26px;
-}
-
-.loginOptions {
-  max-width: 680px;
-  margin-top: 30px;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-  gap: 10px;
-}
-
-.loginOptions .xLogin {
-  background: var(--paper);
-}
-
-.loginOptions .naverLogin {
-  background: #03c75a;
-  color: #fff;
-}
-
-.loginOptions .kakaoLogin {
-  background: #fee500;
-  color: #191919;
 }
 
 .empty {
-  margin-top: 24px;
-  border: 1px solid rgb(246 248 247 / 15%);
-  border-radius: 24px;
-  background: var(--navy-soft);
-  padding: clamp(28px, 6vw, 54px);
+  margin-top: 20px;
+  border: 1px dashed var(--which-border-strong);
+  border-radius: 14px;
+  background: var(--which-surface-subtle);
+  padding: 28px;
 }
 
 .empty h3 {
   margin: 0;
-  font-size: clamp(1.6rem, 5vw, 2.5rem);
-  letter-spacing: -0.05em;
+  font-size: 1.4rem;
 }
 
 .empty p {
-  color: var(--muted);
+  color: var(--which-text-secondary);
   line-height: 1.6;
 }
 
-.empty a {
-  margin-top: 10px;
-}
-
 .moreButton {
-  margin: 28px auto 0;
+  margin: 24px auto 0;
   display: flex;
 }
 
-.moreButton:disabled {
+.moreButton:disabled,
+.privacyNote button:disabled {
   cursor: wait;
   opacity: 0.6;
 }
 
 .privacyNote {
-  padding-bottom: clamp(60px, 9vw, 96px);
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 18px;
+  border-left: 4px solid var(--which-orange);
 }
 
-.privacyNote > div {
-  border-left: 4px solid var(--orange);
-  background: rgb(12 42 53 / 78%);
-  padding: 20px 22px;
+.privacyNote p {
+  color: var(--which-orange-strong);
 }
 
 .privacyNote strong,
@@ -441,83 +364,44 @@
 
 .privacyNote span {
   margin-top: 8px;
-  color: var(--muted);
+  color: var(--which-text-secondary);
   line-height: 1.55;
 }
 
 .privacyNote button {
-  margin-top: 18px;
+  border-color: var(--which-border-strong);
   background: transparent;
-  border: 1px solid rgb(246 248 247 / 35%);
-  color: var(--paper);
-}
-
-.privacyNote button:disabled {
-  cursor: wait;
-  opacity: 0.6;
 }
 
 .privacyNote .logoutError {
-  margin: 14px 0 0;
-  border-left: 4px solid var(--orange);
-  background: rgb(255 138 61 / 12%);
-  color: var(--paper);
-  font-size: 0.82rem;
+  grid-column: 1 / -1;
+  margin: 0;
+  border-left: 4px solid var(--which-orange);
+  border-radius: 8px;
+  background: var(--which-orange-soft);
+  color: var(--which-text);
+  font-size: 0.8rem;
   font-weight: 800;
-  line-height: 1.5;
   padding: 11px 14px;
 }
 
-.footer {
-  min-height: 76px;
-  border-top: 1px solid rgb(246 248 247 / 14%);
-  color: var(--muted);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  font-size: 0.62rem;
-  font-weight: 850;
-  letter-spacing: 0.11em;
-}
-
-.feedLink:focus-visible,
-.providerCard a:focus-visible,
-.voteCard a:focus-visible,
-.loginOptions a:focus-visible,
-.message button:focus-visible,
-.moreButton:focus-visible,
-.privacyNote button:focus-visible,
-.empty a:focus-visible {
-  outline: 3px solid var(--orange);
-  outline-offset: 4px;
-}
-
-@media (min-width: 760px) {
-  .profile {
-    grid-template-columns: 1fr auto;
-    align-items: end;
+@media (max-width: 720px) {
+  .profile,
+  .privacyNote {
+    grid-template-columns: 1fr;
+    align-items: start;
   }
 
+  .summary {
+    min-width: 0;
+  }
+
+  .providerGrid,
   .voteGrid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .connectedAccountsHeading {
-    grid-template-columns: 1fr minmax(220px, 0.7fr);
-    align-items: end;
-  }
-
-  .providerGrid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 520px) {
-  .loginOptions {
     grid-template-columns: 1fr;
   }
 
+  .connectedAccountsHeading,
   .historyHeading {
     align-items: start;
     flex-direction: column;

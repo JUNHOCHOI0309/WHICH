@@ -16,6 +16,16 @@ WHICH의 핵심 투표 흐름을 기존 Dark Editorial 화면에서 밝고 빠�
 - 투표 완료 뒤 A/B 대표 댓글을 Feed 카드 안에서 자동·수동 순환
 - 실제 연결된 Home, Interests, My Record 경로만 내비게이션에 노출
 - Desktop 3열/2열/1열과 Mobile bottom navigation 반응형 지원
+- Issue Detail, Interests, Login/Signup, My Record, Creator Profile을 같은 Light App Shell로 통합
+
+## Route 공통 App Shell
+
+- 모든 사용자 페이지는 동일한 WHICH header, desktop left rail, mobile bottom navigation을 사용한다.
+- 로그인·회원가입처럼 현재 메뉴가 없는 화면은 navigation을 유지하되 활성 메뉴를 표시하지 않는다.
+- route별 안내 문구는 오른쪽 rail의 공통 안내 카드 컴포넌트로 제공하고, 1320px 미만에서는 숨긴다.
+- 페이지 본문은 흰 surface, 옅은 회색 배경, 1px border, 낮은 elevation을 기본으로 한다.
+- Cyan은 주요 행동·A·성공, Orange는 B·주의·보조 강조 역할로 고정한다.
+- API, 인증, 투표, 댓글의 상태 로직은 유지하며 layout wrapper와 presentation만 교체한다.
 
 ## 공통 상호작용 규칙
 

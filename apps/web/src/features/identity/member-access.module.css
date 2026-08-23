@@ -1,8 +1,9 @@
 .access {
   margin-top: 30px;
-  border: 1px solid var(--ink);
-  background: #e8fbfc;
-  padding: 20px;
+  border: 1px solid var(--which-border);
+  border-radius: 16px;
+  background: var(--which-cyan-soft);
+  padding: 22px;
 }
 
 .eyebrow {
@@ -31,9 +32,10 @@
   width: 100%;
   min-height: 48px;
   margin-top: 18px;
-  border: 1px solid var(--ink);
-  background: var(--a);
-  color: var(--ink);
+  border: 1px solid var(--which-border-strong);
+  border-radius: 999px;
+  background: var(--which-cyan);
+  color: var(--which-text);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -51,8 +53,9 @@
 }
 
 .profileLink {
-  background: var(--ink);
-  color: var(--surface);
+  border-color: var(--which-cyan-strong);
+  background: var(--which-cyan-strong);
+  color: var(--which-surface);
 }
 
 .loginOptions {
@@ -112,14 +115,16 @@
 
 .notice {
   border-left: 4px solid var(--b);
-  background: #fff1e8;
+  border-radius: 8px;
+  background: var(--which-orange-soft);
   padding: 10px 12px;
 }
 
 .logoutError {
   margin: 12px 0 0;
   border-left: 4px solid var(--b);
-  background: #fff1e8;
+  border-radius: 8px;
+  background: var(--which-orange-soft);
   color: var(--ink);
   font-size: 0.8rem;
   font-weight: 800;

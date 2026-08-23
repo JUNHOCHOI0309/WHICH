@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 
 import { BalanceResultBar } from "@/components/vote/balance-result-bar";
 import { VoteChoiceRow } from "@/components/vote/vote-choice-row";
+import { WhichAsideCard, WhichShell } from "@/components/layout/which-shell";
 import type {
   CommentReportReason,
   CommentSide,
@@ -1171,23 +1172,21 @@ function NextIssueAction({
 
 function ExperienceShell({ children }: { children: ReactNode }) {
   return (
-    <main className={styles.page}>
-      <header className={styles.header}>
-        <Link className={styles.brand} href="/" aria-label="WHICH 홈">
-          WHICH<span className={styles.brandDot}>.</span>
-        </Link>
-        <div className={styles.headerActions}>
-          <Link className={styles.meLink} href="/me">
-            내 기록
-          </Link>
-          <span className={styles.openBadge}>OPEN QUESTION</span>
-        </div>
-      </header>
-      <div className={styles.stage}>{children}</div>
-      <footer className={styles.footer}>
-        <span>YOUR CHOICE, CLEARLY.</span>
-        <span>WHICH · 2026</span>
-      </footer>
-    </main>
+    <WhichShell
+      active="home"
+      aside={
+        <WhichAsideCard
+          eyebrow="OPEN QUESTION"
+          title="내 선택 뒤에 결과와 댓글이 열립니다."
+          tone="orange"
+        >
+          투표 전에는 어느 쪽이 앞서는지 보여주지 않아요.
+        </WhichAsideCard>
+      }
+    >
+      <div className={styles.page}>
+        <div className={styles.stage}>{children}</div>
+      </div>
+    </WhichShell>
   );
 }

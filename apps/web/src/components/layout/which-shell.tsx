@@ -5,7 +5,7 @@ import styles from "./which-shell.module.css";
 
 export function WhichShell({
   children,
-  active = "home",
+  active,
   aside,
 }: {
   children: ReactNode;
@@ -47,11 +47,9 @@ export function WhichShell({
 
         <aside className={styles.rightRail} aria-label="WHICH 안내">
           {aside ?? (
-            <div className={styles.principleCard}>
-              <span>WHICH PRINCIPLE</span>
-              <strong>먼저 선택하고, 그다음 결과를 봐요.</strong>
-              <p>어느 한쪽도 미리 추천하지 않습니다.</p>
-            </div>
+            <WhichAsideCard eyebrow="WHICH PRINCIPLE" title="먼저 선택하고, 그다음 결과를 봐요.">
+              어느 한쪽도 미리 추천하지 않습니다.
+            </WhichAsideCard>
           )}
         </aside>
       </div>
@@ -68,6 +66,26 @@ export function WhichShell({
         </ShellLink>
       </nav>
     </main>
+  );
+}
+
+export function WhichAsideCard({
+  eyebrow,
+  title,
+  children,
+  tone = "cyan",
+}: {
+  eyebrow: string;
+  title: string;
+  children: ReactNode;
+  tone?: "cyan" | "orange";
+}) {
+  return (
+    <div className={styles.principleCard} data-tone={tone}>
+      <span>{eyebrow}</span>
+      <strong>{title}</strong>
+      <p>{children}</p>
+    </div>
   );
 }
 

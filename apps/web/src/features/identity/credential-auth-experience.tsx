@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 
+import { WhichAsideCard, WhichShell } from "@/components/layout/which-shell";
 import { loginHref } from "@/lib/auth";
 
 import styles from "./credential-auth-experience.module.css";
@@ -51,108 +52,114 @@ export function CredentialAuthExperience({
   ] as const;
 
   return (
-    <main className={styles.page}>
-      <header className={styles.header}>
-        <Link href="/" className={styles.brand}>
-          WHICH<span>.</span>
-        </Link>
-        <Link href="/">질문 둘러보기</Link>
-      </header>
-      <section className={styles.card}>
-        <p className={styles.eyebrow}>ONE ACCOUNT, MANY WAYS IN</p>
-        <h1>{isSignup ? "빠르게 WHICH 계정을 만들어요." : "내 WHICH 계정으로 들어가요."}</h1>
-        <p className={styles.description}>
-          {isSignup
-            ? "이메일과 비밀번호만 정하면 됩니다. Handle과 소개는 나중에 설정할 수 있어요."
-            : "이메일·비밀번호 또는 연결해 둔 소셜 수단 중 편한 방법을 선택하세요."}
-        </p>
-
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            setPending(true);
-            setError(null);
-            void submitCredential({ mode, email, password, termsAccepted, returnTo })
-              .catch((reason: unknown) =>
-                setError(reason instanceof Error ? reason.message : "다시 시도해 주세요."),
-              )
-              .finally(() => setPending(false));
-          }}
+    <WhichShell
+      aside={
+        <WhichAsideCard
+          eyebrow="ONE MEMBER"
+          title="어떤 방법으로 들어와도 기록은 하나로 이어져요."
+          tone="orange"
         >
-          <label>
-            이메일
-            <input
-              type="email"
-              name="email"
-              autoComplete="email"
-              required
-              maxLength={320}
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-            />
-          </label>
-          <label>
-            WHICH 비밀번호
-            <input
-              type="password"
-              name="password"
-              autoComplete={isSignup ? "new-password" : "current-password"}
-              required
-              minLength={isSignup ? 15 : 1}
-              maxLength={128}
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-            />
-            {isSignup ? <small>15자 이상의 문장형 비밀번호를 권장해요.</small> : null}
-          </label>
-          {isSignup ? (
-            <label className={styles.terms}>
-              <input
-                type="checkbox"
-                checked={termsAccepted}
-                onChange={(event) => setTermsAccepted(event.target.checked)}
-                required
-              />
-              계정 생성을 위해 이메일과 비밀번호 해시를 저장하는 데 동의합니다.
-            </label>
-          ) : null}
-          <button type="submit" disabled={pending}>
-            {pending ? "처리 중…" : isSignup ? "WHICH 계정 만들기" : "로그인"}
-          </button>
-        </form>
-
-        {error ? (
-          <p className={styles.error} role="alert">
-            {error}
+          소셜 인증을 사용하더라도 WHICH 계정은 한 명의 Member로 관리됩니다.
+        </WhichAsideCard>
+      }
+    >
+      <div className={styles.page}>
+        <section className={styles.card}>
+          <p className={styles.eyebrow}>ONE ACCOUNT, MANY WAYS IN</p>
+          <h1>{isSignup ? "빠르게 WHICH 계정을 만들어요." : "내 WHICH 계정으로 들어가요."}</h1>
+          <p className={styles.description}>
+            {isSignup
+              ? "이메일과 비밀번호만 정하면 됩니다. Handle과 소개는 나중에 설정할 수 있어요."
+              : "이메일·비밀번호 또는 연결해 둔 소셜 수단 중 편한 방법을 선택하세요."}
           </p>
-        ) : null}
 
-        <div className={styles.divider}>
-          <span>또는</span>
-        </div>
-        <div className={styles.social} aria-label="소셜 로그인">
-          {social
-            .filter((provider) => provider.enabled)
-            .map((provider) => (
-              <a
-                key={provider.id}
-                href={loginHref(provider.id, returnTo)}
-                data-provider={provider.id}
-              >
-                {provider.label}
-              </a>
-            ))}
-        </div>
-
-        <p className={styles.switch}>
-          {isSignup ? "이미 WHICH 계정이 있나요?" : "아직 WHICH 계정이 없나요?"}{" "}
-          <Link
-            href={`${isSignup ? "/login" : "/signup"}?returnTo=${encodeURIComponent(returnTo)}`}
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              setPending(true);
+              setError(null);
+              void submitCredential({ mode, email, password, termsAccepted, returnTo })
+                .catch((reason: unknown) =>
+                  setError(reason instanceof Error ? reason.message : "다시 시도해 주세요."),
+                )
+                .finally(() => setPending(false));
+            }}
           >
-            {isSignup ? "로그인" : "빠른 회원가입"}
-          </Link>
-        </p>
-      </section>
-    </main>
+            <label>
+              이메일
+              <input
+                type="email"
+                name="email"
+                autoComplete="email"
+                required
+                maxLength={320}
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+              />
+            </label>
+            <label>
+              WHICH 비밀번호
+              <input
+                type="password"
+                name="password"
+                autoComplete={isSignup ? "new-password" : "current-password"}
+                required
+                minLength={isSignup ? 15 : 1}
+                maxLength={128}
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+              />
+              {isSignup ? <small>15자 이상의 문장형 비밀번호를 권장해요.</small> : null}
+            </label>
+            {isSignup ? (
+              <label className={styles.terms}>
+                <input
+                  type="checkbox"
+                  checked={termsAccepted}
+                  onChange={(event) => setTermsAccepted(event.target.checked)}
+                  required
+                />
+                계정 생성을 위해 이메일과 비밀번호 해시를 저장하는 데 동의합니다.
+              </label>
+            ) : null}
+            <button type="submit" disabled={pending}>
+              {pending ? "처리 중…" : isSignup ? "WHICH 계정 만들기" : "로그인"}
+            </button>
+          </form>
+
+          {error ? (
+            <p className={styles.error} role="alert">
+              {error}
+            </p>
+          ) : null}
+
+          <div className={styles.divider}>
+            <span>또는</span>
+          </div>
+          <div className={styles.social} aria-label="소셜 로그인">
+            {social
+              .filter((provider) => provider.enabled)
+              .map((provider) => (
+                <a
+                  key={provider.id}
+                  href={loginHref(provider.id, returnTo)}
+                  data-provider={provider.id}
+                >
+                  {provider.label}
+                </a>
+              ))}
+          </div>
+
+          <p className={styles.switch}>
+            {isSignup ? "이미 WHICH 계정이 있나요?" : "아직 WHICH 계정이 없나요?"}{" "}
+            <Link
+              href={`${isSignup ? "/login" : "/signup"}?returnTo=${encodeURIComponent(returnTo)}`}
+            >
+              {isSignup ? "로그인" : "빠른 회원가입"}
+            </Link>
+          </p>
+        </section>
+      </div>
+    </WhichShell>
   );
 }
