@@ -30,6 +30,7 @@ describe("Member private profile experience", () => {
       "href",
       "/login?returnTo=%2Fme",
     );
+    expect(screen.getAllByRole("link", { name: "관심사" })).toHaveLength(2);
   });
 
   it("shows only the current Member's profile and accepted vote history", async () => {

@@ -129,6 +129,10 @@
   letter-spacing: 0.1em;
 }
 
+.principleCard[data-tone="orange"] > span {
+  color: var(--which-orange-strong);
+}
+
 .railNote span {
   display: block;
   margin-top: 9px;
@@ -206,6 +210,10 @@
   .leftRail {
     display: none;
   }
+
+  .bottomNav {
+    display: grid;
+  }
 }
 
 @media (max-width: 767px) {
@@ -230,9 +238,5 @@
   .shell {
     display: block;
     padding: 14px 12px 36px;
-  }
-
-  .bottomNav {
-    display: grid;
   }
 }

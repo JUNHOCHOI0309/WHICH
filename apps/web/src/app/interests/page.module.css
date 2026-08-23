@@ -1,35 +1,37 @@
 .page {
-  min-height: 100svh;
-  background: #061923;
-  color: #f6f8f7;
+  display: grid;
+  gap: 22px;
+  padding-bottom: 48px;
 }
 
-.page header {
-  width: min(100%, 960px);
-  margin-inline: auto;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  border-bottom: 1px solid rgb(246 248 247 / 14%);
-  padding: 22px clamp(20px, 5vw, 50px);
+.intro {
+  border-bottom: 1px solid var(--which-border);
+  padding: 6px 4px 24px;
 }
 
-.page header a {
-  color: #f6f8f7;
-  font-size: 1.2rem;
-  font-weight: 950;
-  text-decoration: none;
-}
-
-.page header span {
-  color: #14c8d4;
+.intro p {
+  margin: 0;
+  color: var(--which-cyan-strong);
   font-size: 0.68rem;
-  font-weight: 850;
+  font-weight: 900;
   letter-spacing: 0.12em;
 }
 
-.stage {
-  width: min(100%, 860px);
-  margin-inline: auto;
-  padding: clamp(30px, 8vw, 76px) clamp(18px, 5vw, 48px);
+.intro h1 {
+  max-width: 14ch;
+  margin: 10px 0 0;
+  font-size: clamp(2rem, 5vw, 3.6rem);
+  letter-spacing: -0.065em;
+  line-height: 1.08;
+  text-wrap: balance;
+  word-break: keep-all;
+}
+
+.intro > span {
+  display: block;
+  max-width: 58ch;
+  margin-top: 14px;
+  color: var(--which-text-secondary);
+  line-height: 1.65;
+  word-break: keep-all;
 }

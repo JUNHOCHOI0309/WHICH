@@ -6,21 +6,9 @@
   --line: var(--which-border);
   --a: var(--which-cyan);
   --b: var(--which-orange);
-  min-height: 100svh;
-  background: var(--paper);
+  min-height: 0;
+  background: transparent;
   color: var(--ink);
-  display: grid;
-  grid-template-rows: auto 1fr auto;
-}
-
-.header,
-.footer {
-  width: min(100%, 1180px);
-  margin-inline: auto;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 22px clamp(20px, 5vw, 56px);
 }
 
 .comments {
@@ -439,67 +427,17 @@
   opacity: 0.65;
 }
 
-.header {
-  position: sticky;
-  z-index: 40;
-  top: 0;
-  border-bottom: 1px solid var(--line);
-  background: rgb(255 255 255 / 92%);
-  backdrop-filter: blur(12px);
-}
-
-.brand {
-  color: var(--ink);
-  font-size: 1.45rem;
-  font-weight: 950;
-  letter-spacing: -0.06em;
-  text-decoration: none;
-}
-
-.brandDot {
-  color: var(--a);
-}
-
-.openBadge,
 .issueMeta,
-.eyebrow,
-.footer {
+.eyebrow {
   font-size: 0.68rem;
   font-weight: 850;
   letter-spacing: 0.12em;
 }
 
-.openBadge {
-  border: 1px solid var(--a);
-  border-radius: 999px;
-  color: var(--which-cyan-strong);
-  padding: 7px 10px;
-}
-
-.headerActions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.meLink {
-  color: var(--ink);
-  font-size: 0.72rem;
-  font-weight: 850;
-  text-decoration: none;
-}
-
-.meLink:focus-visible {
-  outline: 3px solid var(--b);
-  outline-offset: 4px;
-}
-
 .stage {
-  width: min(100%, 880px);
-  margin-inline: auto;
   display: grid;
   align-items: center;
-  padding: clamp(24px, 6vw, 64px) clamp(14px, 4vw, 40px);
+  padding-block: clamp(4px, 2vw, 18px) 42px;
 }
 
 .issueCard,
@@ -960,11 +898,6 @@
 .skeletonShort {
   width: 58%;
   margin-top: 12px;
-}
-
-.footer {
-  border-top: 1px solid var(--line);
-  color: var(--muted);
 }
 
 .nextIssue {
