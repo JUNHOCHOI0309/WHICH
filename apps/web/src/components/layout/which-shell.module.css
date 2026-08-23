@@ -1,0 +1,238 @@
+.page {
+  min-height: 100svh;
+  background: var(--which-bg);
+  color: var(--which-text);
+  padding-bottom: 72px;
+}
+
+.header {
+  position: sticky;
+  z-index: 50;
+  top: 0;
+  border-bottom: 1px solid var(--which-border);
+  background: rgb(255 255 255 / 92%);
+  backdrop-filter: blur(12px);
+}
+
+.headerInner {
+  width: min(100%, 1540px);
+  min-height: 72px;
+  margin-inline: auto;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 20px;
+  padding-inline: clamp(16px, 3vw, 40px);
+}
+
+.brand {
+  width: fit-content;
+  color: var(--which-text);
+  font-size: 1.7rem;
+  font-weight: 950;
+  letter-spacing: -0.07em;
+  text-decoration: none;
+}
+
+.brand span {
+  color: var(--which-cyan-strong);
+}
+
+.productLine {
+  margin: 0;
+  color: var(--which-text-secondary);
+  font-size: 0.82rem;
+  font-weight: 650;
+}
+
+.profileLink {
+  justify-self: end;
+  min-height: 44px;
+  border: 1px solid var(--which-border-strong);
+  border-radius: 999px;
+  color: var(--which-text);
+  display: inline-flex;
+  align-items: center;
+  padding: 0 16px;
+  font-size: 0.82rem;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.shell {
+  width: min(100%, 1540px);
+  margin-inline: auto;
+  display: grid;
+  grid-template-columns: 232px minmax(620px, 880px) 320px;
+  gap: 24px;
+  padding: 28px clamp(16px, 3vw, 40px) 64px;
+}
+
+.leftRail,
+.rightRail {
+  position: sticky;
+  top: 100px;
+  align-self: start;
+}
+
+.leftRail {
+  display: grid;
+  gap: 6px;
+}
+
+.navLink {
+  min-height: 46px;
+  border-radius: 12px;
+  color: var(--which-text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 14px;
+  font-size: 0.9rem;
+  text-decoration: none;
+}
+
+.navLink > span {
+  width: 22px;
+  color: var(--which-text-tertiary);
+  font-size: 1.18rem;
+  text-align: center;
+}
+
+.navLinkActive {
+  background: var(--which-cyan-soft);
+  color: var(--which-text);
+}
+
+.navLinkActive > span {
+  color: var(--which-cyan-strong);
+}
+
+.railNote,
+.principleCard {
+  border: 1px solid var(--which-border);
+  border-radius: 16px;
+  background: var(--which-surface);
+  box-shadow: 0 8px 24px rgb(15 23 42 / 4%);
+}
+
+.railNote {
+  margin-top: 24px;
+  padding: 18px;
+}
+
+.railNote strong,
+.principleCard > span {
+  color: var(--which-cyan-strong);
+  font-size: 0.65rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+}
+
+.railNote span {
+  display: block;
+  margin-top: 9px;
+  color: var(--which-text-secondary);
+  font-size: 0.78rem;
+  line-height: 1.6;
+  word-break: keep-all;
+}
+
+.main {
+  min-width: 0;
+}
+
+.principleCard {
+  padding: 22px;
+}
+
+.principleCard strong {
+  display: block;
+  margin-top: 12px;
+  font-size: 1.1rem;
+  line-height: 1.45;
+  word-break: keep-all;
+}
+
+.principleCard p {
+  margin: 10px 0 0;
+  color: var(--which-text-secondary);
+  font-size: 0.84rem;
+  line-height: 1.6;
+}
+
+.bottomNav {
+  position: fixed;
+  z-index: 60;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  min-height: 64px;
+  border-top: 1px solid var(--which-border);
+  background: rgb(255 255 255 / 96%);
+  display: none;
+  grid-template-columns: repeat(3, 1fr);
+  padding-bottom: env(safe-area-inset-bottom);
+  backdrop-filter: blur(12px);
+}
+
+.bottomNav .navLink {
+  min-height: 64px;
+  border-radius: 0;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  padding: 4px;
+  font-size: 0.68rem;
+}
+
+@media (max-width: 1319px) {
+  .shell {
+    grid-template-columns: 220px minmax(0, 880px);
+    justify-content: center;
+  }
+
+  .rightRail {
+    display: none;
+  }
+}
+
+@media (max-width: 1023px) {
+  .shell {
+    grid-template-columns: minmax(0, 760px);
+    padding-top: 20px;
+  }
+
+  .leftRail {
+    display: none;
+  }
+}
+
+@media (max-width: 767px) {
+  .page {
+    padding-bottom: calc(68px + env(safe-area-inset-bottom));
+  }
+
+  .headerInner {
+    min-height: 58px;
+    grid-template-columns: 1fr auto;
+  }
+
+  .brand {
+    font-size: 1.45rem;
+  }
+
+  .productLine,
+  .profileLink {
+    display: none;
+  }
+
+  .shell {
+    display: block;
+    padding: 14px 12px 36px;
+  }
+
+  .bottomNav {
+    display: grid;
+  }
+}

@@ -7,13 +7,13 @@ import { colors } from "@/theme";
 export default function RootLayout() {
   return (
     <SafeAreaProvider>
-      <StatusBar style="light" />
+      <StatusBar style="dark" />
       <Stack
         screenOptions={{
-          contentStyle: { backgroundColor: colors.ink },
-          headerStyle: { backgroundColor: colors.ink },
+          contentStyle: { backgroundColor: colors.bg },
+          headerStyle: { backgroundColor: colors.surface },
           headerShadowVisible: false,
-          headerTintColor: colors.paper,
+          headerTintColor: colors.text,
           headerTitleStyle: { fontWeight: "800" },
         }}
       >

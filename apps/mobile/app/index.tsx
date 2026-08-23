@@ -1,20 +1,21 @@
 import { router } from "expo-router";
 import { randomUUID } from "expo-crypto";
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  FlatList,
-  Pressable,
-  RefreshControl,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import type { PublicFeedIssue, PublicIssueFeed } from "@/contracts";
+import { BalanceResultBar } from "@/components/vote/balance-result-bar";
+import { VoteChoiceRow } from "@/components/vote/vote-choice-row";
+import type { IssueChoice, PublicFeedIssue, PublicIssueFeed, VoteResponse } from "@/contracts";
+import { MobileApiError } from "@/lib/mobile-api";
 import { guestSubjects, mobileApi } from "@/lib/runtime";
 import { colors } from "@/theme";
+
+type CardVoteState =
+  | { status: "PRE_VOTE" }
+  | { status: "SUBMITTING"; choice: IssueChoice; idempotencyKey: string }
+  | { status: "ERROR"; choice: IssueChoice; idempotencyKey: string; message: string }
+  | { status: "RESULT"; vote: VoteResponse };
 
 export default function FeedScreen() {
   const [issues, setIssues] = useState<PublicFeedIssue[]>([]);
@@ -22,6 +23,7 @@ export default function FeedScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ranking, setRanking] = useState<PublicIssueFeed["ranking"] | null>(null);
+  const [cardStates, setCardStates] = useState<Record<string, CardVoteState>>({});
   const analyticsSessionId = useRef(randomUUID());
   const viewedRecommendationRequests = useRef(new Set<string>());
 
@@ -50,15 +52,18 @@ export default function FeedScreen() {
     return feed;
   }, []);
 
+  const applyFeed = useCallback((feed: PublicIssueFeed) => {
+    setIssues(feed.items);
+    setRanking(feed.ranking);
+  }, []);
+
   const load = useCallback(
     async (refresh = false) => {
       if (refresh) setRefreshing(true);
       else setLoading(true);
       setError(null);
       try {
-        const feed = await fetchFeed();
-        setIssues(feed.items);
-        setRanking(feed.ranking);
+        applyFeed(await fetchFeed());
       } catch (reason) {
         setError(reason instanceof Error ? reason.message : "피드를 불러오지 못했습니다.");
       } finally {
@@ -66,17 +71,14 @@ export default function FeedScreen() {
         setRefreshing(false);
       }
     },
-    [fetchFeed],
+    [applyFeed, fetchFeed],
   );
 
   useEffect(() => {
     let active = true;
     void fetchFeed()
       .then((feed) => {
-        if (active) {
-          setIssues(feed.items);
-          setRanking(feed.ranking);
-        }
+        if (active) applyFeed(feed);
       })
       .catch((reason: unknown) => {
         if (active) {
@@ -89,44 +91,139 @@ export default function FeedScreen() {
     return () => {
       active = false;
     };
-  }, [fetchFeed]);
+  }, [applyFeed, fetchFeed]);
+
+  const submitCardVote = useCallback(
+    async (issue: PublicFeedIssue, choice: IssueChoice, idempotencyKey: string) => {
+      setCardStates((current) => ({
+        ...current,
+        [issue.id]: { status: "SUBMITTING", choice, idempotencyKey },
+      }));
+      void mobileApi
+        .recordAnalyticsEvent({
+          sessionId: analyticsSessionId.current,
+          eventId: randomUUID(),
+          eventType: "VOTE_SUBMIT",
+          issueId: issue.id,
+          issueVersion: issue.version,
+          occurredAt: new Date().toISOString(),
+        })
+        .catch(() => undefined);
+
+      try {
+        let subjectId = await guestSubjects.getOrCreate();
+        const command = {
+          issueId: issue.id,
+          issueVersion: issue.version,
+          choiceId: choice.id,
+          idempotencyKey,
+        };
+        let vote: VoteResponse;
+        try {
+          vote = await mobileApi.submitGuestVote({ ...command, subjectId });
+        } catch (reason) {
+          if (!(reason instanceof MobileApiError) || reason.code !== "GUEST_SUBJECT_NOT_FOUND") {
+            throw reason;
+          }
+          subjectId = await guestSubjects.rotate();
+          vote = await mobileApi.submitGuestVote({ ...command, subjectId });
+        }
+        setCardStates((current) => ({ ...current, [issue.id]: { status: "RESULT", vote } }));
+        void mobileApi
+          .recordAnalyticsEvent({
+            sessionId: analyticsSessionId.current,
+            eventId: randomUUID(),
+            eventType: "RESULT_VIEW",
+            issueId: issue.id,
+            issueVersion: issue.version,
+            occurredAt: new Date().toISOString(),
+          })
+          .catch(() => undefined);
+      } catch {
+        setCardStates((current) => ({
+          ...current,
+          [issue.id]: {
+            status: "ERROR",
+            choice,
+            idempotencyKey,
+            message: "선택을 전송하지 못했어요.",
+          },
+        }));
+      }
+    },
+    [],
+  );
+
+  const openIssue = useCallback(
+    (issue: PublicFeedIssue) => {
+      if (ranking?.mode === "PERSONALIZED") {
+        void mobileApi
+          .recordAnalyticsEvent({
+            sessionId: analyticsSessionId.current,
+            eventId: randomUUID(),
+            eventType: "PERSONALIZED_ISSUE_OPEN",
+            issueId: issue.id,
+            issueVersion: issue.version,
+            recommendationRequestId: issue.recommendation.requestId,
+            occurredAt: new Date().toISOString(),
+          })
+          .catch(() => undefined);
+      }
+      router.push({ pathname: "/issues/[issueId]", params: { issueId: issue.id } });
+    },
+    [ranking?.mode],
+  );
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
+    <SafeAreaView style={styles.safeArea} edges={["top", "left", "right", "bottom"]}>
       <FlatList
         data={issues}
         keyExtractor={(item) => item.id}
+        style={styles.list}
         contentContainerStyle={styles.content}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={() => void load(true)}
-            tintColor={colors.accent}
+            tintColor={colors.cyanStrong}
           />
         }
         ListHeaderComponent={
           <View style={styles.header}>
             <View style={styles.headerRow}>
               <Text accessibilityRole="header" style={styles.brand}>
-                WHICH
+                <Text style={styles.brandW}>W</Text>HICH
               </Text>
-              <Pressable accessibilityRole="button" onPress={() => router.push("/interests")}>
-                <Text style={styles.interestLink}>관심사 설정</Text>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => router.push("/interests")}
+                style={({ pressed }) => [styles.interestLink, pressed && styles.pressed]}
+              >
+                <Text style={styles.interestLinkText}>관심사</Text>
               </Pressable>
             </View>
-            <Text style={styles.eyebrow}>MOBILE FIRST</Text>
-            <Text style={styles.title}>고르고, 결과를 보고, 다음 질문으로.</Text>
-            {ranking?.mode === "PERSONALIZED" ? (
-              <Text style={styles.personalizedBadge}>관심사 기반 추천</Text>
-            ) : null}
+            <Text style={styles.title}>지금, 어느 쪽인가요?</Text>
+            <View style={styles.filters}>
+              <View style={styles.filterActive}>
+                <Text style={styles.filterActiveText}>
+                  {ranking?.mode === "PERSONALIZED" ? "추천" : "최신"}
+                </Text>
+              </View>
+              {ranking?.mode === "PERSONALIZED" ? (
+                <View style={styles.filterSoft}>
+                  <Text style={styles.filterSoftText}>관심사 기반</Text>
+                </View>
+              ) : null}
+              <Text style={styles.filterHint}>결과는 투표 후 공개</Text>
+            </View>
           </View>
         }
         ListEmptyComponent={
-          loading ? (
-            <ActivityIndicator color={colors.accent} size="large" />
-          ) : (
+          !loading ? (
             <View style={styles.stateCard}>
-              <Text style={styles.stateTitle}>{error ?? "지금 참여할 질문이 없습니다."}</Text>
+              <Text style={styles.stateTitle}>
+                {error ?? "지금 참여할 수 있는 질문을 모두 봤어요."}
+              </Text>
               <Pressable
                 accessibilityRole="button"
                 onPress={() => void load()}
@@ -135,113 +232,316 @@ export default function FeedScreen() {
                 <Text style={styles.retryText}>다시 불러오기</Text>
               </Pressable>
             </View>
+          ) : (
+            <FeedSkeleton />
           )
         }
-        renderItem={({ item, index }) => (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`${item.question} 투표 열기`}
-            onPress={() => {
-              if (ranking?.mode === "PERSONALIZED") {
-                void mobileApi
-                  .recordAnalyticsEvent({
-                    sessionId: analyticsSessionId.current,
-                    eventId: randomUUID(),
-                    eventType: "PERSONALIZED_ISSUE_OPEN",
-                    issueId: item.id,
-                    issueVersion: item.version,
-                    recommendationRequestId: item.recommendation.requestId,
-                    occurredAt: new Date().toISOString(),
-                  })
-                  .catch(() => undefined);
-              }
-              router.push({ pathname: "/issues/[issueId]", params: { issueId: item.id } });
+        renderItem={({ item }) => (
+          <VoteFeedCard
+            issue={item}
+            state={cardStates[item.id] ?? { status: "PRE_VOTE" }}
+            onChoose={(choice) => {
+              const state = cardStates[item.id];
+              if (state?.status === "SUBMITTING" || state?.status === "RESULT") return;
+              void submitCardVote(item, choice, randomUUID());
             }}
-            style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
-          >
-            <View style={styles.cardMeta}>
-              <Text style={styles.category}>{item.categoryCode}</Text>
-              <Text style={styles.sequence}>{String(index + 1).padStart(2, "0")}</Text>
-            </View>
-            <Text style={styles.question}>{item.question}</Text>
-            <View style={styles.previewRow}>
-              {item.choices.map((choice) => (
-                <View key={choice.id} style={styles.previewChoice}>
-                  <Text style={styles.previewCode}>{choice.code}</Text>
-                  <Text numberOfLines={1} style={styles.previewLabel}>
-                    {choice.label}
-                  </Text>
-                </View>
-              ))}
-            </View>
-          </Pressable>
+            onRetry={(choice, idempotencyKey) => void submitCardVote(item, choice, idempotencyKey)}
+            onReset={() =>
+              setCardStates((current) => ({
+                ...current,
+                [item.id]: { status: "PRE_VOTE" },
+              }))
+            }
+            onOpen={() => openIssue(item)}
+          />
         )}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
       />
+      <View style={styles.bottomNav}>
+        <View style={styles.bottomNavItemActive}>
+          <Text style={styles.bottomNavIconActive}>⌂</Text>
+          <Text style={styles.bottomNavTextActive}>홈</Text>
+        </View>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => router.push("/interests")}
+          style={styles.bottomNavItem}
+        >
+          <Text style={styles.bottomNavIcon}>#</Text>
+          <Text style={styles.bottomNavText}>관심사</Text>
+        </Pressable>
+      </View>
     </SafeAreaView>
   );
 }
 
+function VoteFeedCard({
+  issue,
+  state,
+  onChoose,
+  onRetry,
+  onReset,
+  onOpen,
+}: {
+  issue: PublicFeedIssue;
+  state: CardVoteState;
+  onChoose: (choice: IssueChoice) => void;
+  onRetry: (choice: IssueChoice, idempotencyKey: string) => void;
+  onReset: () => void;
+  onOpen: () => void;
+}) {
+  const choiceA = issue.choices.find((choice) => choice.code === "A");
+  const choiceB = issue.choices.find((choice) => choice.code === "B");
+  const pending = state.status === "SUBMITTING" || state.status === "ERROR" ? state.choice : null;
+
+  return (
+    <View style={styles.card} accessibilityState={{ busy: state.status === "SUBMITTING" }}>
+      <View style={styles.cardMeta}>
+        <Text style={styles.category}>{issue.categoryCode.replaceAll("_", " ")}</Text>
+        <Text style={styles.date}>
+          {new Intl.DateTimeFormat("ko-KR", { month: "short", day: "numeric" }).format(
+            new Date(issue.publishedAt),
+          )}
+        </Text>
+      </View>
+      <Pressable accessibilityRole="link" onPress={onOpen}>
+        <Text style={styles.question}>{issue.question}</Text>
+      </Pressable>
+
+      {state.status !== "RESULT" ? (
+        <View style={styles.choices}>
+          {choiceA ? (
+            <VoteChoiceRow
+              choice={choiceA}
+              selected={pending?.id === choiceA.id}
+              pending={state.status === "SUBMITTING" && pending?.id === choiceA.id}
+              disabled={state.status === "SUBMITTING"}
+              onPress={onChoose}
+            />
+          ) : null}
+          {choiceB ? (
+            <VoteChoiceRow
+              choice={choiceB}
+              selected={pending?.id === choiceB.id}
+              pending={state.status === "SUBMITTING" && pending?.id === choiceB.id}
+              disabled={state.status === "SUBMITTING"}
+              onPress={onChoose}
+            />
+          ) : null}
+        </View>
+      ) : null}
+
+      {state.status === "SUBMITTING" ? (
+        <Text accessibilityLiveRegion="polite" style={styles.notice}>
+          선택을 안전하게 기록하고 있어요…
+        </Text>
+      ) : null}
+
+      {state.status === "ERROR" ? (
+        <View style={styles.errorCard} accessibilityLiveRegion="assertive">
+          <Text style={styles.errorText}>{state.message}</Text>
+          <View style={styles.errorActions}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => onRetry(state.choice, state.idempotencyKey)}
+              style={styles.errorButton}
+            >
+              <Text style={styles.errorButtonText}>같은 선택으로 재시도</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" onPress={onReset} style={styles.errorButton}>
+              <Text style={styles.errorButtonText}>선택 다시 하기</Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
+
+      {state.status === "RESULT" && choiceA && choiceB ? (
+        <View style={styles.resultArea}>
+          <Text accessibilityLiveRegion="polite" style={styles.notice}>
+            {state.vote.outcome === "REJECTED_DUPLICATE"
+              ? `처음 선택한 ${state.vote.choice}가 유지되고 있어요.`
+              : `${state.vote.choice} 선택이 반영됐어요.`}
+          </Text>
+          <BalanceResultBar
+            aLabel={choiceA.label}
+            bLabel={choiceB.label}
+            acceptedA={state.vote.result.acceptedA}
+            acceptedB={state.vote.result.acceptedB}
+            selectedChoice={state.vote.choice}
+          />
+        </View>
+      ) : null}
+
+      <Pressable accessibilityRole="link" onPress={onOpen} style={styles.cardFooter}>
+        <Text style={styles.cardFooterHint}>
+          {state.status === "RESULT" ? "결과가 공개됐어요" : "결과는 선택 후 공개"}
+        </Text>
+        <Text style={styles.cardFooterLink}>상세·공유 보기 ↗</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+function FeedSkeleton() {
+  return (
+    <View accessibilityLabel="질문 목록을 불러오는 중입니다." style={styles.skeleton}>
+      <View style={styles.skeletonLineShort} />
+      <View style={styles.skeletonLine} />
+      <View style={styles.skeletonChoice} />
+      <View style={styles.skeletonChoice} />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: colors.ink },
-  content: { flexGrow: 1, paddingHorizontal: 18, paddingBottom: 48 },
-  header: { gap: 12, paddingBottom: 32, paddingTop: 18 },
+  safeArea: { backgroundColor: colors.bg, flex: 1 },
+  list: { flex: 1 },
+  content: { flexGrow: 1, paddingHorizontal: 14, paddingBottom: 20 },
+  header: { gap: 14, paddingBottom: 14, paddingTop: 8 },
   headerRow: { alignItems: "center", flexDirection: "row", justifyContent: "space-between" },
-  brand: { color: colors.paper, fontSize: 30, fontWeight: "900", letterSpacing: -1 },
-  interestLink: { color: colors.cyan, fontSize: 13, fontWeight: "900" },
-  eyebrow: { color: colors.accent, fontSize: 12, fontWeight: "900", letterSpacing: 2 },
-  title: { color: colors.paper, fontSize: 34, fontWeight: "900", lineHeight: 42, maxWidth: 340 },
-  personalizedBadge: {
-    alignSelf: "flex-start",
-    borderColor: colors.cyan,
+  brand: { color: colors.text, fontSize: 24, fontWeight: "900", letterSpacing: -1.2 },
+  brandW: { color: colors.cyanStrong },
+  interestLink: {
+    alignItems: "center",
+    borderColor: colors.border,
     borderRadius: 999,
     borderWidth: 1,
-    color: colors.cyan,
-    fontSize: 12,
-    fontWeight: "900",
-    paddingHorizontal: 11,
-    paddingVertical: 7,
+    justifyContent: "center",
+    minHeight: 42,
+    paddingHorizontal: 14,
   },
+  interestLinkText: { color: colors.text, fontSize: 12, fontWeight: "800" },
+  title: { color: colors.text, fontSize: 27, fontWeight: "900", lineHeight: 34 },
+  filters: { alignItems: "center", flexDirection: "row", gap: 8 },
+  filterActive: {
+    backgroundColor: colors.cyan,
+    borderRadius: 999,
+    minHeight: 32,
+    paddingHorizontal: 13,
+    justifyContent: "center",
+  },
+  filterActiveText: { color: "#062A31", fontSize: 12, fontWeight: "900" },
+  filterSoft: {
+    backgroundColor: colors.cyanSoft,
+    borderRadius: 999,
+    minHeight: 32,
+    paddingHorizontal: 12,
+    justifyContent: "center",
+  },
+  filterSoftText: { color: colors.cyanStrong, fontSize: 11, fontWeight: "800" },
+  filterHint: { color: colors.textTertiary, flex: 1, fontSize: 10, textAlign: "right" },
   card: {
-    backgroundColor: colors.panel,
-    borderColor: colors.line,
-    borderRadius: 28,
-    borderWidth: 1,
-    gap: 26,
-    padding: 24,
-  },
-  cardPressed: { opacity: 0.78, transform: [{ scale: 0.99 }] },
-  cardMeta: { alignItems: "center", flexDirection: "row", justifyContent: "space-between" },
-  category: { color: colors.cyan, fontSize: 12, fontWeight: "800" },
-  sequence: { color: colors.muted, fontSize: 12, fontWeight: "800" },
-  question: { color: colors.paper, fontSize: 26, fontWeight: "900", lineHeight: 34 },
-  previewRow: { flexDirection: "row", gap: 10 },
-  previewChoice: {
-    alignItems: "center",
-    backgroundColor: colors.panelSoft,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
     borderRadius: 16,
-    flex: 1,
-    flexDirection: "row",
-    gap: 8,
-    minHeight: 56,
+    borderWidth: 1,
+    gap: 16,
+    padding: 16,
+  },
+  cardMeta: { alignItems: "center", flexDirection: "row", justifyContent: "space-between" },
+  category: { color: colors.cyanStrong, fontSize: 11, fontWeight: "900", letterSpacing: 0.6 },
+  date: { color: colors.textTertiary, fontSize: 11, fontWeight: "700" },
+  question: { color: colors.text, fontSize: 18, fontWeight: "900", lineHeight: 25 },
+  choices: { gap: 9 },
+  notice: {
+    backgroundColor: colors.cyanSoft,
+    borderRadius: 10,
+    color: colors.cyanStrong,
+    fontSize: 12,
+    fontWeight: "800",
+    lineHeight: 18,
+    padding: 11,
+  },
+  resultArea: { gap: 4 },
+  errorCard: {
+    backgroundColor: colors.orangeSoft,
+    borderLeftColor: colors.orange,
+    borderLeftWidth: 4,
+    gap: 10,
     padding: 12,
   },
-  previewCode: { color: colors.accent, fontSize: 13, fontWeight: "900" },
-  previewLabel: { color: colors.paper, flex: 1, fontSize: 14, fontWeight: "700" },
-  separator: { height: 14 },
+  errorText: { color: colors.text, fontSize: 12, fontWeight: "700" },
+  errorActions: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  errorButton: {
+    backgroundColor: colors.surface,
+    borderColor: colors.borderStrong,
+    borderRadius: 9,
+    borderWidth: 1,
+    minHeight: 40,
+    paddingHorizontal: 11,
+    justifyContent: "center",
+  },
+  errorButtonText: { color: colors.text, fontSize: 11, fontWeight: "800" },
+  cardFooter: {
+    alignItems: "center",
+    borderTopColor: colors.border,
+    borderTopWidth: 1,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    minHeight: 46,
+    paddingTop: 8,
+  },
+  cardFooterHint: { color: colors.textTertiary, fontSize: 10 },
+  cardFooterLink: { color: colors.text, fontSize: 12, fontWeight: "900" },
+  pressed: { opacity: 0.92, transform: [{ scale: 0.995 }] },
+  separator: { height: 12 },
   stateCard: {
     alignItems: "center",
-    backgroundColor: colors.panel,
-    borderRadius: 24,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: 16,
+    borderWidth: 1,
     gap: 18,
     padding: 28,
   },
-  stateTitle: { color: colors.paper, fontSize: 18, fontWeight: "800", textAlign: "center" },
+  stateTitle: { color: colors.text, fontSize: 17, fontWeight: "800", textAlign: "center" },
   retry: {
-    backgroundColor: colors.accent,
-    borderRadius: 16,
+    backgroundColor: colors.cyan,
+    borderRadius: 999,
+    minHeight: 46,
     paddingHorizontal: 20,
-    paddingVertical: 14,
+    justifyContent: "center",
   },
-  retryText: { color: colors.ink, fontWeight: "900" },
+  retryText: { color: "#062A31", fontWeight: "900" },
+  skeleton: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 14,
+    padding: 18,
+  },
+  skeletonLineShort: {
+    backgroundColor: colors.surfaceSubtle,
+    borderRadius: 8,
+    height: 12,
+    width: "28%",
+  },
+  skeletonLine: {
+    backgroundColor: colors.surfaceSubtle,
+    borderRadius: 8,
+    height: 24,
+    width: "82%",
+  },
+  skeletonChoice: { backgroundColor: colors.surfaceSubtle, borderRadius: 12, height: 52 },
+  bottomNav: {
+    backgroundColor: colors.surface,
+    borderTopColor: colors.border,
+    borderTopWidth: 1,
+    flexDirection: "row",
+    minHeight: 62,
+  },
+  bottomNavItem: { alignItems: "center", flex: 1, gap: 2, justifyContent: "center", minHeight: 62 },
+  bottomNavItemActive: {
+    alignItems: "center",
+    backgroundColor: colors.cyanSoft,
+    flex: 1,
+    gap: 2,
+    justifyContent: "center",
+    minHeight: 62,
+  },
+  bottomNavIcon: { color: colors.textTertiary, fontSize: 19 },
+  bottomNavIconActive: { color: colors.cyanStrong, fontSize: 19 },
+  bottomNavText: { color: colors.textSecondary, fontSize: 10, fontWeight: "700" },
+  bottomNavTextActive: { color: colors.text, fontSize: 10, fontWeight: "900" },
 });

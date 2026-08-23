@@ -115,7 +115,7 @@ describe("IssueExperience", () => {
     );
 
     render(<IssueExperience issueId={ISSUE_ID} />);
-    await screen.findByRole("button", { name: "A, 아침형 인간" });
+    await screen.findByRole("button", { name: "A 선택, 아침형 인간" });
     await observerReady;
     const article = screen.getByRole("article");
     const callback = observerCallback;
@@ -230,7 +230,7 @@ describe("IssueExperience", () => {
 
     render(<IssueExperience issueId={ISSUE_ID} />);
 
-    const choice = await screen.findByRole("button", { name: "A, 아침형 인간" });
+    const choice = await screen.findByRole("button", { name: "A 선택, 아침형 인간" });
     expect(screen.queryByText("75%")).not.toBeInTheDocument();
 
     fireEvent.click(choice);
@@ -293,7 +293,7 @@ describe("IssueExperience", () => {
 
     expect(await screen.findByText("당신의 선택이 반영됐어요.")).toBeInTheDocument();
     expect(screen.getByText("60%")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "A, 아침형 인간" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "A 선택, 아침형 인간" })).not.toBeInTheDocument();
     expect(votePosts).toHaveLength(0);
     expect(JSON.parse(sessionStorage.getItem(`which:vote-result:${ISSUE_ID}`) ?? "null")).toEqual(
       restoredResult,
@@ -334,7 +334,7 @@ describe("IssueExperience", () => {
     );
 
     render(<IssueExperience issueId={ISSUE_ID} />);
-    fireEvent.click(await screen.findByRole("button", { name: "B, 저녁형 인간" }));
+    fireEvent.click(await screen.findByRole("button", { name: "B 선택, 저녁형 인간" }));
 
     expect(await screen.findByText("이미 참여한 질문이에요.")).toBeInTheDocument();
     expect(screen.getByText("처음 선택이 결과에 그대로 유지됩니다.")).toBeInTheDocument();
@@ -402,7 +402,7 @@ describe("IssueExperience", () => {
     );
 
     render(<IssueExperience issueId={ISSUE_ID} />);
-    fireEvent.click(await screen.findByRole("button", { name: "B, 저녁형 인간" }));
+    fireEvent.click(await screen.findByRole("button", { name: "B 선택, 저녁형 인간" }));
     expect(await screen.findByText("아침이 좋아요.")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "B 선택" }));
@@ -443,7 +443,7 @@ describe("IssueExperience", () => {
     );
 
     render(<IssueExperience issueId={ISSUE_ID} />);
-    fireEvent.click(await screen.findByRole("button", { name: "A, 아침형 인간" }));
+    fireEvent.click(await screen.findByRole("button", { name: "A 선택, 아침형 인간" }));
 
     expect(
       await screen.findByText("선택 이유를 불러오지 못했어요. 결과는 그대로 유지됩니다."),

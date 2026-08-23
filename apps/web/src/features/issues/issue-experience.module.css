@@ -1,22 +1,21 @@
 .page {
-  --ink: #061923;
-  --paper: #061923;
-  --surface: #f6f8f7;
-  --muted: #5e7076;
-  --line: #bfcfd2;
-  --a: #14c8d4;
-  --b: #ff8a3d;
+  --ink: var(--which-text);
+  --paper: var(--which-bg);
+  --surface: var(--which-surface);
+  --muted: var(--which-text-secondary);
+  --line: var(--which-border);
+  --a: var(--which-cyan);
+  --b: var(--which-orange);
   min-height: 100svh;
-  background:
-    radial-gradient(circle at 82% 8%, rgb(20 200 212 / 14%), transparent 30rem), var(--paper);
-  color: var(--surface);
+  background: var(--paper);
+  color: var(--ink);
   display: grid;
   grid-template-rows: auto 1fr auto;
 }
 
 .header,
 .footer {
-  width: min(100%, 1120px);
+  width: min(100%, 1180px);
   margin-inline: auto;
   display: flex;
   align-items: center;
@@ -58,7 +57,8 @@
 
 .commentComposer {
   margin-top: 20px;
-  border: 1px solid var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 14px;
   background: color-mix(in srgb, var(--a) 7%, var(--surface));
   padding: 18px;
 }
@@ -231,6 +231,7 @@
   --comment-side: var(--line);
   border: 1px solid var(--line);
   border-left: 5px solid var(--comment-side);
+  border-radius: 12px;
   padding: 17px 18px;
 }
 
@@ -439,12 +440,17 @@
 }
 
 .header {
-  border-bottom: 1px solid rgb(246 248 247 / 14%);
+  position: sticky;
+  z-index: 40;
+  top: 0;
+  border-bottom: 1px solid var(--line);
+  background: rgb(255 255 255 / 92%);
+  backdrop-filter: blur(12px);
 }
 
 .brand {
-  color: var(--surface);
-  font-size: 1.2rem;
+  color: var(--ink);
+  font-size: 1.45rem;
   font-weight: 950;
   letter-spacing: -0.06em;
   text-decoration: none;
@@ -466,7 +472,7 @@
 .openBadge {
   border: 1px solid var(--a);
   border-radius: 999px;
-  color: var(--a);
+  color: var(--which-cyan-strong);
   padding: 7px 10px;
 }
 
@@ -477,7 +483,7 @@
 }
 
 .meLink {
-  color: var(--surface);
+  color: var(--ink);
   font-size: 0.72rem;
   font-weight: 850;
   text-decoration: none;
@@ -489,11 +495,11 @@
 }
 
 .stage {
-  width: min(100%, 860px);
+  width: min(100%, 880px);
   margin-inline: auto;
   display: grid;
   align-items: center;
-  padding: clamp(28px, 7vw, 72px) clamp(18px, 5vw, 48px);
+  padding: clamp(24px, 6vw, 64px) clamp(14px, 4vw, 40px);
 }
 
 .issueCard,
@@ -501,9 +507,11 @@
 .messageCard,
 .loadingCard {
   background: var(--surface);
-  border: 1px solid rgb(246 248 247 / 18%);
-  border-radius: 24px;
-  box-shadow: 0 28px 90px rgb(0 0 0 / 32%);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow:
+    0 1px 2px rgb(15 23 42 / 3%),
+    0 8px 24px rgb(15 23 42 / 4%);
   color: var(--ink);
   padding: clamp(26px, 6vw, 58px);
 }
@@ -513,7 +521,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-bottom: clamp(28px, 6vw, 52px);
+  margin-bottom: clamp(20px, 4vw, 32px);
   text-transform: uppercase;
 }
 
@@ -521,18 +529,18 @@
 .messageCard h1,
 .resultCard h1 {
   margin: 0;
-  max-width: 16ch;
-  font-size: clamp(2.25rem, 8vw, 5.4rem);
+  max-width: 20ch;
+  font-size: clamp(2rem, 6vw, 3.8rem);
   font-weight: 900;
   letter-spacing: -0.07em;
-  line-height: 1.02;
+  line-height: 1.12;
   text-wrap: balance;
   word-break: keep-all;
 }
 
 .messageCard h1,
 .resultCard h1 {
-  font-size: clamp(2rem, 7vw, 4.2rem);
+  font-size: clamp(1.8rem, 5vw, 3rem);
 }
 
 .context,
@@ -601,7 +609,7 @@
   display: grid;
   grid-template-columns: 1fr;
   gap: 12px;
-  margin-top: clamp(34px, 7vw, 62px);
+  margin-top: clamp(26px, 5vw, 42px);
 }
 
 .choiceButton {
@@ -699,7 +707,8 @@
 .submitError {
   margin-top: 22px;
   border: 1px solid var(--b);
-  background: #fff1e8;
+  border-radius: 12px;
+  background: var(--which-orange-soft);
   padding: 18px;
 }
 
@@ -758,6 +767,18 @@
   font-weight: 700;
 }
 
+.myVoteNotice {
+  margin: 20px 0 0;
+  border: 1px solid color-mix(in srgb, var(--a) 30%, var(--line));
+  border-radius: 11px;
+  background: var(--which-cyan-soft);
+  color: var(--which-cyan-strong);
+  padding: 11px 14px;
+  font-size: 0.8rem;
+  font-weight: 850;
+  line-height: 1.5;
+}
+
 .resultRows {
   display: grid;
   gap: 12px;
@@ -766,7 +787,8 @@
 
 .resultShare {
   margin-top: 30px;
-  border: 1px solid var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 14px;
   background: color-mix(in srgb, var(--a) 8%, var(--surface));
   padding: 20px;
 }
@@ -941,8 +963,8 @@
 }
 
 .footer {
-  border-top: 1px solid rgb(246 248 247 / 14%);
-  color: #9db2b8;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
 }
 
 .nextIssue {
@@ -993,26 +1015,7 @@
 
 @media (min-width: 700px) {
   .choiceGrid {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .choiceButton {
-    min-height: 150px;
-    grid-template-columns: 1fr auto;
-    align-content: space-between;
-  }
-
-  .choiceCode {
-    grid-column: 1;
-  }
-
-  .choiceArrow {
-    grid-column: 2;
-    grid-row: 1;
-  }
-
-  .choiceLabel {
-    grid-column: 1 / -1;
+    grid-template-columns: 1fr;
   }
 }
 
