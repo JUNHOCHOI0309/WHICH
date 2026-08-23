@@ -100,13 +100,13 @@ describe("FeedExperience", () => {
     render(<FeedExperience />);
 
     expect(await screen.findByText("여행은 미리 계획하는 편인가요?")).toBeInTheDocument();
-    expect(screen.getByText("A · 미리 계획한다")).toBeInTheDocument();
-    expect(screen.getByText("B · 가서 정한다")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "A 선택, 미리 계획한다" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "B 선택, 가서 정한다" })).toBeInTheDocument();
     expect(screen.queryByText(/\d+%/)).not.toBeInTheDocument();
     expect(requests[0]).toBe("/api/guest-subjects");
-    expect(
-      screen.getAllByRole("link", { name: /이 질문에 참여하기/ })[0]?.getAttribute("href"),
-    ).toBe("/issues/10000000-0000-4000-8000-000000000003");
+    expect(screen.getAllByRole("link", { name: /상세·댓글 보기/ })[0]?.getAttribute("href")).toBe(
+      "/issues/10000000-0000-4000-8000-000000000003",
+    );
   });
 
   it("shows an empty completion state and can retry a failed load", async () => {
@@ -127,7 +127,7 @@ describe("FeedExperience", () => {
     render(<FeedExperience />);
 
     fireEvent.click(await screen.findByRole("button", { name: "다시 불러오기" }));
-    expect(await screen.findByText("지금 참여할 질문을 모두 골랐어요.")).toBeInTheDocument();
+    expect(await screen.findByText("지금 참여할 수 있는 질문을 모두 봤어요.")).toBeInTheDocument();
     await waitFor(() => expect(feedAttempts).toBe(2));
   });
 
@@ -149,11 +149,11 @@ describe("FeedExperience", () => {
 
     render(<FeedExperience />);
 
-    expect(await screen.findByText("관심사 기반 추천")).toBeInTheDocument();
+    expect(await screen.findByText("관심사 기반")).toBeInTheDocument();
     await waitFor(() =>
       expect(analyticsEvents.map((event) => event.eventType)).toContain("PERSONALIZED_FEED_VIEW"),
     );
-    fireEvent.click(screen.getAllByRole("link", { name: /이 질문에 참여하기/ })[0]!);
+    fireEvent.click(screen.getAllByRole("link", { name: /상세·댓글 보기/ })[0]!);
     await waitFor(() =>
       expect(analyticsEvents.map((event) => event.eventType)).toContain("PERSONALIZED_ISSUE_OPEN"),
     );
@@ -162,5 +162,55 @@ describe("FeedExperience", () => {
         (event) => event.recommendationRequestId === personalizedFeed.ranking.requestId,
       ),
     ).toBe(true);
+  });
+
+  it("submits one inline vote and reveals a single balance result only after success", async () => {
+    const vote = {
+      outcome: "ACCEPTED",
+      voteAttemptId: "attempt-1",
+      voteId: "vote-1",
+      issueId: feed.items[0]!.id,
+      issueVersion: 1,
+      choice: "A",
+      result: {
+        resultVersion: 1,
+        acceptedA: 6,
+        acceptedB: 4,
+        displayedTotal: 10,
+        integrityState: "NORMAL",
+      },
+    };
+    const voteRequests: RequestInit[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = String(input);
+        if (url === "/api/guest-subjects") return jsonResponse({ status: "ready" });
+        if (url.startsWith("/api/issues/feed?")) return jsonResponse(feed);
+        if (url.endsWith("/votes")) {
+          voteRequests.push(init ?? {});
+          return jsonResponse(vote);
+        }
+        if (url === "/api/analytics/events") {
+          return jsonResponse({ accepted: true, duplicate: false });
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      }),
+    );
+
+    render(<FeedExperience />);
+
+    expect(await screen.findByText(feed.items[0]!.question)).toBeInTheDocument();
+    expect(screen.queryByText("60%")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "A 선택, 미리 계획한다" }));
+
+    expect(await screen.findByText("A 선택이 반영됐어요.")).toBeInTheDocument();
+    expect(screen.getByText("60%")).toBeInTheDocument();
+    expect(screen.getByText("40%")).toBeInTheDocument();
+    expect(voteRequests).toHaveLength(1);
+    expect(JSON.parse(String(voteRequests[0]?.body))).toMatchObject({
+      issueVersion: 1,
+      choiceId: "choice-a",
+    });
   });
 });

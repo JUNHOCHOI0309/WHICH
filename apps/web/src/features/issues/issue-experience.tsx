@@ -5,6 +5,8 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
+import { BalanceResultBar } from "@/components/vote/balance-result-bar";
+import { VoteChoiceRow } from "@/components/vote/vote-choice-row";
 import type {
   CommentReportReason,
   CommentSide,
@@ -297,22 +299,14 @@ export function IssueExperience({
 
         <div className={styles.choiceGrid} aria-label="선택지">
           {issue.choices.map((choice) => (
-            <button
-              className={`${styles.choiceButton} ${styles[`choice${choice.code}`]} ${
-                selectedChoice?.id === choice.id ? styles.choiceSelected : ""
-              }`}
-              type="button"
+            <VoteChoiceRow
               key={choice.id}
+              choice={choice}
               disabled={screen === "submitting" || screen === "submit-error"}
-              onClick={() => choose(choice)}
-              aria-label={`${choice.code}, ${choice.label}`}
-            >
-              <span className={styles.choiceCode}>{choice.code}</span>
-              <span className={styles.choiceLabel}>{choice.label}</span>
-              <span className={styles.choiceArrow} aria-hidden="true">
-                ↗
-              </span>
-            </button>
+              pending={screen === "submitting" && selectedChoice?.id === choice.id}
+              selected={selectedChoice?.id === choice.id}
+              onSelect={choose}
+            />
           ))}
         </div>
 
@@ -368,9 +362,9 @@ function ResultScreen({
   naverLoginEnabled: boolean;
 }) {
   const total = result.result.displayedTotal;
-  const acceptedAPercent = total === 0 ? 0 : Math.round((result.result.acceptedA / total) * 100);
-  const acceptedBPercent = total === 0 ? 0 : 100 - acceptedAPercent;
   const duplicate = result.outcome === "REJECTED_DUPLICATE";
+  const choiceA = issue.choices.find((choice) => choice.code === "A")?.label ?? "A";
+  const choiceB = issue.choices.find((choice) => choice.code === "B")?.label ?? "B";
 
   useEffect(() => {
     void recordAnalyticsEvent({
@@ -404,22 +398,16 @@ function ResultScreen({
             </span>
           </Link>
         ) : null}
-        <div className={styles.resultRows}>
-          <ResultRow
-            code="A"
-            label={issue.choices.find((choice) => choice.code === "A")?.label ?? "A"}
-            count={result.result.acceptedA}
-            percent={acceptedAPercent}
-            selected={result.choice === "A"}
-          />
-          <ResultRow
-            code="B"
-            label={issue.choices.find((choice) => choice.code === "B")?.label ?? "B"}
-            count={result.result.acceptedB}
-            percent={acceptedBPercent}
-            selected={result.choice === "B"}
-          />
-        </div>
+        <p className={styles.myVoteNotice}>
+          ✓ 당신은 “{result.choice === "A" ? choiceA : choiceB}”에 투표했어요.
+        </p>
+        <BalanceResultBar
+          aLabel={choiceA}
+          bLabel={choiceB}
+          acceptedA={result.result.acceptedA}
+          acceptedB={result.result.acceptedB}
+          selectedChoice={result.choice}
+        />
         <p className={styles.totalCount}>현재 유효한 선택 {total.toLocaleString("ko-KR")}개</p>
         <ResultSharePanel issue={issue} result={result} />
         <InterestSelector
@@ -1177,37 +1165,6 @@ function NextIssueAction({
       {state === "error" ? (
         <p role="alert">다음 질문을 찾지 못했어요. 버튼을 눌러 다시 시도해 주세요.</p>
       ) : null}
-    </div>
-  );
-}
-
-function ResultRow({
-  code,
-  label,
-  count,
-  percent,
-  selected,
-}: {
-  code: "A" | "B";
-  label: string;
-  count: number;
-  percent: number;
-  selected: boolean;
-}) {
-  return (
-    <div className={`${styles.resultRow} ${selected ? styles.resultSelected : ""}`}>
-      <div className={styles.resultLabel}>
-        <span className={styles.resultCode}>{code}</span>
-        <span>{label}</span>
-        {selected ? <span className={styles.myChoice}>나의 선택</span> : null}
-      </div>
-      <div className={styles.resultNumbers}>
-        <strong>{percent}%</strong>
-        <span>{count.toLocaleString("ko-KR")}</span>
-      </div>
-      <div className={styles.resultTrack} aria-hidden="true">
-        <span className={styles[`resultFill${code}`]} style={{ width: `${percent}%` }} />
-      </div>
     </div>
   );
 }

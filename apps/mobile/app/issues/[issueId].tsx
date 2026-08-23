@@ -12,15 +12,13 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { BalanceResultBar } from "@/components/vote/balance-result-bar";
+import { VoteChoiceRow } from "@/components/vote/vote-choice-row";
 import type { IssueChoice, PublicIssue, VoteResponse } from "@/contracts";
 import { InterestSelector } from "@/features/interests/interest-selector";
 import { MobileApiError } from "@/lib/mobile-api";
 import { guestSubjects, mobileApi } from "@/lib/runtime";
 import { colors } from "@/theme";
-
-function percentage(value: number, total: number) {
-  return total === 0 ? 0 : Math.round((value / total) * 100);
-}
 
 export default function IssueScreen() {
   const { issueId } = useLocalSearchParams<{ issueId: string }>();
@@ -215,27 +213,14 @@ export default function IssueScreen() {
 
         <View style={styles.choices}>
           {issue.choices.map((choice) => (
-            <Pressable
+            <VoteChoiceRow
               key={choice.id}
-              accessibilityRole="button"
-              accessibilityState={{ disabled: Boolean(submittingChoice || vote) }}
+              choice={choice}
               disabled={Boolean(submittingChoice || vote)}
-              onPress={() => void submit(choice)}
-              style={({ pressed }) => [
-                styles.choice,
-                choice.code === "B" && styles.choiceB,
-                pressed && styles.choicePressed,
-                vote?.choice === choice.code && styles.choiceSelected,
-              ]}
-            >
-              <Text style={styles.choiceCode}>{choice.code}</Text>
-              <Text style={styles.choiceLabel}>{choice.label}</Text>
-              {submittingChoice === choice.id ? (
-                <ActivityIndicator color={colors.ink} />
-              ) : (
-                <Text style={styles.choiceArrow}>→</Text>
-              )}
-            </Pressable>
+              pending={submittingChoice === choice.id}
+              selected={vote?.choice === choice.code}
+              onPress={(selected) => void submit(selected)}
+            />
           ))}
         </View>
 
@@ -247,25 +232,21 @@ export default function IssueScreen() {
               <Text style={styles.resultEyebrow}>
                 {vote?.outcome === "REJECTED_DUPLICATE" ? "이미 반영된 선택" : "실시간 결과"}
               </Text>
-              <View style={styles.resultRow}>
-                <Text style={styles.resultA}>
-                  A {percentage(result.acceptedA, result.displayedTotal)}%
+              {vote ? (
+                <Text style={styles.myVoteNotice}>
+                  ✓ 당신은 “
+                  {issue.choices.find((choice) => choice.code === vote.choice)?.label ??
+                    vote.choice}
+                  ”에 투표했어요.
                 </Text>
-                <Text style={styles.resultB}>
-                  B {percentage(result.acceptedB, result.displayedTotal)}%
-                </Text>
-              </View>
-              <View style={styles.track}>
-                <View
-                  style={[
-                    styles.trackA,
-                    { width: `${percentage(result.acceptedA, result.displayedTotal)}%` },
-                  ]}
-                />
-              </View>
-              <Text style={styles.total}>
-                {result.displayedTotal.toLocaleString("ko-KR")}명 참여
-              </Text>
+              ) : null}
+              <BalanceResultBar
+                aLabel={issue.choices.find((choice) => choice.code === "A")?.label ?? "A"}
+                bLabel={issue.choices.find((choice) => choice.code === "B")?.label ?? "B"}
+                acceptedA={result.acceptedA}
+                acceptedB={result.acceptedB}
+                selectedChoice={vote?.choice ?? "A"}
+              />
             </View>
             {vote ? (
               <View style={styles.shareCard}>
@@ -336,20 +317,20 @@ export default function IssueScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: colors.ink },
-  content: { gap: 22, padding: 20, paddingBottom: 48 },
+  safeArea: { flex: 1, backgroundColor: colors.bg },
+  content: { gap: 18, padding: 16, paddingBottom: 48 },
   center: {
     alignItems: "center",
-    backgroundColor: colors.ink,
+    backgroundColor: colors.bg,
     flex: 1,
     gap: 18,
     justifyContent: "center",
     padding: 24,
   },
-  category: { color: colors.cyan, fontSize: 13, fontWeight: "900", letterSpacing: 1 },
-  question: { color: colors.paper, fontSize: 34, fontWeight: "900", lineHeight: 43 },
-  context: { color: colors.muted, fontSize: 16, lineHeight: 25 },
-  choices: { gap: 12, marginTop: 8 },
+  category: { color: colors.cyanStrong, fontSize: 12, fontWeight: "900", letterSpacing: 1 },
+  question: { color: colors.text, fontSize: 27, fontWeight: "900", lineHeight: 35 },
+  context: { color: colors.textSecondary, fontSize: 15, lineHeight: 23 },
+  choices: { gap: 10, marginTop: 4 },
   choice: {
     alignItems: "center",
     backgroundColor: colors.cyan,
@@ -382,22 +363,33 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   retry: {
-    backgroundColor: colors.accent,
-    borderRadius: 16,
+    backgroundColor: colors.cyan,
+    borderRadius: 999,
     paddingHorizontal: 20,
     paddingVertical: 14,
   },
-  retryText: { color: colors.ink, fontWeight: "900" },
+  retryText: { color: "#062A31", fontWeight: "900" },
   resultCard: {
-    backgroundColor: colors.panel,
-    borderColor: colors.line,
-    borderRadius: 24,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: 16,
     borderWidth: 1,
     gap: 18,
     marginTop: 8,
     padding: 22,
   },
-  resultEyebrow: { color: colors.accent, fontSize: 13, fontWeight: "900" },
+  resultEyebrow: { color: colors.cyanStrong, fontSize: 12, fontWeight: "900", letterSpacing: 0.8 },
+  myVoteNotice: {
+    backgroundColor: colors.cyanSoft,
+    borderColor: "#B7EAF0",
+    borderRadius: 11,
+    borderWidth: 1,
+    color: colors.cyanStrong,
+    fontSize: 12,
+    fontWeight: "800",
+    lineHeight: 18,
+    padding: 11,
+  },
   resultRow: { flexDirection: "row", justifyContent: "space-between" },
   resultA: { color: colors.cyan, fontSize: 26, fontWeight: "900" },
   resultB: { color: colors.accent, fontSize: 26, fontWeight: "900" },
@@ -405,35 +397,35 @@ const styles = StyleSheet.create({
   trackA: { backgroundColor: colors.cyan, height: "100%" },
   total: { color: colors.muted, fontSize: 13, textAlign: "right" },
   shareCard: {
-    backgroundColor: colors.panel,
-    borderColor: colors.line,
-    borderRadius: 20,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: 16,
     borderWidth: 1,
     gap: 12,
     padding: 20,
   },
-  shareTitle: { color: colors.paper, fontSize: 20, fontWeight: "900" },
+  shareTitle: { color: colors.text, fontSize: 20, fontWeight: "900" },
   shareToggle: { alignItems: "center", flexDirection: "row", gap: 9 },
   shareToggleMark: { color: colors.cyan, fontSize: 20, fontWeight: "900" },
-  shareToggleText: { color: colors.paper, fontSize: 14, fontWeight: "800" },
-  sharePrivacy: { color: colors.muted, fontSize: 12, lineHeight: 18 },
+  shareToggleText: { color: colors.text, fontSize: 14, fontWeight: "800" },
+  sharePrivacy: { color: colors.textSecondary, fontSize: 12, lineHeight: 18 },
   shareButton: {
     alignItems: "center",
-    backgroundColor: colors.accent,
-    borderRadius: 16,
+    backgroundColor: colors.cyan,
+    borderRadius: 999,
     minHeight: 52,
     justifyContent: "center",
   },
-  shareButtonText: { color: colors.ink, fontSize: 15, fontWeight: "900" },
+  shareButtonText: { color: "#062A31", fontSize: 15, fontWeight: "900" },
   nextIssue: {
     alignItems: "center",
     backgroundColor: colors.cyan,
-    borderRadius: 20,
+    borderRadius: 999,
     minHeight: 60,
     justifyContent: "center",
     paddingHorizontal: 20,
   },
-  nextIssueText: { color: colors.ink, fontSize: 16, fontWeight: "900" },
-  nextIssueMessage: { color: colors.muted, fontSize: 14, textAlign: "center" },
-  locked: { color: colors.muted, fontSize: 14, textAlign: "center" },
+  nextIssueText: { color: "#062A31", fontSize: 16, fontWeight: "900" },
+  nextIssueMessage: { color: colors.textSecondary, fontSize: 14, textAlign: "center" },
+  locked: { color: colors.textSecondary, fontSize: 14, textAlign: "center" },
 });

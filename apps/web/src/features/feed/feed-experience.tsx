@@ -3,12 +3,25 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { ensureGuestSubject, loadIssueFeed, recordAnalyticsEvent } from "@/features/issues/client";
-import type { PublicFeedIssue, PublicIssueFeed } from "@/lib/contracts";
+import { WhichShell } from "@/components/layout/which-shell";
+import { BalanceResultBar } from "@/components/vote/balance-result-bar";
+import { VoteChoiceRow } from "@/components/vote/vote-choice-row";
+import {
+  ensureGuestSubject,
+  loadIssueFeed,
+  recordAnalyticsEvent,
+  submitGuestVote,
+} from "@/features/issues/client";
+import type { IssueChoice, PublicFeedIssue, PublicIssueFeed, VoteResponse } from "@/lib/contracts";
 
 import styles from "./feed-experience.module.css";
 
 type FeedScreen = "loading" | "ready" | "empty" | "error";
+type CardVoteState =
+  | { status: "PRE_VOTE" }
+  | { status: "SUBMITTING"; choice: IssueChoice; idempotencyKey: string }
+  | { status: "ERROR"; choice: IssueChoice; idempotencyKey: string; message: string }
+  | { status: "RESULT"; vote: VoteResponse };
 
 export function FeedExperience() {
   const [screen, setScreen] = useState<FeedScreen>("loading");
@@ -16,21 +29,25 @@ export function FeedExperience() {
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [ranking, setRanking] = useState<PublicIssueFeed["ranking"] | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [cardStates, setCardStates] = useState<Record<string, CardVoteState>>({});
   const viewedRecommendationRequests = useRef(new Set<string>());
+
+  const applyFeed = useCallback((feed: PublicIssueFeed) => {
+    setItems(feed.items);
+    setNextCursor(feed.nextCursor);
+    setRanking(feed.ranking);
+    setScreen(feed.items.length ? "ready" : "empty");
+  }, []);
 
   const loadInitial = useCallback(async () => {
     setScreen("loading");
     try {
       await ensureGuestSubject();
-      const feed = await loadIssueFeed({ limit: 6 });
-      setItems(feed.items);
-      setNextCursor(feed.nextCursor);
-      setRanking(feed.ranking);
-      setScreen(feed.items.length ? "ready" : "empty");
+      applyFeed(await loadIssueFeed({ limit: 6 }));
     } catch {
       setScreen("error");
     }
-  }, []);
+  }, [applyFeed]);
 
   useEffect(() => {
     let active = true;
@@ -39,11 +56,7 @@ export function FeedExperience() {
     void ensureGuestSubject()
       .then(() => loadIssueFeed({ limit: 6, signal: controller.signal }))
       .then((feed) => {
-        if (!active) return;
-        setItems(feed.items);
-        setNextCursor(feed.nextCursor);
-        setRanking(feed.ranking);
-        setScreen(feed.items.length ? "ready" : "empty");
+        if (active) applyFeed(feed);
       })
       .catch((error: unknown) => {
         if (!active || (error instanceof DOMException && error.name === "AbortError")) return;
@@ -54,7 +67,7 @@ export function FeedExperience() {
       active = false;
       controller.abort();
     };
-  }, []);
+  }, [applyFeed]);
 
   useEffect(() => {
     const firstIssue = items[0];
@@ -104,35 +117,88 @@ export function FeedExperience() {
     }
   }, [loadingMore, nextCursor]);
 
+  const submitCardVote = useCallback(
+    async (issue: PublicFeedIssue, choice: IssueChoice, idempotencyKey: string) => {
+      setCardStates((current) => ({
+        ...current,
+        [issue.id]: { status: "SUBMITTING", choice, idempotencyKey },
+      }));
+      void recordAnalyticsEvent({
+        eventType: "VOTE_SUBMIT",
+        issueId: issue.id,
+        issueVersion: issue.version,
+      }).catch(() => undefined);
+
+      try {
+        const vote = await submitGuestVote({
+          issueId: issue.id,
+          issueVersion: issue.version,
+          choiceId: choice.id,
+          idempotencyKey,
+        });
+        sessionStorage.setItem(`which:vote-result:${issue.id}`, JSON.stringify(vote));
+        setCardStates((current) => ({ ...current, [issue.id]: { status: "RESULT", vote } }));
+        void recordAnalyticsEvent({
+          eventType: "RESULT_VIEW",
+          issueId: issue.id,
+          issueVersion: issue.version,
+        }).catch(() => undefined);
+      } catch {
+        setCardStates((current) => ({
+          ...current,
+          [issue.id]: {
+            status: "ERROR",
+            choice,
+            idempotencyKey,
+            message: "선택을 전송하지 못했어요.",
+          },
+        }));
+      }
+    },
+    [],
+  );
+
+  const choose = useCallback(
+    (issue: PublicFeedIssue, choice: IssueChoice) => {
+      const current = cardStates[issue.id];
+      if (current?.status === "SUBMITTING" || current?.status === "RESULT") return;
+      void submitCardVote(issue, choice, crypto.randomUUID());
+    },
+    [cardStates, submitCardVote],
+  );
+
+  const recordOpen = useCallback(
+    (issue: PublicFeedIssue) => {
+      if (ranking?.mode !== "PERSONALIZED") return;
+      void recordAnalyticsEvent({
+        eventType: "PERSONALIZED_ISSUE_OPEN",
+        issueId: issue.id,
+        issueVersion: issue.version,
+        recommendationRequestId: issue.recommendation.requestId,
+      }).catch(() => undefined);
+    },
+    [ranking?.mode],
+  );
+
   return (
-    <main className={styles.page}>
-      <header className={styles.header}>
-        <Link className={styles.brand} href="/" aria-label="WHICH 홈">
-          WHICH<span>.</span>
-        </Link>
-        <div className={styles.headerActions}>
-          <Link className={styles.meLink} href="/me">
-            내 기록
-          </Link>
-          <span className={styles.liveBadge}>LIVE QUESTIONS</span>
-        </div>
-      </header>
-
-      <section className={styles.hero}>
-        <p className={styles.eyebrow}>TODAY&apos;S CHOICES</p>
-        <h1>오늘, 당신은 어느 쪽인가요?</h1>
-        <p>정답 대신 더 가까운 쪽을 고르고, 선택한 뒤에 결과를 확인하세요.</p>
-      </section>
-
+    <WhichShell active="home">
       <section className={styles.feed} aria-labelledby="feed-title">
-        <div className={styles.feedHeading}>
+        <header className={styles.feedHeader}>
           <div>
-            <h2 id="feed-title">참여 가능한 질문</h2>
-            {screen === "ready" && ranking?.mode === "PERSONALIZED" ? (
-              <p className={styles.personalizedBadge}>관심사 기반 추천</p>
-            ) : null}
+            <p className={styles.eyebrow}>TODAY&apos;S CHOICES</p>
+            <h1 id="feed-title">지금, 어느 쪽인가요?</h1>
           </div>
           {screen === "ready" ? <span>{items.length}개의 질문</span> : null}
+        </header>
+
+        <div className={styles.filters} aria-label="현재 피드 정렬">
+          <span className={styles.filterActive}>
+            {ranking?.mode === "PERSONALIZED" ? "추천" : "최신"}
+          </span>
+          {ranking?.mode === "PERSONALIZED" ? (
+            <span className={styles.personalizedBadge}>관심사 기반</span>
+          ) : null}
+          <Link href="/interests">관심사 조정</Link>
         </div>
 
         {screen === "loading" ? <FeedLoading /> : null}
@@ -148,18 +214,26 @@ export function FeedExperience() {
         {screen === "empty" ? (
           <FeedMessage
             eyebrow="YOU'RE ALL CAUGHT UP"
-            title="지금 참여할 질문을 모두 골랐어요."
-            description="새로운 질문이 준비되면 이곳에 이어서 표시됩니다."
+            title="지금 참여할 수 있는 질문을 모두 봤어요."
+            description="새로운 질문이 올라오면 다시 확인해 주세요."
           />
         ) : null}
         {screen === "ready" ? (
           <>
-            <div className={styles.grid}>
-              {items.map((item, index) => (
+            <div className={styles.list}>
+              {items.map((item) => (
                 <FeedCard
                   issue={item}
-                  personalized={ranking?.mode === "PERSONALIZED"}
-                  priority={index === 0}
+                  state={cardStates[item.id] ?? { status: "PRE_VOTE" }}
+                  onChoose={(choice) => choose(item, choice)}
+                  onRetry={(choice, key) => void submitCardVote(item, choice, key)}
+                  onReset={() =>
+                    setCardStates((current) => ({
+                      ...current,
+                      [item.id]: { status: "PRE_VOTE" },
+                    }))
+                  }
+                  onOpen={() => recordOpen(item)}
                   key={item.id}
                 />
               ))}
@@ -177,60 +251,119 @@ export function FeedExperience() {
           </>
         ) : null}
       </section>
-
-      <footer className={styles.footer}>
-        <span>YOUR CHOICE, CLEARLY.</span>
-        <span>CYAN × ORANGE</span>
-      </footer>
-    </main>
+    </WhichShell>
   );
 }
 
 function FeedCard({
   issue,
-  personalized,
-  priority,
+  state,
+  onChoose,
+  onRetry,
+  onReset,
+  onOpen,
 }: {
   issue: PublicFeedIssue;
-  personalized: boolean;
-  priority: boolean;
+  state: CardVoteState;
+  onChoose: (choice: IssueChoice) => void;
+  onRetry: (choice: IssueChoice, idempotencyKey: string) => void;
+  onReset: () => void;
+  onOpen: () => void;
 }) {
   const choiceA = issue.choices.find((choice) => choice.code === "A");
   const choiceB = issue.choices.find((choice) => choice.code === "B");
+  const pendingChoice =
+    state.status === "SUBMITTING" || state.status === "ERROR" ? state.choice : null;
 
   return (
-    <article className={`${styles.card} ${priority ? styles.featuredCard : ""}`}>
+    <article className={styles.card} aria-busy={state.status === "SUBMITTING"}>
       <div className={styles.cardMeta}>
         <span>{issue.categoryCode.replaceAll("_", " ")}</span>
-        <span>RESULTS AFTER VOTE</span>
+        <time dateTime={issue.publishedAt}>
+          {new Intl.DateTimeFormat("ko-KR", { month: "short", day: "numeric" }).format(
+            new Date(issue.publishedAt),
+          )}
+        </time>
       </div>
-      <h3>{issue.question}</h3>
-      <div className={styles.choicePreview} aria-label="선택지 미리보기">
-        <span className={styles.choiceA}>A · {choiceA?.label}</span>
-        <span className={styles.choiceB}>B · {choiceB?.label}</span>
-      </div>
-      <Link
-        className={styles.cardLink}
-        href={`/issues/${issue.id}`}
-        onClick={() => {
-          if (!personalized) return;
-          void recordAnalyticsEvent({
-            eventType: "PERSONALIZED_ISSUE_OPEN",
-            issueId: issue.id,
-            issueVersion: issue.version,
-            recommendationRequestId: issue.recommendation.requestId,
-          }).catch(() => undefined);
-        }}
-      >
-        이 질문에 참여하기 <span aria-hidden="true">↗</span>
+
+      <Link className={styles.questionLink} href={`/issues/${issue.id}`} onClick={onOpen}>
+        <h2>{issue.question}</h2>
       </Link>
+
+      {state.status !== "RESULT" ? (
+        <div className={styles.choiceList}>
+          {choiceA ? (
+            <VoteChoiceRow
+              choice={choiceA}
+              selected={pendingChoice?.id === choiceA.id}
+              pending={state.status === "SUBMITTING" && pendingChoice?.id === choiceA.id}
+              disabled={state.status === "SUBMITTING"}
+              onSelect={onChoose}
+            />
+          ) : null}
+          {choiceB ? (
+            <VoteChoiceRow
+              choice={choiceB}
+              selected={pendingChoice?.id === choiceB.id}
+              pending={state.status === "SUBMITTING" && pendingChoice?.id === choiceB.id}
+              disabled={state.status === "SUBMITTING"}
+              onSelect={onChoose}
+            />
+          ) : null}
+        </div>
+      ) : null}
+
+      {state.status === "SUBMITTING" ? (
+        <p className={styles.status} role="status">
+          선택을 안전하게 기록하고 있어요…
+        </p>
+      ) : null}
+
+      {state.status === "ERROR" ? (
+        <div className={styles.voteError} role="alert">
+          <p>{state.message} 같은 선택으로 다시 시도할 수 있어요.</p>
+          <div>
+            <button type="button" onClick={() => onRetry(state.choice, state.idempotencyKey)}>
+              같은 선택으로 재시도
+            </button>
+            <button type="button" onClick={onReset}>
+              선택 다시 하기
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {state.status === "RESULT" && choiceA && choiceB ? (
+        <div className={styles.cardResult}>
+          <p className={styles.voteNotice}>
+            {state.vote.outcome === "REJECTED_DUPLICATE"
+              ? `처음 선택한 ${state.vote.choice}가 유지되고 있어요.`
+              : `${state.vote.choice} 선택이 반영됐어요.`}
+          </p>
+          <BalanceResultBar
+            aLabel={choiceA.label}
+            bLabel={choiceB.label}
+            acceptedA={state.vote.result.acceptedA}
+            acceptedB={state.vote.result.acceptedB}
+            selectedChoice={state.vote.choice}
+            compact
+          />
+        </div>
+      ) : null}
+
+      <footer className={styles.cardFooter}>
+        <span>{state.status === "RESULT" ? "결과가 공개됐어요" : "결과는 선택 후 공개"}</span>
+        <Link href={`/issues/${issue.id}`} onClick={onOpen}>
+          상세·댓글 보기 <span aria-hidden="true">↗</span>
+        </Link>
+      </footer>
     </article>
   );
 }
 
 function FeedLoading() {
   return (
-    <div className={styles.loadingGrid} aria-busy="true" aria-live="polite">
+    <div className={styles.loadingList} aria-busy="true" aria-live="polite">
       <span className={styles.srOnly}>질문 목록을 불러오는 중입니다.</span>
       <div />
       <div />
@@ -254,7 +387,7 @@ function FeedMessage({
   return (
     <div className={styles.message} aria-live="polite">
       <p>{eyebrow}</p>
-      <h3>{title}</h3>
+      <h2>{title}</h2>
       <span>{description}</span>
       {action && onAction ? (
         <button type="button" onClick={onAction}>

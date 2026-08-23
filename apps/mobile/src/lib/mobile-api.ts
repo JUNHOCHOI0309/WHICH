@@ -126,6 +126,8 @@ export function createMobileApiClient(
       sessionId: string;
       eventId: string;
       eventType:
+        | "VOTE_SUBMIT"
+        | "RESULT_VIEW"
         | "INTEREST_PROMPT_VIEW"
         | "INTEREST_SELECTION_COMPLETE"
         | "INTEREST_PROMPT_SKIP"

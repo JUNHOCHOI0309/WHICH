@@ -1,5 +1,21 @@
 :root {
   color-scheme: light;
+  --which-bg: #f7f9fa;
+  --which-surface: #ffffff;
+  --which-surface-subtle: #f4f7f8;
+  --which-text: #11181c;
+  --which-text-secondary: #69757d;
+  --which-text-tertiary: #929ca2;
+  --which-border: #e4e9ec;
+  --which-border-strong: #d5dde1;
+  --which-cyan: #10b9ce;
+  --which-cyan-strong: #078ea4;
+  --which-cyan-soft: #eaf9fc;
+  --which-orange: #ff6b35;
+  --which-orange-strong: #d94d1c;
+  --which-orange-soft: #fff1eb;
+  --which-danger: #d9363e;
+  --which-success: #087a67;
   font-family:
     Inter,
     Pretendard,
@@ -9,8 +25,8 @@
     BlinkMacSystemFont,
     "Segoe UI",
     sans-serif;
-  background: #061923;
-  color: #f6f8f7;
+  background: var(--which-bg);
+  color: var(--which-text);
 }
 
 * {
@@ -20,10 +36,28 @@
 body {
   margin: 0;
   min-width: 320px;
-  background: #061923;
+  background: var(--which-bg);
+  color: var(--which-text);
 }
 
 button,
 a {
   -webkit-tap-highlight-color: transparent;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+::selection {
+  background: var(--which-cyan-soft);
+  color: var(--which-text);
+}
+
+:where(a, button, input, textarea, select):focus-visible {
+  outline: 3px solid var(--which-cyan-strong);
+  outline-offset: 2px;
 }
