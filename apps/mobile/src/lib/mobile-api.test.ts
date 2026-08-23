@@ -59,6 +59,22 @@ describe("mobile API client", () => {
     });
   });
 
+  it("loads both A/B comment highlights with the accepted Guest Subject", async () => {
+    const request = vi.fn(async () => jsonResponse({ A: [], B: [] }));
+    const api = createMobileApiClient({ baseUrl: "https://whichone.site", request });
+    const subjectId = "591f2e90-996a-50c5-af46-967dd0793000";
+    const issueId = "93831fba-b70f-598a-88f6-92eb4f70df9c";
+
+    await api.loadCommentHighlights(subjectId, issueId);
+
+    expect(request).toHaveBeenCalledWith(
+      `https://whichone.site/api/mobile/v1/issues/${issueId}/comment-highlights`,
+      expect.objectContaining({
+        headers: expect.objectContaining({ "x-anonymous-subject-id": subjectId }),
+      }),
+    );
+  });
+
   it("surfaces the server error code", async () => {
     const api = createMobileApiClient({
       request: async () =>

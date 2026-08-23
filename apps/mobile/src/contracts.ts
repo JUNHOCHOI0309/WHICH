@@ -63,6 +63,19 @@ export type VoteResponse = {
   result: IssueTally;
 };
 
+export type CommentHighlight = {
+  id: string;
+  choice: "A" | "B";
+  author: { displayName: string };
+  body: string;
+  reactions: { helpfulCount: number; viewerReacted: boolean };
+};
+
+export type CommentHighlights = {
+  A: CommentHighlight[];
+  B: CommentHighlight[];
+};
+
 export type ShareChannel = "COPY" | "SYSTEM" | "X";
 
 export type ShareCardResponse = {

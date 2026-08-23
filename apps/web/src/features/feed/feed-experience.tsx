@@ -4,15 +4,23 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { WhichShell } from "@/components/layout/which-shell";
+import { RotatingCommentHighlights } from "@/components/comments/rotating-comment-highlights";
 import { BalanceResultBar } from "@/components/vote/balance-result-bar";
 import { VoteChoiceRow } from "@/components/vote/vote-choice-row";
 import {
   ensureGuestSubject,
+  loadCommentHighlights,
   loadIssueFeed,
   recordAnalyticsEvent,
   submitGuestVote,
 } from "@/features/issues/client";
-import type { IssueChoice, PublicFeedIssue, PublicIssueFeed, VoteResponse } from "@/lib/contracts";
+import type {
+  CommentHighlights,
+  IssueChoice,
+  PublicFeedIssue,
+  PublicIssueFeed,
+  VoteResponse,
+} from "@/lib/contracts";
 
 import styles from "./feed-experience.module.css";
 
@@ -22,6 +30,8 @@ type CardVoteState =
   | { status: "SUBMITTING"; choice: IssueChoice; idempotencyKey: string }
   | { status: "ERROR"; choice: IssueChoice; idempotencyKey: string; message: string }
   | { status: "RESULT"; vote: VoteResponse };
+type HighlightState =
+  { status: "LOADING" } | { status: "READY"; highlights: CommentHighlights } | { status: "ERROR" };
 
 export function FeedExperience() {
   const [screen, setScreen] = useState<FeedScreen>("loading");
@@ -30,6 +40,7 @@ export function FeedExperience() {
   const [ranking, setRanking] = useState<PublicIssueFeed["ranking"] | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [cardStates, setCardStates] = useState<Record<string, CardVoteState>>({});
+  const [highlightStates, setHighlightStates] = useState<Record<string, HighlightState>>({});
   const viewedRecommendationRequests = useRef(new Set<string>());
 
   const applyFeed = useCallback((feed: PublicIssueFeed) => {
@@ -87,6 +98,19 @@ export function FeedExperience() {
     }).catch(() => undefined);
   }, [items, ranking]);
 
+  const loadHighlights = useCallback(async (issueId: string) => {
+    setHighlightStates((current) => ({ ...current, [issueId]: { status: "LOADING" } }));
+    try {
+      const highlights = await loadCommentHighlights({ issueId });
+      setHighlightStates((current) => ({
+        ...current,
+        [issueId]: { status: "READY", highlights },
+      }));
+    } catch {
+      setHighlightStates((current) => ({ ...current, [issueId]: { status: "ERROR" } }));
+    }
+  }, []);
+
   const loadMore = useCallback(async () => {
     if (!nextCursor || loadingMore) return;
     setLoadingMore(true);
@@ -138,6 +162,7 @@ export function FeedExperience() {
         });
         sessionStorage.setItem(`which:vote-result:${issue.id}`, JSON.stringify(vote));
         setCardStates((current) => ({ ...current, [issue.id]: { status: "RESULT", vote } }));
+        void loadHighlights(issue.id);
         void recordAnalyticsEvent({
           eventType: "RESULT_VIEW",
           issueId: issue.id,
@@ -155,7 +180,7 @@ export function FeedExperience() {
         }));
       }
     },
-    [],
+    [loadHighlights],
   );
 
   const choose = useCallback(
@@ -225,6 +250,7 @@ export function FeedExperience() {
                 <FeedCard
                   issue={item}
                   state={cardStates[item.id] ?? { status: "PRE_VOTE" }}
+                  highlightState={highlightStates[item.id]}
                   onChoose={(choice) => choose(item, choice)}
                   onRetry={(choice, key) => void submitCardVote(item, choice, key)}
                   onReset={() =>
@@ -234,6 +260,7 @@ export function FeedExperience() {
                     }))
                   }
                   onOpen={() => recordOpen(item)}
+                  onRetryHighlights={() => void loadHighlights(item.id)}
                   key={item.id}
                 />
               ))}
@@ -258,17 +285,21 @@ export function FeedExperience() {
 function FeedCard({
   issue,
   state,
+  highlightState,
   onChoose,
   onRetry,
   onReset,
   onOpen,
+  onRetryHighlights,
 }: {
   issue: PublicFeedIssue;
   state: CardVoteState;
+  highlightState?: HighlightState;
   onChoose: (choice: IssueChoice) => void;
   onRetry: (choice: IssueChoice, idempotencyKey: string) => void;
   onReset: () => void;
   onOpen: () => void;
+  onRetryHighlights: () => void;
 }) {
   const choiceA = issue.choices.find((choice) => choice.code === "A");
   const choiceB = issue.choices.find((choice) => choice.code === "B");
@@ -347,6 +378,13 @@ function FeedCard({
             acceptedB={state.vote.result.acceptedB}
             selectedChoice={state.vote.choice}
             compact
+          />
+          <RotatingCommentHighlights
+            highlights={highlightState?.status === "READY" ? highlightState.highlights : null}
+            loading={highlightState?.status === "LOADING"}
+            error={highlightState?.status === "ERROR"}
+            detailsHref={`/issues/${issue.id}#comment-title`}
+            onRetry={onRetryHighlights}
           />
         </div>
       ) : null}

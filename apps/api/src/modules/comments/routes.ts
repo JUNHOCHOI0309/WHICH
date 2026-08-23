@@ -35,6 +35,11 @@ const commentPageSchema = Type.Object({
   nextCursor: Type.Union([Type.String(), Type.Null()]),
 });
 
+const commentHighlightsSchema = Type.Object({
+  A: Type.Array(publicCommentSchema),
+  B: Type.Array(publicCommentSchema),
+});
+
 type CommentRoute = {
   Params: { issueId: string };
   Querystring: { side?: "ALL" | "A" | "B"; cursor?: string; limit?: number };
@@ -45,6 +50,12 @@ type CommentWriteRoute = {
   Params: { issueId: string };
   Headers: { authorization?: string; "idempotency-key": string };
   Body: { body: string };
+};
+
+type CommentHighlightsRoute = {
+  Params: { issueId: string };
+  Querystring: { limitPerSide?: number };
+  Headers: { authorization?: string; "x-anonymous-subject-id"?: string };
 };
 
 type HelpfulReactionRoute = {
@@ -165,6 +176,54 @@ export async function registerCommentRoutes(
           cursor: request.query.cursor,
           limit: request.query.limit ?? 10,
         });
+      },
+    );
+
+    commentApp.get<CommentHighlightsRoute>(
+      "/v1/issues/:issueId/comment-highlights",
+      {
+        schema: {
+          tags: ["comments"],
+          summary: "List representative A/B Comments after an accepted Vote",
+          params: Type.Object({ issueId: uuidSchema }),
+          querystring: Type.Object({
+            limitPerSide: Type.Optional(Type.Integer({ minimum: 1, maximum: 5, default: 5 })),
+          }),
+          headers: Type.Object(
+            {
+              authorization: Type.Optional(Type.String()),
+              "x-anonymous-subject-id": Type.Optional(uuidSchema),
+            },
+            { additionalProperties: true },
+          ),
+          response: {
+            200: commentHighlightsSchema,
+            400: errorResponseSchema,
+            401: errorResponseSchema,
+            403: errorResponseSchema,
+            409: errorResponseSchema,
+            500: errorResponseSchema,
+          },
+        },
+      },
+      async (request) => {
+        const sessionToken = bearerToken(request.headers.authorization);
+        if (request.headers.authorization && !sessionToken) {
+          throw new CommentError("SESSION_REQUIRED", 401, "The Member session is invalid.");
+        }
+        const limit = request.query.limitPerSide ?? 5;
+        const query = {
+          issueId: request.params.issueId,
+          sessionToken: sessionToken ?? undefined,
+          anonymousSubjectId: request.headers["x-anonymous-subject-id"],
+          view: "HIGHLIGHT" as const,
+          limit,
+        };
+        const [commentsA, commentsB] = await Promise.all([
+          service.listGuestComments({ ...query, side: "A" }),
+          service.listGuestComments({ ...query, side: "B" }),
+        ]);
+        return { A: commentsA.items, B: commentsB.items };
       },
     );
 

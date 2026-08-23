@@ -8,6 +8,7 @@ import {
   PUT as saveInterestProfile,
 } from "@/app/api/mobile/v1/interest-profile/route";
 import { GET as loadFeed } from "@/app/api/mobile/v1/issues/feed/route";
+import { GET as loadCommentHighlights } from "@/app/api/mobile/v1/issues/[issueId]/comment-highlights/route";
 import { POST as submitVote } from "@/app/api/mobile/v1/issues/[issueId]/votes/route";
 
 function jsonResponse(body: unknown, status = 200) {
@@ -74,6 +75,28 @@ describe("mobile BFF routes", () => {
 
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toMatchObject({ code: "INVALID_GUEST_SUBJECT" });
+  });
+
+  it("forwards one native highlight request after Vote completion", async () => {
+    const request = vi.fn(async () => jsonResponse({ A: [], B: [] }));
+    vi.stubGlobal("fetch", request);
+    const subjectId = "8c092a45-c446-50f3-b1ac-ac9a018b9105";
+    const issueId = "591f2e90-996a-50c5-af46-967dd0793000";
+
+    const response = await loadCommentHighlights(
+      new NextRequest(`https://whichone.site/api/mobile/v1/issues/${issueId}/comment-highlights`, {
+        headers: { "x-anonymous-subject-id": subjectId },
+      }),
+      { params: Promise.resolve({ issueId }) },
+    );
+
+    expect(response.status).toBe(200);
+    expect(request).toHaveBeenCalledWith(
+      new URL(`http://localhost:4000/v1/issues/${issueId}/comment-highlights?limitPerSide=5`),
+      expect.objectContaining({
+        headers: expect.objectContaining({ "x-anonymous-subject-id": subjectId }),
+      }),
+    );
   });
 
   it("preserves native Vote idempotency at the server boundary", async () => {

@@ -6,6 +6,7 @@ import type {
   CommentWriteResponse,
   HelpfulReactionResponse,
   PublicCommentPage,
+  CommentHighlights,
   PublicIssue,
   PublicIssueFeed,
   ShareCardResponse,
@@ -213,6 +214,20 @@ export async function loadIssueComments(options: {
 
   if (!response.ok) throwApiError(response, body as ApiErrorBody);
   return body as PublicCommentPage;
+}
+
+export async function loadCommentHighlights(options: { issueId: string; signal?: AbortSignal }) {
+  const response = await fetch(
+    `/api/issues/${encodeURIComponent(options.issueId)}/comment-highlights`,
+    {
+      headers: { accept: "application/json" },
+      cache: "no-store",
+      signal: options.signal,
+    },
+  );
+  const body = await responseBody<CommentHighlights>(response);
+  if (!response.ok) throwApiError(response, body as ApiErrorBody);
+  return body as CommentHighlights;
 }
 
 export async function submitMemberComment(command: {
