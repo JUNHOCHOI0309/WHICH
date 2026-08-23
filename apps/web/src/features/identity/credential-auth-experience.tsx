@@ -119,7 +119,16 @@ export function CredentialAuthExperience({
                   onChange={(event) => setTermsAccepted(event.target.checked)}
                   required
                 />
-                계정 생성을 위해 이메일과 비밀번호 해시를 저장하는 데 동의합니다.
+                <span>
+                  <Link href="/legal/terms" target="_blank">
+                    서비스 이용약관
+                  </Link>
+                  과{" "}
+                  <Link href="/legal/privacy" target="_blank">
+                    개인정보 처리방침
+                  </Link>
+                  에 동의하고 계정을 만듭니다.
+                </span>
               </label>
             ) : null}
             <button type="submit" disabled={pending}>
@@ -130,6 +139,12 @@ export function CredentialAuthExperience({
           {error ? (
             <p className={styles.error} role="alert">
               {error}
+            </p>
+          ) : null}
+
+          {!isSignup ? (
+            <p className={styles.recoveryLink}>
+              <Link href="/forgot-password">비밀번호를 잊었거나 이메일 확인이 필요한가요?</Link>
             </p>
           ) : null}
 

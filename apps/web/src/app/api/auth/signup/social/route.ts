@@ -1,7 +1,12 @@
 import { cookies } from "next/headers";
 import { type NextRequest, NextResponse } from "next/server";
 
-import { SOCIAL_SIGNUP_COOKIE, decodeSocialSignupTicket } from "@/lib/server/member-auth";
+import { requestEmailVerification, sendAuthEmail } from "@/lib/server/auth-email";
+import {
+  SOCIAL_SIGNUP_COOKIE,
+  authRequestKey,
+  decodeSocialSignupTicket,
+} from "@/lib/server/member-auth";
 import { completeSocialSignup, MemberIdentityLinkError } from "@/lib/server/member-session-bridge";
 import {
   clearGuestSubjectCookie,
@@ -48,6 +53,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    const requestKey = authRequestKey(request.headers, body.email);
     const session = await completeSocialSignup({
       mode: body.mode,
       social: {
@@ -59,8 +65,26 @@ export async function POST(request: NextRequest) {
       },
       email: body.email,
       password: body.password,
+      authRequestKey: requestKey,
     });
-    const response = NextResponse.json({ ok: true, returnTo: ticket.returnTo });
+    let returnTo = ticket.returnTo;
+    if (body.mode === "new") {
+      let emailSent = false;
+      try {
+        const delivery = await requestEmailVerification(body.email, requestKey);
+        emailSent = delivery ? await sendAuthEmail(delivery, "verification", request.url) : false;
+      } catch (error) {
+        console.error("[auth-email] social signup verification delivery failed", {
+          message: error instanceof Error ? error.message : "unknown",
+        });
+      }
+      const target = new URL("/verify-email", request.nextUrl.origin);
+      target.searchParams.set("email", body.email.trim());
+      target.searchParams.set("sent", emailSent ? "1" : "0");
+      target.searchParams.set("returnTo", ticket.returnTo);
+      returnTo = `${target.pathname}${target.search}`;
+    }
+    const response = NextResponse.json({ ok: true, returnTo });
     setMemberSessionCookie(response, session.token, session.expiresAt);
     clearSocialSignupCookie(response);
     if (ticket.anonymousSubjectId) clearGuestSubjectCookie(response);

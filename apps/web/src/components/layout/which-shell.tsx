@@ -54,6 +54,12 @@ export function WhichShell({
         </aside>
       </div>
 
+      <footer className={styles.footer}>
+        <span>WHICH · 2026</span>
+        <Link href="/legal/terms">서비스 이용약관</Link>
+        <Link href="/legal/privacy">개인정보 처리방침</Link>
+      </footer>
+
       <nav className={styles.bottomNav} aria-label="모바일 주요 메뉴">
         <ShellLink href="/" active={active === "home"} icon="⌂">
           홈

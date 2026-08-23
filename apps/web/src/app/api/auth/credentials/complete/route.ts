@@ -1,7 +1,8 @@
 import { cookies } from "next/headers";
 import { type NextRequest, NextResponse } from "next/server";
 
-import { internalAuthSecret } from "@/lib/server/member-auth";
+import { requestEmailVerification, sendAuthEmail } from "@/lib/server/auth-email";
+import { authRequestKey, internalAuthSecret } from "@/lib/server/member-auth";
 import { fetchWhichApi, MEMBER_SESSION_COOKIE } from "@/lib/server/which-api";
 
 export const runtime = "nodejs";
@@ -73,5 +74,24 @@ export async function POST(request: NextRequest) {
       { status: upstream.status },
     );
   }
-  return NextResponse.json({ ok: true });
+  const requestKey = authRequestKey(request.headers, body.email);
+  let emailSent = false;
+  try {
+    const delivery = await requestEmailVerification(body.email, requestKey);
+    emailSent = delivery ? await sendAuthEmail(delivery, "verification", request.url) : false;
+  } catch (error) {
+    console.error("[auth-email] credential completion verification delivery failed", {
+      message: error instanceof Error ? error.message : "unknown",
+    });
+  }
+  const target = new URL("/verify-email", request.nextUrl.origin);
+  target.searchParams.set("email", body.email.trim());
+  target.searchParams.set("sent", emailSent ? "1" : "0");
+  target.searchParams.set("returnTo", "/me");
+  return NextResponse.json({
+    ok: true,
+    verificationRequired: true,
+    emailSent,
+    returnTo: `${target.pathname}${target.search}`,
+  });
 }

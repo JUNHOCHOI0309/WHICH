@@ -180,6 +180,21 @@
   backdrop-filter: blur(12px);
 }
 
+.footer {
+  width: min(100%, 1540px);
+  margin: 0 auto;
+  border-top: 1px solid var(--which-border);
+  color: var(--which-text-tertiary);
+  display: flex;
+  gap: 18px;
+  padding: 22px clamp(16px, 3vw, 40px) 32px;
+  font-size: 0.72rem;
+}
+
+.footer a {
+  color: inherit;
+}
+
 .bottomNav .navLink {
   min-height: 64px;
   border-radius: 0;
@@ -198,6 +213,10 @@
 
   .rightRail {
     display: none;
+  }
+
+  .footer {
+    padding-bottom: 24px;
   }
 }
 

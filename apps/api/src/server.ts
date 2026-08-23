@@ -30,6 +30,8 @@ const app = await buildApp(config, {
   memberIdentity: createMemberIdentityService(database.db, {
     sessionTtlSeconds: config.auth.memberSessionTtlSeconds,
     allowDevelopmentProvider: config.auth.allowDevelopmentProvider,
+    requireVerifiedEmail: config.auth.requireVerifiedEmail,
+    authSecurity: config.auth.security,
   }),
   interestProfiles: createInterestProfileService(database.db),
   analytics: createAnalyticsService(database.db),

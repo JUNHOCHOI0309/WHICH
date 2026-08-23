@@ -22,6 +22,19 @@ const environmentSchema = z.object({
   INTERNAL_AUTH_SECRET: z.string().min(16).default(LOCAL_INTERNAL_AUTH_SECRET),
   MODERATION_INTERNAL_SECRET: z.string().min(16).default(LOCAL_MODERATION_INTERNAL_SECRET),
   MEMBER_SESSION_TTL_SECONDS: z.coerce.number().int().min(300).max(2_592_000).default(604_800),
+  AUTH_EMAIL_VERIFICATION_TTL_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(900)
+    .max(604_800)
+    .default(86_400),
+  AUTH_PASSWORD_RESET_TTL_SECONDS: z.coerce.number().int().min(300).max(86_400).default(1_800),
+  AUTH_RATE_LIMIT_WINDOW_SECONDS: z.coerce.number().int().min(60).max(86_400).default(900),
+  AUTH_SIGNUP_RATE_LIMIT: z.coerce.number().int().min(1).max(100).default(5),
+  AUTH_LOGIN_RATE_LIMIT: z.coerce.number().int().min(1).max(100).default(10),
+  AUTH_EMAIL_DELIVERY_RATE_LIMIT: z.coerce.number().int().min(1).max(100).default(3),
+  AUTH_TOKEN_CONSUME_RATE_LIMIT: z.coerce.number().int().min(1).max(100).default(10),
+  AUTH_EMAIL_VERIFICATION_REQUIRED: booleanString,
   FEATURE_COMMENTS_ENABLED: booleanString,
   FEATURE_CREATOR_SUBMISSIONS_ENABLED: booleanString,
   FEATURE_ML_RANKER_ENABLED: booleanString,
@@ -67,6 +80,16 @@ export function getConfig(environment: NodeJS.ProcessEnv = process.env) {
       moderationInternalSecret: parsed.MODERATION_INTERNAL_SECRET,
       memberSessionTtlSeconds: parsed.MEMBER_SESSION_TTL_SECONDS,
       allowDevelopmentProvider: parsed.NODE_ENV !== "production",
+      requireVerifiedEmail: parsed.AUTH_EMAIL_VERIFICATION_REQUIRED,
+      security: {
+        verificationTtlSeconds: parsed.AUTH_EMAIL_VERIFICATION_TTL_SECONDS,
+        passwordResetTtlSeconds: parsed.AUTH_PASSWORD_RESET_TTL_SECONDS,
+        rateLimitWindowSeconds: parsed.AUTH_RATE_LIMIT_WINDOW_SECONDS,
+        signupLimit: parsed.AUTH_SIGNUP_RATE_LIMIT,
+        loginLimit: parsed.AUTH_LOGIN_RATE_LIMIT,
+        emailDeliveryLimit: parsed.AUTH_EMAIL_DELIVERY_RATE_LIMIT,
+        tokenConsumeLimit: parsed.AUTH_TOKEN_CONSUME_RATE_LIMIT,
+      },
     },
     featureFlags: Object.freeze({
       comments: parsed.FEATURE_COMMENTS_ENABLED,

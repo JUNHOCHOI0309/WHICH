@@ -166,6 +166,7 @@ export async function registerMemberIdentityRoutes(
         anonymousSubjectId?: string;
         createIfMissing?: boolean;
         credential?: { email: string; password: string };
+        authRequestKey?: string;
       };
     }>(
       "/v1/internal/member-sessions",
@@ -195,6 +196,7 @@ export async function registerMemberIdentityRoutes(
                 password: Type.String({ minLength: 1, maxLength: 128 }),
               }),
             ),
+            authRequestKey: Type.Optional(Type.String({ minLength: 16, maxLength: 128 })),
           }),
           response: {
             201: Type.Object({
@@ -213,6 +215,7 @@ export async function registerMemberIdentityRoutes(
             403: errorSchema,
             404: errorSchema,
             409: errorSchema,
+            429: errorSchema,
             500: errorSchema,
           },
         },
@@ -230,7 +233,12 @@ export async function registerMemberIdentityRoutes(
 
     identityApp.post<{
       Headers: { "x-internal-auth-secret"?: string };
-      Body: { email: string; password: string; anonymousSubjectId?: string };
+      Body: {
+        email: string;
+        password: string;
+        anonymousSubjectId?: string;
+        authRequestKey?: string;
+      };
     }>(
       "/v1/internal/member-credential-sessions",
       {
@@ -244,6 +252,7 @@ export async function registerMemberIdentityRoutes(
             email: Type.String({ minLength: 3, maxLength: 320 }),
             password: Type.String({ minLength: 1, maxLength: 128 }),
             anonymousSubjectId: Type.Optional(Type.String({ format: "uuid" })),
+            authRequestKey: Type.Optional(Type.String({ minLength: 16, maxLength: 128 })),
           }),
           response: {
             201: Type.Object({
@@ -262,6 +271,7 @@ export async function registerMemberIdentityRoutes(
             403: errorSchema,
             404: errorSchema,
             409: errorSchema,
+            429: errorSchema,
             500: errorSchema,
           },
         },
@@ -274,6 +284,161 @@ export async function registerMemberIdentityRoutes(
         }
         const session = await service.createCredentialSession(request.body);
         return reply.code(201).send(session);
+      },
+    );
+
+    identityApp.post<{
+      Headers: { "x-internal-auth-secret"?: string };
+      Body: { email: string; authRequestKey?: string };
+    }>(
+      "/v1/internal/member-email-verification-requests",
+      {
+        schema: {
+          hide: true,
+          headers: Type.Object(
+            { "x-internal-auth-secret": Type.Optional(Type.String()) },
+            { additionalProperties: true },
+          ),
+          body: Type.Object({
+            email: Type.String({ minLength: 3, maxLength: 320 }),
+            authRequestKey: Type.Optional(Type.String({ minLength: 16, maxLength: 128 })),
+          }),
+          response: {
+            200: Type.Union([
+              Type.Object({
+                email: Type.String(),
+                token: Type.String(),
+                expiresAt: Type.String({ format: "date-time" }),
+              }),
+              Type.Null(),
+            ]),
+            400: errorSchema,
+            401: errorSchema,
+            429: errorSchema,
+            500: errorSchema,
+          },
+        },
+      },
+      async (request, reply) => {
+        if (!secretMatches(request.headers["x-internal-auth-secret"], internalSecret)) {
+          return reply
+            .code(401)
+            .send({ code: "UNAUTHORIZED", message: "Internal authentication failed." });
+        }
+        return service.requestEmailVerification(request.body);
+      },
+    );
+
+    identityApp.post<{
+      Headers: { "x-internal-auth-secret"?: string };
+      Body: { token: string; authRequestKey?: string };
+    }>(
+      "/v1/internal/member-email-verifications",
+      {
+        schema: {
+          hide: true,
+          headers: Type.Object(
+            { "x-internal-auth-secret": Type.Optional(Type.String()) },
+            { additionalProperties: true },
+          ),
+          body: Type.Object({
+            token: Type.String({ minLength: 32, maxLength: 256 }),
+            authRequestKey: Type.Optional(Type.String({ minLength: 16, maxLength: 128 })),
+          }),
+          response: {
+            200: Type.Object({ verified: Type.Literal(true) }),
+            400: errorSchema,
+            401: errorSchema,
+            429: errorSchema,
+            500: errorSchema,
+          },
+        },
+      },
+      async (request, reply) => {
+        if (!secretMatches(request.headers["x-internal-auth-secret"], internalSecret)) {
+          return reply
+            .code(401)
+            .send({ code: "UNAUTHORIZED", message: "Internal authentication failed." });
+        }
+        return service.verifyEmail(request.body);
+      },
+    );
+
+    identityApp.post<{
+      Headers: { "x-internal-auth-secret"?: string };
+      Body: { email: string; authRequestKey?: string };
+    }>(
+      "/v1/internal/member-password-reset-requests",
+      {
+        schema: {
+          hide: true,
+          headers: Type.Object(
+            { "x-internal-auth-secret": Type.Optional(Type.String()) },
+            { additionalProperties: true },
+          ),
+          body: Type.Object({
+            email: Type.String({ minLength: 3, maxLength: 320 }),
+            authRequestKey: Type.Optional(Type.String({ minLength: 16, maxLength: 128 })),
+          }),
+          response: {
+            200: Type.Union([
+              Type.Object({
+                email: Type.String(),
+                token: Type.String(),
+                expiresAt: Type.String({ format: "date-time" }),
+              }),
+              Type.Null(),
+            ]),
+            400: errorSchema,
+            401: errorSchema,
+            429: errorSchema,
+            500: errorSchema,
+          },
+        },
+      },
+      async (request, reply) => {
+        if (!secretMatches(request.headers["x-internal-auth-secret"], internalSecret)) {
+          return reply
+            .code(401)
+            .send({ code: "UNAUTHORIZED", message: "Internal authentication failed." });
+        }
+        return service.requestPasswordReset(request.body);
+      },
+    );
+
+    identityApp.post<{
+      Headers: { "x-internal-auth-secret"?: string };
+      Body: { token: string; password: string; authRequestKey?: string };
+    }>(
+      "/v1/internal/member-password-resets",
+      {
+        schema: {
+          hide: true,
+          headers: Type.Object(
+            { "x-internal-auth-secret": Type.Optional(Type.String()) },
+            { additionalProperties: true },
+          ),
+          body: Type.Object({
+            token: Type.String({ minLength: 32, maxLength: 256 }),
+            password: Type.String({ minLength: 1, maxLength: 128 }),
+            authRequestKey: Type.Optional(Type.String({ minLength: 16, maxLength: 128 })),
+          }),
+          response: {
+            200: Type.Object({ reset: Type.Literal(true) }),
+            400: errorSchema,
+            401: errorSchema,
+            429: errorSchema,
+            500: errorSchema,
+          },
+        },
+      },
+      async (request, reply) => {
+        if (!secretMatches(request.headers["x-internal-auth-secret"], internalSecret)) {
+          return reply
+            .code(401)
+            .send({ code: "UNAUTHORIZED", message: "Internal authentication failed." });
+        }
+        return service.resetPassword(request.body);
       },
     );
 

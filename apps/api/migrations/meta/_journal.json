@@ -134,6 +134,13 @@
       "when": 1787404488828,
       "tag": "0018_abnormal_johnny_storm",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1787502615399,
+      "tag": "0019_lucky_smasher",
+      "breakpoints": true
     }
   ]
 }

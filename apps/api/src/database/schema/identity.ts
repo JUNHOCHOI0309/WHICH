@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   check,
   index,
+  integer,
   pgTable,
   timestamp,
   unique,
@@ -64,6 +65,64 @@ export const memberCredentials = pgTable(
   (table) => [
     unique("member_credentials_member_unique").on(table.memberId),
     unique("member_credentials_email_unique").on(table.emailNormalized),
+  ],
+);
+
+export const memberAuthTokens = pgTable(
+  "member_auth_tokens",
+  {
+    id: uuid("member_auth_token_id").defaultRandom().primaryKey(),
+    credentialId: uuid("member_credential_id")
+      .notNull()
+      .references(() => memberCredentials.id, { onDelete: "cascade" }),
+    purpose: varchar("purpose", { length: 32 }).notNull(),
+    tokenHash: varchar("token_hash", { length: 64 }).notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    consumedAt: timestamp("consumed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    unique("member_auth_tokens_token_hash_unique").on(table.tokenHash),
+    index("member_auth_tokens_credential_purpose_idx").on(
+      table.credentialId,
+      table.purpose,
+      table.createdAt,
+    ),
+    index("member_auth_tokens_active_expiry_idx")
+      .on(table.expiresAt)
+      .where(sql`${table.consumedAt} is null`),
+    check(
+      "member_auth_tokens_purpose_check",
+      sql`${table.purpose} in ('EMAIL_VERIFICATION', 'PASSWORD_RESET')`,
+    ),
+    check("member_auth_tokens_expiry_check", sql`${table.expiresAt} > ${table.createdAt}`),
+  ],
+);
+
+export const authRateLimitWindows = pgTable(
+  "auth_rate_limit_windows",
+  {
+    id: uuid("auth_rate_limit_window_id").defaultRandom().primaryKey(),
+    action: varchar("action", { length: 32 }).notNull(),
+    bucketKeyHash: varchar("bucket_key_hash", { length: 64 }).notNull(),
+    windowStartedAt: timestamp("window_started_at", { withTimezone: true }).notNull(),
+    attemptCount: integer("attempt_count").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    unique("auth_rate_limit_windows_bucket_unique").on(
+      table.action,
+      table.bucketKeyHash,
+      table.windowStartedAt,
+    ),
+    index("auth_rate_limit_windows_expiry_idx").on(table.expiresAt),
+    check("auth_rate_limit_windows_attempt_count_check", sql`${table.attemptCount} > 0`),
+    check(
+      "auth_rate_limit_windows_expiry_check",
+      sql`${table.expiresAt} > ${table.windowStartedAt}`,
+    ),
   ],
 );
 
