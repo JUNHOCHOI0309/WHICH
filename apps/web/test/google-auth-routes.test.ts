@@ -220,12 +220,17 @@ describe("Google OIDC routes", () => {
       name === AUTH_FLOW_COOKIE ? { value: flow } : undefined,
     );
     oidcMocks.authorizationCodeGrant.mockResolvedValue({
-      claims: () => ({ sub: "google-subject-1", name: "테스트 회원" }),
+      claims: () => ({
+        sub: "google-subject-1",
+        name: "테스트 회원",
+        picture: "https://lh3.googleusercontent.com/google-avatar",
+      }),
     });
     const request = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
       expect(JSON.parse(String(init?.body))).toMatchObject({
         provider: "GOOGLE",
         providerSubject: "google-subject-1",
+        avatarUrl: "https://lh3.googleusercontent.com/google-avatar",
         anonymousSubjectId: guestSubjectId,
       });
       return Response.json(

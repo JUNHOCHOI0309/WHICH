@@ -7,6 +7,10 @@ import type { MemberIdentityService } from "./contracts.js";
 import { decodeMemberVoteHistoryCursor } from "./cursor.js";
 import { MemberIdentityError } from "./errors.js";
 
+const avatarSchema = Type.Union([
+  Type.Object({ kind: Type.Literal("INITIALS"), initials: Type.String() }),
+  Type.Object({ kind: Type.Literal("IMAGE"), url: Type.String({ format: "uri" }) }),
+]);
 const memberSchema = Type.Object({
   id: Type.String({ format: "uuid" }),
   displayName: Type.String(),
@@ -16,6 +20,7 @@ const memberSchema = Type.Object({
     Type.Literal("SUSPENDED"),
     Type.Literal("DELETED"),
   ]),
+  avatar: avatarSchema,
 });
 
 const errorSchema = Type.Object({ code: Type.String(), message: Type.String() });
@@ -89,7 +94,7 @@ const publicCreatorProfileSchema = Type.Object({
     handle: Type.String(),
     bio: Type.Union([Type.String(), Type.Null()]),
     joinedMonth: Type.String({ pattern: "^[0-9]{4}-[0-9]{2}$" }),
-    avatar: Type.Object({ kind: Type.Literal("INITIALS"), initials: Type.String() }),
+    avatar: avatarSchema,
   }),
   stats: Type.Object({
     publishedIssueCount: Type.Integer({ minimum: 0 }),
@@ -163,6 +168,7 @@ export async function registerMemberIdentityRoutes(
         provider: "EMAIL" | "GOOGLE" | "X" | "NAVER" | "KAKAO" | "DEVELOPMENT";
         providerSubject: string;
         displayName: string;
+        avatarUrl?: string;
         anonymousSubjectId?: string;
         createIfMissing?: boolean;
         credential?: { email: string; password: string };
@@ -188,6 +194,7 @@ export async function registerMemberIdentityRoutes(
             ]),
             providerSubject: Type.String({ minLength: 1, maxLength: 255 }),
             displayName: Type.String({ minLength: 1, maxLength: 160 }),
+            avatarUrl: Type.Optional(Type.String({ format: "uri", maxLength: 2048 })),
             anonymousSubjectId: Type.Optional(Type.String({ format: "uuid" })),
             createIfMissing: Type.Optional(Type.Boolean()),
             credential: Type.Optional(
@@ -487,6 +494,7 @@ export async function registerMemberIdentityRoutes(
         provider: "GOOGLE" | "X" | "NAVER" | "KAKAO" | "DEVELOPMENT";
         providerSubject: string;
         displayName: string;
+        avatarUrl?: string;
       };
     }>(
       "/v1/internal/member-identity-links",
@@ -502,6 +510,7 @@ export async function registerMemberIdentityRoutes(
             provider: identityProviderSchema,
             providerSubject: Type.String({ minLength: 1, maxLength: 255 }),
             displayName: Type.String({ minLength: 1, maxLength: 160 }),
+            avatarUrl: Type.Optional(Type.String({ format: "uri", maxLength: 2048 })),
           }),
           response: {
             201: Type.Object({

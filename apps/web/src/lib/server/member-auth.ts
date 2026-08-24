@@ -43,6 +43,7 @@ export type SocialSignupTicket = {
   provider: AuthProvider;
   providerSubject: string;
   displayName: string;
+  avatarUrl?: string;
   suggestedEmail?: string;
   anonymousSubjectId?: string;
   returnTo: string;
@@ -134,6 +135,8 @@ export function decodeSocialSignupTicket(
       typeof ticket.displayName !== "string" ||
       ticket.displayName.length < 1 ||
       ticket.displayName.length > 160 ||
+      (ticket.avatarUrl !== undefined &&
+        (typeof ticket.avatarUrl !== "string" || ticket.avatarUrl.length > 2048)) ||
       (ticket.suggestedEmail !== undefined &&
         (typeof ticket.suggestedEmail !== "string" || ticket.suggestedEmail.length > 320)) ||
       (ticket.anonymousSubjectId !== undefined && !uuidPattern.test(ticket.anonymousSubjectId)) ||

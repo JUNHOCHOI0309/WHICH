@@ -7,6 +7,7 @@ type XProfile = {
   id: string;
   name: string | null;
   username: string | null;
+  profileImageUrl: string | null;
 };
 
 export function buildXAuthorizationUrl(input: {
@@ -62,12 +63,14 @@ export async function exchangeXAuthorizationCode(
 }
 
 export async function fetchXProfile(accessToken: string, request: typeof fetch = fetch) {
-  const response = await request("https://api.x.com/2/users/me", {
+  const url = new URL("https://api.x.com/2/users/me");
+  url.searchParams.set("user.fields", "profile_image_url");
+  const response = await request(url, {
     headers: { accept: "application/json", authorization: `Bearer ${accessToken}` },
     cache: "no-store",
   });
   const payload = (await response.json()) as {
-    data?: { id?: unknown; name?: unknown; username?: unknown };
+    data?: { id?: unknown; name?: unknown; username?: unknown; profile_image_url?: unknown };
   };
   if (!response.ok || typeof payload.data?.id !== "string" || !payload.data.id) {
     throw new Error("X authenticated user lookup failed.");
@@ -76,6 +79,8 @@ export async function fetchXProfile(accessToken: string, request: typeof fetch =
     id: payload.data.id,
     name: typeof payload.data.name === "string" ? payload.data.name : null,
     username: typeof payload.data.username === "string" ? payload.data.username : null,
+    profileImageUrl:
+      typeof payload.data.profile_image_url === "string" ? payload.data.profile_image_url : null,
   } satisfies XProfile;
 }
 

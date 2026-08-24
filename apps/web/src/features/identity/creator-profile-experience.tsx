@@ -123,7 +123,11 @@ export function CreatorProfileExperience({ handle }: { handle: string }) {
           <>
             <section className={styles.hero} aria-labelledby="creator-name">
               <div className={styles.avatar} aria-hidden="true">
-                {profile.creator.avatar.initials}
+                {profile.creator.avatar.kind === "IMAGE" ? (
+                  <img src={profile.creator.avatar.url} alt="" referrerPolicy="no-referrer" />
+                ) : (
+                  profile.creator.avatar.initials
+                )}
               </div>
               <div className={styles.identity}>
                 <p>QUESTION CREATOR</p>

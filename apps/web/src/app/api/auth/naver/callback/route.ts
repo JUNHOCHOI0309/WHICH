@@ -150,6 +150,7 @@ export async function GET(request: Request) {
           : typeof claims.name === "string"
             ? claims.name
             : "네이버 회원",
+      avatarUrl: typeof claims.picture === "string" ? claims.picture : undefined,
       anonymousSubjectId,
       suggestedEmail: typeof claims.email === "string" ? claims.email : undefined,
     });
@@ -162,6 +163,7 @@ export async function GET(request: Request) {
           provider: session.input.provider,
           providerSubject: session.input.providerSubject,
           displayName: session.input.displayName,
+          avatarUrl: session.input.avatarUrl,
           suggestedEmail: session.input.suggestedEmail,
           anonymousSubjectId: session.input.anonymousSubjectId ?? undefined,
           returnTo: flow.returnTo,

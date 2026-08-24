@@ -130,6 +130,7 @@ export function createIssueReadService(
           .select({
             displayName: members.displayName,
             handle: memberProfiles.handle,
+            avatarUrl: members.avatarUrl,
           })
           .from(issueAuthors)
           .innerJoin(memberProfiles, eq(issueAuthors.memberId, memberProfiles.memberId))
@@ -178,11 +179,14 @@ export function createIssueReadService(
           choices,
           author: author
             ? {
-                ...author,
-                avatar: {
-                  kind: "INITIALS" as const,
-                  initials: publicProfileInitials(author.displayName),
-                },
+                displayName: author.displayName,
+                handle: author.handle,
+                avatar: author.avatarUrl
+                  ? { kind: "IMAGE" as const, url: author.avatarUrl }
+                  : {
+                      kind: "INITIALS" as const,
+                      initials: publicProfileInitials(author.displayName),
+                    },
               }
             : null,
           result: {

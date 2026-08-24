@@ -80,6 +80,7 @@ export async function GET(request: Request) {
       provider: "X",
       providerSubject: profile.id,
       displayName: xDisplayName(profile),
+      avatarUrl: profile.profileImageUrl ?? undefined,
       anonymousSubjectId,
     });
     if (session.kind === "signup") {
@@ -90,6 +91,7 @@ export async function GET(request: Request) {
           provider: session.input.provider,
           providerSubject: session.input.providerSubject,
           displayName: session.input.displayName,
+          avatarUrl: session.input.avatarUrl,
           suggestedEmail: session.input.suggestedEmail,
           anonymousSubjectId: session.input.anonymousSubjectId ?? undefined,
           returnTo: flow.returnTo,

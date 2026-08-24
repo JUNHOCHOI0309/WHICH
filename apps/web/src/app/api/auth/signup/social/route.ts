@@ -60,6 +60,7 @@ export async function POST(request: NextRequest) {
         provider: ticket.provider,
         providerSubject: ticket.providerSubject,
         displayName: ticket.displayName,
+        avatarUrl: ticket.avatarUrl,
         suggestedEmail: ticket.suggestedEmail,
         anonymousSubjectId: ticket.anonymousSubjectId,
       },

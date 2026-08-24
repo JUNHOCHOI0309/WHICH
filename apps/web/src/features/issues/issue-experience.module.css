@@ -598,6 +598,14 @@
   background: #a7eff5;
   font-size: 0.75rem;
   font-weight: 950;
+  overflow: hidden;
+}
+
+.authorLink > span:first-child img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
 }
 
 .authorLink > span:last-child {

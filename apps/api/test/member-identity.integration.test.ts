@@ -87,6 +87,7 @@ function createMemberSession(input: {
   createIfMissing?: boolean;
   credential?: { email: string; password: string };
   displayName?: string;
+  avatarUrl?: string;
 }) {
   return app.inject({
     method: "POST",
@@ -96,6 +97,7 @@ function createMemberSession(input: {
       provider: input.provider ?? "DEVELOPMENT",
       providerSubject: input.providerSubject,
       displayName: input.displayName ?? "테스트 회원",
+      avatarUrl: input.avatarUrl,
       anonymousSubjectId: input.anonymousSubjectId,
       createIfMissing: input.createIfMissing,
       credential: input.credential,
@@ -107,6 +109,7 @@ function linkMemberIdentity(input: {
   memberId: string;
   provider: "GOOGLE" | "X" | "NAVER" | "KAKAO";
   providerSubject: string;
+  avatarUrl?: string;
 }) {
   return app.inject({
     method: "POST",
@@ -117,6 +120,7 @@ function linkMemberIdentity(input: {
       provider: input.provider,
       providerSubject: input.providerSubject,
       displayName: "연결 테스트 회원",
+      avatarUrl: input.avatarUrl,
     },
   });
 }
@@ -221,6 +225,35 @@ describe("Member identity and Guest vote linking", () => {
     });
     expect(preserved.statusCode).toBe(201);
     expect(preserved.json()).toMatchObject({ member: { displayName: "사용자가 정한 이름" } });
+  });
+
+  it("adopts the first social avatar without letting later Provider logins overwrite it", async () => {
+    const providerSubject = `google-avatar-${randomUUID()}`;
+    const firstAvatar = "https://lh3.googleusercontent.com/avatar-first";
+    const signup = await createMemberSession({
+      provider: "GOOGLE",
+      providerSubject,
+      displayName: "프로필 회원",
+      avatarUrl: firstAvatar,
+    });
+
+    expect(signup.statusCode).toBe(201);
+    expect(signup.json()).toMatchObject({
+      member: { avatar: { kind: "IMAGE", url: firstAvatar } },
+    });
+
+    const laterLogin = await createMemberSession({
+      provider: "GOOGLE",
+      providerSubject,
+      displayName: "프로필 회원",
+      avatarUrl: "https://lh3.googleusercontent.com/avatar-later",
+      createIfMissing: false,
+    });
+
+    expect(laterLogin.statusCode).toBe(201);
+    expect(laterLogin.json()).toMatchObject({
+      member: { avatar: { kind: "IMAGE", url: firstAvatar } },
+    });
   });
 
   it("creates one Member with credential and social identities, then signs in by email", async () => {

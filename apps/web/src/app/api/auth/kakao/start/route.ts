@@ -51,7 +51,7 @@ export async function GET(request: Request) {
     const redirectUri = new URL("/api/auth/kakao/callback", baseUrl).toString();
     const authorizationUrl = oidc.buildAuthorizationUrl(config, {
       redirect_uri: redirectUri,
-      scope: "openid profile_nickname",
+      scope: "openid profile_nickname profile_image",
       response_type: "code",
       code_challenge: codeChallenge,
       code_challenge_method: "S256",
