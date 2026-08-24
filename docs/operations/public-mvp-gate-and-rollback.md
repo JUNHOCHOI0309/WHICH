@@ -1,6 +1,6 @@
 # Public MVP Gate & Rollback Drill
 
-Status: Implemented v1  
+Status: Implemented v1.2
 Gate guarantee: read-only target inspection  
 Rollback strategy: application rollback without database downgrade
 
@@ -67,12 +67,22 @@ The public-only command runs from any workstation and does not need database or 
 pnpm --filter @which/api launch:public-smoke https://whichone.site
 ```
 
-It requires all four public checks to pass:
+It requires all 15 public checks to pass:
 
 1. The canonical home returns an HTML `200` response.
 2. The public Feed returns at least one launchable Issue.
-3. Google OAuth starts with a redirect to `accounts.google.com`.
-4. X OAuth starts with a redirect to `x.com`.
+3. A Feed Issue opens through its canonical `/issues/:issueId` deep link.
+4. Feed exclusion returns a different next Issue.
+5. The mobile BFF Feed returns at least one launchable Issue.
+6. Login, signup, password-recovery, and `/me` Member/Guest entry points return HTML `200` responses.
+7. Privacy policy and terms of service return HTML `200` responses.
+8. Google, X, Naver, and Kakao OAuth starts redirect to their exact provider hosts.
+
+All independent checks run concurrently. OAuth redirects are inspected with `redirect: manual`; the
+Gate never follows them, receives provider credentials, or creates a Member session. Feed, deep-link,
+next-Issue, mobile, credential, and legal checks are read-only and create no Vote, Comment, Reaction,
+Report, or Guest Subject data. A fixed syntactically valid Probe-only Guest Cookie bypasses the Web
+BFF's normal first-visit Subject creation without requiring a database row.
 
 This command cannot prove database migrations, Release ID, Outbox state, or Vote reconciliation.
 Run the full Gate from a Render Shell for those internal checks.
@@ -95,7 +105,7 @@ The Gate requires every check to pass:
 3. API liveness and readiness return `200` and `ok`.
 4. The running `RELEASE_ID` matches the expected artifact.
 5. Outbox Dead Letters stay within threshold; Pending age also applies when HTTP delivery is enabled.
-6. The public home, non-empty Feed, Google OAuth start, and X OAuth start all pass.
+6. All 15 public-surface checks described above pass.
 7. The selected Issue Version returns `CONSISTENT` from reconciliation `DRY_RUN`.
 
 Feature flags are captured in the release identity check for review. Political Vote and Comment
@@ -166,10 +176,15 @@ account flow through Issue → Vote → Result → Comment → Helpful Reaction 
 moderation case. This manual smoke is intentionally isolated from the read-only production Gate.
 The same write paths are also covered by PostgreSQL integration tests in `pnpm check`.
 
+For the Public v0 operating run, record environment-specific manual evidence with
+`public-v0-release-verification.md`. Do not convert production user content into test fixtures. Use a
+dedicated test Issue and identities, or rely on the current release's prior operating QA when no
+isolated production fixture exists.
+
 ## Known v1 boundaries
 
 - Backup freshness, deployment platform health, DNS, CDN, and external consumer internals require
-  platform-specific checks outside this repository.
+  platform-specific checks outside this repository and must be recorded in the release evidence.
 - The Gate samples one explicitly configured Issue Version; it does not reconcile every aggregate.
 - Schema compatibility of the previous artifact must be established when that artifact is built.
 - Reports are local artifacts by default and must be copied to the release or incident record.

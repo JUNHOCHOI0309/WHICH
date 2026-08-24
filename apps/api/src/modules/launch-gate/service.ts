@@ -75,41 +75,109 @@ function environmentCheck(config: LaunchGateConfig) {
 }
 
 async function collectPublicSurfaceChecks(publicWeb: PublicWebProbe) {
-  const checks: LaunchGateCheck[] = [];
-  checks.push(
-    await checked("public_home", async () => {
+  const checks = await Promise.all([
+    checked("public_home", async () => {
       const result = await publicWeb.home();
       return result.statusCode === 200 && result.isHtml
         ? pass("public_home", "Public Web returns an HTML page.")
         : fail("public_home", "Public Web home check failed.", result);
     }),
-  );
-  checks.push(
-    await checked("public_feed", async () => {
+    checked("public_feed", async () => {
       const result = await publicWeb.feed();
       return result.statusCode === 200 && result.itemCount !== null && result.itemCount > 0
         ? pass("public_feed", "Public Feed contains at least one launchable Issue.", result)
         : fail("public_feed", "Public Feed has no launchable Issue.", result);
     }),
-  );
-  checks.push(
-    await checked("google_oauth_start", async () => {
+    checked("public_issue_deep_link", async () => {
+      const result = await publicWeb.issueDeepLink();
+      return result.statusCode === 200 && result.isHtml && result.issueId !== null
+        ? pass("public_issue_deep_link", "A Feed Issue opens through its canonical deep link.", {
+            issueId: result.issueId,
+          })
+        : fail("public_issue_deep_link", "Public Issue deep-link check failed.", result);
+    }),
+    checked("public_next_issue", async () => {
+      const result = await publicWeb.nextIssue();
+      const hasDifferentIssue =
+        result.returnedIssueId !== null && result.returnedIssueId !== result.excludedIssueId;
+      return result.statusCode === 200 &&
+        result.itemCount !== null &&
+        result.itemCount > 0 &&
+        hasDifferentIssue
+        ? pass("public_next_issue", "Feed exclusion returns a different next Issue.", result)
+        : fail("public_next_issue", "Next Issue selection check failed.", result);
+    }),
+    checked("mobile_feed", async () => {
+      const result = await publicWeb.mobileFeed();
+      return result.statusCode === 200 && result.itemCount !== null && result.itemCount > 0
+        ? pass("mobile_feed", "Mobile BFF Feed contains at least one launchable Issue.", result)
+        : fail("mobile_feed", "Mobile BFF Feed check failed.", result);
+    }),
+    checked("credential_login", async () => {
+      const result = await publicWeb.login();
+      return result.statusCode === 200 && result.isHtml
+        ? pass("credential_login", "Credential login entry point is available.")
+        : fail("credential_login", "Credential login entry-point check failed.", result);
+    }),
+    checked("credential_signup", async () => {
+      const result = await publicWeb.signup();
+      return result.statusCode === 200 && result.isHtml
+        ? pass("credential_signup", "Credential signup entry point is available.")
+        : fail("credential_signup", "Credential signup entry-point check failed.", result);
+    }),
+    checked("password_recovery", async () => {
+      const result = await publicWeb.passwordRecovery();
+      return result.statusCode === 200 && result.isHtml
+        ? pass("password_recovery", "Password recovery entry point is available.")
+        : fail("password_recovery", "Password recovery entry-point check failed.", result);
+    }),
+    checked("member_center", async () => {
+      const result = await publicWeb.memberCenter();
+      return result.statusCode === 200 && result.isHtml
+        ? pass("member_center", "Member center or Guest authentication entry point is available.")
+        : fail("member_center", "Member center entry-point check failed.", result);
+    }),
+    checked("privacy_policy", async () => {
+      const result = await publicWeb.privacyPolicy();
+      return result.statusCode === 200 && result.isHtml
+        ? pass("privacy_policy", "Privacy policy is publicly available.")
+        : fail("privacy_policy", "Privacy policy check failed.", result);
+    }),
+    checked("terms_of_service", async () => {
+      const result = await publicWeb.termsOfService();
+      return result.statusCode === 200 && result.isHtml
+        ? pass("terms_of_service", "Terms of service are publicly available.")
+        : fail("terms_of_service", "Terms of service check failed.", result);
+    }),
+    checked("google_oauth_start", async () => {
       const result = await publicWeb.googleOAuthStart();
       const redirectStatus = [302, 303, 307, 308].includes(result.statusCode);
       return redirectStatus && result.providerHost === "accounts.google.com"
         ? pass("google_oauth_start", "Google OAuth starts at the expected provider.", result)
         : fail("google_oauth_start", "Google OAuth start check failed.", result);
     }),
-  );
-  checks.push(
-    await checked("x_oauth_start", async () => {
+    checked("x_oauth_start", async () => {
       const result = await publicWeb.xOAuthStart();
       const redirectStatus = [302, 303, 307, 308].includes(result.statusCode);
       return redirectStatus && result.providerHost === "x.com"
         ? pass("x_oauth_start", "X OAuth starts at the expected provider.", result)
         : fail("x_oauth_start", "X OAuth start check failed.", result);
     }),
-  );
+    checked("naver_oauth_start", async () => {
+      const result = await publicWeb.naverOAuthStart();
+      const redirectStatus = [302, 303, 307, 308].includes(result.statusCode);
+      return redirectStatus && result.providerHost === "nid.naver.com"
+        ? pass("naver_oauth_start", "Naver OAuth starts at the expected provider.", result)
+        : fail("naver_oauth_start", "Naver OAuth start check failed.", result);
+    }),
+    checked("kakao_oauth_start", async () => {
+      const result = await publicWeb.kakaoOAuthStart();
+      const redirectStatus = [302, 303, 307, 308].includes(result.statusCode);
+      return redirectStatus && result.providerHost === "kauth.kakao.com"
+        ? pass("kakao_oauth_start", "Kakao OAuth starts at the expected provider.", result)
+        : fail("kakao_oauth_start", "Kakao OAuth start check failed.", result);
+    }),
+  ]);
   return checks;
 }
 
