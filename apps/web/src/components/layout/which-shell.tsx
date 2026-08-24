@@ -1,8 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
-import { creatorSubmissionsEnabled } from "@/lib/server/feature-flags";
-
 import {
   HeaderMemberNavigation,
   MemberNavigationLink,
@@ -16,12 +14,13 @@ export function WhichShell({
   children,
   active,
   aside,
+  creationEnabled = false,
 }: {
   children: ReactNode;
   active?: "home" | "interests" | "create" | "me";
   aside?: ReactNode;
+  creationEnabled?: boolean;
 }) {
-  const creationEnabled = creatorSubmissionsEnabled();
   return (
     <MemberNavigationProvider>
       <QuestionComposerProvider enabled={creationEnabled}>

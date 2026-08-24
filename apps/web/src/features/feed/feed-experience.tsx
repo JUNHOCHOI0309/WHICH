@@ -33,7 +33,7 @@ type CardVoteState =
 type HighlightState =
   { status: "LOADING" } | { status: "READY"; highlights: CommentHighlights } | { status: "ERROR" };
 
-export function FeedExperience() {
+export function FeedExperience({ creationEnabled = false }: { creationEnabled?: boolean }) {
   const [screen, setScreen] = useState<FeedScreen>("loading");
   const [items, setItems] = useState<PublicFeedIssue[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -206,7 +206,7 @@ export function FeedExperience() {
   );
 
   return (
-    <WhichShell active="home">
+    <WhichShell active="home" creationEnabled={creationEnabled}>
       <section className={styles.feed} aria-labelledby="feed-title">
         <header className={styles.feedHeader}>
           <div>

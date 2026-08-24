@@ -121,7 +121,7 @@ describe("FeedExperience", () => {
       }),
     );
 
-    render(<FeedExperience />);
+    render(<FeedExperience creationEnabled />);
 
     const questionButtons = await screen.findAllByRole("button", { name: "Question" });
     expect(questionButtons).toHaveLength(2);
@@ -147,7 +147,7 @@ describe("FeedExperience", () => {
       }),
     );
 
-    render(<FeedExperience />);
+    render(<FeedExperience creationEnabled />);
 
     expect(await screen.findByText(feed.items[0]!.question)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Question" })).not.toBeInTheDocument();
@@ -171,7 +171,7 @@ describe("FeedExperience", () => {
       }),
     );
 
-    render(<FeedExperience />);
+    render(<FeedExperience creationEnabled={false} />);
 
     expect(await screen.findByText(feed.items[0]!.question)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Question" })).not.toBeInTheDocument();
