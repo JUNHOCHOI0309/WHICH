@@ -6,6 +6,7 @@ import {
   eq,
   exists,
   gt,
+  inArray,
   isNotNull,
   isNull,
   lt,
@@ -21,6 +22,7 @@ import {
   issueChoices,
   issueAuthors,
   issueInterestCards,
+  guestMemberLinks,
   issues,
   issueVersions,
   memberProfiles,
@@ -301,6 +303,61 @@ export function createIssueReadService(
         }
 
         if (subjectId) {
+          const excludedSubjectIds = new Set<string>([subjectId]);
+          const [viewerSubject] = await transaction
+            .select({ kind: voterSubjects.kind, userId: voterSubjects.userId })
+            .from(voterSubjects)
+            .where(eq(voterSubjects.id, subjectId))
+            .limit(1);
+          const memberId =
+            viewerSubject?.userId &&
+            (viewerSubject.kind === "MEMBER" || viewerSubject.kind === "VERIFIED_MEMBER")
+              ? viewerSubject.userId
+              : null;
+
+          if (memberId) {
+            const [memberSubjects, linkedGuestSubjects] = await Promise.all([
+              transaction
+                .select({ id: voterSubjects.id })
+                .from(voterSubjects)
+                .where(
+                  and(
+                    eq(voterSubjects.userId, memberId),
+                    inArray(voterSubjects.kind, ["MEMBER", "VERIFIED_MEMBER"]),
+                  ),
+                ),
+              transaction
+                .select({ id: guestMemberLinks.guestSubjectId })
+                .from(guestMemberLinks)
+                .where(eq(guestMemberLinks.memberId, memberId)),
+            ]);
+            for (const memberSubject of memberSubjects) excludedSubjectIds.add(memberSubject.id);
+            for (const guestSubject of linkedGuestSubjects) excludedSubjectIds.add(guestSubject.id);
+
+            if (query.anonymousSubjectId) {
+              const [currentGuest] = await transaction
+                .select({ id: voterSubjects.id })
+                .from(voterSubjects)
+                .where(
+                  and(
+                    eq(voterSubjects.kind, "GUEST"),
+                    eq(voterSubjects.anonymousSubjectId, query.anonymousSubjectId),
+                  ),
+                )
+                .limit(1);
+              if (currentGuest) {
+                const [currentGuestLink] = await transaction
+                  .select({ memberId: guestMemberLinks.memberId })
+                  .from(guestMemberLinks)
+                  .where(eq(guestMemberLinks.guestSubjectId, currentGuest.id))
+                  .limit(1);
+                if (!currentGuestLink || currentGuestLink.memberId === memberId) {
+                  excludedSubjectIds.add(currentGuest.id);
+                }
+              }
+            }
+          }
+
           filters.push(
             notExists(
               transaction
@@ -309,7 +366,7 @@ export function createIssueReadService(
                 .where(
                   and(
                     eq(votes.issueId, issues.id),
-                    eq(votes.subjectId, subjectId),
+                    inArray(votes.subjectId, [...excludedSubjectIds]),
                     eq(votes.integrityState, "ACCEPTED"),
                   ),
                 ),
