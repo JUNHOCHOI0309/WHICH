@@ -35,9 +35,26 @@ function createPublicWeb(overrides: Partial<PublicWebProbe> = {}): PublicWebProb
   return {
     home: () => Promise.resolve({ statusCode: 200, isHtml: true }),
     feed: () => Promise.resolve({ statusCode: 200, itemCount: 1 }),
+    issueDeepLink: () => Promise.resolve({ statusCode: 200, isHtml: true, issueId: "issue-1" }),
+    nextIssue: () =>
+      Promise.resolve({
+        statusCode: 200,
+        itemCount: 1,
+        excludedIssueId: "issue-1",
+        returnedIssueId: "issue-2",
+      }),
+    mobileFeed: () => Promise.resolve({ statusCode: 200, itemCount: 1 }),
+    login: () => Promise.resolve({ statusCode: 200, isHtml: true }),
+    signup: () => Promise.resolve({ statusCode: 200, isHtml: true }),
+    passwordRecovery: () => Promise.resolve({ statusCode: 200, isHtml: true }),
+    memberCenter: () => Promise.resolve({ statusCode: 200, isHtml: true }),
+    privacyPolicy: () => Promise.resolve({ statusCode: 200, isHtml: true }),
+    termsOfService: () => Promise.resolve({ statusCode: 200, isHtml: true }),
     googleOAuthStart: () =>
       Promise.resolve({ statusCode: 307, providerHost: "accounts.google.com" }),
     xOAuthStart: () => Promise.resolve({ statusCode: 307, providerHost: "x.com" }),
+    naverOAuthStart: () => Promise.resolve({ statusCode: 307, providerHost: "nid.naver.com" }),
+    kakaoOAuthStart: () => Promise.resolve({ statusCode: 307, providerHost: "kauth.kakao.com" }),
     ...overrides,
   };
 }
@@ -111,7 +128,7 @@ describe("Public MVP Gate", () => {
     });
 
     expect(report.verdict).toBe("GO");
-    expect(report.checks).toHaveLength(11);
+    expect(report.checks).toHaveLength(22);
     expect(report.checks.every((check) => check.status === "PASS")).toBe(true);
     expect(JSON.stringify(report)).not.toContain(config.internalAuthSecret);
     expect(JSON.stringify(report)).not.toContain(config.outboxWebhookSecret);
@@ -229,6 +246,27 @@ describe("Public Surface Gate", () => {
     expect(report.checks).toContainEqual(
       expect.objectContaining({ name: "public_feed", status: "FAIL" }),
     );
+  });
+
+  it("returns NO_GO when a next Issue or required OAuth provider is unavailable", async () => {
+    const report = await runPublicSurfaceGate(
+      "https://whichone.site",
+      createPublicWeb({
+        nextIssue: () =>
+          Promise.resolve({
+            statusCode: 200,
+            itemCount: 1,
+            excludedIssueId: "issue-1",
+            returnedIssueId: "issue-1",
+          }),
+        kakaoOAuthStart: () => Promise.resolve({ statusCode: 404, providerHost: null }),
+      }),
+    );
+
+    expect(report.verdict).toBe("NO_GO");
+    expect(
+      report.checks.filter((check) => check.status === "FAIL").map((check) => check.name),
+    ).toEqual(["public_next_issue", "kakao_oauth_start"]);
   });
 });
 

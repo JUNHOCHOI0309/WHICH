@@ -82,6 +82,15 @@ export type PublicFeedProbe = {
   itemCount: number | null;
 };
 
+export type PublicIssueProbe = PublicHomeProbe & {
+  issueId: string | null;
+};
+
+export type PublicNextIssueProbe = PublicFeedProbe & {
+  excludedIssueId: string | null;
+  returnedIssueId: string | null;
+};
+
 export type OAuthStartProbe = {
   statusCode: number;
   providerHost: string | null;
@@ -97,8 +106,19 @@ export interface LaunchGateApiProbe {
 export interface PublicWebProbe {
   home(): Promise<PublicHomeProbe>;
   feed(): Promise<PublicFeedProbe>;
+  issueDeepLink(): Promise<PublicIssueProbe>;
+  nextIssue(): Promise<PublicNextIssueProbe>;
+  mobileFeed(): Promise<PublicFeedProbe>;
+  login(): Promise<PublicHomeProbe>;
+  signup(): Promise<PublicHomeProbe>;
+  passwordRecovery(): Promise<PublicHomeProbe>;
+  memberCenter(): Promise<PublicHomeProbe>;
+  privacyPolicy(): Promise<PublicHomeProbe>;
+  termsOfService(): Promise<PublicHomeProbe>;
   googleOAuthStart(): Promise<OAuthStartProbe>;
   xOAuthStart(): Promise<OAuthStartProbe>;
+  naverOAuthStart(): Promise<OAuthStartProbe>;
+  kakaoOAuthStart(): Promise<OAuthStartProbe>;
 }
 
 export interface LaunchGateStore {
