@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import type { ReactNode } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 
 import { BalanceResultBar } from "@/components/vote/balance-result-bar";
 import { VoteChoiceRow } from "@/components/vote/vote-choice-row";
@@ -16,8 +17,6 @@ import type {
   PublicIssue,
   VoteResponse,
 } from "@/lib/contracts";
-import { MemberAccess } from "@/features/identity/member-access";
-import { InterestSelector } from "@/features/interests/interest-selector";
 import { loginHref } from "@/lib/auth";
 
 import styles from "./issue-experience.module.css";
@@ -380,7 +379,7 @@ function ResultScreen({
   return (
     <ExperienceShell>
       <article className={styles.resultCard} aria-labelledby="result-title" aria-live="polite">
-        <p className={styles.eyebrow}>{duplicate ? "YOUR FIRST CHOICE STAYS" : "VOTE RECORDED"}</p>
+        <p className={styles.eyebrow}>{duplicate ? "YOUR FIRST CHOICE STAYS" : "VOTE RECORD"}</p>
         <h1 id="result-title">
           {duplicate ? "이미 참여한 질문이에요." : "당신의 선택이 반영됐어요."}
         </h1>
@@ -413,15 +412,6 @@ function ResultScreen({
         />
         <p className={styles.totalCount}>현재 유효한 선택 {total.toLocaleString("ko-KR")}개</p>
         <ResultSharePanel issue={issue} result={result} />
-        <InterestSelector
-          mode="prompt"
-          analyticsContext={{ issueId: issue.id, issueVersion: issue.version }}
-        />
-        <MemberAccess
-          issueId={issue.id}
-          kakaoLoginEnabled={kakaoLoginEnabled}
-          naverLoginEnabled={naverLoginEnabled}
-        />
         <CommentSection
           issueId={issue.id}
           kakaoLoginEnabled={kakaoLoginEnabled}
@@ -433,16 +423,32 @@ function ResultScreen({
   );
 }
 
+type ResultShareChannel = "SYSTEM" | "X";
+
 function ResultSharePanel({ issue, result }: { issue: PublicIssue; result: VoteResponse }) {
   const [includeChoice, setIncludeChoice] = useState(false);
-  const [pending, setPending] = useState<"COPY" | "SYSTEM" | "X" | null>(null);
+  const [channel, setChannel] = useState<ResultShareChannel>("SYSTEM");
+  const [expanded, setExpanded] = useState(false);
+  const [pending, setPending] = useState<ResultShareChannel | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
-  async function share(channel: "COPY" | "SYSTEM" | "X") {
+  function openShare(nextChannel: ResultShareChannel) {
+    setChannel(nextChannel);
+    setExpanded(true);
+    setMessage(null);
+    void recordAnalyticsEvent({
+      eventType: "SHARE_OPEN",
+      issueId: issue.id,
+      issueVersion: issue.version,
+    }).catch(() => undefined);
+  }
+
+  async function share() {
     if (pending) return;
     setPending(channel);
     setMessage(null);
     try {
+      let usedClipboardFallback = false;
       const created = await createResultShareCard({
         issueId: issue.id,
         issueVersion: issue.version,
@@ -463,6 +469,7 @@ function ResultSharePanel({ issue, result }: { issue: PublicIssue; result: VoteR
           "noopener,noreferrer",
         );
       } else {
+        usedClipboardFallback = true;
         await navigator.clipboard.writeText(created.url);
       }
       void recordAnalyticsEvent({
@@ -471,7 +478,13 @@ function ResultSharePanel({ issue, result }: { issue: PublicIssue; result: VoteR
         issueVersion: issue.version,
         shareCardId: created.shareCard.id,
       }).catch(() => undefined);
-      setMessage(channel === "COPY" ? "공유 링크를 복사했어요." : "공유 화면을 열었어요.");
+      setMessage(
+        channel === "X"
+          ? "X 공유 창을 열었어요."
+          : usedClipboardFallback
+            ? "공유 링크를 복사했어요."
+            : "기기 공유 화면을 열었어요.",
+      );
     } catch (reason) {
       if (reason instanceof DOMException && reason.name === "AbortError") return;
       setMessage("공유 링크를 만들지 못했어요. 결과는 그대로 확인할 수 있습니다.");
@@ -480,53 +493,100 @@ function ResultSharePanel({ issue, result }: { issue: PublicIssue; result: VoteR
     }
   }
 
-  useEffect(() => {
-    void recordAnalyticsEvent({
-      eventType: "SHARE_OPEN",
-      issueId: issue.id,
-      issueVersion: issue.version,
-    }).catch(() => undefined);
-  }, [issue.id, issue.version]);
-
   return (
-    <section className={styles.resultShare} aria-labelledby="result-share-title">
-      <div>
-        <p className={styles.commentEyebrow}>RESULT SHARE</p>
-        <h2 id="result-share-title">이 결과를 같이 이야기해 보세요.</h2>
+    <section className={styles.resultShareShell} aria-label="결과 공유">
+      <div className={styles.shareLaunchers} role="group" aria-label="공유 방법 선택">
+        <button
+          type="button"
+          className={channel === "X" && expanded ? styles.shareLauncherActive : undefined}
+          aria-expanded={channel === "X" && expanded}
+          aria-controls="result-share-panel"
+          onClick={() => openShare("X")}
+        >
+          <Image
+            className={styles.shareIcon}
+            src="/icons/x-logo.png"
+            alt=""
+            width={20}
+            height={20}
+          />
+          X 공유
+        </button>
+        <button
+          type="button"
+          className={channel === "SYSTEM" && expanded ? styles.shareLauncherActive : undefined}
+          aria-expanded={channel === "SYSTEM" && expanded}
+          aria-controls="result-share-panel"
+          onClick={() => openShare("SYSTEM")}
+        >
+          <Image
+            className={styles.shareIcon}
+            src="/icons/share.png"
+            alt=""
+            width={20}
+            height={20}
+          />
+          공유하기
+        </button>
       </div>
-      <label className={styles.shareChoiceToggle}>
-        <input
-          type="checkbox"
-          checked={includeChoice}
-          onChange={(event) => {
-            setIncludeChoice(event.target.checked);
-            void recordAnalyticsEvent({
-              eventType: "SHARE_CHOICE_TOGGLE",
-              issueId: issue.id,
-              issueVersion: issue.version,
-            }).catch(() => undefined);
-          }}
-        />
-        내가 고른 {result.choice}도 함께 공개
-      </label>
-      <p className={styles.sharePrivacy}>
-        선택 공개는 기본으로 꺼져 있으며, 공유 링크에는 계정 정보가 들어가지 않아요.
-      </p>
-      <div className={styles.shareActions}>
-        <button type="button" disabled={Boolean(pending)} onClick={() => void share("COPY")}>
-          {pending === "COPY" ? "링크 생성 중…" : "링크 복사"}
-        </button>
-        <button type="button" disabled={Boolean(pending)} onClick={() => void share("SYSTEM")}>
-          기기로 공유
-        </button>
-        <button type="button" disabled={Boolean(pending)} onClick={() => void share("X")}>
-          X에 공유
-        </button>
-      </div>
-      {message ? (
-        <p className={styles.shareMessage} role="status">
-          {message}
-        </p>
+
+      {expanded ? (
+        <div className={styles.resultShare} id="result-share-panel">
+          <div className={styles.sharePanelHeading}>
+            <div>
+              <p className={styles.commentEyebrow}>RESULT SHARE</p>
+              <h2>이 결과를 같이 이야기해 보세요.</h2>
+            </div>
+            <button
+              type="button"
+              className={styles.shareClose}
+              onClick={() => {
+                setExpanded(false);
+                setMessage(null);
+              }}
+            >
+              접기
+            </button>
+          </div>
+          <label className={styles.shareChoiceToggle}>
+            <input
+              type="checkbox"
+              checked={includeChoice}
+              onChange={(event) => {
+                setIncludeChoice(event.target.checked);
+                void recordAnalyticsEvent({
+                  eventType: "SHARE_CHOICE_TOGGLE",
+                  issueId: issue.id,
+                  issueVersion: issue.version,
+                }).catch(() => undefined);
+              }}
+            />
+            내가 고른 {result.choice}도 함께 공개
+          </label>
+          <p className={styles.sharePrivacy}>
+            선택 공개는 기본으로 꺼져 있으며, 공유 링크에는 계정 정보가 들어가지 않아요.
+          </p>
+          <button
+            type="button"
+            className={styles.sharePrimaryAction}
+            disabled={Boolean(pending)}
+            onClick={() => void share()}
+          >
+            <Image
+              className={styles.shareIcon}
+              src={channel === "X" ? "/icons/x-logo.png" : "/icons/share.png"}
+              alt=""
+              width={20}
+              height={20}
+            />
+            {pending ? "공유 링크 만드는 중…" : channel === "X" ? "X에 공유하기" : "결과 공유하기"}
+          </button>
+          {message ? (
+            <p className={styles.shareMessage} role="status">
+              {message}
+            </p>
+          ) : null}
+        </div>
       ) : null}
     </section>
   );

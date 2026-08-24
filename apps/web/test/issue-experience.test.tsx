@@ -154,6 +154,9 @@ describe("IssueExperience", () => {
 
   it("records one vote and reveals results only after selection", async () => {
     const voteRequests: RequestInit[] = [];
+    const shareRequests: RequestInit[] = [];
+    const writeText = vi.fn(async () => undefined);
+    vi.stubGlobal("navigator", { clipboard: { writeText }, share: undefined });
     const voteResult: VoteResponse = {
       outcome: "ACCEPTED",
       voteAttemptId: "attempt-1",
@@ -179,6 +182,16 @@ describe("IssueExperience", () => {
         if (url.endsWith(`/api/issues/${ISSUE_ID}/votes`)) {
           voteRequests.push(init ?? {});
           return jsonResponse(voteResult);
+        }
+        if (url.endsWith(`/api/issues/${ISSUE_ID}/share-cards`)) {
+          shareRequests.push(init ?? {});
+          return jsonResponse(
+            {
+              shareCard: { id: "share-card-1" },
+              url: `https://whichone.site/s/share-card-1`,
+            },
+            201,
+          );
         }
         if (url.startsWith(`/api/issues/${ISSUE_ID}/comments?`)) {
           return jsonResponse({
@@ -237,9 +250,26 @@ describe("IssueExperience", () => {
     fireEvent.click(choice);
 
     expect(await screen.findByText("당신의 선택이 반영됐어요.")).toBeInTheDocument();
+    expect(screen.getByText("VOTE RECORD")).toBeInTheDocument();
     expect(screen.getByText("75%")).toBeInTheDocument();
     expect(await screen.findByText("아침 시간을 온전히 쓸 수 있어서 좋아요.")).toBeInTheDocument();
     expect(voteRequests).toHaveLength(1);
+    expect(screen.queryByText("RESULT SHARE")).not.toBeInTheDocument();
+    expect(screen.queryByText("YOUR INTERESTS")).not.toBeInTheDocument();
+    expect(screen.queryByText("MEMBER LINK")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "X 공유" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "공유하기" }));
+    expect(screen.getByText("RESULT SHARE")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "결과 공유하기" })).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "내가 고른 A도 함께 공개" })).not.toBeChecked();
+    fireEvent.click(screen.getByRole("button", { name: "결과 공유하기" }));
+    await waitFor(() =>
+      expect(writeText).toHaveBeenCalledWith("https://whichone.site/s/share-card-1"),
+    );
+    expect(JSON.parse(String(shareRequests[0]?.body))).toMatchObject({ channel: "SYSTEM" });
+    expect(JSON.parse(String(shareRequests[0]?.body))).not.toHaveProperty("sharedChoiceCode");
+    expect(screen.getByText("공유 링크를 복사했어요.")).toBeInTheDocument();
 
     const requestBody = JSON.parse(String(voteRequests[0]?.body)) as Record<string, unknown>;
     expect(requestBody).toMatchObject({ issueVersion: 1, choiceId: "choice-a" });
@@ -514,7 +544,7 @@ describe("IssueExperience", () => {
     expect(navigation.push).not.toHaveBeenCalled();
   });
 
-  it("does not expose an unreviewed Naver login choice by default", async () => {
+  it("keeps Member promotion out of the result flow and hides unreviewed login choices", async () => {
     const savedResult: VoteResponse = {
       outcome: "ACCEPTED",
       voteAttemptId: "attempt-naver-disabled",
@@ -550,12 +580,12 @@ describe("IssueExperience", () => {
 
     render(<IssueExperience issueId={ISSUE_ID} />);
 
-    expect(await screen.findByRole("link", { name: /로그인 또는 빠른 회원가입/ })).toHaveAttribute(
-      "href",
-      `/login?returnTo=${encodeURIComponent(`/issues/${ISSUE_ID}#member-access`)}`,
-    );
+    expect(screen.queryByText("MEMBER LINK")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: /로그인 또는 빠른 회원가입/ }),
+    ).not.toBeInTheDocument();
 
-    fireEvent.change(screen.getByRole("textbox", { name: "내 선택 이유" }), {
+    fireEvent.change(await screen.findByRole("textbox", { name: "내 선택 이유" }), {
       target: { value: "숨김 확인" },
     });
     fireEvent.click(screen.getByRole("button", { name: "로그인하고 게시" }));
