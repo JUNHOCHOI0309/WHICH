@@ -10,6 +10,7 @@ import {
   readAnalyticsSummary,
   readMeasurementBaseline,
 } from "../src/analytics-operator.js";
+import { readLimitedBetaEvidence } from "../src/beta-operator.js";
 import type { Database } from "../src/database/client.js";
 import {
   analyticsDailyMetrics,
@@ -208,6 +209,52 @@ describe("first-party analytics", () => {
       },
       contentSupply: { activeIssues: 2 },
     });
+    const betaEvidence = await readLimitedBetaEvidence(
+      database.db,
+      {
+        schemaVersion: 1,
+        betaId: "which-52-integration-test",
+        status: "PLANNED",
+        cohort: { targetInvitedUsers: 1, minimumFeedbackResponses: 1 },
+        observation: { minimumHours: 24, defaultReviewWindowDays: 1 },
+        evidenceThresholds: {
+          minimumQualifiedSessions: 1,
+          minimumActiveIssues: 1,
+          maximumModerationQueue: 0,
+          maximumOldestModerationCaseHours: 0,
+          maximumVoteAggregateMismatches: 0,
+          maximumDeadLetters: 0,
+        },
+        decisionPolicy: {
+          requireNoOpenReleaseBlockers: true,
+          requireNoUnrecoveredSev1: true,
+          requireNoUnrecoveredDataIncident: true,
+          automatedEvidenceDoesNotMakeFinalDecision: true,
+        },
+      },
+      {
+        schemaVersion: 1,
+        betaId: "which-52-integration-test",
+        observationStartedAt: "2026-08-23T00:00:00.000Z",
+        observationEndedAt: "2026-08-25T00:00:00.000Z",
+        invitedUsers: 1,
+        feedbackResponses: 1,
+        feedbackThemes: [],
+        incidents: [],
+        releaseBlockers: [],
+        notes: [],
+      },
+      1,
+      new Date("2026-08-25T00:00:00.000Z"),
+    );
+    expect(betaEvidence).toMatchObject({
+      evidenceStatus: "READY_FOR_DECISION",
+      operationalSignals: {
+        moderation: { currentQueueSize: 0 },
+        reliability: { deadLetters: 0 },
+      },
+    });
+    expect(betaEvidence.reportDigest).toMatch(/^[a-f0-9]{64}$/);
     await app.close();
   });
 

@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "betaId": "which-52-limited-beta-v1",
+  "status": "PLANNED",
+  "cohort": {
+    "targetInvitedUsers": 10,
+    "minimumFeedbackResponses": 5
+  },
+  "observation": {
+    "minimumHours": 168,
+    "defaultReviewWindowDays": 7
+  },
+  "evidenceThresholds": {
+    "minimumQualifiedSessions": 10,
+    "minimumActiveIssues": 24,
+    "maximumModerationQueue": 5,
+    "maximumOldestModerationCaseHours": 24,
+    "maximumVoteAggregateMismatches": 0,
+    "maximumDeadLetters": 0
+  },
+  "decisionPolicy": {
+    "requireNoOpenReleaseBlockers": true,
+    "requireNoUnrecoveredSev1": true,
+    "requireNoUnrecoveredDataIncident": true,
+    "automatedEvidenceDoesNotMakeFinalDecision": true
+  }
+}

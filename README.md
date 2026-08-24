@@ -124,4 +124,6 @@ Outbox Worker 운영 방법은
 [`docs/operations/issue-pack-publication.md`](docs/operations/issue-pack-publication.md), 네이버 로그인과
 유입 경계는 [`docs/product/naver-acquisition-and-login.md`](docs/product/naver-acquisition-and-login.md)에
 기록되어 있습니다. 핵심 지표 정의와 보존·집계 운영은
-[`docs/operations/core-analytics.md`](docs/operations/core-analytics.md)를 확인하세요.
+[`docs/operations/core-analytics.md`](docs/operations/core-analytics.md), 제한 사용자 Beta 일일 검토와
+Public v0 Go/No-Go 절차는
+[`docs/operations/limited-beta-and-go-no-go.md`](docs/operations/limited-beta-and-go-no-go.md)를 확인하세요.
