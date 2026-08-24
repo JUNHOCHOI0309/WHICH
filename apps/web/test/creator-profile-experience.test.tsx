@@ -53,7 +53,7 @@ describe("Creator public profile experience", () => {
       "/issues/591f2e90-996a-50c5-af46-967dd0793000",
     );
     expect(screen.getByText("선택 기록은 공개되지 않아요")).toBeVisible();
-    expect(screen.getAllByRole("link", { name: "내 기록" })).toHaveLength(3);
+    expect(screen.getAllByRole("link", { name: "로그인" })).toHaveLength(3);
   });
 
   it("does not reveal whether a missing profile is private", async () => {

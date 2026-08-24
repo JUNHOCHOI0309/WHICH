@@ -877,6 +877,6 @@ describe("IssueExperience", () => {
 
     expect(await screen.findByText("지금은 참여할 수 없는 질문이에요.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "다시 불러오기" })).toBeInTheDocument();
-    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(3));
   });
 });

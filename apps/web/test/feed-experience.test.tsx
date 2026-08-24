@@ -91,6 +91,7 @@ describe("FeedExperience", () => {
       vi.fn(async (input: string | URL | Request) => {
         const url = String(input);
         requests.push(url);
+        if (url === "/api/member-session") return jsonResponse({ code: "SESSION_INVALID" }, 401);
         if (url === "/api/guest-subjects") return jsonResponse({ status: "ready" });
         if (url.startsWith("/api/issues/feed?")) return jsonResponse(feed);
         throw new Error(`Unexpected request: ${url}`);
@@ -103,7 +104,7 @@ describe("FeedExperience", () => {
     expect(screen.getByRole("button", { name: "A 선택, 미리 계획한다" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "B 선택, 가서 정한다" })).toBeInTheDocument();
     expect(screen.queryByText(/\d+%/)).not.toBeInTheDocument();
-    expect(requests[0]).toBe("/api/guest-subjects");
+    expect(requests).toContain("/api/guest-subjects");
     expect(screen.getAllByRole("link", { name: /상세·댓글 보기/ })[0]?.getAttribute("href")).toBe(
       "/issues/10000000-0000-4000-8000-000000000003",
     );
@@ -115,6 +116,7 @@ describe("FeedExperience", () => {
       "fetch",
       vi.fn(async (input: string | URL | Request) => {
         const url = String(input);
+        if (url === "/api/member-session") return jsonResponse({ code: "SESSION_INVALID" }, 401);
         if (url === "/api/guest-subjects") return jsonResponse({ status: "ready" });
         feedAttempts += 1;
         if (feedAttempts === 1) {
@@ -137,6 +139,7 @@ describe("FeedExperience", () => {
       "fetch",
       vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
         const url = String(input);
+        if (url === "/api/member-session") return jsonResponse({ code: "SESSION_INVALID" }, 401);
         if (url === "/api/guest-subjects") return jsonResponse({ status: "ready" });
         if (url.startsWith("/api/issues/feed?")) return jsonResponse(personalizedFeed);
         if (url === "/api/analytics/events") {
@@ -185,6 +188,7 @@ describe("FeedExperience", () => {
       "fetch",
       vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
         const url = String(input);
+        if (url === "/api/member-session") return jsonResponse({ code: "SESSION_INVALID" }, 401);
         if (url === "/api/guest-subjects") return jsonResponse({ status: "ready" });
         if (url.startsWith("/api/issues/feed?")) return jsonResponse(feed);
         if (url.endsWith("/votes")) {

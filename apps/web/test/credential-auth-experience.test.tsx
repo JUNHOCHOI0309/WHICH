@@ -29,7 +29,7 @@ describe("Member credential authentication experience", () => {
     expect(screen.getByRole("link", { name: "X로 계속하기" })).toBeVisible();
     expect(screen.getAllByRole("link", { name: "홈" })).toHaveLength(2);
     expect(screen.getAllByRole("link", { name: "관심사" })).toHaveLength(2);
-    expect(screen.getAllByRole("link", { name: "내 기록" })).toHaveLength(3);
+    expect(screen.getAllByRole("link", { name: "로그인" })).toHaveLength(3);
   });
 
   it("links signup consent to the published terms and privacy policy", () => {
