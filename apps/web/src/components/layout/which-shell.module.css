@@ -175,9 +175,13 @@
   border-top: 1px solid var(--which-border);
   background: rgb(255 255 255 / 96%);
   display: none;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   padding-bottom: env(safe-area-inset-bottom);
   backdrop-filter: blur(12px);
+}
+
+.bottomNavFour {
+  grid-template-columns: repeat(4, 1fr);
 }
 
 .footer {

@@ -1,5 +1,6 @@
 import { WhichAsideCard, WhichShell } from "@/components/layout/which-shell";
 import { IssueCreatorExperience } from "@/features/issues/issue-creator-experience";
+import { creatorSubmissionsEnabled } from "@/lib/server/feature-flags";
 
 export const metadata = {
   title: "질문 만들기 | WHICH",
@@ -7,6 +8,7 @@ export const metadata = {
 };
 
 export default function CreateIssuePage() {
+  const enabled = creatorSubmissionsEnabled();
   return (
     <WhichShell
       active="create"
@@ -20,7 +22,16 @@ export default function CreateIssuePage() {
         </WhichAsideCard>
       }
     >
-      <IssueCreatorExperience />
+      {enabled ? (
+        <IssueCreatorExperience />
+      ) : (
+        <section>
+          <h1>질문 만들기를 잠시 쉬고 있어요.</h1>
+          <p>
+            안전 점검이 끝나면 다시 열겠습니다. 기존 질문의 투표와 결과는 그대로 이용할 수 있어요.
+          </p>
+        </section>
+      )}
     </WhichShell>
   );
 }

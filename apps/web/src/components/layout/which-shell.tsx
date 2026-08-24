@@ -1,6 +1,8 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+import { creatorSubmissionsEnabled } from "@/lib/server/feature-flags";
+
 import {
   HeaderMemberNavigation,
   MemberNavigationLink,
@@ -17,6 +19,7 @@ export function WhichShell({
   active?: "home" | "interests" | "create" | "me";
   aside?: ReactNode;
 }) {
+  const creationEnabled = creatorSubmissionsEnabled();
   return (
     <MemberNavigationProvider>
       <main className={styles.page}>
@@ -38,9 +41,11 @@ export function WhichShell({
             <ShellLink href="/interests" active={active === "interests"} icon="#">
               관심사
             </ShellLink>
-            <ShellLink href="/create" active={active === "create"} icon="＋">
-              질문 만들기
-            </ShellLink>
+            {creationEnabled ? (
+              <ShellLink href="/create" active={active === "create"} icon="＋">
+                질문 만들기
+              </ShellLink>
+            ) : null}
             <MemberNavigationLink active={active === "me"} />
             <div className={styles.railNote}>
               <strong>RESULTS AFTER VOTE</strong>
@@ -65,16 +70,21 @@ export function WhichShell({
           <Link href="/legal/privacy">개인정보 처리방침</Link>
         </footer>
 
-        <nav className={styles.bottomNav} aria-label="모바일 주요 메뉴">
+        <nav
+          className={`${styles.bottomNav} ${creationEnabled ? styles.bottomNavFour : ""}`}
+          aria-label="모바일 주요 메뉴"
+        >
           <ShellLink href="/" active={active === "home"} icon="⌂">
             홈
           </ShellLink>
           <ShellLink href="/interests" active={active === "interests"} icon="#">
             관심사
           </ShellLink>
-          <ShellLink href="/create" active={active === "create"} icon="＋">
-            만들기
-          </ShellLink>
+          {creationEnabled ? (
+            <ShellLink href="/create" active={active === "create"} icon="＋">
+              만들기
+            </ShellLink>
+          ) : null}
           <MemberNavigationLink active={active === "me"} />
         </nav>
       </main>
