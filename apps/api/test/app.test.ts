@@ -25,6 +25,8 @@ const issueReader: IssueReadService = {
 const commentReader: CommentService = {
   listGuestComments: vi.fn(),
   submitMemberComment: vi.fn(),
+  updateMemberComment: vi.fn(),
+  deleteMemberComment: vi.fn(),
   toggleHelpfulReaction: vi.fn(),
   reportComment: vi.fn(),
   listModerationCases: vi.fn(),

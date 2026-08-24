@@ -85,6 +85,7 @@ export type PublicComment = {
   editedAt: string | null;
   reactions: { helpfulCount: number; viewerReacted: boolean };
   reports: { viewerReported: boolean; canReport: boolean };
+  permissions: { canEdit: boolean; canDelete: boolean };
 };
 
 export type PublicCommentPage = {
@@ -98,6 +99,14 @@ export type CommentHighlights = {
 };
 
 export type CommentWriteResponse = { comment: PublicComment };
+
+export type CommentUpdateResponse = {
+  comment: { id: string; body: string; editedAt: string };
+};
+
+export type CommentDeleteResponse = {
+  comment: { id: string; deleted: true };
+};
 
 export type HelpfulReactionResponse = {
   reaction: { code: "HELPFUL"; active: boolean; helpfulCount: number };

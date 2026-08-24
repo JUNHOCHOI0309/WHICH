@@ -292,6 +292,10 @@
   color: var(--muted);
 }
 
+.commentCard footer button.commentOwnerButton {
+  margin-left: 0;
+}
+
 .commentCard footer button.reportButton:first-of-type {
   margin-left: auto;
 }
@@ -316,6 +320,90 @@
   color: #9c2f00;
   font-size: 0.76rem;
   font-weight: 750;
+}
+
+.commentEditForm,
+.commentDeleteConfirm {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+.commentEditForm label {
+  font-size: 0.76rem;
+  font-weight: 850;
+}
+
+.commentEditForm textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  line-height: 1.6;
+  padding: 11px;
+  resize: vertical;
+}
+
+.commentEditFooter,
+.commentDeleteConfirm > div {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.commentEditFooter span {
+  margin-right: auto;
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+.commentEditForm button,
+.commentDeleteConfirm button {
+  min-height: 38px;
+  border: 1px solid var(--ink);
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 850;
+  padding: 7px 12px;
+}
+
+.commentEditForm button[type="submit"],
+.commentDeleteConfirm button:first-child {
+  background: var(--ink);
+  color: var(--surface);
+}
+
+.commentEditForm button:disabled,
+.commentDeleteConfirm button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.commentDeleteConfirm p {
+  margin: 0;
+  line-height: 1.6;
+}
+
+.commentMutationError,
+.commentMutationMessage {
+  margin: 12px 0 0;
+  font-size: 0.76rem;
+  font-weight: 750;
+}
+
+.commentMutationError {
+  color: #9c2f00;
+}
+
+.commentMutationMessage {
+  color: #006a70;
 }
 
 .commentCollapsed {

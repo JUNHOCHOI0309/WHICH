@@ -28,6 +28,10 @@ const publicCommentSchema = Type.Object({
     viewerReported: Type.Boolean(),
     canReport: Type.Boolean(),
   }),
+  permissions: Type.Object({
+    canEdit: Type.Boolean(),
+    canDelete: Type.Boolean(),
+  }),
 });
 
 const commentPageSchema = Type.Object({
@@ -69,6 +73,17 @@ type HelpfulReactionRoute = {
     "x-anonymous-subject-id"?: string;
     "idempotency-key": string;
   };
+};
+
+type CommentUpdateRoute = {
+  Params: { commentId: string };
+  Headers: { authorization?: string };
+  Body: { body: string };
+};
+
+type CommentDeleteRoute = {
+  Params: { commentId: string };
+  Headers: { authorization?: string };
 };
 
 type CommentReportRoute = {
@@ -315,6 +330,86 @@ export async function registerCommentRoutes(
           sessionToken: sessionToken ?? undefined,
           anonymousSubjectId: request.headers["x-anonymous-subject-id"],
           idempotencyKey: request.headers["idempotency-key"],
+        });
+        return reply.code(result.httpStatus).send(result.body);
+      },
+    );
+
+    commentApp.patch<CommentUpdateRoute>(
+      "/v1/comments/:commentId",
+      {
+        schema: {
+          tags: ["comments"],
+          summary: "Edit a Comment owned by the active Member",
+          params: Type.Object({ commentId: uuidSchema }),
+          headers: Type.Object(
+            { authorization: Type.Optional(Type.String()) },
+            { additionalProperties: true },
+          ),
+          body: Type.Object({ body: Type.String({ minLength: 1, maxLength: 500 }) }),
+          response: {
+            200: Type.Object({
+              comment: Type.Object({
+                id: uuidSchema,
+                body: Type.String(),
+                editedAt: Type.String({ format: "date-time" }),
+              }),
+            }),
+            400: errorResponseSchema,
+            401: errorResponseSchema,
+            403: errorResponseSchema,
+            404: errorResponseSchema,
+            409: errorResponseSchema,
+            422: errorResponseSchema,
+            500: errorResponseSchema,
+          },
+        },
+      },
+      async (request, reply) => {
+        const token = bearerToken(request.headers.authorization);
+        if (!token) {
+          throw new CommentError("SESSION_REQUIRED", 401, "An active Member session is required.");
+        }
+        const result = await service.updateMemberComment({
+          commentId: request.params.commentId,
+          sessionToken: token,
+          body: request.body.body,
+        });
+        return reply.code(result.httpStatus).send(result.body);
+      },
+    );
+
+    commentApp.delete<CommentDeleteRoute>(
+      "/v1/comments/:commentId",
+      {
+        schema: {
+          tags: ["comments"],
+          summary: "Soft-delete a Comment owned by the active Member",
+          params: Type.Object({ commentId: uuidSchema }),
+          headers: Type.Object(
+            { authorization: Type.Optional(Type.String()) },
+            { additionalProperties: true },
+          ),
+          response: {
+            200: Type.Object({
+              comment: Type.Object({ id: uuidSchema, deleted: Type.Literal(true) }),
+            }),
+            400: errorResponseSchema,
+            401: errorResponseSchema,
+            403: errorResponseSchema,
+            404: errorResponseSchema,
+            500: errorResponseSchema,
+          },
+        },
+      },
+      async (request, reply) => {
+        const token = bearerToken(request.headers.authorization);
+        if (!token) {
+          throw new CommentError("SESSION_REQUIRED", 401, "An active Member session is required.");
+        }
+        const result = await service.deleteMemberComment({
+          commentId: request.params.commentId,
+          sessionToken: token,
         });
         return reply.code(result.httpStatus).send(result.body);
       },

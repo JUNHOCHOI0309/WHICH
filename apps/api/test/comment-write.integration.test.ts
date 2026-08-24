@@ -103,6 +103,23 @@ function submitComment(
   });
 }
 
+function updateComment(commentId: string, token: string, body: string) {
+  return app.inject({
+    method: "PATCH",
+    url: `/v1/comments/${commentId}`,
+    headers: { authorization: `Bearer ${token}` },
+    payload: { body },
+  });
+}
+
+function deleteComment(commentId: string, token: string) {
+  return app.inject({
+    method: "DELETE",
+    url: `/v1/comments/${commentId}`,
+    headers: { authorization: `Bearer ${token}` },
+  });
+}
+
 beforeAll(async () => {
   const testDatabase = await createTestDatabase();
   database = testDatabase.database;
@@ -378,5 +395,127 @@ describe("Member Comment write API", () => {
     );
     expect(policy.statusCode).toBe(422);
     expect(policy.json()).toMatchObject({ code: "COMMENT_URL_NOT_ALLOWED" });
+  });
+
+  it("lets only the author edit and soft-delete a Comment", async () => {
+    const issue = await createIssue();
+    const authorGuest = await createGuestVote(issue.issueId, issue.choiceAId);
+    const author = await createSession(`comment-mutation-author-${issue.issueId}`, authorGuest);
+    const published = await submitComment(
+      issue.issueId,
+      author.token,
+      randomUUID(),
+      "수정 전 댓글",
+    );
+    const commentId = published.json<{ comment: { id: string } }>().comment.id;
+
+    const otherGuest = await createGuestVote(issue.issueId, issue.choiceBId);
+    const other = await createSession(`comment-mutation-other-${issue.issueId}`, otherGuest);
+    const otherList = await app.inject({
+      method: "GET",
+      url: `/v1/issues/${issue.issueId}/comments?side=ALL&limit=10`,
+      headers: { authorization: `Bearer ${other.token}` },
+    });
+    expect(otherList.json()).toMatchObject({
+      items: [
+        {
+          id: commentId,
+          permissions: { canEdit: false, canDelete: false },
+        },
+      ],
+    });
+
+    const forbiddenEdit = await updateComment(commentId, other.token, "가로챈 수정");
+    const forbiddenDelete = await deleteComment(commentId, other.token);
+    expect(forbiddenEdit.statusCode).toBe(403);
+    expect(forbiddenEdit.json()).toMatchObject({ code: "COMMENT_AUTHOR_REQUIRED" });
+    expect(forbiddenDelete.statusCode).toBe(403);
+    expect(forbiddenDelete.json()).toMatchObject({ code: "COMMENT_AUTHOR_REQUIRED" });
+
+    const missingSessionEdit = await app.inject({
+      method: "PATCH",
+      url: `/v1/comments/${commentId}`,
+      payload: { body: "로그인 없는 수정" },
+    });
+    const missingSessionDelete = await app.inject({
+      method: "DELETE",
+      url: `/v1/comments/${commentId}`,
+    });
+    expect(missingSessionEdit.statusCode).toBe(401);
+    expect(missingSessionDelete.statusCode).toBe(401);
+
+    const edited = await updateComment(commentId, author.token, "  수정한 댓글  ");
+    expect(edited.statusCode).toBe(200);
+    const editedBody = edited.json<{
+      comment: { id: string; body: string; editedAt: string };
+    }>();
+    expect(editedBody.comment).toMatchObject({ id: commentId, body: "수정한 댓글" });
+    expect(Number.isNaN(Date.parse(editedBody.comment.editedAt))).toBe(false);
+
+    const authorList = await app.inject({
+      method: "GET",
+      url: `/v1/issues/${issue.issueId}/comments?side=ALL&limit=10`,
+      headers: { authorization: `Bearer ${author.token}` },
+    });
+    const authorPage = authorList.json<{
+      items: Array<{
+        id: string;
+        body: string;
+        editedAt: string | null;
+        permissions: { canEdit: boolean; canDelete: boolean };
+      }>;
+    }>();
+    expect(authorPage).toMatchObject({
+      items: [
+        {
+          id: commentId,
+          body: "수정한 댓글",
+          permissions: { canEdit: true, canDelete: true },
+        },
+      ],
+    });
+    expect(authorPage.items[0]?.editedAt).not.toBeNull();
+
+    const invalidEdit = await updateComment(commentId, author.token, "https://example.com");
+    expect(invalidEdit.statusCode).toBe(422);
+    expect(invalidEdit.json()).toMatchObject({ code: "COMMENT_URL_NOT_ALLOWED" });
+
+    const deleted = await deleteComment(commentId, author.token);
+    expect(deleted.statusCode).toBe(200);
+    expect(deleted.json()).toEqual({ comment: { id: commentId, deleted: true } });
+    expect((await deleteComment(commentId, author.token)).statusCode).toBe(404);
+
+    const [stored] = await database.db
+      .select({
+        body: comments.body,
+        visibility: comments.visibility,
+        deletedAt: comments.deletedAt,
+        version: comments.version,
+      })
+      .from(comments)
+      .where(eq(comments.id, commentId));
+    expect(stored).toMatchObject({
+      body: "[작성자가 삭제한 댓글]",
+      visibility: "REMOVED_BY_AUTHOR",
+      version: 3,
+    });
+    expect(stored?.deletedAt).toBeInstanceOf(Date);
+
+    const afterDelete = await app.inject({
+      method: "GET",
+      url: `/v1/issues/${issue.issueId}/comments?side=ALL&limit=10`,
+      headers: { authorization: `Bearer ${author.token}` },
+    });
+    expect(afterDelete.json()).toEqual({ items: [], nextCursor: null });
+
+    const events = await database.db
+      .select({ type: outboxEvents.eventType })
+      .from(outboxEvents)
+      .where(eq(outboxEvents.aggregateId, commentId));
+    expect(events.map((event) => event.type)).toEqual([
+      "COMMENT_PUBLISHED",
+      "COMMENT_EDITED",
+      "COMMENT_REMOVED_BY_AUTHOR",
+    ]);
   });
 });

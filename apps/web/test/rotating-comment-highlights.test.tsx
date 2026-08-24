@@ -16,6 +16,7 @@ function comment(id: string, choice: "A" | "B", body: string): PublicComment {
     editedAt: null,
     reactions: { helpfulCount: 1, viewerReacted: false },
     reports: { viewerReported: false, canReport: true },
+    permissions: { canEdit: false, canDelete: false },
   };
 }
 

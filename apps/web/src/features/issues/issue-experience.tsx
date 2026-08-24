@@ -23,6 +23,7 @@ import { loginHref } from "@/lib/auth";
 import styles from "./issue-experience.module.css";
 import {
   createResultShareCard,
+  deleteMemberComment,
   ensureGuestSubject,
   loadIssueComments,
   loadIssueFeed,
@@ -33,6 +34,7 @@ import {
   submitMemberComment,
   submitGuestVote,
   toggleHelpfulReaction,
+  updateMemberComment,
   WebApiError,
 } from "./client";
 
@@ -575,6 +577,14 @@ function CommentSection({
   const [reportingCommentId, setReportingCommentId] = useState<string | null>(null);
   const [reportMessage, setReportMessage] = useState<string | null>(null);
   const [reportError, setReportError] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<{ commentId: string; body: string } | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [mutatingCommentId, setMutatingCommentId] = useState<string | null>(null);
+  const [commentMutationError, setCommentMutationError] = useState<{
+    commentId: string;
+    message: string;
+  } | null>(null);
+  const [commentMutationMessage, setCommentMutationMessage] = useState<string | null>(null);
   const [expandedCollapsedIds, setExpandedCollapsedIds] = useState<Set<string>>(() => new Set());
   const pendingCommentKey = useRef<string | null>(null);
   const pendingReportKey = useRef<{ commentId: string; key: string } | null>(null);
@@ -769,6 +779,99 @@ function CommentSection({
     }
   };
 
+  const saveCommentEdit = async () => {
+    if (!editDraft || mutatingCommentId) return;
+    const normalizedBody = editDraft.body.trim();
+    if (Array.from(normalizedBody).length < 2) {
+      setCommentMutationError({
+        commentId: editDraft.commentId,
+        message: "두 글자 이상 입력해 주세요.",
+      });
+      return;
+    }
+
+    setMutatingCommentId(editDraft.commentId);
+    setCommentMutationError(null);
+    setCommentMutationMessage(null);
+    try {
+      const result = await updateMemberComment({
+        commentId: editDraft.commentId,
+        body: editDraft.body,
+      });
+      setItems((current) =>
+        current.map((item) =>
+          item.id === result.comment.id
+            ? { ...item, body: result.comment.body, editedAt: result.comment.editedAt }
+            : item,
+        ),
+      );
+      setEditDraft(null);
+      setCommentMutationMessage("댓글을 수정했어요.");
+    } catch (error) {
+      if (error instanceof WebApiError && error.status === 401) {
+        setAuthState("guest");
+        setItems((current) =>
+          current.map((item) => ({
+            ...item,
+            permissions: { canEdit: false, canDelete: false },
+          })),
+        );
+      }
+      setCommentMutationError({
+        commentId: editDraft.commentId,
+        message:
+          error instanceof WebApiError && error.status === 401
+            ? "로그인이 만료됐어요. 다시 로그인한 뒤 수정해 주세요."
+            : error instanceof WebApiError && error.status === 422
+              ? "URL·제어문자·과도한 반복 없이 2~500자로 작성해 주세요."
+              : error instanceof WebApiError && error.code === "COMMENT_AUTHOR_REQUIRED"
+                ? "본인이 작성한 댓글만 수정할 수 있어요."
+                : "댓글을 수정하지 못했어요. 잠시 후 다시 시도해 주세요.",
+      });
+    } finally {
+      setMutatingCommentId(null);
+    }
+  };
+
+  const removeOwnComment = async (commentId: string) => {
+    if (mutatingCommentId) return;
+    setMutatingCommentId(commentId);
+    setCommentMutationError(null);
+    setCommentMutationMessage(null);
+    try {
+      await deleteMemberComment(commentId);
+      setItems((current) => {
+        const next = current.filter((item) => item.id !== commentId);
+        if (next.length === 0) setState("empty");
+        return next;
+      });
+      setDeleteConfirmId(null);
+      setEditDraft(null);
+      setCommentMutationMessage("댓글을 삭제했어요.");
+    } catch (error) {
+      if (error instanceof WebApiError && error.status === 401) {
+        setAuthState("guest");
+        setItems((current) =>
+          current.map((item) => ({
+            ...item,
+            permissions: { canEdit: false, canDelete: false },
+          })),
+        );
+      }
+      setCommentMutationError({
+        commentId,
+        message:
+          error instanceof WebApiError && error.status === 401
+            ? "로그인이 만료됐어요. 다시 로그인한 뒤 삭제해 주세요."
+            : error instanceof WebApiError && error.code === "COMMENT_AUTHOR_REQUIRED"
+              ? "본인이 작성한 댓글만 삭제할 수 있어요."
+              : "댓글을 삭제하지 못했어요. 잠시 후 다시 시도해 주세요.",
+      });
+    } finally {
+      setMutatingCommentId(null);
+    }
+  };
+
   const submitReport = async () => {
     if (!reportDraft || reportingCommentId) return;
     const detail = reportDraft.detail.trim();
@@ -946,6 +1049,9 @@ function CommentSection({
               canReport: true,
             };
             const isReporting = reportingCommentId === comment.id;
+            const permissions = comment.permissions ?? { canEdit: false, canDelete: false };
+            const isEditing = editDraft?.commentId === comment.id;
+            const isMutating = mutatingCommentId === comment.id;
             return (
               <article
                 key={comment.id}
@@ -963,7 +1069,44 @@ function CommentSection({
                     }).format(new Date(comment.createdAt))}
                   </time>
                 </header>
-                {isCollapsed && !isExpanded ? (
+                {isEditing ? (
+                  <form
+                    className={styles.commentEditForm}
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      void saveCommentEdit();
+                    }}
+                  >
+                    <label htmlFor={`comment-edit-${comment.id}`}>댓글 수정 내용</label>
+                    <textarea
+                      id={`comment-edit-${comment.id}`}
+                      value={editDraft.body}
+                      maxLength={500}
+                      rows={4}
+                      disabled={isMutating}
+                      onChange={(event) => {
+                        setCommentMutationError(null);
+                        setEditDraft({ commentId: comment.id, body: event.target.value });
+                      }}
+                    />
+                    <div className={styles.commentEditFooter}>
+                      <span>{Array.from(editDraft.body).length}/500</span>
+                      <button type="submit" disabled={isMutating}>
+                        {isMutating ? "저장 중…" : "수정 저장"}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isMutating}
+                        onClick={() => {
+                          setEditDraft(null);
+                          setCommentMutationError(null);
+                        }}
+                      >
+                        취소
+                      </button>
+                    </div>
+                  </form>
+                ) : isCollapsed && !isExpanded ? (
                   <div className={styles.collapsedNotice}>
                     <p>여러 신고가 접수되어 내용을 접어 두었어요.</p>
                     <button
@@ -995,19 +1138,73 @@ function CommentSection({
                       공감 {comment.reactions?.helpfulCount ?? 0}
                     </button>
                   ) : null}
-                  <button
-                    type="button"
-                    className={styles.reportButton}
-                    disabled={reportState.viewerReported || !reportState.canReport || isReporting}
-                    onClick={() => {
-                      setReportMessage(null);
-                      setReportError(null);
-                      setReportDraft({ commentId: comment.id, reason: "SPAM", detail: "" });
-                    }}
-                  >
-                    {reportState.viewerReported ? "신고 완료" : isReporting ? "접수 중…" : "신고"}
-                  </button>
+                  {permissions.canEdit ? (
+                    <button
+                      type="button"
+                      className={styles.commentOwnerButton}
+                      disabled={isMutating}
+                      onClick={() => {
+                        setDeleteConfirmId(null);
+                        setCommentMutationError(null);
+                        setEditDraft({ commentId: comment.id, body: comment.body });
+                      }}
+                    >
+                      수정
+                    </button>
+                  ) : null}
+                  {permissions.canDelete ? (
+                    <button
+                      type="button"
+                      className={styles.commentOwnerButton}
+                      disabled={isMutating}
+                      onClick={() => {
+                        setEditDraft(null);
+                        setCommentMutationError(null);
+                        setDeleteConfirmId(comment.id);
+                      }}
+                    >
+                      삭제
+                    </button>
+                  ) : null}
+                  {!permissions.canEdit && !permissions.canDelete ? (
+                    <button
+                      type="button"
+                      className={styles.reportButton}
+                      disabled={reportState.viewerReported || !reportState.canReport || isReporting}
+                      onClick={() => {
+                        setReportMessage(null);
+                        setReportError(null);
+                        setReportDraft({ commentId: comment.id, reason: "SPAM", detail: "" });
+                      }}
+                    >
+                      {reportState.viewerReported ? "신고 완료" : isReporting ? "접수 중…" : "신고"}
+                    </button>
+                  ) : null}
                 </footer>
+                {deleteConfirmId === comment.id ? (
+                  <div className={styles.commentDeleteConfirm} role="alert">
+                    <p>이 댓글을 삭제할까요? 삭제한 내용은 다시 표시되지 않아요.</p>
+                    <div>
+                      <button
+                        type="button"
+                        disabled={isMutating}
+                        onClick={() => void removeOwnComment(comment.id)}
+                      >
+                        {isMutating ? "삭제 중…" : "댓글 삭제 확인"}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isMutating}
+                        onClick={() => setDeleteConfirmId(null)}
+                      >
+                        삭제 취소
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+                {commentMutationError?.commentId === comment.id ? (
+                  <p className={styles.commentMutationError}>{commentMutationError.message}</p>
+                ) : null}
                 {reportDraft?.commentId === comment.id ? (
                   <form
                     className={styles.reportForm}
@@ -1080,6 +1277,12 @@ function CommentSection({
       {reactionError ? (
         <p className={styles.reactionError} role="alert">
           {reactionError}
+        </p>
+      ) : null}
+
+      {commentMutationMessage ? (
+        <p className={styles.commentMutationMessage} role="status">
+          {commentMutationMessage}
         </p>
       ) : null}
 

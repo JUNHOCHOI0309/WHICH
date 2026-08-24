@@ -3,6 +3,8 @@ import type {
   CommentSide,
   CommentReportReason,
   CommentReportResponse,
+  CommentDeleteResponse,
+  CommentUpdateResponse,
   CommentWriteResponse,
   HelpfulReactionResponse,
   PublicCommentPage,
@@ -247,6 +249,27 @@ export async function submitMemberComment(command: {
   const body = await responseBody<CommentWriteResponse>(response);
   if (!response.ok) throwApiError(response, body as ApiErrorBody);
   return body as CommentWriteResponse;
+}
+
+export async function updateMemberComment(command: { commentId: string; body: string }) {
+  const response = await fetch(`/api/comments/${encodeURIComponent(command.commentId)}`, {
+    method: "PATCH",
+    headers: { accept: "application/json", "content-type": "application/json" },
+    body: JSON.stringify({ body: command.body }),
+  });
+  const body = await responseBody<CommentUpdateResponse>(response);
+  if (!response.ok) throwApiError(response, body as ApiErrorBody);
+  return body as CommentUpdateResponse;
+}
+
+export async function deleteMemberComment(commentId: string) {
+  const response = await fetch(`/api/comments/${encodeURIComponent(commentId)}`, {
+    method: "DELETE",
+    headers: { accept: "application/json" },
+  });
+  const body = await responseBody<CommentDeleteResponse>(response);
+  if (!response.ok) throwApiError(response, body as ApiErrorBody);
+  return body as CommentDeleteResponse;
 }
 
 export async function toggleHelpfulReaction(command: {
