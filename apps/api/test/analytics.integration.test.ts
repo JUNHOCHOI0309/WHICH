@@ -4,7 +4,12 @@ import Fastify from "fastify";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { applyAnalyticsRetention, readAnalyticsSummary } from "../src/analytics-operator.js";
+import {
+  applyAnalyticsRetention,
+  readAnalyticsReconciliation,
+  readAnalyticsSummary,
+  readMeasurementBaseline,
+} from "../src/analytics-operator.js";
 import type { Database } from "../src/database/client.js";
 import {
   analyticsDailyMetrics,
@@ -81,6 +86,12 @@ describe("first-party analytics", () => {
       issueId,
       issueVersion: 1,
       occurredAt: new Date().toISOString(),
+      context: {
+        entrySurface: "EXTERNAL" as const,
+        audienceSegment: "GUEST" as const,
+        deviceSegment: "MOBILE" as const,
+        trafficClass: "PRODUCT" as const,
+      },
       attribution: {
         source: "naver" as const,
         medium: "choice" as const,
@@ -165,15 +176,63 @@ describe("first-party analytics", () => {
       secondVoteConversion: 1,
       nextIssueRate: 1,
     });
-    expect(summary.acquisitionChannels).toEqual([
+    expect(summary.segments).toEqual([
       expect.objectContaining({
         source: "naver",
         medium: "choice",
+        entry_surface: "EXTERNAL",
+        audience_segment: "GUEST",
+        device_segment: "MOBILE",
         accepted_votes: 2,
         second_vote_sessions: 1,
       }),
     ]);
+    const reconciliation = await readAnalyticsReconciliation(database.db, 1);
+    expect(reconciliation.voteEventLedger).toMatchObject({
+      acceptedVotes: 2,
+      analyticsLinkedVotes: 2,
+      acceptedVotesMissingSubmitEvent: 2,
+      acceptedVotesMissingResultEvent: 1,
+    });
+    expect(reconciliation.voteAggregateProjection).toEqual({
+      mismatchedIssues: 0,
+      absoluteVoteDelta: 0,
+    });
+    const baseline = await readMeasurementBaseline(database.db, 1);
+    expect(baseline).toMatchObject({
+      status: "READY",
+      experimentPreRegistration: {
+        experimentId: "which-50-next-issue-cta-v1",
+        status: "PLANNED",
+        primaryMetric: "nextIssueRate",
+      },
+      contentSupply: { activeIssues: 2 },
+    });
     await app.close();
+  });
+
+  it("excludes explicitly classified test traffic from the official funnel", async () => {
+    const analytics = createAnalyticsService(database.db);
+    await analytics.recordEvent({
+      eventId: randomUUID(),
+      sessionId: randomUUID(),
+      eventType: "ISSUE_VIEWABLE_IMPRESSION",
+      issueId,
+      issueVersion: 1,
+      occurredAt: new Date().toISOString(),
+      context: {
+        entrySurface: "HOME",
+        audienceSegment: "GUEST",
+        deviceSegment: "DESKTOP",
+        trafficClass: "TEST",
+      },
+    });
+
+    const summary = await readAnalyticsSummary(database.db, 1);
+    expect(summary.metrics.qualifiedSessions).toBe(1);
+    expect(summary.trafficCoverage).toEqual(
+      expect.arrayContaining([expect.objectContaining({ traffic_class: "TEST", sessions: 1 })]),
+    );
   });
 
   it("aggregates before deleting raw events older than 90 days", async () => {

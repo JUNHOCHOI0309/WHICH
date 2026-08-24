@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "experimentId": "which-50-next-issue-cta-v1",
+  "status": "PLANNED",
+  "hypothesis": "결과 화면의 다음 질문 CTA를 선택의 연속성을 강조하는 문구로 바꾸면 결과를 본 사용자의 다음 질문 진입률이 높아진다.",
+  "population": {
+    "trafficClass": "PRODUCT",
+    "riskLevel": "LOW",
+    "excludePolitical": true,
+    "assignmentUnit": "analytics_session_id"
+  },
+  "arms": [
+    { "id": "control", "weight": 50, "label": "다음 질문 보기" },
+    { "id": "treatment", "weight": 50, "label": "다음 선택 보기" }
+  ],
+  "primaryMetric": "nextIssueRate",
+  "secondaryMetrics": ["secondVoteConversion"],
+  "guardrails": ["qualifiedVotePerSession", "nextIssueExhaustedRate"],
+  "minimumRuntimeDays": 7,
+  "minimumQualifiedSessionsPerArm": 200,
+  "stoppingRule": "최소 기간과 표본을 모두 충족하기 전에는 승자를 선언하지 않으며, 중간 결과로 배분을 변경하지 않는다.",
+  "activation": "이 문서는 사전등록만 수행한다. 별도 기능 플래그와 QA 승인 전에는 사용자에게 노출하지 않는다."
+}

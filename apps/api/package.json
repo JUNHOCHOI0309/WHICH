@@ -8,6 +8,8 @@
     "analytics:aggregate": "tsx src/analytics-operator.ts aggregate",
     "analytics:retention": "tsx src/analytics-operator.ts retention",
     "analytics:summary": "tsx src/analytics-operator.ts summary",
+    "analytics:reconcile": "tsx src/analytics-operator.ts reconcile",
+    "analytics:baseline": "tsx src/analytics-operator.ts baseline",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/database/migrate.ts",
     "db:seed": "tsx src/database/seed.ts",

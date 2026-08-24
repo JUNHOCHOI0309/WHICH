@@ -24,6 +24,12 @@ export function createAnalyticsService(database: Database["db"]): AnalyticsServi
       const activityAt = new Date();
       const startedAt = occurredAt > activityAt ? activityAt : occurredAt;
       const expiresAt = new Date(activityAt.getTime() + SESSION_IDLE_MILLISECONDS);
+      const context = command.context ?? {
+        entrySurface: "UNKNOWN" as const,
+        audienceSegment: "UNKNOWN" as const,
+        deviceSegment: "UNKNOWN" as const,
+        trafficClass: "UNCLASSIFIED" as const,
+      };
 
       return database.transaction(async (transaction) => {
         const [issueVersion] = await transaction
@@ -47,6 +53,10 @@ export function createAnalyticsService(database: Database["db"]): AnalyticsServi
             attributionCampaign: attribution?.campaign,
             attributionContent: attribution?.content,
             attributionCapturedAt: attribution ? new Date(attribution.capturedAt) : undefined,
+            entrySurface: context.entrySurface,
+            audienceSegment: context.audienceSegment,
+            deviceSegment: context.deviceSegment,
+            trafficClass: context.trafficClass,
             startedAt,
             lastActivityAt: activityAt,
             expiresAt,
@@ -59,6 +69,18 @@ export function createAnalyticsService(database: Database["db"]): AnalyticsServi
               attributionCampaign: sql`coalesce(${analyticsSessions.attributionCampaign}, excluded.attribution_campaign)`,
               attributionContent: sql`coalesce(${analyticsSessions.attributionContent}, excluded.attribution_content)`,
               attributionCapturedAt: sql`coalesce(${analyticsSessions.attributionCapturedAt}, excluded.attribution_captured_at)`,
+              entrySurface: sql`case when ${analyticsSessions.entrySurface} = 'UNKNOWN' then excluded.entry_surface else ${analyticsSessions.entrySurface} end`,
+              audienceSegment: sql`case
+                when excluded.audience_segment = 'MEMBER' then 'MEMBER'
+                when ${analyticsSessions.audienceSegment} = 'UNKNOWN' then excluded.audience_segment
+                else ${analyticsSessions.audienceSegment}
+              end`,
+              deviceSegment: sql`case when ${analyticsSessions.deviceSegment} = 'UNKNOWN' then excluded.device_segment else ${analyticsSessions.deviceSegment} end`,
+              trafficClass: sql`case
+                when excluded.traffic_class in ('TEST', 'OPERATOR', 'BOT') then excluded.traffic_class
+                when ${analyticsSessions.trafficClass} = 'UNCLASSIFIED' then excluded.traffic_class
+                else ${analyticsSessions.trafficClass}
+              end`,
               lastActivityAt: activityAt,
               expiresAt,
               updatedAt: activityAt,
