@@ -100,3 +100,16 @@ export function MemberNavigationLink({ active }: { active: boolean }) {
     </Link>
   );
 }
+
+export function MemberCreateLink({ className, enabled }: { className?: string; enabled: boolean }) {
+  const { state } = useContext(MemberNavigationContext);
+
+  if (!enabled || state !== "member") return null;
+
+  return (
+    <Link className={className} href="/create" aria-label="새 질문 만들기">
+      <span aria-hidden="true">＋</span>
+      질문 만들기
+    </Link>
+  );
+}

@@ -26,10 +26,42 @@
   word-break: keep-all;
 }
 
-.feedHeader > span {
+.feedActions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.feedActions > span {
   color: var(--which-text-tertiary);
   font-size: 0.76rem;
   white-space: nowrap;
+}
+
+.createLink {
+  min-height: 42px;
+  border-radius: 999px;
+  background: var(--which-cyan);
+  color: #062a31;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 16px;
+  font-size: 0.78rem;
+  font-weight: 900;
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    background 160ms ease,
+    transform 160ms ease;
+}
+
+.createLink:hover,
+.createLink:focus-visible {
+  background: var(--which-cyan-strong);
+  color: var(--which-surface);
+  transform: translateY(-1px);
 }
 
 .filters {
@@ -310,8 +342,13 @@
     font-size: 1.65rem;
   }
 
-  .feedHeader > span {
+  .feedActions > span {
     display: none;
+  }
+
+  .createLink {
+    min-height: 40px;
+    padding-inline: 13px;
   }
 
   .filters > a {
@@ -336,6 +373,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .card,
+  .createLink,
   .loadingList div {
     animation: none;
     transition: none;
