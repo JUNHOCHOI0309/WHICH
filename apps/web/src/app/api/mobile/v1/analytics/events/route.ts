@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
 import { internalAuthSecret } from "@/lib/server/member-auth";
+import { mobileAnalyticsContextForRequest } from "@/lib/server/analytics-context";
 import { fetchWhichApi, validGuestSubject } from "@/lib/server/which-api";
 
 export async function POST(request: NextRequest) {
@@ -21,7 +22,11 @@ export async function POST(request: NextRequest) {
         "content-type": "application/json",
         "x-internal-auth-secret": internalAuthSecret(),
       },
-      body: JSON.stringify({ ...event, sessionId }),
+      body: JSON.stringify({
+        ...event,
+        sessionId,
+        context: mobileAnalyticsContextForRequest(request),
+      }),
     });
     return NextResponse.json(await upstream.json(), { status: upstream.status });
   } catch {
