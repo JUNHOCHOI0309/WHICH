@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
 import { decodeEntryAttribution, ENTRY_ATTRIBUTION_COOKIE } from "@/lib/server/entry-attribution";
+import { analyticsContextForRequest } from "@/lib/server/analytics-context";
 import {
   analyticsSessionForRequest,
   setAnalyticsSessionCookie,
@@ -43,6 +44,7 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify({
         ...body,
         sessionId: session.id,
+        context: analyticsContextForRequest(request, Boolean(safeAttribution)),
         ...(safeAttribution ? { attribution: safeAttribution } : {}),
       }),
     });

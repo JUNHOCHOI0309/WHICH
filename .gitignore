@@ -30,3 +30,4 @@ Thumbs.db
 # test output
 playwright-report/
 test-results/
+artifacts/

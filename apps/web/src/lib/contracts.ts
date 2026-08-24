@@ -38,6 +38,19 @@ export type PublicIssue = {
   };
 };
 
+export type CreateIssueCommand = {
+  question: string;
+  context?: string | null;
+  choiceA: string;
+  choiceB: string;
+  interestCardCode: InterestCardCode;
+};
+
+export type CreateIssueResponse = {
+  issue: PublicIssue;
+  created: boolean;
+};
+
 export type RankingMode = "PERSONALIZED" | "RECENCY";
 export type RankingReasonCode =
   | "INTEREST_PROFILE_MATCH"

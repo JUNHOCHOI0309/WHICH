@@ -9,7 +9,7 @@ import type { AppConfig } from "./config.js";
 import type { Database } from "./database/client.js";
 import type { CommentService } from "./modules/comments/contracts.js";
 import { registerCommentRoutes } from "./modules/comments/routes.js";
-import type { IssueReadService } from "./modules/issues/contracts.js";
+import type { IssueReadService, IssueWriteService } from "./modules/issues/contracts.js";
 import { registerIssueRoutes } from "./modules/issues/routes.js";
 import type { MemberIdentityService } from "./modules/identity/contracts.js";
 import { registerMemberIdentityRoutes } from "./modules/identity/routes.js";
@@ -24,6 +24,7 @@ import { registerShareCardRoutes } from "./modules/shares/routes.js";
 
 export type AppDependencies = Pick<Database, "ping" | "close"> & {
   issueReader: IssueReadService;
+  issueWriter?: IssueWriteService;
   guestVotes: GuestVoteService;
   commentReader: CommentService;
   memberIdentity: MemberIdentityService;
@@ -105,7 +106,7 @@ export async function buildApp(config: AppConfig, database: AppDependencies) {
     featureFlags: config.featureFlags,
   }));
 
-  await registerIssueRoutes(app, database.issueReader);
+  await registerIssueRoutes(app, database.issueReader, database.issueWriter);
   await registerVotingRoutes(app, database.guestVotes, config.auth.internalSecret);
   await registerCommentRoutes(app, database.commentReader, config.auth.moderationInternalSecret);
   await registerMemberIdentityRoutes(app, database.memberIdentity, config.auth.internalSecret);

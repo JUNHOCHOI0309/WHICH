@@ -17,6 +17,30 @@ export const ANALYTICS_EVENT_TYPES = [
 
 export type AnalyticsEventType = (typeof ANALYTICS_EVENT_TYPES)[number];
 
+export const ANALYTICS_ENTRY_SURFACES = [
+  "HOME",
+  "EXTERNAL",
+  "DIRECT_ISSUE",
+  "NATIVE",
+  "UNKNOWN",
+] as const;
+export const ANALYTICS_AUDIENCE_SEGMENTS = ["GUEST", "MEMBER", "UNKNOWN"] as const;
+export const ANALYTICS_DEVICE_SEGMENTS = ["MOBILE", "TABLET", "DESKTOP", "UNKNOWN"] as const;
+export const ANALYTICS_TRAFFIC_CLASSES = [
+  "PRODUCT",
+  "TEST",
+  "OPERATOR",
+  "BOT",
+  "UNCLASSIFIED",
+] as const;
+
+export type AnalyticsSessionContext = {
+  entrySurface: (typeof ANALYTICS_ENTRY_SURFACES)[number];
+  audienceSegment: (typeof ANALYTICS_AUDIENCE_SEGMENTS)[number];
+  deviceSegment: (typeof ANALYTICS_DEVICE_SEGMENTS)[number];
+  trafficClass: (typeof ANALYTICS_TRAFFIC_CLASSES)[number];
+};
+
 export type AcquisitionAttribution =
   | {
       source: "naver";
@@ -43,6 +67,7 @@ export type AnalyticsEventCommand = {
   shareCardId?: string;
   occurredAt: string;
   attribution?: AcquisitionAttribution;
+  context?: AnalyticsSessionContext;
 };
 
 export type AnalyticsEventResult = { accepted: true; duplicate: boolean };

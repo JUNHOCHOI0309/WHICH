@@ -25,6 +25,10 @@ export const analyticsSessions = pgTable(
     attributionCampaign: varchar("attribution_campaign", { length: 64 }),
     attributionContent: varchar("attribution_content", { length: 96 }),
     attributionCapturedAt: timestamp("attribution_captured_at", { withTimezone: true }),
+    entrySurface: varchar("entry_surface", { length: 24 }).default("UNKNOWN").notNull(),
+    audienceSegment: varchar("audience_segment", { length: 16 }).default("UNKNOWN").notNull(),
+    deviceSegment: varchar("device_segment", { length: 16 }).default("UNKNOWN").notNull(),
+    trafficClass: varchar("traffic_class", { length: 16 }).default("UNCLASSIFIED").notNull(),
     startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
     lastActivityAt: timestamp("last_activity_at", { withTimezone: true }).notNull(),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
@@ -40,6 +44,13 @@ export const analyticsSessions = pgTable(
     check(
       "analytics_sessions_window_check",
       sql`${table.lastActivityAt} >= ${table.startedAt} and ${table.expiresAt} > ${table.lastActivityAt}`,
+    ),
+    check(
+      "analytics_sessions_context_check",
+      sql`${table.entrySurface} in ('HOME', 'EXTERNAL', 'DIRECT_ISSUE', 'NATIVE', 'UNKNOWN')
+        and ${table.audienceSegment} in ('GUEST', 'MEMBER', 'UNKNOWN')
+        and ${table.deviceSegment} in ('MOBILE', 'TABLET', 'DESKTOP', 'UNKNOWN')
+        and ${table.trafficClass} in ('PRODUCT', 'TEST', 'OPERATOR', 'BOT', 'UNCLASSIFIED')`,
     ),
   ],
 );
@@ -100,6 +111,40 @@ export const analyticsDailyMetrics = pgTable(
     primaryKey({
       columns: [table.metricDate, table.source, table.medium, table.campaign, table.content],
       name: "analytics_daily_metrics_pk",
+    }),
+  ],
+);
+
+export const analyticsDailyFunnelMetrics = pgTable(
+  "analytics_daily_funnel_metrics_v2",
+  {
+    metricDate: date("metric_date").notNull(),
+    source: varchar("source", { length: 32 }).notNull(),
+    medium: varchar("medium", { length: 32 }).notNull(),
+    entrySurface: varchar("entry_surface", { length: 24 }).notNull(),
+    audienceSegment: varchar("audience_segment", { length: 16 }).notNull(),
+    deviceSegment: varchar("device_segment", { length: 16 }).notNull(),
+    qualifiedSessions: integer("qualified_sessions").default(0).notNull(),
+    submitSessions: integer("submit_sessions").default(0).notNull(),
+    acceptedVoteSessions: integer("accepted_vote_sessions").default(0).notNull(),
+    acceptedVotes: integer("accepted_votes").default(0).notNull(),
+    resultSessions: integer("result_sessions").default(0).notNull(),
+    nextIssueSessions: integer("next_issue_sessions").default(0).notNull(),
+    secondVoteSessions: integer("second_vote_sessions").default(0).notNull(),
+    exhaustedSessions: integer("exhausted_sessions").default(0).notNull(),
+    refreshedAt: timestamp("refreshed_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [
+        table.metricDate,
+        table.source,
+        table.medium,
+        table.entrySurface,
+        table.audienceSegment,
+        table.deviceSegment,
+      ],
+      name: "analytics_daily_funnel_metrics_v2_pk",
     }),
   ],
 );

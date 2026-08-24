@@ -3,7 +3,14 @@ import { timingSafeEqual } from "node:crypto";
 import { Type } from "@sinclair/typebox";
 import type { FastifyInstance } from "fastify";
 
-import { ANALYTICS_EVENT_TYPES, type AnalyticsService } from "./contracts.js";
+import {
+  ANALYTICS_AUDIENCE_SEGMENTS,
+  ANALYTICS_DEVICE_SEGMENTS,
+  ANALYTICS_ENTRY_SURFACES,
+  ANALYTICS_EVENT_TYPES,
+  ANALYTICS_TRAFFIC_CLASSES,
+  type AnalyticsService,
+} from "./contracts.js";
 import { AnalyticsEventError } from "./service.js";
 
 const uuidSchema = Type.String({ format: "uuid" });
@@ -93,6 +100,22 @@ export async function registerAnalyticsRoutes(
             shareCardId: Type.Optional(uuidSchema),
             occurredAt: Type.String({ format: "date-time" }),
             attribution: Type.Optional(attributionSchema),
+            context: Type.Optional(
+              Type.Object({
+                entrySurface: Type.Union(
+                  ANALYTICS_ENTRY_SURFACES.map((value) => Type.Literal(value)),
+                ),
+                audienceSegment: Type.Union(
+                  ANALYTICS_AUDIENCE_SEGMENTS.map((value) => Type.Literal(value)),
+                ),
+                deviceSegment: Type.Union(
+                  ANALYTICS_DEVICE_SEGMENTS.map((value) => Type.Literal(value)),
+                ),
+                trafficClass: Type.Union(
+                  ANALYTICS_TRAFFIC_CLASSES.map((value) => Type.Literal(value)),
+                ),
+              }),
+            ),
           }),
           response: {
             200: Type.Object({ accepted: Type.Literal(true), duplicate: Type.Boolean() }),

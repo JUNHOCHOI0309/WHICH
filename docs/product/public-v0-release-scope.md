@@ -137,8 +137,8 @@ These items may be valuable, but they do not block validation of the core hypoth
 - advanced learned ranking, Two-Tower, sequence models, real-time Bandit, or real-time feature store;
 - native Member OAuth, push notifications, signed App Store/Play Store distribution, and complete Web
   parity;
-- open Creator publishing, large-scale UGC automation, Following, notification expansion, or social
-  graph features;
+- unrestricted Creator publishing, large-scale UGC automation, Following, notification expansion, or
+  social graph features;
 - threaded Reply expansion, DM, groups, quote posts, or real-time chat;
 - new Search, Trending, Live, bookmark, or notification product surfaces;
 - political/election voting, representative polling claims, monetization, B2B analytics, multi-region,
@@ -154,6 +154,23 @@ Use this order whenever a new request or defect appears:
    operate the release safely.
 3. **Post-v0 backlog:** improves breadth or convenience but is not required to make the public v0
    decision.
+
+## Approved post-v0 extension: Member Issue creation v1
+
+WHICH-57 introduces a deliberately narrow Creator publishing path without changing the validated
+Guest Vote core loop:
+
+- only an active Member session can publish;
+- each Issue contains one question, optional short context, and exactly two distinct A/B choices;
+- only LOW-risk, non-political, link-free subjective topics are accepted;
+- the server normalizes and validates all text, enforces idempotency, and limits each Member to three
+  Issues per rolling 24 hours;
+- Issue, Version, Choices, Interest mapping, Author, zero-result baseline, and Outbox event are created
+  in one transaction;
+- published Issues reuse the existing Feed, Detail, Vote, Result, Comment, and Creator Profile paths.
+
+Drafts, editing, deletion, human review queues, broad automated moderation, and AI-assisted rewriting
+remain follow-up scope. This limited path must not be described as unrestricted open publishing.
 
 A Post-v0 request does not interrupt the current milestone unless new evidence changes this release
 contract.

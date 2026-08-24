@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildApp } from "../src/app.js";
 import { getConfig } from "../src/config.js";
 import type { CommentService } from "../src/modules/comments/contracts.js";
-import type { IssueReadService } from "../src/modules/issues/contracts.js";
+import type { IssueReadService, IssueWriteService } from "../src/modules/issues/contracts.js";
 import type { MemberIdentityService } from "../src/modules/identity/contracts.js";
 import type { InterestProfileService } from "../src/modules/interests/contracts.js";
 import type { GuestVoteService } from "../src/modules/voting/contracts.js";
@@ -17,9 +17,15 @@ const guestVotes: GuestVoteService = {
   reconcileIssueVersion: vi.fn(),
 };
 
+const getGuestIssue = vi.fn<IssueReadService["getGuestIssue"]>();
 const issueReader: IssueReadService = {
-  getGuestIssue: vi.fn(),
+  getGuestIssue,
   listGuestIssues: vi.fn(),
+};
+
+const createMemberIssue = vi.fn<IssueWriteService["createMemberIssue"]>();
+const issueWriter: IssueWriteService = {
+  createMemberIssue,
 };
 
 const commentReader: CommentService = {
@@ -69,6 +75,7 @@ describe("system health", () => {
       ping: vi.fn(),
       close: vi.fn(),
       issueReader,
+      issueWriter,
       guestVotes,
       commentReader,
       memberIdentity,
@@ -167,6 +174,7 @@ describe("OpenAPI contract", () => {
       ping: vi.fn(),
       close: vi.fn(),
       issueReader,
+      issueWriter,
       guestVotes,
       commentReader,
       memberIdentity,
@@ -180,6 +188,7 @@ describe("OpenAPI contract", () => {
 
     expect(response.statusCode).toBe(200);
     expect(document.paths).toHaveProperty(["/v1/issues/{issueId}", "get"]);
+    expect(document.paths).toHaveProperty(["/v1/issues", "post"]);
     expect(document.paths).toHaveProperty(["/v1/issues/feed", "get"]);
     expect(document.paths).toHaveProperty(["/v1/guest-subjects", "post"]);
     expect(document.paths).toHaveProperty(["/v1/issues/{issueId}/votes", "post"]);
@@ -195,5 +204,79 @@ describe("OpenAPI contract", () => {
     expect(document.paths).toHaveProperty(["/v1/interest-profile", "put"]);
     expect(document.paths).toHaveProperty(["/v1/interest-profile/reset", "post"]);
     expect(document.paths).toHaveProperty(["/v1/interest-profile/merge", "post"]);
+  });
+
+  it("keeps Member issue creation authenticated and idempotent", async () => {
+    const issueId = "876a6750-8efc-4ff1-a923-d4d8959d8f31";
+    createMemberIssue.mockResolvedValue({
+      created: true,
+      issue: {
+        id: issueId,
+        version: 1,
+        question: "퇴근 후 바로 잘까?",
+        context: null,
+        choices: [
+          { code: "A", label: "바로 자기" },
+          { code: "B", label: "조금 더 놀기" },
+        ],
+        interestCardCode: "DAILY_LIFE",
+        publishedAt: "2026-08-25T03:00:00.000Z",
+      },
+    });
+    getGuestIssue.mockResolvedValue({
+      id: issueId,
+      version: 1,
+      question: "퇴근 후 바로 잘까?",
+      context: null,
+      publishedAt: "2026-08-25T03:00:00.000Z",
+      categoryCode: "LIFE",
+      experienceModeCode: "PLAYFUL_QUICK",
+      choices: [
+        { id: "9f64f67d-c0e8-4f6a-ab8d-0508926c7e51", code: "A", label: "바로 자기" },
+        { id: "2375d356-56fb-43ba-a675-d14f3d60ef16", code: "B", label: "조금 더 놀기" },
+      ],
+      author: null,
+      result: { visibility: "PRE_VOTE_HIDDEN", tally: null },
+    });
+    const app = await buildApp(getConfig({ NODE_ENV: "test" }), {
+      ping: vi.fn(),
+      close: vi.fn(),
+      issueReader,
+      issueWriter,
+      guestVotes,
+      commentReader,
+      memberIdentity,
+    });
+    openApps.push(app);
+
+    const guest = await app.inject({
+      method: "POST",
+      url: "/v1/issues",
+      headers: { "idempotency-key": "c41a85f6-a31d-4518-b667-455335d48c39" },
+      payload: {
+        question: "퇴근 후 바로 잘까",
+        choiceA: "바로 자기",
+        choiceB: "조금 더 놀기",
+        interestCardCode: "DAILY_LIFE",
+      },
+    });
+    expect(guest.statusCode).toBe(401);
+
+    const member = await app.inject({
+      method: "POST",
+      url: "/v1/issues",
+      headers: {
+        authorization: "Bearer member-session-token",
+        "idempotency-key": "c41a85f6-a31d-4518-b667-455335d48c39",
+      },
+      payload: {
+        question: "퇴근 후 바로 잘까",
+        choiceA: "바로 자기",
+        choiceB: "조금 더 놀기",
+        interestCardCode: "DAILY_LIFE",
+      },
+    });
+    expect(member.statusCode).toBe(201);
+    expect(member.json()).toMatchObject({ created: true, issue: { id: issueId } });
   });
 });
