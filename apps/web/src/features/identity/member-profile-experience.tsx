@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { WhichAsideCard, WhichShell } from "@/components/layout/which-shell";
-import { loginHref } from "@/lib/auth";
 import type { MemberPrivateProfile, MemberPrivateVote } from "@/lib/contracts";
 import { logoutMemberSession, MEMBER_LOGOUT_ERROR } from "@/lib/member-session";
 
@@ -13,10 +12,6 @@ import { MemberPublicProfileSettings } from "./member-public-profile-settings";
 import { MemberCredentialSetup } from "./member-credential-setup";
 
 type Screen = "loading" | "guest" | "ready" | "error";
-type AccountLinkNotice = {
-  tone: "success" | "warning" | "error";
-  message: string;
-};
 
 type AccountDeletionError = { code?: string; message?: string };
 
@@ -27,31 +22,6 @@ function accountDeletionMessage(error: AccountDeletionError, status: number) {
   }
   if (status === 401) return "로그인 세션이 만료되었습니다. 다시 로그인해 주세요.";
   return error.message || "회원 탈퇴를 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.";
-}
-
-function readAccountLinkNotice(): AccountLinkNotice | null {
-  if (window.location.hash !== "#connected-accounts") return null;
-
-  const outcome = new URLSearchParams(window.location.search).get("auth");
-  if (outcome === "success") {
-    return {
-      tone: "success",
-      message: "로그인 수단을 연결했습니다. 연결된 Guest 기록도 같은 회원에게 이어집니다.",
-    };
-  }
-  if (outcome === "merge-review") {
-    return {
-      tone: "warning",
-      message: "이 계정에는 별도 활동 또는 충돌이 있어 자동 병합하지 않았습니다.",
-    };
-  }
-  if (outcome === "error") {
-    return {
-      tone: "error",
-      message: "로그인 수단을 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.",
-    };
-  }
-  return null;
 }
 
 async function readProfile(cursor?: string) {
@@ -83,26 +53,12 @@ function participatedLabel(value: string) {
   }).format(new Date(value));
 }
 
-const socialProviders = [
-  { id: "GOOGLE", login: "google", label: "Google" },
-  { id: "X", login: "x", label: "X" },
-  { id: "NAVER", login: "naver", label: "네이버" },
-  { id: "KAKAO", login: "kakao", label: "카카오" },
-] as const;
-
-export function MemberProfileExperience({
-  kakaoLoginEnabled,
-  naverLoginEnabled,
-}: {
-  kakaoLoginEnabled?: boolean;
-  naverLoginEnabled: boolean;
-}) {
+export function MemberProfileExperience() {
   const [screen, setScreen] = useState<Screen>("loading");
   const [profile, setProfile] = useState<MemberPrivateProfile | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [logoutPending, setLogoutPending] = useState(false);
   const [logoutError, setLogoutError] = useState<string | null>(null);
-  const [accountLinkNotice, setAccountLinkNotice] = useState<AccountLinkNotice | null>(null);
   const [accountDeletionOpen, setAccountDeletionOpen] = useState(false);
   const [accountDeletionPassword, setAccountDeletionPassword] = useState("");
   const [accountDeletionConfirmation, setAccountDeletionConfirmation] = useState("");
@@ -128,13 +84,6 @@ export function MemberProfileExperience({
 
   useEffect(() => {
     let active = true;
-    const notice = readAccountLinkNotice();
-    if (notice) {
-      queueMicrotask(() => {
-        if (active) setAccountLinkNotice(notice);
-      });
-    }
-
     void readProfile()
       .then((next) => {
         if (!active) return;
@@ -275,61 +224,6 @@ export function MemberProfileExperience({
                 }
               />
             ) : null}
-
-            <section
-              className={styles.connectedAccounts}
-              id="connected-accounts"
-              aria-labelledby="connected-accounts-title"
-            >
-              <div className={styles.connectedAccountsHeading}>
-                <div>
-                  <p>CONNECTED ACCOUNTS</p>
-                  <h2 id="connected-accounts-title">로그인 수단 연결</h2>
-                </div>
-                <span>어느 수단으로 로그인해도 같은 기록으로 연결됩니다.</span>
-              </div>
-              {accountLinkNotice ? (
-                <p
-                  className={styles.accountLinkNotice}
-                  data-tone={accountLinkNotice.tone}
-                  role={accountLinkNotice.tone === "success" ? "status" : "alert"}
-                >
-                  {accountLinkNotice.message}
-                </p>
-              ) : null}
-              <div className={styles.providerGrid}>
-                {socialProviders.map((provider) => {
-                  const enabled =
-                    provider.id === "GOOGLE" ||
-                    provider.id === "X" ||
-                    (provider.id === "NAVER" && naverLoginEnabled) ||
-                    (provider.id === "KAKAO" && kakaoLoginEnabled);
-                  if (!enabled) return null;
-                  const connected = profile.identities.some(
-                    (identity) => identity.provider === provider.id,
-                  );
-                  return (
-                    <article className={styles.providerCard} key={provider.id}>
-                      <div>
-                        <strong>{provider.label}</strong>
-                        <span>{connected ? "연결됨" : "연결되지 않음"}</span>
-                      </div>
-                      {connected ? (
-                        <span className={styles.connectedBadge}>CONNECTED</span>
-                      ) : (
-                        <a href={loginHref(provider.login, "/me#connected-accounts", "link")}>
-                          연결하기
-                        </a>
-                      )}
-                    </article>
-                  );
-                })}
-              </div>
-              <p className={styles.accountLinkNote}>
-                계정 연결은 현재 로그인된 회원에게만 추가됩니다. 이메일이나 Guest 쿠키만으로 다른
-                회원을 자동 병합하지 않습니다.
-              </p>
-            </section>
 
             <section className={styles.history} aria-labelledby="history-title">
               <div className={styles.historyHeading}>

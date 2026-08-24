@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 
 import { MemberProfileExperience } from "@/features/identity/member-profile-experience";
-import { kakaoLoginEnabled, naverLoginEnabled } from "@/lib/server/member-auth";
 
 export const metadata: Metadata = {
   title: "내 기록",
@@ -9,10 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function MePage() {
-  return (
-    <MemberProfileExperience
-      kakaoLoginEnabled={kakaoLoginEnabled()}
-      naverLoginEnabled={naverLoginEnabled()}
-    />
-  );
+  return <MemberProfileExperience />;
 }
