@@ -2,15 +2,18 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 
 import { hash as hashPassword, verify as verifyPassword } from "@node-rs/argon2";
 import { alias } from "drizzle-orm/pg-core";
-import { and, eq, gt, isNull, lt, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, isNull, lt, sql } from "drizzle-orm";
 
 import type { Database } from "../../database/client.js";
 import {
   authRateLimitWindows,
   guestMemberLinks,
+  comments,
   commentReactions,
   commentReports,
+  interestProfiles,
   issueChoices,
+  issueAuthors,
   memberCredentials,
   memberAuthTokens,
   memberIdentityLinks,
@@ -18,6 +21,7 @@ import {
   memberSessions,
   members,
   outboxEvents,
+  recommendationRequests,
   resultSnapshots,
   voteAggregates,
   voteIntegrityDecisions,
@@ -1538,6 +1542,120 @@ export function createMemberIdentityService(
           .returning();
         if (!profile) throw new Error("Member profile update did not return a row.");
         return profileSettings(profile);
+      });
+    },
+
+    async deleteAccount(token, password) {
+      const session = await activeMemberSession(database, token);
+      if (!session) return null;
+
+      const [credential] = await database
+        .select({ id: memberCredentials.id, passwordHash: memberCredentials.passwordHash })
+        .from(memberCredentials)
+        .where(eq(memberCredentials.memberId, session.member.id))
+        .limit(1);
+      if (!credential) {
+        throw new MemberIdentityError(
+          "CREDENTIAL_REQUIRED",
+          409,
+          "Email and password login must be configured before account deletion.",
+        );
+      }
+      if (!(await verifyPassword(credential.passwordHash, password))) {
+        throw new MemberIdentityError("CREDENTIAL_INVALID", 401, "The password is invalid.");
+      }
+
+      const now = new Date();
+      return database.transaction(async (transaction) => {
+        const locked = await transaction.execute<{ status: string }>(sql`
+          select status
+          from members
+          where member_id = ${session.member.id}
+          for update
+        `);
+        if (locked.rows[0]?.status !== "ACTIVE") {
+          throw new MemberIdentityError("MEMBER_NOT_ACTIVE", 403, "The Member is not active.");
+        }
+
+        const subjects = await transaction
+          .select({ id: voterSubjects.id })
+          .from(voterSubjects)
+          .where(eq(voterSubjects.userId, session.member.id));
+        const subjectIds = subjects.map((subject) => subject.id);
+
+        if (subjectIds.length > 0) {
+          await transaction
+            .update(comments)
+            .set({ authorDisplayName: "탈퇴한 사용자", updatedAt: now })
+            .where(inArray(comments.authorSubjectId, subjectIds));
+          await transaction
+            .update(recommendationRequests)
+            .set({ subjectId: null })
+            .where(inArray(recommendationRequests.subjectId, subjectIds));
+          await transaction
+            .delete(interestProfiles)
+            .where(inArray(interestProfiles.subjectId, subjectIds));
+        }
+
+        await transaction
+          .delete(guestMemberLinks)
+          .where(eq(guestMemberLinks.memberId, session.member.id));
+        await transaction.delete(issueAuthors).where(eq(issueAuthors.memberId, session.member.id));
+        await transaction
+          .delete(memberProfiles)
+          .where(eq(memberProfiles.memberId, session.member.id));
+        await transaction
+          .delete(memberIdentityLinks)
+          .where(eq(memberIdentityLinks.memberId, session.member.id));
+        await transaction
+          .delete(memberCredentials)
+          .where(eq(memberCredentials.memberId, session.member.id));
+        await transaction
+          .update(memberSessions)
+          .set({ revokedAt: now })
+          .where(
+            and(eq(memberSessions.memberId, session.member.id), isNull(memberSessions.revokedAt)),
+          );
+
+        if (subjectIds.length > 0) {
+          await transaction
+            .update(voterSubjects)
+            .set({
+              kind: "DELETED_MEMBER",
+              anonymousSubjectId: null,
+              userId: null,
+              verifiedUniquenessHandle: null,
+              expiresAt: null,
+              lastSeenAt: now,
+            })
+            .where(inArray(voterSubjects.id, subjectIds));
+        }
+
+        await transaction
+          .update(members)
+          .set({ status: "DELETED", displayName: "탈퇴한 사용자", updatedAt: now })
+          .where(eq(members.id, session.member.id));
+
+        const eventId = randomUUID();
+        await transaction.insert(outboxEvents).values({
+          id: eventId,
+          aggregateType: "MEMBER",
+          aggregateId: session.member.id,
+          eventType: "MEMBER_ACCOUNT_DELETED",
+          schemaVersion: EVENT_SCHEMA_VERSION,
+          occurredAt: now,
+          payload: {
+            event_id: eventId,
+            event_type: "MEMBER_ACCOUNT_DELETED",
+            schema_version: EVENT_SCHEMA_VERSION,
+            occurred_at: now.toISOString(),
+            aggregate_type: "MEMBER",
+            aggregate_id: session.member.id,
+            data: { anonymized_subject_count: subjectIds.length },
+          },
+        });
+
+        return { deleted: true } as const;
       });
     },
 

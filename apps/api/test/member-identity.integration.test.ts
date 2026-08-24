@@ -7,8 +7,11 @@ import { buildApp } from "../src/app.js";
 import { getConfig } from "../src/config.js";
 import type { Database } from "../src/database/client.js";
 import {
+  comments,
   guestMemberLinks,
+  interestProfiles,
   issueChoices,
+  issueAuthors,
   issues,
   issueVersions,
   memberCredentials,
@@ -19,6 +22,7 @@ import {
   members,
   recommendationRequests,
   resultSnapshots,
+  subjectInterests,
   voteAggregates,
   voteAttempts,
   voteIntegrityDecisions,
@@ -238,6 +242,202 @@ describe("Member identity and Guest vote linking", () => {
     });
     expect(rejected.statusCode).toBe(401);
     expect(rejected.json()).toMatchObject({ code: "CREDENTIAL_INVALID" });
+  });
+
+  it("deletes PII and login access while preserving anonymized activity", async () => {
+    const email = `delete-${randomUUID()}@example.com`;
+    const password = "a deletion test password";
+    const providerSubject = `google-delete-${randomUUID()}`;
+    const guestId = await createGuest();
+    const signup = await createMemberSession({
+      provider: "GOOGLE",
+      providerSubject,
+      anonymousSubjectId: guestId,
+      credential: { email, password },
+    });
+    const signupBody = signup.json<{ token: string; member: { id: string } }>();
+    await verifyCredentialEmail(email);
+    const secondSession = await app.inject({
+      method: "POST",
+      url: "/v1/internal/member-credential-sessions",
+      headers: { "x-internal-auth-secret": INTERNAL_SECRET },
+      payload: { email, password },
+    });
+    const secondToken = secondSession.json<{ token: string }>().token;
+    await linkMemberIdentity({
+      memberId: signupBody.member.id,
+      provider: "NAVER",
+      providerSubject: `naver-delete-${randomUUID()}`,
+    });
+
+    const issue = await createIssue();
+    const [memberSubject] = await database.db
+      .select({ id: voterSubjects.id })
+      .from(voterSubjects)
+      .where(eq(voterSubjects.userId, signupBody.member.id));
+    const attemptId = randomUUID();
+    const voteId = randomUUID();
+    const now = new Date();
+    await database.db.insert(voteAttempts).values({
+      id: attemptId,
+      idempotencyKey: attemptId,
+      issueId: issue.issueId,
+      issueVersion: 1,
+      choiceId: issue.choiceAId,
+      subjectId: memberSubject!.id,
+      requestState: "COMPLETED",
+      requestFingerprint: "d".repeat(64),
+      completedAt: now,
+    });
+    await database.db.insert(votes).values({
+      id: voteId,
+      voteAttemptId: attemptId,
+      issueId: issue.issueId,
+      issueVersion: 1,
+      choiceId: issue.choiceAId,
+      subjectId: memberSubject!.id,
+      integrityState: "ACCEPTED",
+      userTier: "MEMBER",
+      accountAssurance: "CREDENTIAL",
+      uniquenessAssurance: "ACCOUNT",
+      issueRiskLevel: "LOW",
+      eligibilityPolicyVersion: "member-low-v1",
+      integrityPolicyVersion: "vote-integrity-v1",
+      acceptedAt: now,
+    });
+    const commentId = randomUUID();
+    await database.db.insert(comments).values({
+      id: commentId,
+      issueId: issue.issueId,
+      issueVersion: 1,
+      authorSubjectId: memberSubject!.id,
+      acceptedVoteId: voteId,
+      choice: "A",
+      authorDisplayName: "삭제 전 표시 이름",
+      body: "탈퇴 후에도 유지되는 댓글",
+      publicationState: "PUBLISHED",
+    });
+    await database.db.insert(memberProfiles).values({
+      memberId: signupBody.member.id,
+      handle: `delete_${randomUUID().replaceAll("-", "").slice(0, 12)}`,
+      bio: "삭제될 소개",
+      visibility: "PUBLIC",
+    });
+    await database.db.insert(issueAuthors).values({
+      issueId: issue.issueId,
+      memberId: signupBody.member.id,
+    });
+    await database.db.insert(interestProfiles).values({
+      subjectId: memberSubject!.id,
+      taxonomyVersion: "interest_cards_v1",
+      onboardingState: "COMPLETED",
+      completedAt: now,
+    });
+    await database.db.insert(subjectInterests).values({
+      subjectId: memberSubject!.id,
+      cardCode: "FOOD",
+    });
+    const recommendationRequestId = randomUUID();
+    await database.db.insert(recommendationRequests).values({
+      id: recommendationRequestId,
+      subjectId: memberSubject!.id,
+      rankingVersion: "deletion-test-v1",
+      rankingMode: "PERSONALIZED",
+      reasonCode: "PROFILE_READY",
+      profileVersion: 1,
+    });
+
+    const rejected = await app.inject({
+      method: "DELETE",
+      url: "/v1/me",
+      headers: { authorization: `Bearer ${signupBody.token}` },
+      payload: { password: "the wrong deletion password", confirmation: "DELETE" },
+    });
+    expect(rejected.statusCode).toBe(401);
+
+    const deleted = await app.inject({
+      method: "DELETE",
+      url: "/v1/me",
+      headers: { authorization: `Bearer ${signupBody.token}` },
+      payload: { password, confirmation: "DELETE" },
+    });
+    expect(deleted.statusCode).toBe(200);
+    expect(deleted.json()).toEqual({ deleted: true });
+
+    const [tombstone] = await database.db
+      .select({ status: members.status, displayName: members.displayName })
+      .from(members)
+      .where(eq(members.id, signupBody.member.id));
+    expect(tombstone).toEqual({ status: "DELETED", displayName: "탈퇴한 사용자" });
+    expect(
+      await database.db
+        .select()
+        .from(memberCredentials)
+        .where(eq(memberCredentials.memberId, signupBody.member.id)),
+    ).toHaveLength(0);
+    expect(
+      await database.db
+        .select()
+        .from(memberIdentityLinks)
+        .where(eq(memberIdentityLinks.memberId, signupBody.member.id)),
+    ).toHaveLength(0);
+    expect(
+      await database.db
+        .select()
+        .from(memberProfiles)
+        .where(eq(memberProfiles.memberId, signupBody.member.id)),
+    ).toHaveLength(0);
+
+    const [anonymousSubject] = await database.db
+      .select({
+        kind: voterSubjects.kind,
+        userId: voterSubjects.userId,
+        anonymousSubjectId: voterSubjects.anonymousSubjectId,
+      })
+      .from(voterSubjects)
+      .where(eq(voterSubjects.id, memberSubject!.id));
+    expect(anonymousSubject).toEqual({
+      kind: "DELETED_MEMBER",
+      userId: null,
+      anonymousSubjectId: null,
+    });
+    const [preservedComment] = await database.db
+      .select({ displayName: comments.authorDisplayName, body: comments.body })
+      .from(comments)
+      .where(eq(comments.id, commentId));
+    expect(preservedComment).toEqual({
+      displayName: "탈퇴한 사용자",
+      body: "탈퇴 후에도 유지되는 댓글",
+    });
+    expect(await database.db.select().from(votes).where(eq(votes.id, voteId))).toHaveLength(1);
+    expect(
+      await database.db
+        .select()
+        .from(interestProfiles)
+        .where(eq(interestProfiles.subjectId, memberSubject!.id)),
+    ).toHaveLength(0);
+    const [recommendation] = await database.db
+      .select({ subjectId: recommendationRequests.subjectId })
+      .from(recommendationRequests)
+      .where(eq(recommendationRequests.id, recommendationRequestId));
+    expect(recommendation?.subjectId).toBeNull();
+
+    for (const token of [signupBody.token, secondToken]) {
+      const session = await app.inject({
+        method: "GET",
+        url: "/v1/member-session",
+        headers: { authorization: `Bearer ${token}` },
+      });
+      expect(session.statusCode).toBe(401);
+    }
+
+    const reused = await createMemberSession({
+      provider: "GOOGLE",
+      providerSubject,
+      credential: { email, password },
+    });
+    expect(reused.statusCode).toBe(201);
+    expect(reused.json()).not.toMatchObject({ member: { id: signupBody.member.id } });
   });
 
   it("lets an existing social-only Member complete email and password login", async () => {

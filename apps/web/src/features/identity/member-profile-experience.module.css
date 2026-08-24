@@ -8,7 +8,8 @@
 .history,
 .message,
 .connectedAccounts,
-.privacyNote {
+.privacyNote,
+.accountDeletion {
   border: 1px solid var(--which-border);
   border-radius: 18px;
   background: var(--which-surface);
@@ -97,6 +98,7 @@
 .loginOptions a,
 .moreButton,
 .privacyNote button,
+.accountDeletion button,
 .empty a {
   width: fit-content;
   min-height: 46px;
@@ -385,11 +387,128 @@
   padding: 11px 14px;
 }
 
+.accountDeletion {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 22px;
+  border-left: 4px solid var(--which-orange);
+}
+
+.accountDeletion > div > p {
+  margin: 0 0 10px;
+  color: var(--which-orange-strong);
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+}
+
+.accountDeletion h2 {
+  margin: 0;
+  font-size: clamp(1.45rem, 3vw, 2rem);
+  letter-spacing: -0.04em;
+}
+
+.accountDeletion > div > span {
+  display: block;
+  max-width: 72ch;
+  margin-top: 12px;
+  color: var(--which-text-secondary);
+  line-height: 1.7;
+  word-break: keep-all;
+}
+
+.accountDeletion button {
+  border-color: var(--which-orange);
+  background: transparent;
+}
+
+.accountDeletionForm {
+  grid-column: 1 / -1;
+  border-top: 1px solid var(--which-border);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  padding-top: 20px;
+}
+
+.accountDeletionForm label {
+  color: var(--which-text);
+  display: grid;
+  gap: 8px;
+  font-size: 0.78rem;
+  font-weight: 850;
+}
+
+.accountDeletionForm input {
+  min-height: 48px;
+  border: 1px solid var(--which-border-strong);
+  border-radius: 12px;
+  background: var(--which-surface-subtle);
+  color: var(--which-text);
+  font: inherit;
+  padding: 10px 13px;
+}
+
+.accountDeletionForm input:focus-visible {
+  border-color: var(--which-orange);
+  outline: 3px solid color-mix(in srgb, var(--which-orange) 22%, transparent);
+}
+
+.accountDeletionWarning,
+.accountDeletionError {
+  grid-column: 1 / -1;
+  margin: 0;
+  border-left: 4px solid var(--which-orange);
+  border-radius: 8px;
+  background: var(--which-orange-soft);
+  color: var(--which-text);
+  font-size: 0.78rem;
+  font-weight: 800;
+  line-height: 1.55;
+  padding: 12px 14px;
+}
+
+.accountDeletionError {
+  color: var(--which-orange-strong);
+}
+
+.accountDeletionActions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.accountDeletionActions button:last-child {
+  background: var(--which-orange);
+}
+
+.accountDeletion button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 @media (max-width: 720px) {
   .profile,
-  .privacyNote {
+  .privacyNote,
+  .accountDeletion,
+  .accountDeletionForm {
     grid-template-columns: 1fr;
     align-items: start;
+  }
+
+  .accountDeletion > button {
+    width: 100%;
+  }
+
+  .accountDeletionActions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .accountDeletionActions button {
+    width: 100%;
   }
 
   .summary {

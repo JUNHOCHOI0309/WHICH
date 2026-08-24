@@ -37,6 +37,10 @@ export type MemberCredentialResult = {
   email: string;
 };
 
+export type MemberAccountDeletionResult = {
+  deleted: true;
+};
+
 export type MemberSessionResult = {
   token: string;
   expiresAt: string;
@@ -182,6 +186,7 @@ export interface MemberIdentityService {
     query: MemberVoteHistoryQuery,
   ): Promise<MemberPrivateProfile | null>;
   updateProfile(token: string, command: MemberProfileUpdate): Promise<MemberProfileSettings | null>;
+  deleteAccount(token: string, password: string): Promise<MemberAccountDeletionResult | null>;
   getPublicCreatorProfile(handle: string): Promise<PublicCreatorProfile | null>;
   findPrivateVote(
     token: string,

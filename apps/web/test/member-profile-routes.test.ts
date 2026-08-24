@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { GET as readMe } from "@/app/api/me/route";
+import { DELETE as deleteMe, GET as readMe } from "@/app/api/me/route";
 import { GET as readVoteStatus } from "@/app/api/issues/[issueId]/vote-status/route";
 
 const ISSUE_ID = "591f2e90-996a-50c5-af46-967dd0793000";
@@ -66,5 +66,70 @@ describe("Member private profile BFF routes", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ choice: "B" });
     expect(upstream).toHaveBeenCalledTimes(1);
+  });
+
+  it("reauthenticates account deletion and clears the local session only after success", async () => {
+    const upstream = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      expect(String(input)).toBe("http://localhost:4000/v1/me");
+      expect(init?.method).toBe("DELETE");
+      expect(new Headers(init?.headers).get("authorization")).toBe("Bearer member-token");
+      expect(JSON.parse(String(init?.body))).toEqual({
+        password: "correct password",
+        confirmation: "DELETE",
+      });
+      return new Response(JSON.stringify({ deleted: true }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    });
+    vi.stubGlobal("fetch", upstream);
+
+    const response = await deleteMe(
+      new NextRequest("https://whichone.site/api/me", {
+        method: "DELETE",
+        headers: {
+          cookie: "which_member_session=member-token",
+          "content-type": "application/json",
+          "x-which-csrf": "member-account-delete",
+        },
+        body: JSON.stringify({
+          password: "correct password",
+          confirmation: "탈퇴합니다",
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ deleted: true });
+    expect(response.headers.get("set-cookie")).toContain("which_member_session=");
+    expect(response.headers.get("set-cookie")).toContain("Max-Age=0");
+  });
+
+  it("keeps the local session when account deletion is rejected", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({ code: "CREDENTIAL_INVALID", message: "invalid password" }),
+            { status: 401, headers: { "content-type": "application/json" } },
+          ),
+      ),
+    );
+
+    const response = await deleteMe(
+      new NextRequest("https://whichone.site/api/me", {
+        method: "DELETE",
+        headers: {
+          cookie: "which_member_session=member-token",
+          "content-type": "application/json",
+          "x-which-csrf": "member-account-delete",
+        },
+        body: JSON.stringify({ password: "wrong", confirmation: "탈퇴합니다" }),
+      }),
+    );
+
+    expect(response.status).toBe(401);
+    expect(response.headers.get("set-cookie")).toBeNull();
   });
 });

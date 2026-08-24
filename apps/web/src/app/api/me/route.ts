@@ -36,3 +36,72 @@ export async function GET(request: NextRequest) {
     );
   }
 }
+
+export async function DELETE(request: NextRequest) {
+  const origin = request.headers.get("origin");
+  const csrfHeader = request.headers.get("x-which-csrf");
+  let publicOrigin = request.nextUrl.origin;
+  if (process.env.AUTH_BASE_URL) {
+    try {
+      publicOrigin = new URL(process.env.AUTH_BASE_URL).origin;
+    } catch {
+      // Keep the request origin as a safe fallback when configuration is malformed.
+    }
+  }
+  const originMatches = origin === null || origin === "null" || origin === publicOrigin;
+  if (!originMatches || csrfHeader !== "member-account-delete") {
+    return NextResponse.json(
+      { code: "CSRF_REJECTED", message: "요청 출처를 확인할 수 없습니다." },
+      { status: 403 },
+    );
+  }
+
+  const token = request.cookies.get(MEMBER_SESSION_COOKIE)?.value;
+  if (!token) {
+    return NextResponse.json(
+      { code: "SESSION_INVALID", message: "로그인이 필요합니다." },
+      { status: 401 },
+    );
+  }
+
+  let input: { password?: unknown; confirmation?: unknown };
+  try {
+    input = (await request.json()) as { password?: unknown; confirmation?: unknown };
+  } catch {
+    return NextResponse.json(
+      { code: "INVALID_REQUEST", message: "탈퇴 정보를 확인해 주세요." },
+      { status: 400 },
+    );
+  }
+  if (
+    typeof input.password !== "string" ||
+    input.password.length === 0 ||
+    input.confirmation !== "탈퇴합니다"
+  ) {
+    return NextResponse.json(
+      { code: "INVALID_REQUEST", message: "비밀번호와 확인 문구를 정확히 입력해 주세요." },
+      { status: 400 },
+    );
+  }
+
+  try {
+    const upstream = await fetchWhichApi("/v1/me", {
+      method: "DELETE",
+      headers: {
+        accept: "application/json",
+        authorization: `Bearer ${token}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ password: input.password, confirmation: "DELETE" }),
+    });
+    const body = await upstream.json();
+    const response = NextResponse.json(body, { status: upstream.status });
+    if (upstream.ok && body?.deleted === true) clearMemberSessionCookie(response);
+    return response;
+  } catch {
+    return NextResponse.json(
+      { code: "API_UNAVAILABLE", message: "회원 탈퇴를 처리하지 못했습니다." },
+      { status: 502 },
+    );
+  }
+}
