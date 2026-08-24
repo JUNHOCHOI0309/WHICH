@@ -7,6 +7,7 @@ import { buildApp } from "../src/app.js";
 import { getConfig } from "../src/config.js";
 import type { Database } from "../src/database/client.js";
 import {
+  guestMemberLinks,
   interestProfiles,
   issueChoices,
   issueInterestCards,
@@ -75,6 +76,24 @@ async function createGuestProfile(cardCodes: string[], state = "COMPLETED") {
       .values(cardCodes.map((cardCode) => ({ subjectId, cardCode, source: "EXPLICIT" })));
   }
   return { anonymousSubjectId, subjectId };
+}
+
+async function voteOnIssue(
+  issueId: string,
+  headers: { authorization?: string; "x-anonymous-subject-id"?: string },
+) {
+  const [choice] = await database.db
+    .select({ id: issueChoices.id })
+    .from(issueChoices)
+    .where(eq(issueChoices.issueId, issueId))
+    .limit(1);
+  const response = await app.inject({
+    method: "POST",
+    url: `/v1/issues/${issueId}/votes`,
+    headers: { ...headers, "idempotency-key": randomUUID() },
+    payload: { issueVersion: 1, choiceId: choice!.id },
+  });
+  expect(response.statusCode).toBe(201);
 }
 
 beforeAll(async () => {
@@ -240,5 +259,124 @@ describe("Personalized Feed Ranker v0", () => {
     expect(response.statusCode).toBe(200);
     expect(body.ranking.mode).toBe("PERSONALIZED");
     expect(body.items[0]?.id).toBe(educationIssue);
+  });
+
+  it("excludes the Member's direct, linked Guest, and current unlinked Guest votes", async () => {
+    const memberId = randomUUID();
+    const memberSubjectId = randomUUID();
+    const sessionToken = `member-feed-${randomUUID()}`;
+    await database.db.insert(members).values({ id: memberId, displayName: "Feed Member" });
+    await database.db.insert(voterSubjects).values({
+      id: memberSubjectId,
+      kind: "MEMBER",
+      userId: memberId,
+    });
+    await database.db.insert(memberSessions).values({
+      memberId,
+      tokenHash: createHash("sha256").update(sessionToken).digest("hex"),
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+    await database.db.insert(interestProfiles).values({
+      subjectId: memberSubjectId,
+      onboardingState: "COMPLETED",
+      taxonomyVersion: "interest_cards_v1",
+    });
+    await database.db.insert(subjectInterests).values([
+      { subjectId: memberSubjectId, cardCode: "EDUCATION" },
+      { subjectId: memberSubjectId, cardCode: "SOCIETY" },
+      { subjectId: memberSubjectId, cardCode: "WORK" },
+    ]);
+
+    const directIssue = await createIssue("EDUCATION", new Date("2026-08-21T05:00:00.000Z"));
+    const linkedGuestIssue = await createIssue("EDUCATION", new Date("2026-08-21T04:00:00.000Z"));
+    const currentGuestIssue = await createIssue("EDUCATION", new Date("2026-08-21T03:00:00.000Z"));
+    const foreignGuestIssue = await createIssue("EDUCATION", new Date("2026-08-21T02:00:00.000Z"));
+    const unseenIssue = await createIssue("EDUCATION", new Date("2026-08-21T01:00:00.000Z"));
+
+    await voteOnIssue(directIssue, { authorization: `Bearer ${sessionToken}` });
+
+    const linkedGuest = await createGuestProfile([], "SKIPPED");
+    await voteOnIssue(linkedGuestIssue, {
+      "x-anonymous-subject-id": linkedGuest.anonymousSubjectId,
+    });
+    await database.db.insert(guestMemberLinks).values({
+      guestSubjectId: linkedGuest.subjectId,
+      memberSubjectId,
+      memberId,
+      provider: "DEVELOPMENT",
+    });
+
+    const currentGuest = await createGuestProfile([], "SKIPPED");
+    await voteOnIssue(currentGuestIssue, {
+      "x-anonymous-subject-id": currentGuest.anonymousSubjectId,
+    });
+
+    const foreignMemberId = randomUUID();
+    const foreignMemberSubjectId = randomUUID();
+    const foreignGuest = await createGuestProfile([], "SKIPPED");
+    await database.db.insert(members).values({
+      id: foreignMemberId,
+      displayName: "Other Feed Member",
+    });
+    await database.db.insert(voterSubjects).values({
+      id: foreignMemberSubjectId,
+      kind: "MEMBER",
+      userId: foreignMemberId,
+    });
+    await database.db.insert(guestMemberLinks).values({
+      guestSubjectId: foreignGuest.subjectId,
+      memberSubjectId: foreignMemberSubjectId,
+      memberId: foreignMemberId,
+      provider: "DEVELOPMENT",
+    });
+    await voteOnIssue(foreignGuestIssue, {
+      "x-anonymous-subject-id": foreignGuest.anonymousSubjectId,
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/v1/issues/feed?limit=20",
+      headers: {
+        authorization: `Bearer ${sessionToken}`,
+        "x-anonymous-subject-id": currentGuest.anonymousSubjectId,
+      },
+    });
+    const body = response.json<{ items: Array<{ id: string }>; ranking: { mode: string } }>();
+    const issueIds = body.items.map((item) => item.id);
+
+    expect(response.statusCode).toBe(200);
+    expect(body.ranking.mode).toBe("PERSONALIZED");
+    expect(issueIds).not.toContain(directIssue);
+    expect(issueIds).not.toContain(linkedGuestIssue);
+    expect(issueIds).not.toContain(currentGuestIssue);
+    expect(issueIds).toContain(foreignGuestIssue);
+    expect(issueIds).toContain(unseenIssue);
+
+    const recencyFeed = await createIssueReadService(database.db, {
+      personalizationEnabled: false,
+    }).listGuestIssues({
+      sessionToken,
+      anonymousSubjectId: currentGuest.anonymousSubjectId,
+      limit: 20,
+    });
+    const recencyIssueIds = recencyFeed.items.map((item) => item.id);
+    expect(recencyFeed.ranking.mode).toBe("RECENCY");
+    expect(recencyIssueIds).not.toContain(directIssue);
+    expect(recencyIssueIds).not.toContain(linkedGuestIssue);
+    expect(recencyIssueIds).not.toContain(currentGuestIssue);
+    expect(recencyIssueIds).toContain(foreignGuestIssue);
+    expect(recencyIssueIds).toContain(unseenIssue);
+
+    const foreignCookieResponse = await app.inject({
+      method: "GET",
+      url: "/v1/issues/feed?limit=20",
+      headers: {
+        authorization: `Bearer ${sessionToken}`,
+        "x-anonymous-subject-id": foreignGuest.anonymousSubjectId,
+      },
+    });
+    expect(
+      foreignCookieResponse.json<{ items: Array<{ id: string }> }>().items.map((item) => item.id),
+    ).toContain(foreignGuestIssue);
   });
 });
