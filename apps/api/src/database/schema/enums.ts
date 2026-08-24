@@ -34,7 +34,12 @@ export const feedEligibilityEnum = pgEnum("feed_eligibility", [
   "FROZEN",
 ]);
 export const riskLevelEnum = pgEnum("risk_level", ["LOW", "MEDIUM", "HIGH", "RESTRICTED"]);
-export const subjectKindEnum = pgEnum("subject_kind", ["GUEST", "MEMBER", "VERIFIED_MEMBER"]);
+export const subjectKindEnum = pgEnum("subject_kind", [
+  "GUEST",
+  "MEMBER",
+  "VERIFIED_MEMBER",
+  "DELETED_MEMBER",
+]);
 export const memberStatusEnum = pgEnum("member_status", [
   "ACTIVE",
   "LIMITED",

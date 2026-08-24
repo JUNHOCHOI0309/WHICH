@@ -29,7 +29,8 @@ export const voterSubjects = pgTable(
       "voter_subjects_identity_shape_check",
       sql`(${table.kind} = 'GUEST' and ${table.anonymousSubjectId} is not null and ${table.userId} is null and ${table.verifiedUniquenessHandle} is null)
         or (${table.kind} = 'MEMBER' and ${table.anonymousSubjectId} is null and ${table.userId} is not null and ${table.verifiedUniquenessHandle} is null)
-        or (${table.kind} = 'VERIFIED_MEMBER' and ${table.anonymousSubjectId} is null and ${table.userId} is not null and ${table.verifiedUniquenessHandle} is not null)`,
+        or (${table.kind} = 'VERIFIED_MEMBER' and ${table.anonymousSubjectId} is null and ${table.userId} is not null and ${table.verifiedUniquenessHandle} is not null)
+        or (${table.kind} = 'DELETED_MEMBER' and ${table.anonymousSubjectId} is null and ${table.userId} is null and ${table.verifiedUniquenessHandle} is null)`,
     ),
   ],
 );

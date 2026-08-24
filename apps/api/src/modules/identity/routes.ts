@@ -638,6 +638,44 @@ export async function registerMemberIdentityRoutes(
       },
     );
 
+    identityApp.delete<{
+      Headers: { authorization?: string };
+      Body: { password: string; confirmation: "DELETE" };
+    }>(
+      "/v1/me",
+      {
+        schema: {
+          tags: ["identity"],
+          summary: "Delete and anonymize the current Member account",
+          headers: Type.Object(
+            { authorization: Type.Optional(Type.String()) },
+            { additionalProperties: true },
+          ),
+          body: Type.Object({
+            password: Type.String({ minLength: 1, maxLength: 128 }),
+            confirmation: Type.Literal("DELETE"),
+          }),
+          response: {
+            200: Type.Object({ deleted: Type.Literal(true) }),
+            400: errorSchema,
+            401: errorSchema,
+            409: errorSchema,
+          },
+        },
+      },
+      async (request, reply) => {
+        const token = bearerToken(request.headers.authorization);
+        const result = token ? await service.deleteAccount(token, request.body.password) : null;
+        if (!result) {
+          return reply.code(401).send({
+            code: "SESSION_INVALID",
+            message: "The Member session is invalid or expired.",
+          });
+        }
+        return reply.send(result);
+      },
+    );
+
     identityApp.get<{ Params: { handle: string } }>(
       "/v1/profiles/:handle",
       {

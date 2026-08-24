@@ -243,4 +243,109 @@ describe("Member private profile experience", () => {
     expect(screen.getByRole("heading", { name: "로그아웃 유지 회원님의 선택" })).toBeVisible();
     expect(screen.queryByText("로그인하면 내 선택이 이어져요.")).not.toBeInTheDocument();
   });
+
+  it("requires reauthentication and explicit confirmation before deleting an account", async () => {
+    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        requests.push({ url: String(input), init });
+        if (String(input) === "/api/me" && init?.method === "DELETE") {
+          return jsonResponse({ deleted: true });
+        }
+        return jsonResponse({
+          member: {
+            id: "member-1",
+            displayName: "탈퇴 테스트 회원",
+            status: "ACTIVE",
+            joinedAt: "2026-08-01T00:00:00.000Z",
+            participationCount: 1,
+          },
+          publicProfile: null,
+          identities: [
+            {
+              provider: "EMAIL",
+              linkedAt: "2026-08-01T00:00:00.000Z",
+              lastAuthenticatedAt: "2026-08-20T00:00:00.000Z",
+            },
+          ],
+          votes: { items: [], nextCursor: null },
+        });
+      }),
+    );
+
+    render(<MemberProfileExperience naverLoginEnabled={false} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "회원 탈퇴" }));
+    const submit = screen.getByRole("button", { name: "회원 탈퇴 확정" });
+    expect(submit).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("현재 비밀번호"), {
+      target: { value: "correct password" },
+    });
+    fireEvent.change(screen.getByLabelText(/탈퇴합니다/), {
+      target: { value: "탈퇴합니다" },
+    });
+    expect(submit).toBeEnabled();
+    fireEvent.click(submit);
+
+    expect(await screen.findByText("회원 탈퇴가 완료되었습니다.")).toBeVisible();
+    expect(screen.getByText(/기존 투표와 댓글은 탈퇴한 사용자로 익명화/)).toBeVisible();
+    const deletionRequest = requests.find(
+      (request) => request.url === "/api/me" && request.init?.method === "DELETE",
+    );
+    expect(deletionRequest?.init).toMatchObject({
+      method: "DELETE",
+      cache: "no-store",
+      credentials: "same-origin",
+    });
+    expect(new Headers(deletionRequest?.init?.headers).get("x-which-csrf")).toBe(
+      "member-account-delete",
+    );
+    expect(JSON.parse(String(deletionRequest?.init?.body))).toEqual({
+      password: "correct password",
+      confirmation: "탈퇴합니다",
+    });
+  });
+
+  it("keeps the account screen when the deletion password is rejected", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        if (String(input) === "/api/me" && init?.method === "DELETE") {
+          return jsonResponse({ code: "CREDENTIAL_INVALID" }, 401);
+        }
+        return jsonResponse({
+          member: {
+            id: "member-1",
+            displayName: "유지 회원",
+            status: "ACTIVE",
+            joinedAt: "2026-08-01T00:00:00.000Z",
+            participationCount: 0,
+          },
+          publicProfile: null,
+          identities: [
+            {
+              provider: "EMAIL",
+              linkedAt: "2026-08-01T00:00:00.000Z",
+              lastAuthenticatedAt: "2026-08-20T00:00:00.000Z",
+            },
+          ],
+          votes: { items: [], nextCursor: null },
+        });
+      }),
+    );
+
+    render(<MemberProfileExperience naverLoginEnabled={false} />);
+    fireEvent.click(await screen.findByRole("button", { name: "회원 탈퇴" }));
+    fireEvent.change(screen.getByLabelText("현재 비밀번호"), {
+      target: { value: "wrong password" },
+    });
+    fireEvent.change(screen.getByLabelText(/탈퇴합니다/), {
+      target: { value: "탈퇴합니다" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "회원 탈퇴 확정" }));
+
+    expect(await screen.findByText("현재 비밀번호가 올바르지 않습니다.")).toBeVisible();
+    expect(screen.getByRole("heading", { name: "유지 회원님의 선택" })).toBeVisible();
+  });
 });

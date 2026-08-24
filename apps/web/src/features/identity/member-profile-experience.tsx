@@ -18,6 +18,17 @@ type AccountLinkNotice = {
   message: string;
 };
 
+type AccountDeletionError = { code?: string; message?: string };
+
+function accountDeletionMessage(error: AccountDeletionError, status: number) {
+  if (error.code === "CREDENTIAL_INVALID") return "현재 비밀번호가 올바르지 않습니다.";
+  if (error.code === "CREDENTIAL_REQUIRED") {
+    return "회원 탈퇴 전에 이메일과 비밀번호 로그인을 먼저 설정해 주세요.";
+  }
+  if (status === 401) return "로그인 세션이 만료되었습니다. 다시 로그인해 주세요.";
+  return error.message || "회원 탈퇴를 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.";
+}
+
 function readAccountLinkNotice(): AccountLinkNotice | null {
   if (window.location.hash !== "#connected-accounts") return null;
 
@@ -92,6 +103,12 @@ export function MemberProfileExperience({
   const [logoutPending, setLogoutPending] = useState(false);
   const [logoutError, setLogoutError] = useState<string | null>(null);
   const [accountLinkNotice, setAccountLinkNotice] = useState<AccountLinkNotice | null>(null);
+  const [accountDeletionOpen, setAccountDeletionOpen] = useState(false);
+  const [accountDeletionPassword, setAccountDeletionPassword] = useState("");
+  const [accountDeletionConfirmation, setAccountDeletionConfirmation] = useState("");
+  const [accountDeletionPending, setAccountDeletionPending] = useState(false);
+  const [accountDeletionError, setAccountDeletionError] = useState<string | null>(null);
+  const [accountDeleted, setAccountDeleted] = useState(false);
 
   const load = useCallback(async () => {
     setScreen("loading");
@@ -191,10 +208,13 @@ export function MemberProfileExperience({
         {screen === "guest" ? (
           <section className={styles.message}>
             <p>PRIVATE ME</p>
-            <h1>로그인하면 내 선택이 이어져요.</h1>
+            <h1>
+              {accountDeleted ? "회원 탈퇴가 완료되었습니다." : "로그인하면 내 선택이 이어져요."}
+            </h1>
             <span>
-              전체 투표 기록은 다른 사람에게 공개되지 않습니다. 로그인한 본인만 최근 참여와 결과를
-              확인할 수 있어요.
+              {accountDeleted
+                ? "모든 기기에서 로그아웃되었고 개인정보와 로그인 수단을 삭제했습니다. 기존 투표와 댓글은 탈퇴한 사용자로 익명화되어 유지됩니다."
+                : "전체 투표 기록은 다른 사람에게 공개되지 않습니다. 로그인한 본인만 최근 참여와 결과를 확인할 수 있어요."}
             </span>
             <div className={styles.loginOptions} aria-label="로그인 제공자 선택">
               <Link href="/login?returnTo=%2Fme">로그인 또는 빠른 회원가입</Link>
@@ -391,6 +411,127 @@ export function MemberProfileExperience({
                   {logoutError}
                 </p>
               ) : null}
+            </section>
+
+            <section className={styles.accountDeletion} aria-labelledby="account-deletion-title">
+              <div>
+                <p>DELETE ACCOUNT</p>
+                <h2 id="account-deletion-title">회원 탈퇴</h2>
+                <span>
+                  이메일·비밀번호·연결한 소셜 로그인·프로필·관심사는 삭제되고 모든 기기에서
+                  로그아웃됩니다. 질문·투표·댓글·반응은 통계와 대화의 맥락을 위해 개인 식별 정보와
+                  분리되어 <strong>탈퇴한 사용자</strong> 기록으로 유지됩니다.
+                </span>
+              </div>
+              {!accountDeletionOpen ? (
+                <button type="button" onClick={() => setAccountDeletionOpen(true)}>
+                  회원 탈퇴
+                </button>
+              ) : (
+                <form
+                  className={styles.accountDeletionForm}
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    if (
+                      accountDeletionPending ||
+                      !accountDeletionPassword ||
+                      accountDeletionConfirmation !== "탈퇴합니다"
+                    ) {
+                      return;
+                    }
+                    setAccountDeletionPending(true);
+                    setAccountDeletionError(null);
+                    void fetch("/api/me", {
+                      method: "DELETE",
+                      cache: "no-store",
+                      credentials: "same-origin",
+                      headers: {
+                        "content-type": "application/json",
+                        "x-which-csrf": "member-account-delete",
+                      },
+                      body: JSON.stringify({
+                        password: accountDeletionPassword,
+                        confirmation: accountDeletionConfirmation,
+                      }),
+                    })
+                      .then(async (response) => {
+                        const body = (await response
+                          .json()
+                          .catch(() => ({}))) as AccountDeletionError & {
+                          deleted?: boolean;
+                        };
+                        if (!response.ok || body.deleted !== true) {
+                          throw new Error(accountDeletionMessage(body, response.status));
+                        }
+                        setAccountDeleted(true);
+                        setProfile(null);
+                        setScreen("guest");
+                      })
+                      .catch((error: unknown) => {
+                        setAccountDeletionError(
+                          error instanceof Error
+                            ? error.message
+                            : "회원 탈퇴를 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+                        );
+                      })
+                      .finally(() => setAccountDeletionPending(false));
+                  }}
+                >
+                  <p className={styles.accountDeletionWarning} role="alert">
+                    이 작업은 되돌릴 수 없습니다. 계속하려면 현재 비밀번호로 본인 확인을 완료해
+                    주세요.
+                  </p>
+                  <label>
+                    현재 비밀번호
+                    <input
+                      type="password"
+                      autoComplete="current-password"
+                      value={accountDeletionPassword}
+                      onChange={(event) => setAccountDeletionPassword(event.target.value)}
+                      disabled={accountDeletionPending}
+                    />
+                  </label>
+                  <label>
+                    확인을 위해 &quot;탈퇴합니다&quot; 입력
+                    <input
+                      type="text"
+                      autoComplete="off"
+                      value={accountDeletionConfirmation}
+                      onChange={(event) => setAccountDeletionConfirmation(event.target.value)}
+                      disabled={accountDeletionPending}
+                    />
+                  </label>
+                  {accountDeletionError ? (
+                    <p className={styles.accountDeletionError} role="alert">
+                      {accountDeletionError}
+                    </p>
+                  ) : null}
+                  <div className={styles.accountDeletionActions}>
+                    <button
+                      type="button"
+                      disabled={accountDeletionPending}
+                      onClick={() => {
+                        setAccountDeletionOpen(false);
+                        setAccountDeletionPassword("");
+                        setAccountDeletionConfirmation("");
+                        setAccountDeletionError(null);
+                      }}
+                    >
+                      취소
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={
+                        accountDeletionPending ||
+                        !accountDeletionPassword ||
+                        accountDeletionConfirmation !== "탈퇴합니다"
+                      }
+                    >
+                      {accountDeletionPending ? "탈퇴 처리 중…" : "회원 탈퇴 확정"}
+                    </button>
+                  </div>
+                </form>
+              )}
             </section>
           </>
         ) : null}

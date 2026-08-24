@@ -1031,7 +1031,7 @@ export function createCommentService(database: Database["db"]): CommentService {
               ),
             )
             .limit(1);
-          if (!memberActor) {
+          if (!memberActor || memberActor.kind === "DELETED_MEMBER") {
             throw new CommentError("SESSION_REQUIRED", 401, "The Member session is invalid.");
           }
           actorSubjectId = memberActor.subjectId;
@@ -1075,7 +1075,10 @@ export function createCommentService(database: Database["db"]): CommentService {
           actorSubjectId = guestLink?.memberSubjectId ?? guestActor.id;
           originSubjectId = guestActor.id;
           actorMemberId = guestLink?.memberId;
-          actorKind = guestLink?.memberKind ?? "GUEST";
+          actorKind =
+            guestLink?.memberKind && guestLink.memberKind !== "DELETED_MEMBER"
+              ? guestLink.memberKind
+              : "GUEST";
         }
 
         const requestFingerprint = reportFingerprint(command, actorSubjectId, detail);
