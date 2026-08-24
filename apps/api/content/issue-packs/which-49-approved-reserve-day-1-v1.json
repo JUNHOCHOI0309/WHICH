@@ -1,0 +1,265 @@
+{
+  "schemaVersion": 1,
+  "packId": "which-49-approved-reserve-day-1-v1",
+  "target": "production",
+  "taxonomyVersion": "taxonomy_v2.0",
+  "approval": {
+    "status": "APPROVED",
+    "approvedBy": "WHICH_PRODUCT_OWNER",
+    "approvedAt": "2026-08-24T12:00:00.000+09:00"
+  },
+  "issues": [
+    {
+      "id": "7f19b7e6-f3c3-5aed-881d-ba499201a5b2",
+      "version": 1,
+      "question": "여행 사진은 어떤 장면을 더 많이 남기고 싶나요?",
+      "context": "저장 공간과 촬영 시간은 충분하다고 가정해 주세요.",
+      "choices": [
+        {
+          "id": "09fde59d-1a76-544e-ba3d-059f0c10d6d4",
+          "code": "A",
+          "label": "함께한 사람의 순간"
+        },
+        {
+          "id": "1d30bcbd-2b6d-5a19-84bb-3fcacb03ec8f",
+          "code": "B",
+          "label": "장소의 풍경과 분위기"
+        }
+      ],
+      "primaryCategoryCode": "LIFE",
+      "interestCardCodes": ["TRAVEL"],
+      "experienceModeCode": "PLAYFUL_QUICK",
+      "taxonomyVersion": "taxonomy_v2.0",
+      "riskLevel": "LOW",
+      "isPolitical": false,
+      "lifecycle": "PUBLISHED",
+      "visibility": "VISIBLE",
+      "participation": "VOTING_OPEN",
+      "resultVisibility": "PRE_VOTE_HIDDEN",
+      "feedEligibility": "ELIGIBLE",
+      "publishedAt": "2026-08-25T10:00:00.000+09:00",
+      "voteOpenAt": "2026-08-25T10:00:00.000+09:00",
+      "contentHash": "78013d8db90ede2e37d0405fc6dafd9120a146020d3cfb2b228b2d32104e132f",
+      "editorialReview": {
+        "status": "PASSED",
+        "reviewedBy": "WHICH_PRODUCT_OWNER",
+        "reviewedAt": "2026-08-24T12:00:00.000+09:00",
+        "evergreen": true,
+        "sourceRequirement": "NOT_REQUIRED_SUBJECTIVE",
+        "sourceUrls": [],
+        "choiceParity": "PASSED",
+        "duplicateReview": "PASSED"
+      }
+    },
+    {
+      "id": "ad7fdd7e-cf77-526f-a397-f0d4fed0dc81",
+      "version": 1,
+      "question": "가까운 사람과 의견이 다르면 언제 이야기하고 싶나요?",
+      "context": "급히 결론 내릴 필요가 없는 갈등 상황입니다.",
+      "choices": [
+        {
+          "id": "da4ad7dc-2403-5259-986d-56fb6f814aaf",
+          "code": "A",
+          "label": "생각할 시간을 가진 뒤"
+        },
+        {
+          "id": "9ccdf648-05f8-5ce3-b38a-8ef3a599027f",
+          "code": "B",
+          "label": "감정이 남아 있을 때 바로"
+        }
+      ],
+      "primaryCategoryCode": "RELATIONSHIP",
+      "interestCardCodes": ["RELATIONSHIP"],
+      "experienceModeCode": "PLAYFUL_QUICK",
+      "taxonomyVersion": "taxonomy_v2.0",
+      "riskLevel": "LOW",
+      "isPolitical": false,
+      "lifecycle": "PUBLISHED",
+      "visibility": "VISIBLE",
+      "participation": "VOTING_OPEN",
+      "resultVisibility": "PRE_VOTE_HIDDEN",
+      "feedEligibility": "ELIGIBLE",
+      "publishedAt": "2026-08-25T10:00:00.000+09:00",
+      "voteOpenAt": "2026-08-25T10:00:00.000+09:00",
+      "contentHash": "0dee99d4111f85ee25c2d40c208bdddab851ef9b4b2dddb182c0ed26a3fc353d",
+      "editorialReview": {
+        "status": "PASSED",
+        "reviewedBy": "WHICH_PRODUCT_OWNER",
+        "reviewedAt": "2026-08-24T12:00:00.000+09:00",
+        "evergreen": true,
+        "sourceRequirement": "NOT_REQUIRED_SUBJECTIVE",
+        "sourceUrls": [],
+        "choiceParity": "PASSED",
+        "duplicateReview": "PASSED"
+      }
+    },
+    {
+      "id": "d443a070-bf72-5290-809c-aea2d2522f37",
+      "version": 1,
+      "question": "영화를 고를 때 무엇을 먼저 확인하나요?",
+      "context": "두 영화 모두 처음 보는 작품이라고 가정해 주세요.",
+      "choices": [
+        {
+          "id": "fea0aac2-138b-5d1d-b260-239a7ed1b201",
+          "code": "A",
+          "label": "관객의 짧은 평가"
+        },
+        {
+          "id": "a2e9b924-e890-53dd-9b7a-e95d5bd5abac",
+          "code": "B",
+          "label": "줄거리와 분위기 소개"
+        }
+      ],
+      "primaryCategoryCode": "CULTURE_ENT",
+      "interestCardCodes": ["MOVIE_DRAMA"],
+      "experienceModeCode": "PLAYFUL_QUICK",
+      "taxonomyVersion": "taxonomy_v2.0",
+      "riskLevel": "LOW",
+      "isPolitical": false,
+      "lifecycle": "PUBLISHED",
+      "visibility": "VISIBLE",
+      "participation": "VOTING_OPEN",
+      "resultVisibility": "PRE_VOTE_HIDDEN",
+      "feedEligibility": "ELIGIBLE",
+      "publishedAt": "2026-08-25T10:00:00.000+09:00",
+      "voteOpenAt": "2026-08-25T10:00:00.000+09:00",
+      "contentHash": "bb375cfde7472abd9e5f234b30984c7021ee7a235a9c69151161f124cc070b63",
+      "editorialReview": {
+        "status": "PASSED",
+        "reviewedBy": "WHICH_PRODUCT_OWNER",
+        "reviewedAt": "2026-08-24T12:00:00.000+09:00",
+        "evergreen": true,
+        "sourceRequirement": "NOT_REQUIRED_SUBJECTIVE",
+        "sourceUrls": [],
+        "choiceParity": "PASSED",
+        "duplicateReview": "PASSED"
+      }
+    },
+    {
+      "id": "10a3bc03-cf60-5add-be87-1129f1f4d3f6",
+      "version": 1,
+      "question": "새 기기의 설정은 어떤 방식이 더 편한가요?",
+      "context": "언제든 설정을 다시 바꿀 수 있다고 가정해 주세요.",
+      "choices": [
+        {
+          "id": "099633a3-7c11-5c78-b00c-9278e64c5ce2",
+          "code": "A",
+          "label": "추천 설정을 자동 적용하기"
+        },
+        {
+          "id": "49c35402-1774-5dbc-b689-95fe78cb63d9",
+          "code": "B",
+          "label": "처음부터 직접 하나씩 고르기"
+        }
+      ],
+      "primaryCategoryCode": "TECH",
+      "interestCardCodes": ["TECH"],
+      "experienceModeCode": "PLAYFUL_QUICK",
+      "taxonomyVersion": "taxonomy_v2.0",
+      "riskLevel": "LOW",
+      "isPolitical": false,
+      "lifecycle": "PUBLISHED",
+      "visibility": "VISIBLE",
+      "participation": "VOTING_OPEN",
+      "resultVisibility": "PRE_VOTE_HIDDEN",
+      "feedEligibility": "ELIGIBLE",
+      "publishedAt": "2026-08-25T10:00:00.000+09:00",
+      "voteOpenAt": "2026-08-25T10:00:00.000+09:00",
+      "contentHash": "5bb0e95f0dcb621a33ab73a5c60299791ea833401a6290f263d7d2ea7b814461",
+      "editorialReview": {
+        "status": "PASSED",
+        "reviewedBy": "WHICH_PRODUCT_OWNER",
+        "reviewedAt": "2026-08-24T12:00:00.000+09:00",
+        "evergreen": true,
+        "sourceRequirement": "NOT_REQUIRED_SUBJECTIVE",
+        "sourceUrls": [],
+        "choiceParity": "PASSED",
+        "duplicateReview": "PASSED"
+      }
+    },
+    {
+      "id": "6fabcbe8-14e1-591c-8714-bf202d04c1de",
+      "version": 1,
+      "question": "중요한 업무 일정은 어떻게 잡는 것이 더 좋나요?",
+      "context": "마감일 안에서 시작 시간을 자유롭게 정할 수 있습니다.",
+      "choices": [
+        {
+          "id": "5147176a-30b4-5dab-8821-26eced68ecaf",
+          "code": "A",
+          "label": "여유 있게 일찍 시작하기"
+        },
+        {
+          "id": "a7365ab2-8108-53aa-84f6-9ac7b67bc4d3",
+          "code": "B",
+          "label": "상황을 보며 유연하게 시작하기"
+        }
+      ],
+      "primaryCategoryCode": "WORK_CAREER",
+      "interestCardCodes": ["WORK"],
+      "experienceModeCode": "PLAYFUL_QUICK",
+      "taxonomyVersion": "taxonomy_v2.0",
+      "riskLevel": "LOW",
+      "isPolitical": false,
+      "lifecycle": "PUBLISHED",
+      "visibility": "VISIBLE",
+      "participation": "VOTING_OPEN",
+      "resultVisibility": "PRE_VOTE_HIDDEN",
+      "feedEligibility": "ELIGIBLE",
+      "publishedAt": "2026-08-25T10:00:00.000+09:00",
+      "voteOpenAt": "2026-08-25T10:00:00.000+09:00",
+      "contentHash": "aa9e6a1fe6eb1d9172de907c90a4479d57259ec608caceedf3472286e467b55a",
+      "editorialReview": {
+        "status": "PASSED",
+        "reviewedBy": "WHICH_PRODUCT_OWNER",
+        "reviewedAt": "2026-08-24T12:00:00.000+09:00",
+        "evergreen": true,
+        "sourceRequirement": "NOT_REQUIRED_SUBJECTIVE",
+        "sourceUrls": [],
+        "choiceParity": "PASSED",
+        "duplicateReview": "PASSED"
+      }
+    },
+    {
+      "id": "89c52e33-c65d-5f2f-abf5-f4f901a8444f",
+      "version": 1,
+      "question": "선물을 고를 때 어느 쪽을 더 중요하게 보나요?",
+      "context": "가격과 전달 시점은 같다고 가정해 주세요.",
+      "choices": [
+        {
+          "id": "f07fb74e-837a-58c6-a843-7a4d5123eb4a",
+          "code": "A",
+          "label": "자주 쓸 수 있는 실용성"
+        },
+        {
+          "id": "27f0e18b-2018-55de-a6e2-5a8b55c16f25",
+          "code": "B",
+          "label": "오래 기억할 수 있는 특별함"
+        }
+      ],
+      "primaryCategoryCode": "ECONOMY_CONSUMPTION",
+      "interestCardCodes": ["ECONOMY_CONSUMPTION"],
+      "experienceModeCode": "PLAYFUL_QUICK",
+      "taxonomyVersion": "taxonomy_v2.0",
+      "riskLevel": "LOW",
+      "isPolitical": false,
+      "lifecycle": "PUBLISHED",
+      "visibility": "VISIBLE",
+      "participation": "VOTING_OPEN",
+      "resultVisibility": "PRE_VOTE_HIDDEN",
+      "feedEligibility": "ELIGIBLE",
+      "publishedAt": "2026-08-25T10:00:00.000+09:00",
+      "voteOpenAt": "2026-08-25T10:00:00.000+09:00",
+      "contentHash": "f4343c12dd62fbe78cc66a87df07221c12d9b392c8a75b14de73d373bd79da76",
+      "editorialReview": {
+        "status": "PASSED",
+        "reviewedBy": "WHICH_PRODUCT_OWNER",
+        "reviewedAt": "2026-08-24T12:00:00.000+09:00",
+        "evergreen": true,
+        "sourceRequirement": "NOT_REQUIRED_SUBJECTIVE",
+        "sourceUrls": [],
+        "choiceParity": "PASSED",
+        "duplicateReview": "PASSED"
+      }
+    }
+  ]
+}

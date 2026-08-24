@@ -83,6 +83,7 @@ pnpm --filter @which/api db:generate
 pnpm --filter @which/api db:migrate
 pnpm --filter @which/api db:seed       # 멱등 Development Issue·Comment 생성
 pnpm --filter @which/api issues:validate content/issue-packs/which-19-initial-low-v1.json
+pnpm --filter @which/api issues:readiness content/issue-packs/public-v0-inventory-policy.json
 pnpm --filter @which/api outbox:worker # 독립 Outbox Publisher 실행
 pnpm --filter @which/api outbox:publish-once
 pnpm --filter @which/api launch:gate # 읽기 전용 Public MVP GO/NO-GO 판정

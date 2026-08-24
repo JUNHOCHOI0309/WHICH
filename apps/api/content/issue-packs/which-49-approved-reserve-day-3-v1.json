@@ -1,0 +1,265 @@
+{
+  "schemaVersion": 1,
+  "packId": "which-49-approved-reserve-day-3-v1",
+  "target": "production",
+  "taxonomyVersion": "taxonomy_v2.0",
+  "approval": {
+    "status": "APPROVED",
+    "approvedBy": "WHICH_PRODUCT_OWNER",
+    "approvedAt": "2026-08-24T12:00:00.000+09:00"
+  },
+  "issues": [
+    {
+      "id": "5235fcf1-648f-578b-8f34-d4ccccb0c81b",
+      "version": 1,
+      "question": "로그인 보안을 챙길 때 어느 방식이 더 편한가요?",
+      "context": "두 방식 모두 안전하게 설정되어 있다고 가정해 주세요.",
+      "choices": [
+        {
+          "id": "1794ead0-77c6-5b8d-a0c2-d6eb46b219dc",
+          "code": "A",
+          "label": "기기 인증으로 바로 로그인하기"
+        },
+        {
+          "id": "ab96b6e2-2629-5cf0-bb4d-82b55a28e96e",
+          "code": "B",
+          "label": "관리 도구에서 비밀번호 꺼내기"
+        }
+      ],
+      "primaryCategoryCode": "TECH",
+      "interestCardCodes": ["TECH"],
+      "experienceModeCode": "PLAYFUL_QUICK",
+      "taxonomyVersion": "taxonomy_v2.0",
+      "riskLevel": "LOW",
+      "isPolitical": false,
+      "lifecycle": "PUBLISHED",
+      "visibility": "VISIBLE",
+      "participation": "VOTING_OPEN",
+      "resultVisibility": "PRE_VOTE_HIDDEN",
+      "feedEligibility": "ELIGIBLE",
+      "publishedAt": "2026-08-27T10:00:00.000+09:00",
+      "voteOpenAt": "2026-08-27T10:00:00.000+09:00",
+      "contentHash": "9afd17b2b71b4b9839d768909c856ed683b6ec6edc923a4eb94068e6ba084695",
+      "editorialReview": {
+        "status": "PASSED",
+        "reviewedBy": "WHICH_PRODUCT_OWNER",
+        "reviewedAt": "2026-08-24T12:00:00.000+09:00",
+        "evergreen": true,
+        "sourceRequirement": "NOT_REQUIRED_SUBJECTIVE",
+        "sourceUrls": [],
+        "choiceParity": "PASSED",
+        "duplicateReview": "PASSED"
+      }
+    },
+    {
+      "id": "7a2f973e-249f-5c4d-9dc9-1052415355da",
+      "version": 1,
+      "question": "원격 업무에서 빠른 확인이 필요하면 무엇이 더 편한가요?",
+      "context": "같은 팀원에게 짧은 내용을 확인하는 상황입니다.",
+      "choices": [
+        {
+          "id": "b6b82527-c8d2-5b84-ba99-1d65294fe7a9",
+          "code": "A",
+          "label": "메신저로 바로 묻기"
+        },
+        {
+          "id": "d2c40bd1-b949-5096-8587-f08e84d943dc",
+          "code": "B",
+          "label": "짧은 통화 시간을 잡기"
+        }
+      ],
+      "primaryCategoryCode": "WORK_CAREER",
+      "interestCardCodes": ["WORK"],
+      "experienceModeCode": "PLAYFUL_QUICK",
+      "taxonomyVersion": "taxonomy_v2.0",
+      "riskLevel": "LOW",
+      "isPolitical": false,
+      "lifecycle": "PUBLISHED",
+      "visibility": "VISIBLE",
+      "participation": "VOTING_OPEN",
+      "resultVisibility": "PRE_VOTE_HIDDEN",
+      "feedEligibility": "ELIGIBLE",
+      "publishedAt": "2026-08-27T10:00:00.000+09:00",
+      "voteOpenAt": "2026-08-27T10:00:00.000+09:00",
+      "contentHash": "b57b73ad0086bdc18a4fdcfed35f58f17357a50961a2984b45f16367aee172e4",
+      "editorialReview": {
+        "status": "PASSED",
+        "reviewedBy": "WHICH_PRODUCT_OWNER",
+        "reviewedAt": "2026-08-24T12:00:00.000+09:00",
+        "evergreen": true,
+        "sourceRequirement": "NOT_REQUIRED_SUBJECTIVE",
+        "sourceUrls": [],
+        "choiceParity": "PASSED",
+        "duplicateReview": "PASSED"
+      }
+    },
+    {
+      "id": "f4d38fd5-30a7-555c-ad00-d634ec380ea6",
+      "version": 1,
+      "question": "예상 밖의 여유 자금이 생기면 어디에 먼저 쓰고 싶나요?",
+      "context": "생활비와 비상금은 이미 충분하다고 가정해 주세요.",
+      "choices": [
+        {
+          "id": "8c810f4b-d4e7-59a0-aae5-d08edb199f46",
+          "code": "A",
+          "label": "미래를 위해 더 저축하기"
+        },
+        {
+          "id": "f5012fd4-48d3-5de2-9a07-c507b37e26bc",
+          "code": "B",
+          "label": "지금의 경험에 사용하기"
+        }
+      ],
+      "primaryCategoryCode": "ECONOMY_CONSUMPTION",
+      "interestCardCodes": ["ECONOMY_CONSUMPTION"],
+      "experienceModeCode": "PLAYFUL_QUICK",
+      "taxonomyVersion": "taxonomy_v2.0",
+      "riskLevel": "LOW",
+      "isPolitical": false,
+      "lifecycle": "PUBLISHED",
+      "visibility": "VISIBLE",
+      "participation": "VOTING_OPEN",
+      "resultVisibility": "PRE_VOTE_HIDDEN",
+      "feedEligibility": "ELIGIBLE",
+      "publishedAt": "2026-08-27T10:00:00.000+09:00",
+      "voteOpenAt": "2026-08-27T10:00:00.000+09:00",
+      "contentHash": "c6f345b90bc14b8293f8b03e70ab29e13ea64d8f4b6b6984c6c3c907ec2d56df",
+      "editorialReview": {
+        "status": "PASSED",
+        "reviewedBy": "WHICH_PRODUCT_OWNER",
+        "reviewedAt": "2026-08-24T12:00:00.000+09:00",
+        "evergreen": true,
+        "sourceRequirement": "NOT_REQUIRED_SUBJECTIVE",
+        "sourceUrls": [],
+        "choiceParity": "PASSED",
+        "duplicateReview": "PASSED"
+      }
+    },
+    {
+      "id": "eafa28da-a25c-5ec5-896d-ae525da6c7a6",
+      "version": 1,
+      "question": "운동 기록은 어떤 방식이 더 동기부여가 되나요?",
+      "context": "같은 운동을 꾸준히 이어가는 상황입니다.",
+      "choices": [
+        {
+          "id": "cb0f5d39-f5e2-57b3-8457-940545b99acc",
+          "code": "A",
+          "label": "거리와 횟수를 숫자로 확인하기"
+        },
+        {
+          "id": "f8e8da1b-03b5-54fc-a4f5-d1e3b4b08c38",
+          "code": "B",
+          "label": "몸의 느낌과 기분을 메모하기"
+        }
+      ],
+      "primaryCategoryCode": "SPORTS",
+      "interestCardCodes": ["SPORTS", "HOBBY"],
+      "experienceModeCode": "PLAYFUL_QUICK",
+      "taxonomyVersion": "taxonomy_v2.0",
+      "riskLevel": "LOW",
+      "isPolitical": false,
+      "lifecycle": "PUBLISHED",
+      "visibility": "VISIBLE",
+      "participation": "VOTING_OPEN",
+      "resultVisibility": "PRE_VOTE_HIDDEN",
+      "feedEligibility": "ELIGIBLE",
+      "publishedAt": "2026-08-27T10:00:00.000+09:00",
+      "voteOpenAt": "2026-08-27T10:00:00.000+09:00",
+      "contentHash": "ef1a56af2b471cd389ba063aef29d142d11d64ccbfb41ac9087127d0dfd009c2",
+      "editorialReview": {
+        "status": "PASSED",
+        "reviewedBy": "WHICH_PRODUCT_OWNER",
+        "reviewedAt": "2026-08-24T12:00:00.000+09:00",
+        "evergreen": true,
+        "sourceRequirement": "NOT_REQUIRED_SUBJECTIVE",
+        "sourceUrls": [],
+        "choiceParity": "PASSED",
+        "duplicateReview": "PASSED"
+      }
+    },
+    {
+      "id": "ba24d42a-5369-5e64-aac8-1777abf98dd9",
+      "version": 1,
+      "question": "시험을 준비할 때 무엇에 더 시간을 쓰고 싶나요?",
+      "context": "개념 학습을 한 번 마친 뒤 복습하는 단계입니다.",
+      "choices": [
+        {
+          "id": "e84644af-39ba-5e49-93a1-65f4c80bd21d",
+          "code": "A",
+          "label": "실전 문제를 많이 풀기"
+        },
+        {
+          "id": "777f5726-ca78-5951-b270-66f3911f3b6b",
+          "code": "B",
+          "label": "개념을 다시 구조화하기"
+        }
+      ],
+      "primaryCategoryCode": "EDUCATION",
+      "interestCardCodes": ["EDUCATION"],
+      "experienceModeCode": "PLAYFUL_QUICK",
+      "taxonomyVersion": "taxonomy_v2.0",
+      "riskLevel": "LOW",
+      "isPolitical": false,
+      "lifecycle": "PUBLISHED",
+      "visibility": "VISIBLE",
+      "participation": "VOTING_OPEN",
+      "resultVisibility": "PRE_VOTE_HIDDEN",
+      "feedEligibility": "ELIGIBLE",
+      "publishedAt": "2026-08-27T10:00:00.000+09:00",
+      "voteOpenAt": "2026-08-27T10:00:00.000+09:00",
+      "contentHash": "509c3810556240459cc104a64110e99c459110854e53ad9a8d9dd8a9a5660881",
+      "editorialReview": {
+        "status": "PASSED",
+        "reviewedBy": "WHICH_PRODUCT_OWNER",
+        "reviewedAt": "2026-08-24T12:00:00.000+09:00",
+        "evergreen": true,
+        "sourceRequirement": "NOT_REQUIRED_SUBJECTIVE",
+        "sourceUrls": [],
+        "choiceParity": "PASSED",
+        "duplicateReview": "PASSED"
+      }
+    },
+    {
+      "id": "3491f806-9bb7-5c22-b444-c0e4de65ffa7",
+      "version": 1,
+      "question": "동네 소식을 받을 때 어떤 주기가 더 편한가요?",
+      "context": "긴급 재난 안내는 별도로 즉시 온다고 가정해 주세요.",
+      "choices": [
+        {
+          "id": "60f0e56b-c355-5096-829e-0697065fed94",
+          "code": "A",
+          "label": "새 소식마다 앱으로 받기"
+        },
+        {
+          "id": "3e1b646a-e44a-5ecc-aefb-ed51a46fe3e1",
+          "code": "B",
+          "label": "일주일치 소식을 모아 받기"
+        }
+      ],
+      "primaryCategoryCode": "SOCIETY",
+      "interestCardCodes": ["SOCIETY", "DAILY_LIFE"],
+      "experienceModeCode": "PLAYFUL_QUICK",
+      "taxonomyVersion": "taxonomy_v2.0",
+      "riskLevel": "LOW",
+      "isPolitical": false,
+      "lifecycle": "PUBLISHED",
+      "visibility": "VISIBLE",
+      "participation": "VOTING_OPEN",
+      "resultVisibility": "PRE_VOTE_HIDDEN",
+      "feedEligibility": "ELIGIBLE",
+      "publishedAt": "2026-08-27T10:00:00.000+09:00",
+      "voteOpenAt": "2026-08-27T10:00:00.000+09:00",
+      "contentHash": "0d25da74237c252eda977be7711e4e60dd5a6dd0fa3764f68e116a369ae6c4b8",
+      "editorialReview": {
+        "status": "PASSED",
+        "reviewedBy": "WHICH_PRODUCT_OWNER",
+        "reviewedAt": "2026-08-24T12:00:00.000+09:00",
+        "evergreen": true,
+        "sourceRequirement": "NOT_REQUIRED_SUBJECTIVE",
+        "sourceUrls": [],
+        "choiceParity": "PASSED",
+        "duplicateReview": "PASSED"
+      }
+    }
+  ]
+}
