@@ -26,7 +26,9 @@ const app = await buildApp(config, {
   issueReader: createIssueReadService(database.db, {
     personalizationEnabled: config.featureFlags.mlRanker,
   }),
-  issueWriter: createIssueWriteService(database.db),
+  ...(config.environment !== "production" || config.featureFlags.creatorSubmissions
+    ? { issueWriter: createIssueWriteService(database.db) }
+    : {}),
   guestVotes: createGuestVoteService(database.db),
   commentReader: createCommentService(database.db),
   memberIdentity: createMemberIdentityService(database.db, {

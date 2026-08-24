@@ -168,6 +168,8 @@ Guest Vote core loop:
 - Issue, Version, Choices, Interest mapping, Author, zero-result baseline, and Outbox event are created
   in one transaction;
 - published Issues reuse the existing Feed, Detail, Vote, Result, Comment, and Creator Profile paths.
+- Production exposure is controlled by `FEATURE_CREATOR_SUBMISSIONS_ENABLED` as an operational kill
+  switch; Render enables it for WHICH-57.
 
 Drafts, editing, deletion, human review queues, broad automated moderation, and AI-assisted rewriting
 remain follow-up scope. This limited path must not be described as unrestricted open publishing.

@@ -105,7 +105,7 @@ services:
       - key: FEATURE_COMMENTS_ENABLED
         value: "false"
       - key: FEATURE_CREATOR_SUBMISSIONS_ENABLED
-        value: "false"
+        value: "true"
       - key: FEATURE_ML_RANKER_ENABLED
         value: "true"
       - key: FEATURE_RESULT_SHARING_ENABLED
