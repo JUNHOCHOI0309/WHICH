@@ -3,6 +3,46 @@
   gap: 18px;
 }
 
+.modalForm {
+  gap: 0;
+}
+
+.modalForm > .panel:first-child,
+.modalForm > .guestPanel {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 26px;
+}
+
+.modalForm .heading {
+  margin-bottom: 22px;
+}
+
+.modalForm .heading h1 {
+  font-size: clamp(1.45rem, 3vw, 2rem);
+}
+
+.modalForm .preview {
+  display: none;
+}
+
+.modalForm .submitBar {
+  position: sticky;
+  z-index: 2;
+  bottom: 0;
+  border-right: 0;
+  border-bottom: 0;
+  border-left: 0;
+  border-radius: 0;
+  box-shadow: 0 -10px 24px rgb(15 23 42 / 6%);
+  padding-inline: 26px;
+}
+
+.modalForm .error {
+  margin: 0 26px 20px;
+}
+
 .panel {
   border: 1px solid var(--which-border);
   border-radius: 20px;
@@ -317,5 +357,63 @@
 
   .submitBar button {
     width: 100%;
+  }
+
+  .modalForm > .panel:first-child,
+  .modalForm > .guestPanel {
+    padding: 20px 16px 24px;
+  }
+
+  .modalForm .heading {
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+
+  .modalForm .heading h1 {
+    font-size: 1.42rem;
+  }
+
+  .modalForm .field textarea {
+    min-height: 84px;
+  }
+
+  .modalForm .choiceGrid {
+    gap: 10px;
+  }
+
+  .modalForm .choiceField {
+    padding: 12px;
+  }
+
+  .modalForm .categories {
+    margin-top: 20px;
+  }
+
+  .modalForm .categories > div {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 6px;
+    scrollbar-width: none;
+  }
+
+  .modalForm .categories > div::-webkit-scrollbar {
+    display: none;
+  }
+
+  .modalForm .categories label span {
+    white-space: nowrap;
+  }
+
+  .modalForm .submitBar {
+    gap: 10px;
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+  }
+
+  .modalForm .submitBar p {
+    font-size: 0.7rem;
+  }
+
+  .modalForm .error {
+    margin: 0 16px 16px;
   }
 }

@@ -5,6 +5,10 @@ import { FeedExperience } from "@/features/feed/feed-experience";
 import { resetGuestPreparation } from "@/features/issues/client";
 import type { PublicIssueFeed } from "@/lib/contracts";
 
+const navigation = vi.hoisted(() => ({ push: vi.fn() }));
+
+vi.mock("next/navigation", () => ({ useRouter: () => navigation }));
+
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -81,10 +85,12 @@ const personalizedFeed: PublicIssueFeed = {
 describe("FeedExperience", () => {
   beforeEach(() => {
     resetGuestPreparation();
+    navigation.push.mockReset();
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
   });
 
-  it("shows the question creation CTA only to an active Member when submissions are enabled", async () => {
+  it("opens the Question composer from the rail for an active Member", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: string | URL | Request) => {
@@ -94,16 +100,36 @@ describe("FeedExperience", () => {
             member: { id: "member-1", displayName: "질문러", status: "ACTIVE" },
           });
         }
+        if (url === "/api/interests/cards") {
+          return jsonResponse({
+            taxonomyVersion: "interest_cards_v1",
+            minSelections: 3,
+            maxSelections: 8,
+            cards: [
+              {
+                code: "DAILY_LIFE",
+                label: "생활",
+                categoryCodes: ["LIFE"],
+                topicCodes: ["DAILY"],
+              },
+            ],
+          });
+        }
         if (url === "/api/guest-subjects") return jsonResponse({ status: "ready" });
         if (url.startsWith("/api/issues/feed?")) return jsonResponse(feed);
         throw new Error(`Unexpected request: ${url}`);
       }),
     );
 
-    render(<FeedExperience creatorSubmissionsEnabled />);
+    render(<FeedExperience />);
 
-    const createLink = await screen.findByRole("link", { name: "새 질문 만들기" });
-    expect(createLink).toHaveAttribute("href", "/create");
+    const questionButtons = await screen.findAllByRole("button", { name: "Question" });
+    expect(questionButtons).toHaveLength(2);
+    fireEvent.click(questionButtons[0]!);
+    expect(await screen.findByRole("dialog", { name: "Question" })).toBeInTheDocument();
+    expect(screen.getByText("사람들에게 어떤 선택을 물어볼까요?")).toBeInTheDocument();
+    fireEvent.keyDown(screen.getByRole("dialog", { name: "Question" }), { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "Question" })).not.toBeInTheDocument();
   });
 
   it("does not show the question creation CTA to a Guest", async () => {
@@ -118,13 +144,15 @@ describe("FeedExperience", () => {
       }),
     );
 
-    render(<FeedExperience creatorSubmissionsEnabled />);
+    render(<FeedExperience />);
 
     expect(await screen.findByText(feed.items[0]!.question)).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "새 질문 만들기" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Question" })).not.toBeInTheDocument();
   });
 
   it("does not show the question creation CTA when submissions are disabled", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("FEATURE_CREATOR_SUBMISSIONS_ENABLED", "false");
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: string | URL | Request) => {
@@ -140,10 +168,10 @@ describe("FeedExperience", () => {
       }),
     );
 
-    render(<FeedExperience creatorSubmissionsEnabled={false} />);
+    render(<FeedExperience />);
 
     expect(await screen.findByText(feed.items[0]!.question)).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "새 질문 만들기" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Question" })).not.toBeInTheDocument();
   });
 
   it("prepares the Guest before showing result-free Issue cards", async () => {

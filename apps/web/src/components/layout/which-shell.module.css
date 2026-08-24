@@ -76,6 +76,12 @@
 }
 
 .leftRail {
+  min-height: calc(100svh - 128px);
+  display: flex;
+  flex-direction: column;
+}
+
+.railNavigation {
   display: grid;
   gap: 6px;
 }
@@ -90,6 +96,15 @@
   padding: 0 14px;
   font-size: 0.9rem;
   text-decoration: none;
+}
+
+button.navLink {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
 }
 
 .navLink > span {
@@ -119,6 +134,34 @@
 .railNote {
   margin-top: 24px;
   padding: 18px;
+}
+
+.questionButton {
+  min-height: 50px;
+  margin-top: auto;
+  border-radius: 999px !important;
+  background: var(--which-cyan) !important;
+  color: #062a31;
+  justify-content: center;
+  padding-inline: 18px;
+  font-weight: 900;
+  transition:
+    background 160ms ease,
+    color 160ms ease,
+    transform 160ms ease;
+}
+
+.questionButton > span {
+  color: currentcolor;
+}
+
+.questionButton:hover,
+.questionButton:focus-visible,
+.questionButton[aria-expanded="true"] {
+  background: var(--which-cyan-strong) !important;
+  color: var(--which-surface);
+  outline: none;
+  transform: translateY(-1px);
 }
 
 .railNote strong,
@@ -180,7 +223,7 @@
   backdrop-filter: blur(12px);
 }
 
-.bottomNavFour {
+.bottomNav:has(.mobileQuestionButton) {
   grid-template-columns: repeat(4, 1fr);
 }
 
@@ -207,6 +250,27 @@
   gap: 2px;
   padding: 4px;
   font-size: 0.68rem;
+}
+
+.bottomNav .mobileQuestionButton {
+  color: var(--which-cyan-strong);
+}
+
+.bottomNav .mobileQuestionButton > span {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--which-cyan);
+  color: #062a31;
+  display: grid;
+  place-items: center;
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+.bottomNav .mobileQuestionButton[aria-expanded="true"] > span {
+  background: var(--which-cyan-strong);
+  color: var(--which-surface);
 }
 
 @media (max-width: 1319px) {
