@@ -40,6 +40,7 @@ export type GuestCommentQuery = {
 export type MemberCommentSubmission = {
   issueId: string;
   sessionToken: string;
+  anonymousSubjectId?: string;
   idempotencyKey: string;
   body: string;
 };

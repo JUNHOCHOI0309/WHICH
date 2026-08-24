@@ -48,7 +48,11 @@ type CommentRoute = {
 
 type CommentWriteRoute = {
   Params: { issueId: string };
-  Headers: { authorization?: string; "idempotency-key": string };
+  Headers: {
+    authorization?: string;
+    "x-anonymous-subject-id"?: string;
+    "idempotency-key": string;
+  };
   Body: { body: string };
 };
 
@@ -237,6 +241,7 @@ export async function registerCommentRoutes(
           headers: Type.Object(
             {
               authorization: Type.Optional(Type.String()),
+              "x-anonymous-subject-id": Type.Optional(uuidSchema),
               "idempotency-key": uuidSchema,
             },
             { additionalProperties: true },
@@ -261,6 +266,7 @@ export async function registerCommentRoutes(
         const result = await service.submitMemberComment({
           issueId: request.params.issueId,
           sessionToken: token,
+          anonymousSubjectId: request.headers["x-anonymous-subject-id"],
           idempotencyKey: request.headers["idempotency-key"],
           body: request.body.body,
         });

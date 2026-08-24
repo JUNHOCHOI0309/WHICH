@@ -6,6 +6,7 @@ import {
   fetchWhichApi,
   MEMBER_SESSION_COOKIE,
 } from "@/lib/server/which-api";
+import { publicOriginForRequest } from "@/lib/server/request-origin";
 
 export async function GET(request: NextRequest) {
   const token = request.cookies.get(MEMBER_SESSION_COOKIE)?.value;
@@ -40,14 +41,7 @@ export async function GET(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   const origin = request.headers.get("origin");
   const csrfHeader = request.headers.get("x-which-csrf");
-  let publicOrigin = request.nextUrl.origin;
-  if (process.env.AUTH_BASE_URL) {
-    try {
-      publicOrigin = new URL(process.env.AUTH_BASE_URL).origin;
-    } catch {
-      // Keep the request origin as a safe fallback when configuration is malformed.
-    }
-  }
+  const publicOrigin = publicOriginForRequest(request);
   const originMatches = origin === null || origin === "null" || origin === publicOrigin;
   if (!originMatches || csrfHeader !== "member-account-delete") {
     return NextResponse.json(

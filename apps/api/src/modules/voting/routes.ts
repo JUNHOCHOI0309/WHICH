@@ -106,7 +106,8 @@ type VoteRoute = {
   Params: { issueId: string };
   Headers: {
     "idempotency-key": string;
-    "x-anonymous-subject-id": string;
+    authorization?: string;
+    "x-anonymous-subject-id"?: string;
     "x-analytics-session-id"?: string;
   };
   Body: { issueVersion: number; choiceId: string };
@@ -131,6 +132,12 @@ function secretMatches(provided: string | undefined, expected: string) {
     providedBuffer.length === expectedBuffer.length &&
     timingSafeEqual(providedBuffer, expectedBuffer)
   );
+}
+
+function bearerToken(authorization: string | undefined) {
+  if (!authorization?.startsWith("Bearer ")) return null;
+  const token = authorization.slice("Bearer ".length).trim();
+  return token.length > 0 ? token : null;
 }
 
 export async function registerVotingRoutes(
@@ -186,12 +193,13 @@ export async function registerVotingRoutes(
       {
         schema: {
           tags: ["voting"],
-          summary: "Submit an idempotent Guest vote",
+          summary: "Submit an idempotent Guest or Member vote",
           params: Type.Object({ issueId: uuidSchema }),
           headers: Type.Object(
             {
               "idempotency-key": uuidSchema,
-              "x-anonymous-subject-id": uuidSchema,
+              authorization: Type.Optional(Type.String()),
+              "x-anonymous-subject-id": Type.Optional(uuidSchema),
               "x-analytics-session-id": Type.Optional(uuidSchema),
             },
             { additionalProperties: true },
@@ -203,6 +211,7 @@ export async function registerVotingRoutes(
           response: {
             201: voteResponseSchema,
             400: errorResponseSchema,
+            401: errorResponseSchema,
             404: errorResponseSchema,
             409: Type.Union([voteResponseSchema, errorResponseSchema]),
             500: errorResponseSchema,
@@ -210,9 +219,21 @@ export async function registerVotingRoutes(
         },
       },
       async (request, reply) => {
+        const sessionToken = bearerToken(request.headers.authorization);
+        if (request.headers.authorization && !sessionToken) {
+          throw new GuestVoteError("SESSION_REQUIRED", 401, "The Member session is invalid.");
+        }
+        if (!sessionToken && !request.headers["x-anonymous-subject-id"]) {
+          throw new GuestVoteError(
+            "VOTE_SUBJECT_REQUIRED",
+            400,
+            "A Guest subject or active Member session is required.",
+          );
+        }
         const result = await service.submitGuestVote({
           idempotencyKey: request.headers["idempotency-key"],
           anonymousSubjectId: request.headers["x-anonymous-subject-id"],
+          sessionToken: sessionToken ?? undefined,
           issueId: request.params.issueId,
           issueVersion: request.body.issueVersion,
           choiceId: request.body.choiceId,

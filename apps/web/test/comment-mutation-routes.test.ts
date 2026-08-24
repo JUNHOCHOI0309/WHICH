@@ -1,0 +1,182 @@
+import { NextRequest } from "next/server";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { POST as reportComment } from "@/app/api/comments/[commentId]/reports/route";
+import { POST as reactToComment } from "@/app/api/comments/[commentId]/reactions/helpful/route";
+import { POST as publishComment } from "@/app/api/issues/[issueId]/comments/route";
+import { POST as submitVote } from "@/app/api/issues/[issueId]/votes/route";
+
+const issueId = "591f2e90-996a-50c5-af46-967dd0793000";
+const commentId = "8c092a45-c446-50f3-b1ac-ac9a018b9105";
+const guestSubjectId = "4f748dd9-f960-5a70-8d9a-8ce9b072e830";
+const idempotencyKey = "ad457734-dadb-59e6-ad7c-1ad7f6a99d76";
+const choiceId = "24d3656a-a62e-5ca4-9363-3dc269281ed2";
+
+function jsonResponse(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
+}
+
+function mutationRequest(path: string, body?: unknown, origin = "https://whichone.site") {
+  return new NextRequest(`https://which-web.onrender.com${path}`, {
+    method: "POST",
+    headers: {
+      origin,
+      cookie: `which_member_session=member-token; which_guest_subject=${guestSubjectId}`,
+      "content-type": "application/json",
+      "idempotency-key": idempotencyKey,
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
+});
+
+describe("Comment mutation BFF Origin handling", () => {
+  it("accepts the configured public Origin and forwards Member plus Guest identity", async () => {
+    vi.stubEnv("AUTH_BASE_URL", "https://whichone.site");
+    const upstream = vi.fn<
+      (input: string | URL | Request, init?: RequestInit) => Promise<Response>
+    >(async () =>
+      jsonResponse(
+        {
+          comment: {
+            id: commentId,
+            choice: "A",
+            author: { displayName: "작성자" },
+            body: "선택 이유",
+          },
+        },
+        201,
+      ),
+    );
+    vi.stubGlobal("fetch", upstream);
+
+    const response = await publishComment(
+      mutationRequest(`/api/issues/${issueId}/comments`, { body: "선택 이유" }),
+      { params: Promise.resolve({ issueId }) },
+    );
+
+    expect(response.status).toBe(201);
+    expect(upstream).toHaveBeenCalledWith(
+      new URL(`http://localhost:4000/v1/issues/${issueId}/comments`),
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          authorization: "Bearer member-token",
+          "x-anonymous-subject-id": guestSubjectId,
+        }),
+      }),
+    );
+  });
+
+  it("rejects a different Origin before calling the API", async () => {
+    vi.stubEnv("AUTH_BASE_URL", "https://whichone.site");
+    const upstream = vi.fn();
+    vi.stubGlobal("fetch", upstream);
+
+    const response = await publishComment(
+      mutationRequest(
+        `/api/issues/${issueId}/comments`,
+        { body: "선택 이유" },
+        "https://attacker.example",
+      ),
+      { params: Promise.resolve({ issueId }) },
+    );
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ code: "CSRF_REJECTED" });
+    expect(upstream).not.toHaveBeenCalled();
+  });
+
+  it("uses the same public Origin rule for helpful reactions", async () => {
+    vi.stubEnv("AUTH_BASE_URL", "https://whichone.site");
+    const upstream = vi.fn(async () =>
+      jsonResponse({ reaction: { code: "HELPFUL", active: true, helpfulCount: 1 } }),
+    );
+    vi.stubGlobal("fetch", upstream);
+
+    const response = await reactToComment(
+      mutationRequest(`/api/comments/${commentId}/reactions/helpful`),
+      { params: Promise.resolve({ commentId }) },
+    );
+
+    expect(response.status).toBe(200);
+    expect(upstream).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses the same public Origin rule for reports", async () => {
+    vi.stubEnv("AUTH_BASE_URL", "https://whichone.site");
+    const upstream = vi.fn(async () =>
+      jsonResponse(
+        {
+          report: { accepted: true, viewerReported: true },
+          comment: { visibility: "VISIBLE" },
+        },
+        201,
+      ),
+    );
+    vi.stubGlobal("fetch", upstream);
+
+    const response = await reportComment(
+      mutationRequest(`/api/comments/${commentId}/reports`, { reason: "SPAM" }),
+      { params: Promise.resolve({ commentId }) },
+    );
+
+    expect(response.status).toBe(201);
+    expect(upstream).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("Member Vote BFF", () => {
+  it("forwards an active Member session without creating a new Guest subject", async () => {
+    const upstream = vi.fn<
+      (input: string | URL | Request, init?: RequestInit) => Promise<Response>
+    >(async () =>
+      jsonResponse(
+        {
+          outcome: "ACCEPTED",
+          voteAttemptId: idempotencyKey,
+          voteId: "1a682aaa-408e-5c62-8b5d-7ee5ffbf95a6",
+          issueId,
+          issueVersion: 1,
+          choice: "A",
+          result: {
+            resultVersion: 1,
+            acceptedA: 1,
+            acceptedB: 0,
+            displayedTotal: 1,
+            integrityState: "NORMAL",
+          },
+        },
+        201,
+      ),
+    );
+    vi.stubGlobal("fetch", upstream);
+
+    const response = await submitVote(
+      new NextRequest(`https://whichone.site/api/issues/${issueId}/votes`, {
+        method: "POST",
+        headers: {
+          cookie: "which_member_session=member-token",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ issueVersion: 1, choiceId, idempotencyKey }),
+      }),
+      { params: Promise.resolve({ issueId }) },
+    );
+
+    expect(response.status).toBe(201);
+    expect(upstream).toHaveBeenCalledTimes(1);
+    const [, init] = upstream.mock.calls[0]!;
+    const headers = new Headers(init?.headers);
+    expect(headers.get("authorization")).toBe("Bearer member-token");
+    expect(headers.get("x-anonymous-subject-id")).toBeNull();
+    expect(response.headers.get("set-cookie")).not.toContain("which_guest_subject=");
+  });
+});
