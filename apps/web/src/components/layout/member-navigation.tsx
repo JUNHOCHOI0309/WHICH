@@ -117,7 +117,6 @@ export function MemberQuestionComposerButton({ className }: { className?: string
       aria-controls="question-composer-dialog"
       onClick={openComposer}
     >
-      <span aria-hidden="true">＋</span>
       <strong>Question</strong>
     </button>
   );
