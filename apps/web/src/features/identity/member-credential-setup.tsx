@@ -33,9 +33,10 @@ export function MemberCredentialSetup({ onCompleted }: { onCompleted: () => void
             body: JSON.stringify({ email, password }),
           })
             .then(async (response) => {
-              const body = (await response.json()) as { message?: string };
+              const body = (await response.json()) as { message?: string; returnTo?: string };
               if (!response.ok) throw new Error(body.message || "설정을 완료하지 못했습니다.");
               onCompleted();
+              window.location.assign(body.returnTo || "/verify-email");
             })
             .catch((reason: unknown) =>
               setError(reason instanceof Error ? reason.message : "다시 시도해 주세요."),

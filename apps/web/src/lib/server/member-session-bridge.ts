@@ -21,6 +21,7 @@ type SessionInput = {
   displayName: string;
   anonymousSubjectId?: string | null;
   suggestedEmail?: string;
+  authRequestKey?: string;
 };
 type SocialSessionInput = Omit<SessionInput, "provider"> & { provider: SocialProvider };
 
@@ -60,6 +61,7 @@ async function requestMemberSession(
       displayName: input.displayName,
       ...(createIfMissing ? {} : { createIfMissing: false }),
       ...(credential ? { credential } : {}),
+      ...(input.authRequestKey ? { authRequestKey: input.authRequestKey } : {}),
       ...(includeGuestSubject && input.anonymousSubjectId
         ? { anonymousSubjectId: input.anonymousSubjectId }
         : {}),
@@ -73,6 +75,7 @@ async function requestCredentialSession(input: {
   email: string;
   password: string;
   anonymousSubjectId?: string | null;
+  authRequestKey?: string;
 }) {
   const upstream = await fetchWhichApi("/v1/internal/member-credential-sessions", {
     method: "POST",
@@ -85,6 +88,7 @@ async function requestCredentialSession(input: {
       email: input.email,
       password: input.password,
       ...(input.anonymousSubjectId ? { anonymousSubjectId: input.anonymousSubjectId } : {}),
+      ...(input.authRequestKey ? { authRequestKey: input.authRequestKey } : {}),
     }),
   });
   const body = (await upstream.json()) as SessionApiResponse;
@@ -107,6 +111,7 @@ export async function createCredentialMemberSession(input: {
   email: string;
   password: string;
   anonymousSubjectId?: string | null;
+  authRequestKey?: string;
 }) {
   if (input.mode === "login") {
     return requireSessionResponse(await requestCredentialSession(input));
@@ -119,6 +124,7 @@ export async function createCredentialMemberSession(input: {
         providerSubject: input.email,
         displayName,
         anonymousSubjectId: input.anonymousSubjectId,
+        authRequestKey: input.authRequestKey,
       },
       true,
       true,
@@ -132,13 +138,19 @@ export async function completeSocialSignup(input: {
   social: SocialSessionInput;
   email: string;
   password: string;
+  authRequestKey?: string;
 }) {
   if (input.mode === "new") {
     return requireSessionResponse(
-      await requestMemberSession(input.social, true, true, {
-        email: input.email,
-        password: input.password,
-      }),
+      await requestMemberSession(
+        { ...input.social, authRequestKey: input.authRequestKey },
+        true,
+        true,
+        {
+          email: input.email,
+          password: input.password,
+        },
+      ),
     );
   }
 
@@ -147,6 +159,7 @@ export async function completeSocialSignup(input: {
       email: input.email,
       password: input.password,
       anonymousSubjectId: input.social.anonymousSubjectId,
+      authRequestKey: input.authRequestKey,
     }),
   );
   if (!credentialSession.memberId) {

@@ -16,12 +16,20 @@ export type IdentityAssertion = {
     email: string;
     password: string;
   };
+  authRequestKey?: string;
 };
 
 export type CredentialSessionAssertion = {
   email: string;
   password: string;
   anonymousSubjectId?: string;
+  authRequestKey?: string;
+};
+
+export type AuthEmailDelivery = {
+  email: string;
+  token: string;
+  expiresAt: string;
 };
 
 export type MemberCredentialResult = {
@@ -150,6 +158,20 @@ export interface MemberIdentityService {
     memberId: string,
     credential: { email: string; password: string },
   ): Promise<MemberCredentialResult>;
+  requestEmailVerification(input: {
+    email: string;
+    authRequestKey?: string;
+  }): Promise<AuthEmailDelivery | null>;
+  verifyEmail(input: { token: string; authRequestKey?: string }): Promise<{ verified: true }>;
+  requestPasswordReset(input: {
+    email: string;
+    authRequestKey?: string;
+  }): Promise<AuthEmailDelivery | null>;
+  resetPassword(input: {
+    token: string;
+    password: string;
+    authRequestKey?: string;
+  }): Promise<{ reset: true }>;
   linkIdentity(
     memberId: string,
     assertion: Omit<IdentityAssertion, "anonymousSubjectId">,

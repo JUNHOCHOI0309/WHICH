@@ -77,6 +77,31 @@ services:
         generateValue: true
       - key: MEMBER_SESSION_TTL_SECONDS
         value: "604800"
+      - key: AUTH_EMAIL_VERIFICATION_TTL_SECONDS
+        value: "86400"
+      - key: AUTH_PASSWORD_RESET_TTL_SECONDS
+        value: "1800"
+      - key: AUTH_RATE_LIMIT_WINDOW_SECONDS
+        value: "900"
+      - key: AUTH_SIGNUP_RATE_LIMIT
+        value: "5"
+      - key: AUTH_LOGIN_RATE_LIMIT
+        value: "10"
+      - key: AUTH_EMAIL_DELIVERY_RATE_LIMIT
+        value: "3"
+      - key: AUTH_TOKEN_CONSUME_RATE_LIMIT
+        value: "10"
+      # Flip to true only after Resend setup and verification-link QA.
+      - key: AUTH_EMAIL_VERIFICATION_REQUIRED
+        value: "false"
+      - key: RESEND_API_KEY
+        sync: false
+      - key: AUTH_EMAIL_FROM
+        sync: false
+      - key: AUTH_EMAIL_REPLY_TO
+        sync: false
+      - key: SUPPORT_EMAIL
+        sync: false
       - key: FEATURE_COMMENTS_ENABLED
         value: "false"
       - key: FEATURE_CREATOR_SUBMISSIONS_ENABLED

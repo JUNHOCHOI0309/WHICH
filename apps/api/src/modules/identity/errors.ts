@@ -6,7 +6,10 @@ export type MemberIdentityErrorCode =
   | "DEVELOPMENT_PROVIDER_DISABLED"
   | "IDENTITY_SIGNUP_REQUIRED"
   | "CREDENTIAL_INVALID"
+  | "EMAIL_UNVERIFIED"
   | "CREDENTIAL_ALREADY_EXISTS"
+  | "AUTH_TOKEN_INVALID"
+  | "AUTH_RATE_LIMITED"
   | "EMAIL_INVALID"
   | "PASSWORD_INVALID"
   | "GUEST_SUBJECT_NOT_FOUND"
@@ -19,7 +22,7 @@ export type MemberIdentityErrorCode =
 export class MemberIdentityError extends Error {
   constructor(
     public readonly code: MemberIdentityErrorCode,
-    public readonly statusCode: 400 | 401 | 403 | 404 | 409,
+    public readonly statusCode: 400 | 401 | 403 | 404 | 409 | 429,
     message: string,
   ) {
     super(message);

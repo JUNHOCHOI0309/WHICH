@@ -43,6 +43,10 @@ and API deploy and restart together.
    and real-account QA are complete.
 6. Deploy the Blueprint. The service runs database migrations before accepting a
    new release.
+7. Verify the sending domain in Resend, then set `RESEND_API_KEY`,
+   `AUTH_EMAIL_FROM` (for example `WHICH <auth@whichone.site>`),
+   `AUTH_EMAIL_REPLY_TO`, and `SUPPORT_EMAIL`. Keep the API key secret.
+   Leave `AUTH_EMAIL_VERIFICATION_REQUIRED=false` during this setup.
 
 The Blueprint generates the API moderation/internal-auth secrets and the Web
 OAuth-flow secret. The Web BFF reads the generated `INTERNAL_AUTH_SECRET`, so a
@@ -68,6 +72,11 @@ After `which-web` is healthy at its `onrender.com` address:
 7. In Kakao Developers, enable Kakao Login and OpenID Connect, then register
    `https://whichone.site/api/auth/kakao/callback` for the REST API key and enable
    its Client Secret.
+8. Confirm that email verification and password reset links use the canonical
+   `https://whichone.site` origin and that neither the one-time token nor the
+   Resend API key appears in browser JSON or application logs.
+9. After existing credentials can request a verification email and PC/Android
+   QA passes, set `AUTH_EMAIL_VERIFICATION_REQUIRED=true` and redeploy.
 
 `whichone.site` is the canonical origin. Do not add a second origin to
 `AUTH_BASE_URL` or `WEB_ORIGIN` without updating every OAuth/OIDC provider and testing

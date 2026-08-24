@@ -12,6 +12,7 @@ import {
   issues,
   issueVersions,
   memberCredentials,
+  memberAuthTokens,
   memberIdentityLinks,
   memberProfiles,
   memberSessions,
@@ -115,6 +116,25 @@ function linkMemberIdentity(input: {
   });
 }
 
+async function verifyCredentialEmail(email: string) {
+  const requested = await app.inject({
+    method: "POST",
+    url: "/v1/internal/member-email-verification-requests",
+    headers: { "x-internal-auth-secret": INTERNAL_SECRET },
+    payload: { email, authRequestKey: randomUUID() },
+  });
+  expect(requested.statusCode).toBe(200);
+  const token = requested.json<{ token: string }>().token;
+  const confirmed = await app.inject({
+    method: "POST",
+    url: "/v1/internal/member-email-verifications",
+    headers: { "x-internal-auth-secret": INTERNAL_SECRET },
+    payload: { token, authRequestKey: randomUUID() },
+  });
+  expect(confirmed.statusCode).toBe(200);
+  return token;
+}
+
 beforeAll(async () => {
   const testDatabase = await createTestDatabase();
   database = testDatabase.database;
@@ -191,6 +211,16 @@ describe("Member identity and Guest vote linking", () => {
       .where(eq(memberIdentityLinks.memberId, memberId));
     expect(links).toEqual(expect.arrayContaining([{ provider: "EMAIL" }, { provider: "KAKAO" }]));
 
+    const unverified = await app.inject({
+      method: "POST",
+      url: "/v1/internal/member-credential-sessions",
+      headers: { "x-internal-auth-secret": INTERNAL_SECRET },
+      payload: { email: email.toUpperCase(), password },
+    });
+    expect(unverified.statusCode).toBe(403);
+    expect(unverified.json()).toMatchObject({ code: "EMAIL_UNVERIFIED" });
+
+    await verifyCredentialEmail(email);
     const login = await app.inject({
       method: "POST",
       url: "/v1/internal/member-credential-sessions",
@@ -228,6 +258,8 @@ describe("Member identity and Guest vote linking", () => {
     expect(completed.statusCode).toBe(201);
     expect(completed.json()).toMatchObject({ member: { id: memberId }, email });
 
+    await verifyCredentialEmail(email);
+
     const login = await app.inject({
       method: "POST",
       url: "/v1/internal/member-credential-sessions",
@@ -236,6 +268,95 @@ describe("Member identity and Guest vote linking", () => {
     });
     expect(login.statusCode).toBe(201);
     expect(login.json()).toMatchObject({ member: { id: memberId } });
+  });
+
+  it("uses one-time hashed password reset tokens and revokes existing sessions", async () => {
+    const email = `reset-${randomUUID()}@example.com`;
+    const password = "initial correct horse battery";
+    const signup = await createMemberSession({
+      provider: "EMAIL",
+      providerSubject: email,
+      credential: { email, password },
+    });
+    const existingToken = signup.json<{ token: string }>().token;
+    await verifyCredentialEmail(email);
+
+    const requested = await app.inject({
+      method: "POST",
+      url: "/v1/internal/member-password-reset-requests",
+      headers: { "x-internal-auth-secret": INTERNAL_SECRET },
+      payload: { email, authRequestKey: randomUUID() },
+    });
+    expect(requested.statusCode).toBe(200);
+    const resetToken = requested.json<{ token: string }>().token;
+    const [stored] = await database.db
+      .select({ tokenHash: memberAuthTokens.tokenHash })
+      .from(memberAuthTokens)
+      .where(eq(memberAuthTokens.purpose, "PASSWORD_RESET"));
+    expect(stored?.tokenHash).toHaveLength(64);
+    expect(stored?.tokenHash).not.toBe(resetToken);
+
+    const newPassword = "new secure passphrase for which";
+    const reset = await app.inject({
+      method: "POST",
+      url: "/v1/internal/member-password-resets",
+      headers: { "x-internal-auth-secret": INTERNAL_SECRET },
+      payload: { token: resetToken, password: newPassword, authRequestKey: randomUUID() },
+    });
+    expect(reset.statusCode).toBe(200);
+
+    const reused = await app.inject({
+      method: "POST",
+      url: "/v1/internal/member-password-resets",
+      headers: { "x-internal-auth-secret": INTERNAL_SECRET },
+      payload: { token: resetToken, password: newPassword, authRequestKey: randomUUID() },
+    });
+    expect(reused.statusCode).toBe(400);
+    expect(reused.json()).toMatchObject({ code: "AUTH_TOKEN_INVALID" });
+
+    const oldSession = await app.inject({
+      method: "GET",
+      url: "/v1/member-session",
+      headers: { authorization: `Bearer ${existingToken}` },
+    });
+    expect(oldSession.statusCode).toBe(401);
+    const login = await app.inject({
+      method: "POST",
+      url: "/v1/internal/member-credential-sessions",
+      headers: { "x-internal-auth-secret": INTERNAL_SECRET },
+      payload: { email, password: newPassword },
+    });
+    expect(login.statusCode).toBe(201);
+  });
+
+  it("does not reveal whether a password reset email is registered and rate limits shared keys", async () => {
+    const missing = await app.inject({
+      method: "POST",
+      url: "/v1/internal/member-password-reset-requests",
+      headers: { "x-internal-auth-secret": INTERNAL_SECRET },
+      payload: { email: `missing-${randomUUID()}@example.com`, authRequestKey: randomUUID() },
+    });
+    expect(missing.statusCode).toBe(200);
+    expect(missing.body).toBe("null");
+
+    const rateKey = randomUUID();
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const allowed = await app.inject({
+        method: "POST",
+        url: "/v1/internal/member-password-reset-requests",
+        headers: { "x-internal-auth-secret": INTERNAL_SECRET },
+        payload: { email: `absent-${randomUUID()}@example.com`, authRequestKey: rateKey },
+      });
+      expect(allowed.statusCode).toBe(200);
+    }
+    const limited = await app.inject({
+      method: "POST",
+      url: "/v1/internal/member-password-reset-requests",
+      headers: { "x-internal-auth-secret": INTERNAL_SECRET },
+      payload: { email: `absent-${randomUUID()}@example.com`, authRequestKey: rateKey },
+    });
+    expect(limited.statusCode).toBe(429);
+    expect(limited.json()).toMatchObject({ code: "AUTH_RATE_LIMITED" });
   });
 
   it("keeps the private Member profile behind the session token", async () => {

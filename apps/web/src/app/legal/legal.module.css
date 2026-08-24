@@ -1,0 +1,36 @@
+.document {
+  border: 1px solid var(--which-border);
+  border-radius: 20px;
+  background: var(--which-surface);
+  padding: clamp(24px, 5vw, 52px);
+}
+
+.document > p:first-child {
+  color: var(--which-cyan-strong);
+  font-size: 0.7rem;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+}
+
+.document h1 {
+  margin: 10px 0 8px;
+  font-size: clamp(2rem, 5vw, 3.3rem);
+  letter-spacing: -0.055em;
+}
+
+.document h2 {
+  margin: 34px 0 10px;
+  font-size: 1.1rem;
+}
+
+.document p,
+.document li {
+  color: var(--which-text-secondary);
+  line-height: 1.75;
+  word-break: keep-all;
+}
+
+.document a {
+  color: var(--which-cyan-strong);
+  font-weight: 800;
+}

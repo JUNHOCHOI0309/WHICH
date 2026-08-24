@@ -1,7 +1,8 @@
 import { cookies } from "next/headers";
 import { type NextRequest, NextResponse } from "next/server";
 
-import { sanitizeReturnTo } from "@/lib/server/member-auth";
+import { authRequestKey, sanitizeReturnTo } from "@/lib/server/member-auth";
+import { requestEmailVerification, sendAuthEmail } from "@/lib/server/auth-email";
 import {
   createCredentialMemberSession,
   MemberIdentityLinkError,
@@ -64,6 +65,7 @@ export async function POST(request: NextRequest) {
   const returnTo = sanitizeReturnTo(typeof body.returnTo === "string" ? body.returnTo : "/me");
   const cookieStore = await cookies();
   const anonymousSubjectId = validGuestSubject(cookieStore.get(GUEST_SUBJECT_COOKIE)?.value);
+  const requestKey = authRequestKey(request.headers, body.email);
 
   try {
     const session = await createCredentialMemberSession({
@@ -71,21 +73,51 @@ export async function POST(request: NextRequest) {
       email: body.email,
       password: body.password,
       anonymousSubjectId,
+      authRequestKey: requestKey,
     });
-    const response = NextResponse.json({ ok: true, returnTo });
+    let target = returnTo;
+    if (body.mode === "signup") {
+      let emailSent = false;
+      try {
+        const delivery = await requestEmailVerification(body.email, requestKey);
+        emailSent = delivery ? await sendAuthEmail(delivery, "verification", request.url) : false;
+      } catch (error) {
+        console.error("[auth-email] signup verification delivery failed", {
+          message: error instanceof Error ? error.message : "unknown",
+        });
+      }
+      const verificationTarget = new URL("/verify-email", request.nextUrl.origin);
+      verificationTarget.searchParams.set("email", body.email.trim());
+      verificationTarget.searchParams.set("sent", emailSent ? "1" : "0");
+      verificationTarget.searchParams.set("returnTo", returnTo);
+      target = `${verificationTarget.pathname}${verificationTarget.search}`;
+    }
+    const response = NextResponse.json({ ok: true, returnTo: target });
     setMemberSessionCookie(response, session.token, session.expiresAt);
     if (anonymousSubjectId) clearGuestSubjectCookie(response);
     return response;
   } catch (error) {
     const code = error instanceof MemberIdentityLinkError ? error.code : "AUTH_FAILED";
     const status =
-      code === "CREDENTIAL_ALREADY_EXISTS" ? 409 : code === "CREDENTIAL_INVALID" ? 401 : 400;
+      code === "CREDENTIAL_ALREADY_EXISTS"
+        ? 409
+        : code === "CREDENTIAL_INVALID"
+          ? 401
+          : code === "EMAIL_UNVERIFIED"
+            ? 403
+            : code === "AUTH_RATE_LIMITED"
+              ? 429
+              : 400;
     const message =
       status === 409
         ? "이미 등록된 이메일입니다. 로그인해 주세요."
         : status === 401
           ? "이메일 또는 비밀번호를 확인해 주세요."
-          : "계정 처리를 완료하지 못했습니다. 입력값을 확인해 주세요.";
+          : code === "EMAIL_UNVERIFIED"
+            ? "이메일 확인을 먼저 완료해 주세요. 확인 메일을 다시 받을 수 있습니다."
+            : status === 429
+              ? "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요."
+              : "계정 처리를 완료하지 못했습니다. 입력값을 확인해 주세요.";
     return NextResponse.json({ code, message }, { status });
   }
 }

@@ -2,15 +2,17 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 
 import { hash as hashPassword, verify as verifyPassword } from "@node-rs/argon2";
 import { alias } from "drizzle-orm/pg-core";
-import { and, eq, gt, isNull, sql } from "drizzle-orm";
+import { and, eq, gt, isNull, lt, sql } from "drizzle-orm";
 
 import type { Database } from "../../database/client.js";
 import {
+  authRateLimitWindows,
   guestMemberLinks,
   commentReactions,
   commentReports,
   issueChoices,
   memberCredentials,
+  memberAuthTokens,
   memberIdentityLinks,
   memberProfiles,
   memberSessions,
@@ -49,6 +51,24 @@ const PASSWORD_HASH_OPTIONS = {
   outputLen: 32,
 } as const;
 const dummyPasswordHash = hashPassword("which-invalid-credential-padding", PASSWORD_HASH_OPTIONS);
+const DEFAULT_AUTH_SECURITY = {
+  verificationTtlSeconds: 86_400,
+  passwordResetTtlSeconds: 1_800,
+  rateLimitWindowSeconds: 900,
+  signupLimit: 5,
+  loginLimit: 10,
+  emailDeliveryLimit: 3,
+  tokenConsumeLimit: 10,
+} as const;
+type AuthSecurityOptions = {
+  verificationTtlSeconds: number;
+  passwordResetTtlSeconds: number;
+  rateLimitWindowSeconds: number;
+  signupLimit: number;
+  loginLimit: number;
+  emailDeliveryLimit: number;
+  tokenConsumeLimit: number;
+};
 const RESERVED_HANDLES = new Set([
   "admin",
   "api",
@@ -332,8 +352,106 @@ async function privateVoteParticipationCount(database: Database["db"], memberId:
 
 export function createMemberIdentityService(
   database: Database["db"],
-  options: { sessionTtlSeconds: number; allowDevelopmentProvider: boolean },
+  options: {
+    sessionTtlSeconds: number;
+    allowDevelopmentProvider: boolean;
+    requireVerifiedEmail?: boolean;
+    authSecurity?: Partial<AuthSecurityOptions>;
+  },
 ): MemberIdentityService {
+  const authSecurity = { ...DEFAULT_AUTH_SECURITY, ...options.authSecurity };
+
+  async function consumeAuthRateLimit(action: string, bucketKey: string, limit: number) {
+    const now = new Date();
+    await database.delete(authRateLimitWindows).where(lt(authRateLimitWindows.expiresAt, now));
+    const windowMilliseconds = authSecurity.rateLimitWindowSeconds * 1_000;
+    const windowStartedAt = new Date(
+      Math.floor(now.getTime() / windowMilliseconds) * windowMilliseconds,
+    );
+    const expiresAt = new Date(windowStartedAt.getTime() + windowMilliseconds * 2);
+    const bucketKeyHash = hashToken(`${action}:${bucketKey}`);
+    const [window] = await database
+      .insert(authRateLimitWindows)
+      .values({
+        action,
+        bucketKeyHash,
+        windowStartedAt,
+        attemptCount: 1,
+        expiresAt,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: [
+          authRateLimitWindows.action,
+          authRateLimitWindows.bucketKeyHash,
+          authRateLimitWindows.windowStartedAt,
+        ],
+        set: {
+          attemptCount: sql`${authRateLimitWindows.attemptCount} + 1`,
+          expiresAt,
+          updatedAt: now,
+        },
+      })
+      .returning({ attemptCount: authRateLimitWindows.attemptCount });
+    if (!window || window.attemptCount > limit) {
+      throw new MemberIdentityError(
+        "AUTH_RATE_LIMITED",
+        429,
+        "Too many authentication attempts. Try again later.",
+      );
+    }
+  }
+
+  async function issueAuthEmailToken(
+    purpose: "EMAIL_VERIFICATION" | "PASSWORD_RESET",
+    emailInput: string,
+    authRequestKey?: string,
+  ) {
+    const email = normalizeEmail(emailInput);
+    await consumeAuthRateLimit(purpose, authRequestKey ?? email, authSecurity.emailDeliveryLimit);
+    const [credential] = await database
+      .select()
+      .from(memberCredentials)
+      .where(eq(memberCredentials.emailNormalized, email))
+      .limit(1);
+    if (!credential || (purpose === "EMAIL_VERIFICATION" && credential.emailVerifiedAt)) {
+      return null;
+    }
+
+    const now = new Date();
+    await database.delete(memberAuthTokens).where(lt(memberAuthTokens.expiresAt, now));
+    const ttlSeconds =
+      purpose === "EMAIL_VERIFICATION"
+        ? authSecurity.verificationTtlSeconds
+        : authSecurity.passwordResetTtlSeconds;
+    const expiresAt = new Date(now.getTime() + ttlSeconds * 1_000);
+    const token = randomBytes(32).toString("base64url");
+    await database.transaction(async (transaction) => {
+      await transaction.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${`auth-token:${credential.id}:${purpose}`}, 0))`,
+      );
+      await transaction
+        .update(memberAuthTokens)
+        .set({ consumedAt: now })
+        .where(
+          and(
+            eq(memberAuthTokens.credentialId, credential.id),
+            eq(memberAuthTokens.purpose, purpose),
+            isNull(memberAuthTokens.consumedAt),
+          ),
+        );
+      await transaction.insert(memberAuthTokens).values({
+        credentialId: credential.id,
+        purpose,
+        tokenHash: hashToken(token),
+        expiresAt,
+        createdAt: now,
+      });
+    });
+    return { email, token, expiresAt: expiresAt.toISOString() };
+  }
+
   const service: MemberIdentityService = {
     async createSession(assertion) {
       if (assertion.provider === "DEVELOPMENT" && !options.allowDevelopmentProvider) {
@@ -344,13 +462,23 @@ export function createMemberIdentityService(
         );
       }
 
-      const credential = assertion.credential
+      const credentialInput = assertion.credential
         ? {
             email: normalizeEmail(assertion.credential.email),
-            passwordHash: await hashPassword(
-              validatePassword(assertion.credential.password),
-              PASSWORD_HASH_OPTIONS,
-            ),
+            password: validatePassword(assertion.credential.password),
+          }
+        : null;
+      if (credentialInput) {
+        await consumeAuthRateLimit(
+          "SIGNUP",
+          assertion.authRequestKey ?? credentialInput.email,
+          authSecurity.signupLimit,
+        );
+      }
+      const credential = credentialInput
+        ? {
+            email: credentialInput.email,
+            passwordHash: await hashPassword(credentialInput.password, PASSWORD_HASH_OPTIONS),
           }
         : null;
       const providerSubject =
@@ -828,6 +956,11 @@ export function createMemberIdentityService(
 
     async createCredentialSession(assertion) {
       const email = normalizeEmail(assertion.email);
+      await consumeAuthRateLimit(
+        "LOGIN",
+        assertion.authRequestKey ?? email,
+        authSecurity.loginLimit,
+      );
       const [credential] = await database
         .select({ credential: memberCredentials, member: members })
         .from(memberCredentials)
@@ -843,6 +976,13 @@ export function createMemberIdentityService(
           "CREDENTIAL_INVALID",
           401,
           "The email or password is incorrect.",
+        );
+      }
+      if (options.requireVerifiedEmail !== false && !credential.credential.emailVerifiedAt) {
+        throw new MemberIdentityError(
+          "EMAIL_UNVERIFIED",
+          403,
+          "Verify this email address before signing in.",
         );
       }
 
@@ -908,6 +1048,133 @@ export function createMemberIdentityService(
           lastAuthenticatedAt: now,
         });
         return { member: toMemberView(member), email };
+      });
+    },
+
+    async requestEmailVerification(input) {
+      return issueAuthEmailToken("EMAIL_VERIFICATION", input.email, input.authRequestKey);
+    },
+
+    async verifyEmail(input) {
+      await consumeAuthRateLimit(
+        "VERIFY_TOKEN",
+        input.authRequestKey ?? hashToken(input.token),
+        authSecurity.tokenConsumeLimit,
+      );
+      const tokenHash = hashToken(input.token);
+      const now = new Date();
+      return database.transaction(async (transaction) => {
+        const [token] = await transaction
+          .select({ id: memberAuthTokens.id, credentialId: memberAuthTokens.credentialId })
+          .from(memberAuthTokens)
+          .where(
+            and(
+              eq(memberAuthTokens.tokenHash, tokenHash),
+              eq(memberAuthTokens.purpose, "EMAIL_VERIFICATION"),
+              isNull(memberAuthTokens.consumedAt),
+              gt(memberAuthTokens.expiresAt, now),
+            ),
+          )
+          .limit(1);
+        if (!token) {
+          throw new MemberIdentityError(
+            "AUTH_TOKEN_INVALID",
+            400,
+            "This verification link is invalid or expired.",
+          );
+        }
+        const [consumed] = await transaction
+          .update(memberAuthTokens)
+          .set({ consumedAt: now })
+          .where(and(eq(memberAuthTokens.id, token.id), isNull(memberAuthTokens.consumedAt)))
+          .returning({ id: memberAuthTokens.id });
+        if (!consumed) {
+          throw new MemberIdentityError(
+            "AUTH_TOKEN_INVALID",
+            400,
+            "This verification link is invalid or expired.",
+          );
+        }
+        await transaction
+          .update(memberCredentials)
+          .set({ emailVerifiedAt: now, updatedAt: now })
+          .where(eq(memberCredentials.id, token.credentialId));
+        return { verified: true as const };
+      });
+    },
+
+    async requestPasswordReset(input) {
+      return issueAuthEmailToken("PASSWORD_RESET", input.email, input.authRequestKey);
+    },
+
+    async resetPassword(input) {
+      const password = validatePassword(input.password);
+      await consumeAuthRateLimit(
+        "RESET_TOKEN",
+        input.authRequestKey ?? hashToken(input.token),
+        authSecurity.tokenConsumeLimit,
+      );
+      const passwordHash = await hashPassword(password, PASSWORD_HASH_OPTIONS);
+      const tokenHash = hashToken(input.token);
+      const now = new Date();
+      return database.transaction(async (transaction) => {
+        const [token] = await transaction
+          .select({ id: memberAuthTokens.id, credentialId: memberAuthTokens.credentialId })
+          .from(memberAuthTokens)
+          .where(
+            and(
+              eq(memberAuthTokens.tokenHash, tokenHash),
+              eq(memberAuthTokens.purpose, "PASSWORD_RESET"),
+              isNull(memberAuthTokens.consumedAt),
+              gt(memberAuthTokens.expiresAt, now),
+            ),
+          )
+          .limit(1);
+        if (!token) {
+          throw new MemberIdentityError(
+            "AUTH_TOKEN_INVALID",
+            400,
+            "This password reset link is invalid or expired.",
+          );
+        }
+        const [credential] = await transaction
+          .select({ memberId: memberCredentials.memberId })
+          .from(memberCredentials)
+          .where(eq(memberCredentials.id, token.credentialId))
+          .limit(1);
+        const [consumed] = await transaction
+          .update(memberAuthTokens)
+          .set({ consumedAt: now })
+          .where(and(eq(memberAuthTokens.id, token.id), isNull(memberAuthTokens.consumedAt)))
+          .returning({ id: memberAuthTokens.id });
+        if (!credential || !consumed) {
+          throw new MemberIdentityError(
+            "AUTH_TOKEN_INVALID",
+            400,
+            "This password reset link is invalid or expired.",
+          );
+        }
+        await transaction
+          .update(memberCredentials)
+          .set({ passwordHash, passwordChangedAt: now, updatedAt: now })
+          .where(eq(memberCredentials.id, token.credentialId));
+        await transaction
+          .update(memberAuthTokens)
+          .set({ consumedAt: now })
+          .where(
+            and(
+              eq(memberAuthTokens.credentialId, token.credentialId),
+              eq(memberAuthTokens.purpose, "PASSWORD_RESET"),
+              isNull(memberAuthTokens.consumedAt),
+            ),
+          );
+        await transaction
+          .update(memberSessions)
+          .set({ revokedAt: now })
+          .where(
+            and(eq(memberSessions.memberId, credential.memberId), isNull(memberSessions.revokedAt)),
+          );
+        return { reset: true as const };
       });
     },
 

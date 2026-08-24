@@ -275,6 +275,21 @@ export function randomOAuthValue() {
   return randomBytes(32).toString("base64url");
 }
 
+export function authRequestKey(headers: Pick<Headers, "get">, discriminator: string) {
+  const forwardedFor = headers.get("x-forwarded-for")?.split(",", 1)[0]?.trim();
+  const clientAddress =
+    headers.get("cf-connecting-ip")?.trim() ||
+    headers.get("x-real-ip")?.trim() ||
+    forwardedFor ||
+    "unknown";
+  return createHmac("sha256", flowSecret())
+    .update("which-auth-rate-limit-v1\0")
+    .update(clientAddress)
+    .update("\0")
+    .update(discriminator.trim().normalize("NFKC").toLowerCase())
+    .digest("hex");
+}
+
 export function calculateS256CodeChallenge(codeVerifier: string) {
   return createHash("sha256").update(codeVerifier).digest("base64url");
 }
