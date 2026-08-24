@@ -123,9 +123,10 @@ describe("FeedExperience", () => {
 
     render(<FeedExperience creationEnabled />);
 
-    const questionButtons = await screen.findAllByRole("button", { name: "Question" });
-    expect(questionButtons).toHaveLength(2);
-    fireEvent.click(questionButtons[0]!);
+    const desktopQuestionButton = await screen.findByRole("button", { name: "Question" });
+    const mobileQuestionButton = screen.getByRole("button", { name: "질문" });
+    expect(mobileQuestionButton).toHaveTextContent("?");
+    fireEvent.click(desktopQuestionButton);
     expect(await screen.findByRole("dialog", { name: "Question" })).toBeInTheDocument();
     expect(
       await screen.findByRole("heading", { name: "사람들에게 어떤 선택을 물어볼까요?" }),
@@ -151,6 +152,7 @@ describe("FeedExperience", () => {
 
     expect(await screen.findByText(feed.items[0]!.question)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Question" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "질문" })).not.toBeInTheDocument();
   });
 
   it("does not show the question creation CTA when submissions are disabled", async () => {
@@ -175,6 +177,7 @@ describe("FeedExperience", () => {
 
     expect(await screen.findByText(feed.items[0]!.question)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Question" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "질문" })).not.toBeInTheDocument();
   });
 
   it("prepares the Guest before showing result-free Issue cards", async () => {

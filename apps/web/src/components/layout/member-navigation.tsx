@@ -102,7 +102,13 @@ export function MemberNavigationLink({ active }: { active: boolean }) {
   );
 }
 
-export function MemberQuestionComposerButton({ className }: { className?: string }) {
+export function MemberQuestionComposerButton({
+  className,
+  mobile = false,
+}: {
+  className?: string;
+  mobile?: boolean;
+}) {
   const { state } = useContext(MemberNavigationContext);
   const { isOpen, openComposer } = useQuestionComposer();
 
@@ -117,7 +123,8 @@ export function MemberQuestionComposerButton({ className }: { className?: string
       aria-controls="question-composer-dialog"
       onClick={openComposer}
     >
-      <strong>Question</strong>
+      {mobile ? <span aria-hidden="true">?</span> : null}
+      <strong>{mobile ? "질문" : "Question"}</strong>
     </button>
   );
 }

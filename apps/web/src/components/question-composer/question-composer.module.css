@@ -13,6 +13,8 @@
 
 .dialog {
   width: min(760px, 100%);
+  min-width: 0;
+  max-width: 100%;
   max-height: calc(100svh - clamp(48px, 12vh, 128px));
   border: 1px solid var(--which-border);
   border-radius: 24px;
@@ -76,7 +78,11 @@
 }
 
 .body {
+  width: 100%;
   min-height: 0;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
@@ -96,12 +102,17 @@
 
 @media (max-width: 767px) {
   .backdrop {
+    width: 100%;
+    max-width: 100vw;
     place-items: end center;
+    overflow: hidden;
     padding: 24px 0 0;
   }
 
   .dialog {
     width: 100%;
+    min-width: 0;
+    max-width: 100%;
     max-height: calc(100svh - 24px);
     border-right: 0;
     border-bottom: 0;
@@ -125,6 +136,14 @@
     background: var(--which-border-strong);
     content: "";
     transform: translateX(-50%);
+  }
+
+  .body {
+    scrollbar-width: none;
+  }
+
+  .body::-webkit-scrollbar {
+    display: none;
   }
 }
 

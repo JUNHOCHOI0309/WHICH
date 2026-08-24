@@ -87,6 +87,7 @@ export function WhichShell({
             {creationEnabled ? (
               <MemberQuestionComposerButton
                 className={`${styles.navLink} ${styles.mobileQuestionButton}`}
+                mobile
               />
             ) : null}
             <MemberNavigationLink active={active === "me"} />
