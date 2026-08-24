@@ -1,15 +1,19 @@
 export type IdentityProvider = "EMAIL" | "GOOGLE" | "X" | "NAVER" | "KAKAO" | "DEVELOPMENT";
 
+export type MemberAvatar = { kind: "INITIALS"; initials: string } | { kind: "IMAGE"; url: string };
+
 export type MemberView = {
   id: string;
   displayName: string;
   status: "ACTIVE" | "LIMITED" | "SUSPENDED" | "DELETED";
+  avatar: MemberAvatar;
 };
 
 export type IdentityAssertion = {
   provider: IdentityProvider;
   providerSubject: string;
   displayName: string;
+  avatarUrl?: string;
   anonymousSubjectId?: string;
   createIfMissing?: boolean;
   credential?: {
@@ -136,7 +140,7 @@ export type PublicCreatorProfile = {
     handle: string;
     bio: string | null;
     joinedMonth: string;
-    avatar: { kind: "INITIALS"; initials: string };
+    avatar: MemberAvatar;
   };
   stats: {
     publishedIssueCount: number;

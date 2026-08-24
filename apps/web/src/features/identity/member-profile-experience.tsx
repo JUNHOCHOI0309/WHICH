@@ -53,6 +53,18 @@ function participatedLabel(value: string) {
   }).format(new Date(value));
 }
 
+function fallbackInitials(displayName: string) {
+  const words = displayName.trim().split(/\s+/).filter(Boolean);
+  return (
+    (words.length > 1
+      ? words
+          .slice(0, 2)
+          .map((word) => word[0])
+          .join("")
+      : words[0]?.slice(0, 2)) || "W"
+  );
+}
+
 export function MemberProfileExperience() {
   const [screen, setScreen] = useState<Screen>("loading");
   const [profile, setProfile] = useState<MemberPrivateProfile | null>(null);
@@ -185,10 +197,26 @@ export function MemberProfileExperience() {
         {screen === "ready" && profile ? (
           <>
             <section className={styles.profile} aria-labelledby="profile-title">
-              <div>
-                <p>PRIVATE MEMBER PROFILE</p>
-                <h1 id="profile-title">{profile.member.displayName}님의 선택</h1>
-                <span>{joinedLabel(profile.member.joinedAt)}부터 WHICH에 참여했어요.</span>
+              <div className={styles.profileIdentity}>
+                {profile.member.avatar?.kind === "IMAGE" ? (
+                  <img
+                    className={styles.profileAvatar}
+                    src={profile.member.avatar.url}
+                    alt={`${profile.member.displayName} 프로필`}
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  <span className={styles.profileAvatarFallback} aria-hidden="true">
+                    {profile.member.avatar?.kind === "INITIALS"
+                      ? profile.member.avatar.initials
+                      : fallbackInitials(profile.member.displayName)}
+                  </span>
+                )}
+                <div>
+                  <p>PRIVATE MEMBER PROFILE</p>
+                  <h1 id="profile-title">{profile.member.displayName}님의 선택</h1>
+                  <span>{joinedLabel(profile.member.joinedAt)}부터 WHICH에 참여했어요.</span>
+                </div>
               </div>
               <div className={styles.summary} aria-label="참여 요약">
                 <strong>{profile.member.participationCount.toLocaleString("ko-KR")}</strong>

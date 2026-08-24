@@ -28,7 +28,7 @@ export type PublicIssue = {
   author: {
     displayName: string;
     handle: string;
-    avatar: { kind: "INITIALS"; initials: string };
+    avatar: { kind: "INITIALS"; initials: string } | { kind: "IMAGE"; url: string };
   } | null;
   result: {
     visibility:

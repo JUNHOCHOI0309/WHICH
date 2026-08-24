@@ -44,7 +44,7 @@
   word-break: keep-all;
 }
 
-.profile > div > span,
+.profileIdentity > div > span,
 .message > span {
   display: block;
   max-width: 58ch;
@@ -52,6 +52,36 @@
   color: var(--which-text-secondary);
   line-height: 1.65;
   word-break: keep-all;
+}
+
+.profileIdentity {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.profileAvatar,
+.profileAvatarFallback {
+  width: clamp(72px, 10vw, 104px);
+  height: clamp(72px, 10vw, 104px);
+  flex: 0 0 auto;
+  border: 1px solid var(--which-border-strong);
+  border-radius: 50%;
+}
+
+.profileAvatar {
+  display: block;
+  object-fit: cover;
+}
+
+.profileAvatarFallback {
+  display: grid;
+  place-items: center;
+  background: var(--which-cyan-soft);
+  color: var(--which-text);
+  font-size: 1.2rem;
+  font-weight: 950;
 }
 
 .summary {
@@ -427,6 +457,10 @@
 
   .summary {
     min-width: 0;
+  }
+
+  .profileIdentity {
+    align-items: flex-start;
   }
 
   .voteGrid {

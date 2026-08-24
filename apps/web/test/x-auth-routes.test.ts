@@ -76,16 +76,27 @@ describe("X OAuth routes", () => {
     const requests: string[] = [];
     vi.stubGlobal(
       "fetch",
-      vi.fn(async (input: string | URL | Request) => {
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
         const url = String(input);
         requests.push(url);
         if (url === "https://api.x.com/2/oauth2/token") {
           return Response.json({ access_token: "ephemeral-access-token" });
         }
-        if (url === "https://api.x.com/2/users/me") {
-          return Response.json({ data: { id: "x-user-1", name: "X 사용자" } });
+        if (url === "https://api.x.com/2/users/me?user.fields=profile_image_url") {
+          return Response.json({
+            data: {
+              id: "x-user-1",
+              name: "X 사용자",
+              profile_image_url: "https://pbs.twimg.com/profile_images/x-user.jpg",
+            },
+          });
         }
         if (url === "http://localhost:4000/v1/internal/member-sessions") {
+          expect(JSON.parse(String(init?.body))).toMatchObject({
+            provider: "X",
+            providerSubject: "x-user-1",
+            avatarUrl: "https://pbs.twimg.com/profile_images/x-user.jpg",
+          });
           return Response.json(
             { token: "which-session", expiresAt: "2026-08-21T00:00:00.000Z" },
             { status: 201 },
@@ -110,7 +121,7 @@ describe("X OAuth routes", () => {
     expect(response.headers.get("set-cookie")).toContain("Max-Age=0");
     expect(requests).toEqual([
       "https://api.x.com/2/oauth2/token",
-      "https://api.x.com/2/users/me",
+      "https://api.x.com/2/users/me?user.fields=profile_image_url",
       "http://localhost:4000/v1/internal/member-sessions",
     ]);
   });

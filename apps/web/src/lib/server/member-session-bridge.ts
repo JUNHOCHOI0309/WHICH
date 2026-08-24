@@ -19,6 +19,7 @@ type SessionInput = {
   provider: Provider;
   providerSubject: string;
   displayName: string;
+  avatarUrl?: string;
   anonymousSubjectId?: string | null;
   suggestedEmail?: string;
   authRequestKey?: string;
@@ -59,6 +60,7 @@ async function requestMemberSession(
       provider: input.provider,
       providerSubject: input.providerSubject,
       displayName: input.displayName,
+      ...(input.avatarUrl ? { avatarUrl: input.avatarUrl } : {}),
       ...(createIfMissing ? {} : { createIfMissing: false }),
       ...(credential ? { credential } : {}),
       ...(input.authRequestKey ? { authRequestKey: input.authRequestKey } : {}),
@@ -177,6 +179,7 @@ export async function completeSocialSignup(input: {
       provider: input.social.provider,
       providerSubject: input.social.providerSubject,
       displayName: input.social.displayName,
+      ...(input.social.avatarUrl ? { avatarUrl: input.social.avatarUrl } : {}),
     }),
   });
   const body = (await upstream.json()) as SessionApiResponse;
@@ -256,6 +259,7 @@ export async function createOAuthMemberSession(flow: AuthFlow, input: SocialSess
       provider: input.provider,
       providerSubject: input.providerSubject,
       displayName: input.displayName,
+      ...(input.avatarUrl ? { avatarUrl: input.avatarUrl } : {}),
     }),
   });
   const body = (await upstream.json()) as SessionApiResponse;

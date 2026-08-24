@@ -13,6 +13,8 @@ export type IssueTally = {
     "NORMAL" | "MONITORING" | "DEGRADED" | "UNDER_REVIEW" | "RESULT_LOCKED" | "CORRECTED";
 };
 
+export type MemberAvatar = { kind: "INITIALS"; initials: string } | { kind: "IMAGE"; url: string };
+
 export type PublicIssue = {
   id: string;
   version: number;
@@ -25,7 +27,7 @@ export type PublicIssue = {
   author: {
     displayName: string;
     handle: string;
-    avatar: { kind: "INITIALS"; initials: string };
+    avatar: MemberAvatar;
   } | null;
   result: {
     visibility:
@@ -157,6 +159,7 @@ export type MemberPrivateProfile = {
     id: string;
     displayName: string;
     status: "ACTIVE" | "LIMITED" | "SUSPENDED" | "DELETED";
+    avatar: MemberAvatar;
     joinedAt: string;
     participationCount: number;
   };
@@ -185,7 +188,7 @@ export type PublicCreatorProfile = {
     handle: string;
     bio: string | null;
     joinedMonth: string;
-    avatar: { kind: "INITIALS"; initials: string };
+    avatar: MemberAvatar;
   };
   stats: { publishedIssueCount: number; acceptedVoteCount: number };
   issues: Array<{
