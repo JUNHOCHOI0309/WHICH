@@ -127,9 +127,12 @@ describe("FeedExperience", () => {
     expect(questionButtons).toHaveLength(2);
     fireEvent.click(questionButtons[0]!);
     expect(await screen.findByRole("dialog", { name: "Question" })).toBeInTheDocument();
-    expect(screen.getByText("사람들에게 어떤 선택을 물어볼까요?")).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "사람들에게 어떤 선택을 물어볼까요?" }),
+    ).toBeInTheDocument();
     fireEvent.keyDown(screen.getByRole("dialog", { name: "Question" }), { key: "Escape" });
     expect(screen.queryByRole("dialog", { name: "Question" })).not.toBeInTheDocument();
+    expect(document.body.style.overflow).toBe("");
   });
 
   it("does not show the question creation CTA to a Guest", async () => {
