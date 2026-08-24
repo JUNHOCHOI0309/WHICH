@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "policyId": "public-v0-limited-beta-v1",
+  "activeManifestPaths": ["which-19-initial-low-v1.json", "which-49-active-expansion-v1.json"],
+  "reserveManifestPaths": [
+    "which-49-approved-reserve-day-1-v1.json",
+    "which-49-approved-reserve-day-2-v1.json",
+    "which-49-approved-reserve-day-3-v1.json"
+  ],
+  "grandfatheredPackIds": ["which-19-initial-low-v1"],
+  "targets": {
+    "activePoolMinimum": 36,
+    "approvedReserveMinimum": 18,
+    "dailyPublicationTarget": 6,
+    "minimumActiveDaysOfSupply": 6,
+    "minimumReserveDaysOfSupply": 3,
+    "requiredCategoryCodes": [
+      "LIFE",
+      "RELATIONSHIP",
+      "WORK_CAREER",
+      "ECONOMY_CONSUMPTION",
+      "TECH",
+      "CULTURE_ENT",
+      "SPORTS",
+      "EDUCATION",
+      "SOCIETY"
+    ],
+    "minimumActivePerCategory": 3,
+    "minimumActivePerInterestCard": 2,
+    "betaSessionsPerUser": 3,
+    "issuesPerSession": 8,
+    "minimumUnseenBuffer": 12,
+    "exhaustionFallback": "STOP_WITH_EMPTY_STATE"
+  }
+}

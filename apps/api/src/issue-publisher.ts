@@ -8,6 +8,7 @@ import {
   issuePublicationTargetSchema,
   loadIssueManifest,
 } from "./modules/issue-publication/manifest.js";
+import { loadIssueInventoryReadiness } from "./modules/issue-publication/inventory.js";
 import {
   assertIssuePublicationConfirmation,
   assertIssuePublicationTarget,
@@ -25,6 +26,7 @@ function usage() {
   return [
     "Usage:",
     "  issue-publisher validate <manifest.json>",
+    "  issue-publisher readiness <inventory-policy.json>",
     "  issue-publisher dry-run <manifest.json> --target <development|staging|production>",
     "  issue-publisher publish <manifest.json> --target <environment> --confirm <environment:pack-id:manifest-sha256>",
   ].join("\n");
@@ -58,10 +60,21 @@ async function main() {
   const arguments_ = process.argv.slice(2);
   const command = arguments_[0];
   const manifestPath = arguments_[1];
-  if (!command || !manifestPath || !["validate", "dry-run", "publish"].includes(command)) {
+  if (
+    !command ||
+    !manifestPath ||
+    !["validate", "readiness", "dry-run", "publish"].includes(command)
+  ) {
     throw new Error(usage());
   }
   assertKnownArguments(arguments_.slice(2), command);
+
+  if (command === "readiness") {
+    const report = await loadIssueInventoryReadiness(manifestPath);
+    console.log(JSON.stringify(report, null, 2));
+    if (!report.ready) process.exitCode = 1;
+    return;
+  }
 
   const loaded = await loadIssueManifest(manifestPath);
   if (command === "validate") {

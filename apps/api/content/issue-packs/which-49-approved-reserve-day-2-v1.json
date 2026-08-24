@@ -1,0 +1,265 @@
+{
+  "schemaVersion": 1,
+  "packId": "which-49-approved-reserve-day-2-v1",
+  "target": "production",
+  "taxonomyVersion": "taxonomy_v2.0",
+  "approval": {
+    "status": "APPROVED",
+    "approvedBy": "WHICH_PRODUCT_OWNER",
+    "approvedAt": "2026-08-24T12:00:00.000+09:00"
+  },
+  "issues": [
+    {
+      "id": "8d2acca9-c41a-5cbe-a493-11087085f7c2",
+      "version": 1,
+      "question": "스포츠를 챙겨 본다면 어느 방식이 더 즐거운가요?",
+      "context": "좋아하는 종목 하나를 기준으로 생각해 주세요.",
+      "choices": [
+        {
+          "id": "557416c1-1145-5388-adba-f3471bd994fb",
+          "code": "A",
+          "label": "시즌 전체 흐름 따라가기"
+        },
+        {
+          "id": "4567cb6d-231e-5263-86de-150a2ae62e85",
+          "code": "B",
+          "label": "중요한 경기만 골라 보기"
+        }
+      ],
+      "primaryCategoryCode": "SPORTS",
+      "interestCardCodes": ["SPORTS"],
+      "experienceModeCode": "PLAYFUL_QUICK",
+      "taxonomyVersion": "taxonomy_v2.0",
+      "riskLevel": "LOW",
+      "isPolitical": false,
+      "lifecycle": "PUBLISHED",
+      "visibility": "VISIBLE",
+      "participation": "VOTING_OPEN",
+      "resultVisibility": "PRE_VOTE_HIDDEN",
+      "feedEligibility": "ELIGIBLE",
+      "publishedAt": "2026-08-26T10:00:00.000+09:00",
+      "voteOpenAt": "2026-08-26T10:00:00.000+09:00",
+      "contentHash": "4805237a508a7db75cffd1f6d223356b1cde2c0d707e966d876c85f6e5b3c8ac",
+      "editorialReview": {
+        "status": "PASSED",
+        "reviewedBy": "WHICH_PRODUCT_OWNER",
+        "reviewedAt": "2026-08-24T12:00:00.000+09:00",
+        "evergreen": true,
+        "sourceRequirement": "NOT_REQUIRED_SUBJECTIVE",
+        "sourceUrls": [],
+        "choiceParity": "PASSED",
+        "duplicateReview": "PASSED"
+      }
+    },
+    {
+      "id": "598f0512-8fe4-5dc5-8d55-eeab98dfb498",
+      "version": 1,
+      "question": "공부 내용을 정리할 때 어떤 기록이 더 잘 맞나요?",
+      "context": "나중에 다시 복습할 노트를 만든다고 가정해 주세요.",
+      "choices": [
+        {
+          "id": "3b016652-40ce-5d61-be06-9146bb4ae392",
+          "code": "A",
+          "label": "손으로 직접 써서 정리하기"
+        },
+        {
+          "id": "227b2f83-8711-5e6c-b6b4-6ed17bb6e0c7",
+          "code": "B",
+          "label": "디지털로 검색 가능하게 정리하기"
+        }
+      ],
+      "primaryCategoryCode": "EDUCATION",
+      "interestCardCodes": ["EDUCATION"],
+      "experienceModeCode": "PLAYFUL_QUICK",
+      "taxonomyVersion": "taxonomy_v2.0",
+      "riskLevel": "LOW",
+      "isPolitical": false,
+      "lifecycle": "PUBLISHED",
+      "visibility": "VISIBLE",
+      "participation": "VOTING_OPEN",
+      "resultVisibility": "PRE_VOTE_HIDDEN",
+      "feedEligibility": "ELIGIBLE",
+      "publishedAt": "2026-08-26T10:00:00.000+09:00",
+      "voteOpenAt": "2026-08-26T10:00:00.000+09:00",
+      "contentHash": "15cb40662b85d14102a9d27445270d986aa88fb393569f20c9f760c0e531a58c",
+      "editorialReview": {
+        "status": "PASSED",
+        "reviewedBy": "WHICH_PRODUCT_OWNER",
+        "reviewedAt": "2026-08-24T12:00:00.000+09:00",
+        "evergreen": true,
+        "sourceRequirement": "NOT_REQUIRED_SUBJECTIVE",
+        "sourceUrls": [],
+        "choiceParity": "PASSED",
+        "duplicateReview": "PASSED"
+      }
+    },
+    {
+      "id": "a60054e1-f70e-5de9-bd0f-732b36fc5bad",
+      "version": 1,
+      "question": "동네 행사에 참여한다면 어느 활동이 더 끌리나요?",
+      "context": "같은 시간 동안 이웃과 함께하는 행사입니다.",
+      "choices": [
+        {
+          "id": "febba121-3fae-5e54-b114-5d2daa8d0c86",
+          "code": "A",
+          "label": "공간을 함께 정리하기"
+        },
+        {
+          "id": "c1fb4a08-d831-5b89-998c-e46ebb2476f0",
+          "code": "B",
+          "label": "체험 프로그램을 함께 즐기기"
+        }
+      ],
+      "primaryCategoryCode": "SOCIETY",
+      "interestCardCodes": ["SOCIETY"],
+      "experienceModeCode": "PLAYFUL_QUICK",
+      "taxonomyVersion": "taxonomy_v2.0",
+      "riskLevel": "LOW",
+      "isPolitical": false,
+      "lifecycle": "PUBLISHED",
+      "visibility": "VISIBLE",
+      "participation": "VOTING_OPEN",
+      "resultVisibility": "PRE_VOTE_HIDDEN",
+      "feedEligibility": "ELIGIBLE",
+      "publishedAt": "2026-08-26T10:00:00.000+09:00",
+      "voteOpenAt": "2026-08-26T10:00:00.000+09:00",
+      "contentHash": "7f89a329b80638924374d3fefea96d74708865ee188d5d1b920250305b1c0b73",
+      "editorialReview": {
+        "status": "PASSED",
+        "reviewedBy": "WHICH_PRODUCT_OWNER",
+        "reviewedAt": "2026-08-24T12:00:00.000+09:00",
+        "evergreen": true,
+        "sourceRequirement": "NOT_REQUIRED_SUBJECTIVE",
+        "sourceUrls": [],
+        "choiceParity": "PASSED",
+        "duplicateReview": "PASSED"
+      }
+    },
+    {
+      "id": "1fff41b3-0a5c-5c25-b1d4-af15aed5e079",
+      "version": 1,
+      "question": "처음 만드는 요리는 어떤 방식으로 시작하고 싶나요?",
+      "context": "필요한 재료와 조리 도구는 모두 있다고 가정해 주세요.",
+      "choices": [
+        {
+          "id": "8c489b2c-b99e-5482-bba1-713793fe5c54",
+          "code": "A",
+          "label": "레시피를 정확히 따라 하기"
+        },
+        {
+          "id": "c55fd749-153d-528d-a01a-582b07ea312e",
+          "code": "B",
+          "label": "맛을 보며 자유롭게 조절하기"
+        }
+      ],
+      "primaryCategoryCode": "LIFE",
+      "interestCardCodes": ["FOOD"],
+      "experienceModeCode": "PLAYFUL_QUICK",
+      "taxonomyVersion": "taxonomy_v2.0",
+      "riskLevel": "LOW",
+      "isPolitical": false,
+      "lifecycle": "PUBLISHED",
+      "visibility": "VISIBLE",
+      "participation": "VOTING_OPEN",
+      "resultVisibility": "PRE_VOTE_HIDDEN",
+      "feedEligibility": "ELIGIBLE",
+      "publishedAt": "2026-08-26T10:00:00.000+09:00",
+      "voteOpenAt": "2026-08-26T10:00:00.000+09:00",
+      "contentHash": "f81e729554207d61958483d2f3589dc4ed3eaa75097eb388597df4dbd8492456",
+      "editorialReview": {
+        "status": "PASSED",
+        "reviewedBy": "WHICH_PRODUCT_OWNER",
+        "reviewedAt": "2026-08-24T12:00:00.000+09:00",
+        "evergreen": true,
+        "sourceRequirement": "NOT_REQUIRED_SUBJECTIVE",
+        "sourceUrls": [],
+        "choiceParity": "PASSED",
+        "duplicateReview": "PASSED"
+      }
+    },
+    {
+      "id": "5f31dd8b-095f-5676-ad84-88f4670342c1",
+      "version": 1,
+      "question": "공연을 보러 갈 때 어느 쪽이 더 설레나요?",
+      "context": "좋아하는 아티스트의 같은 공연이라고 가정해 주세요.",
+      "choices": [
+        {
+          "id": "1753002a-9335-53e3-a642-af9ab3e927bb",
+          "code": "A",
+          "label": "예상 곡을 미리 알고 가기"
+        },
+        {
+          "id": "0a077aec-dbee-5e23-9e10-138f3f1aa864",
+          "code": "B",
+          "label": "선곡을 모른 채 현장에서 듣기"
+        }
+      ],
+      "primaryCategoryCode": "CULTURE_ENT",
+      "interestCardCodes": ["MUSIC_CONTENT"],
+      "experienceModeCode": "PLAYFUL_QUICK",
+      "taxonomyVersion": "taxonomy_v2.0",
+      "riskLevel": "LOW",
+      "isPolitical": false,
+      "lifecycle": "PUBLISHED",
+      "visibility": "VISIBLE",
+      "participation": "VOTING_OPEN",
+      "resultVisibility": "PRE_VOTE_HIDDEN",
+      "feedEligibility": "ELIGIBLE",
+      "publishedAt": "2026-08-26T10:00:00.000+09:00",
+      "voteOpenAt": "2026-08-26T10:00:00.000+09:00",
+      "contentHash": "84683a5089f993d17803a57d65c5f390a522692ebe26bd29ca7abe0435cdb330",
+      "editorialReview": {
+        "status": "PASSED",
+        "reviewedBy": "WHICH_PRODUCT_OWNER",
+        "reviewedAt": "2026-08-24T12:00:00.000+09:00",
+        "evergreen": true,
+        "sourceRequirement": "NOT_REQUIRED_SUBJECTIVE",
+        "sourceUrls": [],
+        "choiceParity": "PASSED",
+        "duplicateReview": "PASSED"
+      }
+    },
+    {
+      "id": "8d3fb0b0-1085-5277-957f-1d27d9a8c8df",
+      "version": 1,
+      "question": "친구들과 여행할 때 어떤 진행이 더 편한가요?",
+      "context": "여행 기간과 예산은 이미 합의한 상황입니다.",
+      "choices": [
+        {
+          "id": "fe8947b6-1244-560e-849e-360bb126241e",
+          "code": "A",
+          "label": "역할과 일정을 미리 나누기"
+        },
+        {
+          "id": "14a17d6e-8061-53ce-8366-735d9a3586cf",
+          "code": "B",
+          "label": "그날 상황에 맞춰 함께 정하기"
+        }
+      ],
+      "primaryCategoryCode": "RELATIONSHIP",
+      "interestCardCodes": ["RELATIONSHIP", "TRAVEL"],
+      "experienceModeCode": "PLAYFUL_QUICK",
+      "taxonomyVersion": "taxonomy_v2.0",
+      "riskLevel": "LOW",
+      "isPolitical": false,
+      "lifecycle": "PUBLISHED",
+      "visibility": "VISIBLE",
+      "participation": "VOTING_OPEN",
+      "resultVisibility": "PRE_VOTE_HIDDEN",
+      "feedEligibility": "ELIGIBLE",
+      "publishedAt": "2026-08-26T10:00:00.000+09:00",
+      "voteOpenAt": "2026-08-26T10:00:00.000+09:00",
+      "contentHash": "ee5b804b61333a6162e51a4b3673329e3027b99b8b36aaeb6cde4313016c518d",
+      "editorialReview": {
+        "status": "PASSED",
+        "reviewedBy": "WHICH_PRODUCT_OWNER",
+        "reviewedAt": "2026-08-24T12:00:00.000+09:00",
+        "evergreen": true,
+        "sourceRequirement": "NOT_REQUIRED_SUBJECTIVE",
+        "sourceUrls": [],
+        "choiceParity": "PASSED",
+        "duplicateReview": "PASSED"
+      }
+    }
+  ]
+}

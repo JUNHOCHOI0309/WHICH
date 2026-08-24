@@ -33,6 +33,35 @@ const choiceSchema = z
   })
   .strict();
 
+const editorialReviewSchema = z
+  .object({
+    status: z.literal("PASSED"),
+    reviewedBy: normalizedText(1, 100),
+    reviewedAt: timestamp,
+    evergreen: z.boolean(),
+    sourceRequirement: z.enum(["NOT_REQUIRED_SUBJECTIVE", "SOURCE_REQUIRED"]),
+    sourceUrls: z.array(z.string().url()).max(5),
+    choiceParity: z.literal("PASSED"),
+    duplicateReview: z.literal("PASSED"),
+  })
+  .strict()
+  .superRefine((review, context) => {
+    if (review.sourceRequirement === "SOURCE_REQUIRED" && review.sourceUrls.length === 0) {
+      context.addIssue({
+        code: "custom",
+        path: ["sourceUrls"],
+        message: "Source-required editorial reviews must include at least one source URL.",
+      });
+    }
+    if (review.sourceRequirement === "NOT_REQUIRED_SUBJECTIVE" && review.sourceUrls.length > 0) {
+      context.addIssue({
+        code: "custom",
+        path: ["sourceUrls"],
+        message: "Subjective evergreen reviews must not attach unused source URLs.",
+      });
+    }
+  });
+
 const issueSchema = z
   .object({
     id: z.string().uuid(),
@@ -58,6 +87,7 @@ const issueSchema = z
     publishedAt: timestamp,
     voteOpenAt: timestamp,
     contentHash: sha256,
+    editorialReview: editorialReviewSchema.optional(),
   })
   .strict()
   .superRefine((issue, context) => {

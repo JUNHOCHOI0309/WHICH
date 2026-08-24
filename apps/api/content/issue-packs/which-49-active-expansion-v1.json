@@ -1,0 +1,1021 @@
+{
+  "schemaVersion": 1,
+  "packId": "which-49-active-expansion-v1",
+  "target": "production",
+  "taxonomyVersion": "taxonomy_v2.0",
+  "approval": {
+    "status": "APPROVED",
+    "approvedBy": "WHICH_PRODUCT_OWNER",
+    "approvedAt": "2026-08-24T12:00:00.000+09:00"
+  },
+  "issues": [
+    {
+      "id": "dce27dc4-8c58-5d1e-9416-e1bea5780c7d",
+      "version": 1,
+      "question": "출근 시간이 같다면 어떤 이동이 더 낫나요?",
+      "context": "편도 이동 시간이 40분으로 같다고 가정해 주세요.",
+      "choices": [
+        {
+          "id": "5af2de15-6d19-5086-93d1-993e8cb94db5",
+          "code": "A",
+          "label": "환승이 적은 경로"
+        },
+        {
+          "id": "bc4d7d4e-17c6-5a80-b0a1-54136dd57241",
+          "code": "B",
+          "label": "걷는 구간이 많은 경로"
+        }
+      ],
+      "primaryCategoryCode": "LIFE",
+      "interestCardCodes": ["DAILY_LIFE"],
+      "experienceModeCode": "PLAYFUL_QUICK",
+      "taxonomyVersion": "taxonomy_v2.0",
+      "riskLevel": "LOW",
+      "isPolitical": false,
+      "lifecycle": "PUBLISHED",
+      "visibility": "VISIBLE",
+      "participation": "VOTING_OPEN",
+      "resultVisibility": "PRE_VOTE_HIDDEN",
+      "feedEligibility": "ELIGIBLE",
+      "publishedAt": "2026-08-24T15:00:00.000+09:00",
+      "voteOpenAt": "2026-08-24T15:00:00.000+09:00",
+      "contentHash": "4bea7856c49843ff9f8a4dbafb69b00bd4bcce61349363183803f502f93c349f",
+      "editorialReview": {
+        "status": "PASSED",
+        "reviewedBy": "WHICH_PRODUCT_OWNER",
+        "reviewedAt": "2026-08-24T12:00:00.000+09:00",
+        "evergreen": true,
+        "sourceRequirement": "NOT_REQUIRED_SUBJECTIVE",
+        "sourceUrls": [],
+        "choiceParity": "PASSED",
+        "duplicateReview": "PASSED"
+      }
+    },
+    {
+      "id": "f92379dc-5fd9-58c4-bbc6-b5444d51bc79",
+      "version": 1,
+      "question": "쉬는 주말 하루를 어느 쪽으로 보내고 싶나요?",
+      "context": "예산과 이동 부담은 비슷하다고 가정해 주세요.",
+      "choices": [
+        {
+          "id": "57a7f084-0246-5dba-9255-e593461699ca",
+          "code": "A",
+          "label": "익숙한 동네에서 취미 즐기기"
+        },
+        {
+          "id": "a4ea829c-883b-501f-b337-c6c1f7038f41",
+          "code": "B",
+          "label": "가까운 곳으로 당일치기"
+        }
+      ],
+      "primaryCategoryCode": "LIFE",
+      "interestCardCodes": ["HOBBY", "TRAVEL"],
+      "experienceModeCode": "PLAYFUL_QUICK",
+      "taxonomyVersion": "taxonomy_v2.0",
+      "riskLevel": "LOW",
+      "isPolitical": false,
+      "lifecycle": "PUBLISHED",
+      "visibility": "VISIBLE",
+      "participation": "VOTING_OPEN",
+      "resultVisibility": "PRE_VOTE_HIDDEN",
+      "feedEligibility": "ELIGIBLE",
+      "publishedAt": "2026-08-24T15:00:00.000+09:00",
+      "voteOpenAt": "2026-08-24T15:00:00.000+09:00",
+      "contentHash": "03053b57446b96dadf1b67f381bf8c97a1686e3417c58596cc9b32849782dff3",
+      "editorialReview": {
+        "status": "PASSED",
+        "reviewedBy": "WHICH_PRODUCT_OWNER",
+        "reviewedAt": "2026-08-24T12:00:00.000+09:00",
+        "evergreen": true,
+        "sourceRequirement": "NOT_REQUIRED_SUBJECTIVE",
+        "sourceUrls": [],
+        "choiceParity": "PASSED",
+        "duplicateReview": "PASSED"
+      }
+    },
+    {
+      "id": "33bfa57c-f3e2-50a4-9a40-9a4f193b56b8",
+      "version": 1,
+      "question": "친구와 약속 시간이 바뀌면 무엇을 먼저 듣고 싶나요?",
+      "context": "약속을 취소하지 않고 시간을 다시 정하는 상황입니다.",
+      "choices": [
+        {
+          "id": "29452e77-3996-54cc-ba04-54949393b283",
+          "code": "A",
+          "label": "바뀐 이유"
+        },
+        {
+          "id": "dff2fd3e-0028-51d1-aca6-885c2e44a6f7",
+          "code": "B",
+          "label": "가능한 새 시간"
+        }
+      ],
+      "primaryCategoryCode": "RELATIONSHIP",
+      "interestCardCodes": ["RELATIONSHIP"],
+      "experienceModeCode": "PLAYFUL_QUICK",
+      "taxonomyVersion": "taxonomy_v2.0",
+      "riskLevel": "LOW",
+      "isPolitical": false,
+      "lifecycle": "PUBLISHED",
+      "visibility": "VISIBLE",
+      "participation": "VOTING_OPEN",
+      "resultVisibility": "PRE_VOTE_HIDDEN",
+      "feedEligibility": "ELIGIBLE",
+      "publishedAt": "2026-08-24T15:00:00.000+09:00",
+      "voteOpenAt": "2026-08-24T15:00:00.000+09:00",
+      "contentHash": "583474c37bcdfe4ba6e6b88e526c73c3a6f3c58ab21fb9dc1773ef13964e321b",
+      "editorialReview": {
+        "status": "PASSED",
+        "reviewedBy": "WHICH_PRODUCT_OWNER",
+        "reviewedAt": "2026-08-24T12:00:00.000+09:00",
+        "evergreen": true,
+        "sourceRequirement": "NOT_REQUIRED_SUBJECTIVE",
+        "sourceUrls": [],
+        "choiceParity": "PASSED",
+        "duplicateReview": "PASSED"
+      }
+    },
+    {
+      "id": "fb027eb6-0a2e-5733-a80b-efb811174fac",
+      "version": 1,
+      "question": "가족 단체 채팅에서는 어떤 답장 방식이 더 편한가요?",
+      "context": "급하지 않은 일상 대화를 떠올려 주세요.",
+      "choices": [
+        {
+          "id": "bd09afec-ac0d-5a0f-b9ef-eb61960f83eb",
+          "code": "A",
+          "label": "짧게 자주 답하기"
+        },
+        {
+          "id": "e7d02215-35c3-5522-ab56-084477934bd7",
+          "code": "B",
+          "label": "필요한 말을 모아 답하기"
+        }
+      ],
+      "primaryCategoryCode": "RELATIONSHIP",
+      "interestCardCodes": ["RELATIONSHIP"],
+      "experienceModeCode": "PLAYFUL_QUICK",
+      "taxonomyVersion": "taxonomy_v2.0",
+      "riskLevel": "LOW",
+      "isPolitical": false,
+      "lifecycle": "PUBLISHED",
+      "visibility": "VISIBLE",
+      "participation": "VOTING_OPEN",
+      "resultVisibility": "PRE_VOTE_HIDDEN",
+      "feedEligibility": "ELIGIBLE",
+      "publishedAt": "2026-08-24T15:00:00.000+09:00",
+      "voteOpenAt": "2026-08-24T15:00:00.000+09:00",
+      "contentHash": "3dd39cf3ea675caef8d4f8dff5db0d97b830e9f492fe866b260245f02b1285e9",
+      "editorialReview": {
+        "status": "PASSED",
+        "reviewedBy": "WHICH_PRODUCT_OWNER",
+        "reviewedAt": "2026-08-24T12:00:00.000+09:00",
+        "evergreen": true,
+        "sourceRequirement": "NOT_REQUIRED_SUBJECTIVE",
+        "sourceUrls": [],
+        "choiceParity": "PASSED",
+        "duplicateReview": "PASSED"
+      }
+    },
+    {
+      "id": "a986905c-7d84-5deb-a3da-237e242aade9",
+      "version": 1,
+      "question": "처음 듣는 앨범은 어떤 순서로 감상하고 싶나요?",
+      "context": "앨범 전체를 들을 시간은 충분하다고 가정해 주세요.",
+      "choices": [
+        {
+          "id": "38fdabcd-6408-5869-bfd1-147e53358d7f",
+          "code": "A",
+          "label": "수록 순서대로 듣기"
+        },
+        {
+          "id": "25a4f4f5-7a16-59dd-a8e7-04e98e24227c",
+          "code": "B",
+          "label": "인기곡부터 듣기"
+        }
+      ],
+      "primaryCategoryCode": "CULTURE_ENT",
+      "interestCardCodes": ["MUSIC_CONTENT"],
+      "experienceModeCode": "PLAYFUL_QUICK",
+      "taxonomyVersion": "taxonomy_v2.0",
+      "riskLevel": "LOW",
+      "isPolitical": false,
+      "lifecycle": "PUBLISHED",
+      "visibility": "VISIBLE",
+      "participation": "VOTING_OPEN",
+      "resultVisibility": "PRE_VOTE_HIDDEN",
+      "feedEligibility": "ELIGIBLE",
+      "publishedAt": "2026-08-24T15:00:00.000+09:00",
+      "voteOpenAt": "2026-08-24T15:00:00.000+09:00",
+      "contentHash": "638a4506241a01e6734b1bd358377a4bd7fe4da8684c36c083f367596ddce9fa",
+      "editorialReview": {
+        "status": "PASSED",
+        "reviewedBy": "WHICH_PRODUCT_OWNER",
+        "reviewedAt": "2026-08-24T12:00:00.000+09:00",
+        "evergreen": true,
+        "sourceRequirement": "NOT_REQUIRED_SUBJECTIVE",
+        "sourceUrls": [],
+        "choiceParity": "PASSED",
+        "duplicateReview": "PASSED"
+      }
+    },
+    {
+      "id": "76731151-b5d9-5172-a9ca-ffb8ab80a162",
+      "version": 1,
+      "question": "새 콘텐츠를 볼 때 어떤 방식이 더 끌리나요?",
+      "context": "관심 있는 작품이 여러 개 생긴 상황입니다.",
+      "choices": [
+        {
+          "id": "fea65ace-0582-5627-806f-baef6dac041a",
+          "code": "A",
+          "label": "한 작품을 깊게 보기"
+        },
+        {
+          "id": "8fefcd78-0793-581a-875b-388b87e31ca6",
+          "code": "B",
+          "label": "여러 작품을 골고루 보기"
+        }
+      ],
+      "primaryCategoryCode": "CULTURE_ENT",
+      "interestCardCodes": ["MOVIE_DRAMA", "MUSIC_CONTENT"],
+      "experienceModeCode": "PLAYFUL_QUICK",
+      "taxonomyVersion": "taxonomy_v2.0",
+      "riskLevel": "LOW",
+      "isPolitical": false,
+      "lifecycle": "PUBLISHED",
+      "visibility": "VISIBLE",
+      "participation": "VOTING_OPEN",
+      "resultVisibility": "PRE_VOTE_HIDDEN",
+      "feedEligibility": "ELIGIBLE",
+      "publishedAt": "2026-08-24T15:00:00.000+09:00",
+      "voteOpenAt": "2026-08-24T15:00:00.000+09:00",
+      "contentHash": "4036740b4100b05245aa0dad765c1c828984fb87c811fb3f6c6bd59774d76119",
+      "editorialReview": {
+        "status": "PASSED",
+        "reviewedBy": "WHICH_PRODUCT_OWNER",
+        "reviewedAt": "2026-08-24T12:00:00.000+09:00",
+        "evergreen": true,
+        "sourceRequirement": "NOT_REQUIRED_SUBJECTIVE",
+        "sourceUrls": [],
+        "choiceParity": "PASSED",
+        "duplicateReview": "PASSED"
+      }
+    },
+    {
+      "id": "433c51c2-036a-53a4-a334-89b6748f1aee",
+      "version": 1,
+      "question": "게임에서 어느 쪽 재미를 더 중요하게 생각하나요?",
+      "context": "플레이 시간과 게임 완성도는 비슷하다고 가정해 주세요.",
+      "choices": [
+        {
+          "id": "765e3bf9-82bd-58ba-bc74-291a7ba0f36a",
+          "code": "A",
+          "label": "혼자 즐기는 이야기"
+        },
+        {
+          "id": "2b2c78b4-0b94-5c64-befb-6d4a679ff1cb",
+          "code": "B",
+          "label": "함께하는 경쟁과 협동"
+        }
+      ],
+      "primaryCategoryCode": "CULTURE_ENT",
+      "interestCardCodes": ["GAME"],
+      "experienceModeCode": "PLAYFUL_QUICK",
+      "taxonomyVersion": "taxonomy_v2.0",
+      "riskLevel": "LOW",
+      "isPolitical": false,
+      "lifecycle": "PUBLISHED",
+      "visibility": "VISIBLE",
+      "participation": "VOTING_OPEN",
+      "resultVisibility": "PRE_VOTE_HIDDEN",
+      "feedEligibility": "ELIGIBLE",
+      "publishedAt": "2026-08-24T15:00:00.000+09:00",
+      "voteOpenAt": "2026-08-24T15:00:00.000+09:00",
+      "contentHash": "31b3cea7bdd1f95612f95021089eb00c3bc80e19ab6a21f183453b4071862a3c",
+      "editorialReview": {
+        "status": "PASSED",
+        "reviewedBy": "WHICH_PRODUCT_OWNER",
+        "reviewedAt": "2026-08-24T12:00:00.000+09:00",
+        "evergreen": true,
+        "sourceRequirement": "NOT_REQUIRED_SUBJECTIVE",
+        "sourceUrls": [],
+        "choiceParity": "PASSED",
+        "duplicateReview": "PASSED"
+      }
+    },
+    {
+      "id": "4d7f8f6e-dce7-5984-bb66-0e713ec72fe2",
+      "version": 1,
+      "question": "휴대전화를 바꿀 때 무엇을 더 우선하나요?",
+      "context": "가격과 저장 공간은 같다고 가정해 주세요.",
+      "choices": [
+        {
+          "id": "e19c7aef-cb93-56ab-9674-1447aeee7856",
+          "code": "A",
+          "label": "빠른 처리 성능"
+        },
+        {
+          "id": "b5363aeb-5419-5e7c-9e0b-ecc8d7e50826",
+          "code": "B",
+          "label": "오래가는 배터리"
+        }
+      ],
+      "primaryCategoryCode": "TECH",
+      "interestCardCodes": ["TECH"],
+      "experienceModeCode": "PLAYFUL_QUICK",
+      "taxonomyVersion": "taxonomy_v2.0",
+      "riskLevel": "LOW",
+      "isPolitical": false,
+      "lifecycle": "PUBLISHED",
+      "visibility": "VISIBLE",
+      "participation": "VOTING_OPEN",
+      "resultVisibility": "PRE_VOTE_HIDDEN",
+      "feedEligibility": "ELIGIBLE",
+      "publishedAt": "2026-08-24T15:00:00.000+09:00",
+      "voteOpenAt": "2026-08-24T15:00:00.000+09:00",
+      "contentHash": "880eec7f5aff1d82a5119690c773ac72f013c07bd02c8cc6fe1137e3d2f8e487",
+      "editorialReview": {
+        "status": "PASSED",
+        "reviewedBy": "WHICH_PRODUCT_OWNER",
+        "reviewedAt": "2026-08-24T12:00:00.000+09:00",
+        "evergreen": true,
+        "sourceRequirement": "NOT_REQUIRED_SUBJECTIVE",
+        "sourceUrls": [],
+        "choiceParity": "PASSED",
+        "duplicateReview": "PASSED"
+      }
+    },
+    {
+      "id": "751018d8-52c4-5ad5-8346-3a94a79e791f",
+      "version": 1,
+      "question": "AI 도구를 선택할 때 무엇이 더 중요한가요?",
+      "context": "두 도구의 결과 품질은 비슷하다고 가정해 주세요.",
+      "choices": [
+        {
+          "id": "952d4118-1df1-5b93-b521-c4cdcad50cd8",
+          "code": "A",
+          "label": "간편한 사용 방식"
+        },
+        {
+          "id": "1469fb4f-45bb-5d1f-be54-9e0a489645e3",
+          "code": "B",
+          "label": "결과 근거의 투명성"
+        }
+      ],
+      "primaryCategoryCode": "TECH",
+      "interestCardCodes": ["TECH"],
+      "experienceModeCode": "PLAYFUL_QUICK",
+      "taxonomyVersion": "taxonomy_v2.0",
+      "riskLevel": "LOW",
+      "isPolitical": false,
+      "lifecycle": "PUBLISHED",
+      "visibility": "VISIBLE",
+      "participation": "VOTING_OPEN",
+      "resultVisibility": "PRE_VOTE_HIDDEN",
+      "feedEligibility": "ELIGIBLE",
+      "publishedAt": "2026-08-24T15:00:00.000+09:00",
+      "voteOpenAt": "2026-08-24T15:00:00.000+09:00",
+      "contentHash": "b2b310466a77753e0e3eec4b56ecd1b43585cf1574dadd8b396a72a084bdbe96",
+      "editorialReview": {
+        "status": "PASSED",
+        "reviewedBy": "WHICH_PRODUCT_OWNER",
+        "reviewedAt": "2026-08-24T12:00:00.000+09:00",
+        "evergreen": true,
+        "sourceRequirement": "NOT_REQUIRED_SUBJECTIVE",
+        "sourceUrls": [],
+        "choiceParity": "PASSED",
+        "duplicateReview": "PASSED"
+      }
+    },
+    {
+      "id": "826efc9c-d99a-513e-a662-62ea85ebf2ff",
+      "version": 1,
+      "question": "앱 알림은 어떤 방식이 더 편한가요?",
+      "context": "놓치면 안 되는 긴급 알림은 별도로 온다고 가정해 주세요.",
+      "choices": [
+        {
+          "id": "85344ba7-8298-5ccf-a751-18ee065d2a9b",
+          "code": "A",
+          "label": "생길 때마다 바로 받기"
+        },
+        {
+          "id": "348e776b-6c49-53bb-bb24-b60b54915296",
+          "code": "B",
+          "label": "정해진 시간에 모아 받기"
+        }
+      ],
+      "primaryCategoryCode": "TECH",
+      "interestCardCodes": ["TECH", "DAILY_LIFE"],
+      "experienceModeCode": "PLAYFUL_QUICK",
+      "taxonomyVersion": "taxonomy_v2.0",
+      "riskLevel": "LOW",
+      "isPolitical": false,
+      "lifecycle": "PUBLISHED",
+      "visibility": "VISIBLE",
+      "participation": "VOTING_OPEN",
+      "resultVisibility": "PRE_VOTE_HIDDEN",
+      "feedEligibility": "ELIGIBLE",
+      "publishedAt": "2026-08-24T15:00:00.000+09:00",
+      "voteOpenAt": "2026-08-24T15:00:00.000+09:00",
+      "contentHash": "280337450671b043721ed8c60d07c9e1916e14467e2afe379c3a9b1eb65e8b07",
+      "editorialReview": {
+        "status": "PASSED",
+        "reviewedBy": "WHICH_PRODUCT_OWNER",
+        "reviewedAt": "2026-08-24T12:00:00.000+09:00",
+        "evergreen": true,
+        "sourceRequirement": "NOT_REQUIRED_SUBJECTIVE",
+        "sourceUrls": [],
+        "choiceParity": "PASSED",
+        "duplicateReview": "PASSED"
+      }
+    },
+    {
+      "id": "13b8f983-7d7f-5b25-87f1-70430b83c2f9",
+      "version": 1,
+      "question": "스포츠 경기를 볼 때 무엇이 더 중요한가요?",
+      "context": "같은 경기를 현장과 다시보기 중 하나로 본다고 가정해 주세요.",
+      "choices": [
+        {
+          "id": "4dc58568-51dc-583c-a8cc-bac0decd0e8d",
+          "code": "A",
+          "label": "현장의 분위기"
+        },
+        {
+          "id": "8d0ec828-b1ee-57f9-889e-eace82521e9d",
+          "code": "B",
+          "label": "장면을 되짚는 분석"
+        }
+      ],
+      "primaryCategoryCode": "SPORTS",
+      "interestCardCodes": ["SPORTS"],
+      "experienceModeCode": "PLAYFUL_QUICK",
+      "taxonomyVersion": "taxonomy_v2.0",
+      "riskLevel": "LOW",
+      "isPolitical": false,
+      "lifecycle": "PUBLISHED",
+      "visibility": "VISIBLE",
+      "participation": "VOTING_OPEN",
+      "resultVisibility": "PRE_VOTE_HIDDEN",
+      "feedEligibility": "ELIGIBLE",
+      "publishedAt": "2026-08-24T15:00:00.000+09:00",
+      "voteOpenAt": "2026-08-24T15:00:00.000+09:00",
+      "contentHash": "ca767b5fda6e5a53198f1b162e3db109b681e5c90c2536645576d944393e06c8",
+      "editorialReview": {
+        "status": "PASSED",
+        "reviewedBy": "WHICH_PRODUCT_OWNER",
+        "reviewedAt": "2026-08-24T12:00:00.000+09:00",
+        "evergreen": true,
+        "sourceRequirement": "NOT_REQUIRED_SUBJECTIVE",
+        "sourceUrls": [],
+        "choiceParity": "PASSED",
+        "duplicateReview": "PASSED"
+      }
+    },
+    {
+      "id": "ac4d96f0-15e5-5194-958a-23c0109b97f0",
+      "version": 1,
+      "question": "꾸준히 운동한다면 어느 환경이 더 잘 맞나요?",
+      "context": "비용과 이동 시간은 비슷하다고 가정해 주세요.",
+      "choices": [
+        {
+          "id": "4cbb74de-0f8a-5912-93e3-b81ff7efb5b9",
+          "code": "A",
+          "label": "기구가 있는 실내"
+        },
+        {
+          "id": "5be3fcaa-0897-5859-a338-a8e2a226cf84",
+          "code": "B",
+          "label": "바람을 느끼는 야외"
+        }
+      ],
+      "primaryCategoryCode": "SPORTS",
+      "interestCardCodes": ["SPORTS", "HOBBY"],
+      "experienceModeCode": "PLAYFUL_QUICK",
+      "taxonomyVersion": "taxonomy_v2.0",
+      "riskLevel": "LOW",
+      "isPolitical": false,
+      "lifecycle": "PUBLISHED",
+      "visibility": "VISIBLE",
+      "participation": "VOTING_OPEN",
+      "resultVisibility": "PRE_VOTE_HIDDEN",
+      "feedEligibility": "ELIGIBLE",
+      "publishedAt": "2026-08-24T15:00:00.000+09:00",
+      "voteOpenAt": "2026-08-24T15:00:00.000+09:00",
+      "contentHash": "df834786d2d1e4e6b5a2e4e0e580e7ec9de6e3d96180a8f5fb1a77c3091ea5d5",
+      "editorialReview": {
+        "status": "PASSED",
+        "reviewedBy": "WHICH_PRODUCT_OWNER",
+        "reviewedAt": "2026-08-24T12:00:00.000+09:00",
+        "evergreen": true,
+        "sourceRequirement": "NOT_REQUIRED_SUBJECTIVE",
+        "sourceUrls": [],
+        "choiceParity": "PASSED",
+        "duplicateReview": "PASSED"
+      }
+    },
+    {
+      "id": "21cf141f-6719-5bf5-bbe2-7b1a700d5368",
+      "version": 1,
+      "question": "회의를 시작할 때 어떤 방식이 더 효율적인가요?",
+      "context": "30분 안에 결론을 내야 하는 업무 회의입니다.",
+      "choices": [
+        {
+          "id": "03546d94-5517-5d62-8ac8-b8dd06f483bd",
+          "code": "A",
+          "label": "안건을 먼저 고정하기"
+        },
+        {
+          "id": "33a33687-ddbf-54d0-98cf-f5450d2e165f",
+          "code": "B",
+          "label": "의견을 먼저 자유롭게 듣기"
+        }
+      ],
+      "primaryCategoryCode": "WORK_CAREER",
+      "interestCardCodes": ["WORK"],
+      "experienceModeCode": "PLAYFUL_QUICK",
+      "taxonomyVersion": "taxonomy_v2.0",
+      "riskLevel": "LOW",
+      "isPolitical": false,
+      "lifecycle": "PUBLISHED",
+      "visibility": "VISIBLE",
+      "participation": "VOTING_OPEN",
+      "resultVisibility": "PRE_VOTE_HIDDEN",
+      "feedEligibility": "ELIGIBLE",
+      "publishedAt": "2026-08-24T15:00:00.000+09:00",
+      "voteOpenAt": "2026-08-24T15:00:00.000+09:00",
+      "contentHash": "d2822ac95f7d55060530b734f4fc950c10bb9fb66728100241ecaac794da3a41",
+      "editorialReview": {
+        "status": "PASSED",
+        "reviewedBy": "WHICH_PRODUCT_OWNER",
+        "reviewedAt": "2026-08-24T12:00:00.000+09:00",
+        "evergreen": true,
+        "sourceRequirement": "NOT_REQUIRED_SUBJECTIVE",
+        "sourceUrls": [],
+        "choiceParity": "PASSED",
+        "duplicateReview": "PASSED"
+      }
+    },
+    {
+      "id": "f24a38cc-0e62-5b20-bd14-3b3f71c1d84e",
+      "version": 1,
+      "question": "집중해서 일할 때 어느 리듬이 더 잘 맞나요?",
+      "context": "하루 업무량과 쉬는 시간의 총합은 같다고 가정해 주세요.",
+      "choices": [
+        {
+          "id": "39a9ffa1-46fe-52d9-af8b-b88644d899df",
+          "code": "A",
+          "label": "긴 시간 한 번에 집중하기"
+        },
+        {
+          "id": "8e884e22-8498-50a4-a5b9-e0788db538c2",
+          "code": "B",
+          "label": "짧게 나눠 여러 번 집중하기"
+        }
+      ],
+      "primaryCategoryCode": "WORK_CAREER",
+      "interestCardCodes": ["WORK"],
+      "experienceModeCode": "PLAYFUL_QUICK",
+      "taxonomyVersion": "taxonomy_v2.0",
+      "riskLevel": "LOW",
+      "isPolitical": false,
+      "lifecycle": "PUBLISHED",
+      "visibility": "VISIBLE",
+      "participation": "VOTING_OPEN",
+      "resultVisibility": "PRE_VOTE_HIDDEN",
+      "feedEligibility": "ELIGIBLE",
+      "publishedAt": "2026-08-24T15:00:00.000+09:00",
+      "voteOpenAt": "2026-08-24T15:00:00.000+09:00",
+      "contentHash": "f04a5eec35ab28bf59196c4dde29e1357ae1588044c0ddf495bc87f04d54cef4",
+      "editorialReview": {
+        "status": "PASSED",
+        "reviewedBy": "WHICH_PRODUCT_OWNER",
+        "reviewedAt": "2026-08-24T12:00:00.000+09:00",
+        "evergreen": true,
+        "sourceRequirement": "NOT_REQUIRED_SUBJECTIVE",
+        "sourceUrls": [],
+        "choiceParity": "PASSED",
+        "duplicateReview": "PASSED"
+      }
+    },
+    {
+      "id": "af371bad-b3e3-5601-9899-b883094df42d",
+      "version": 1,
+      "question": "업무 피드백은 어떤 방식으로 받는 것이 더 편한가요?",
+      "context": "내용과 전달 시점은 같다고 가정해 주세요.",
+      "choices": [
+        {
+          "id": "3af2ddff-e4e8-5f49-af03-29870482eefc",
+          "code": "A",
+          "label": "글로 정리해서 받기"
+        },
+        {
+          "id": "2478b64d-a379-51dc-a2c0-b1ac7a3ddea6",
+          "code": "B",
+          "label": "대화로 바로 받기"
+        }
+      ],
+      "primaryCategoryCode": "WORK_CAREER",
+      "interestCardCodes": ["WORK"],
+      "experienceModeCode": "PLAYFUL_QUICK",
+      "taxonomyVersion": "taxonomy_v2.0",
+      "riskLevel": "LOW",
+      "isPolitical": false,
+      "lifecycle": "PUBLISHED",
+      "visibility": "VISIBLE",
+      "participation": "VOTING_OPEN",
+      "resultVisibility": "PRE_VOTE_HIDDEN",
+      "feedEligibility": "ELIGIBLE",
+      "publishedAt": "2026-08-24T15:00:00.000+09:00",
+      "voteOpenAt": "2026-08-24T15:00:00.000+09:00",
+      "contentHash": "152899a69a7e3bce2f1fd433286a521afbdc4cd9e28848ef31a294f2d869133c",
+      "editorialReview": {
+        "status": "PASSED",
+        "reviewedBy": "WHICH_PRODUCT_OWNER",
+        "reviewedAt": "2026-08-24T12:00:00.000+09:00",
+        "evergreen": true,
+        "sourceRequirement": "NOT_REQUIRED_SUBJECTIVE",
+        "sourceUrls": [],
+        "choiceParity": "PASSED",
+        "duplicateReview": "PASSED"
+      }
+    },
+    {
+      "id": "99a7c5f4-f764-54eb-98fc-7e3e1b09ec79",
+      "version": 1,
+      "question": "계획에 없던 물건을 살 때 무엇을 더 보나요?",
+      "context": "두 제품의 기본 기능은 비슷하다고 가정해 주세요.",
+      "choices": [
+        {
+          "id": "d98f52f4-d105-557f-a287-8f8a28343cf4",
+          "code": "A",
+          "label": "지금 받을 수 있는 할인"
+        },
+        {
+          "id": "52782a6c-0bd9-5964-9d96-3d4deec32f15",
+          "code": "B",
+          "label": "오래 받을 수 있는 사후 지원"
+        }
+      ],
+      "primaryCategoryCode": "ECONOMY_CONSUMPTION",
+      "interestCardCodes": ["ECONOMY_CONSUMPTION"],
+      "experienceModeCode": "PLAYFUL_QUICK",
+      "taxonomyVersion": "taxonomy_v2.0",
+      "riskLevel": "LOW",
+      "isPolitical": false,
+      "lifecycle": "PUBLISHED",
+      "visibility": "VISIBLE",
+      "participation": "VOTING_OPEN",
+      "resultVisibility": "PRE_VOTE_HIDDEN",
+      "feedEligibility": "ELIGIBLE",
+      "publishedAt": "2026-08-24T15:00:00.000+09:00",
+      "voteOpenAt": "2026-08-24T15:00:00.000+09:00",
+      "contentHash": "0584f46bd50eb58ce6feb6d7185734083952c4a6b8039e23e4d9a597bdc61344",
+      "editorialReview": {
+        "status": "PASSED",
+        "reviewedBy": "WHICH_PRODUCT_OWNER",
+        "reviewedAt": "2026-08-24T12:00:00.000+09:00",
+        "evergreen": true,
+        "sourceRequirement": "NOT_REQUIRED_SUBJECTIVE",
+        "sourceUrls": [],
+        "choiceParity": "PASSED",
+        "duplicateReview": "PASSED"
+      }
+    },
+    {
+      "id": "97ec4b70-da88-54df-b4e2-67f69e056bb5",
+      "version": 1,
+      "question": "구독 서비스를 고를 때 어느 조건이 더 끌리나요?",
+      "context": "1년 동안 이용할 가능성은 반반이라고 가정해 주세요.",
+      "choices": [
+        {
+          "id": "87e3d1fb-ce9a-591d-b8ee-6c844436de51",
+          "code": "A",
+          "label": "언제든 해지 가능한 월간 결제"
+        },
+        {
+          "id": "56f06632-42c4-5fa7-b1ce-2f1f3e38c8ec",
+          "code": "B",
+          "label": "가격이 낮은 연간 결제"
+        }
+      ],
+      "primaryCategoryCode": "ECONOMY_CONSUMPTION",
+      "interestCardCodes": ["ECONOMY_CONSUMPTION"],
+      "experienceModeCode": "PLAYFUL_QUICK",
+      "taxonomyVersion": "taxonomy_v2.0",
+      "riskLevel": "LOW",
+      "isPolitical": false,
+      "lifecycle": "PUBLISHED",
+      "visibility": "VISIBLE",
+      "participation": "VOTING_OPEN",
+      "resultVisibility": "PRE_VOTE_HIDDEN",
+      "feedEligibility": "ELIGIBLE",
+      "publishedAt": "2026-08-24T15:00:00.000+09:00",
+      "voteOpenAt": "2026-08-24T15:00:00.000+09:00",
+      "contentHash": "a14f8029b0b52a8b581663dbf73cb8a19981577ab722c022910aba44f46a3300",
+      "editorialReview": {
+        "status": "PASSED",
+        "reviewedBy": "WHICH_PRODUCT_OWNER",
+        "reviewedAt": "2026-08-24T12:00:00.000+09:00",
+        "evergreen": true,
+        "sourceRequirement": "NOT_REQUIRED_SUBJECTIVE",
+        "sourceUrls": [],
+        "choiceParity": "PASSED",
+        "duplicateReview": "PASSED"
+      }
+    },
+    {
+      "id": "27f26a5d-0f68-5498-a86e-811816282aae",
+      "version": 1,
+      "question": "지출 기록은 어떤 방식이 더 잘 맞나요?",
+      "context": "한 달 소비를 돌아보기 위한 기록입니다.",
+      "choices": [
+        {
+          "id": "9d07efb1-c0e7-528f-8ee2-b33e6ec323a5",
+          "code": "A",
+          "label": "자동으로 빠르게 분류하기"
+        },
+        {
+          "id": "80e5e21f-f4d3-5b77-af3d-95552933ddd4",
+          "code": "B",
+          "label": "직접 확인하며 정확히 분류하기"
+        }
+      ],
+      "primaryCategoryCode": "ECONOMY_CONSUMPTION",
+      "interestCardCodes": ["ECONOMY_CONSUMPTION"],
+      "experienceModeCode": "PLAYFUL_QUICK",
+      "taxonomyVersion": "taxonomy_v2.0",
+      "riskLevel": "LOW",
+      "isPolitical": false,
+      "lifecycle": "PUBLISHED",
+      "visibility": "VISIBLE",
+      "participation": "VOTING_OPEN",
+      "resultVisibility": "PRE_VOTE_HIDDEN",
+      "feedEligibility": "ELIGIBLE",
+      "publishedAt": "2026-08-24T15:00:00.000+09:00",
+      "voteOpenAt": "2026-08-24T15:00:00.000+09:00",
+      "contentHash": "b1327318e2344cf9937813386c066bc17a44317f2523070c60002915f8366a52",
+      "editorialReview": {
+        "status": "PASSED",
+        "reviewedBy": "WHICH_PRODUCT_OWNER",
+        "reviewedAt": "2026-08-24T12:00:00.000+09:00",
+        "evergreen": true,
+        "sourceRequirement": "NOT_REQUIRED_SUBJECTIVE",
+        "sourceUrls": [],
+        "choiceParity": "PASSED",
+        "duplicateReview": "PASSED"
+      }
+    },
+    {
+      "id": "0529827e-1f9d-52b1-a649-4b3cae30333f",
+      "version": 1,
+      "question": "공부를 시작할 때 무엇을 먼저 하는 편인가요?",
+      "context": "복습할 내용과 새로 배울 내용이 모두 있는 날입니다.",
+      "choices": [
+        {
+          "id": "59920c20-d572-538e-ae61-d37910675863",
+          "code": "A",
+          "label": "지난 내용을 복습하기"
+        },
+        {
+          "id": "e04981ea-a71f-5b67-92e6-554993d0f35a",
+          "code": "B",
+          "label": "새 내용을 먼저 배우기"
+        }
+      ],
+      "primaryCategoryCode": "EDUCATION",
+      "interestCardCodes": ["EDUCATION"],
+      "experienceModeCode": "PLAYFUL_QUICK",
+      "taxonomyVersion": "taxonomy_v2.0",
+      "riskLevel": "LOW",
+      "isPolitical": false,
+      "lifecycle": "PUBLISHED",
+      "visibility": "VISIBLE",
+      "participation": "VOTING_OPEN",
+      "resultVisibility": "PRE_VOTE_HIDDEN",
+      "feedEligibility": "ELIGIBLE",
+      "publishedAt": "2026-08-24T15:00:00.000+09:00",
+      "voteOpenAt": "2026-08-24T15:00:00.000+09:00",
+      "contentHash": "8d23d316e10b1624c8b8d00ca85343c6e97f0133dce408a5366039caf75ee2b5",
+      "editorialReview": {
+        "status": "PASSED",
+        "reviewedBy": "WHICH_PRODUCT_OWNER",
+        "reviewedAt": "2026-08-24T12:00:00.000+09:00",
+        "evergreen": true,
+        "sourceRequirement": "NOT_REQUIRED_SUBJECTIVE",
+        "sourceUrls": [],
+        "choiceParity": "PASSED",
+        "duplicateReview": "PASSED"
+      }
+    },
+    {
+      "id": "ad954812-c50d-5561-b883-899b8a3be1f0",
+      "version": 1,
+      "question": "온라인 강의는 어떤 구성이 더 집중되나요?",
+      "context": "전체 학습 시간과 내용은 같다고 가정해 주세요.",
+      "choices": [
+        {
+          "id": "5fc9d0b6-d925-53a8-bf30-e519e2b90b9a",
+          "code": "A",
+          "label": "짧은 강의를 여러 개 듣기"
+        },
+        {
+          "id": "a018cf0c-cf37-5958-b319-3c200e30709b",
+          "code": "B",
+          "label": "긴 강의를 한 번에 듣기"
+        }
+      ],
+      "primaryCategoryCode": "EDUCATION",
+      "interestCardCodes": ["EDUCATION"],
+      "experienceModeCode": "PLAYFUL_QUICK",
+      "taxonomyVersion": "taxonomy_v2.0",
+      "riskLevel": "LOW",
+      "isPolitical": false,
+      "lifecycle": "PUBLISHED",
+      "visibility": "VISIBLE",
+      "participation": "VOTING_OPEN",
+      "resultVisibility": "PRE_VOTE_HIDDEN",
+      "feedEligibility": "ELIGIBLE",
+      "publishedAt": "2026-08-24T15:00:00.000+09:00",
+      "voteOpenAt": "2026-08-24T15:00:00.000+09:00",
+      "contentHash": "edb536edb64e6544bb66d5dbe199ebfe6309b98a43b5c79d4aec3d6d6a62e49f",
+      "editorialReview": {
+        "status": "PASSED",
+        "reviewedBy": "WHICH_PRODUCT_OWNER",
+        "reviewedAt": "2026-08-24T12:00:00.000+09:00",
+        "evergreen": true,
+        "sourceRequirement": "NOT_REQUIRED_SUBJECTIVE",
+        "sourceUrls": [],
+        "choiceParity": "PASSED",
+        "duplicateReview": "PASSED"
+      }
+    },
+    {
+      "id": "5cf90534-3f71-5899-a907-b274048c88f0",
+      "version": 1,
+      "question": "팀 과제의 역할은 어떻게 나누는 것이 더 좋나요?",
+      "context": "팀원 모두가 각 역할을 수행할 수 있다고 가정해 주세요.",
+      "choices": [
+        {
+          "id": "951224aa-81a4-553d-ae35-005aeb9408d5",
+          "code": "A",
+          "label": "잘하는 역할을 계속 맡기"
+        },
+        {
+          "id": "6dbcfc87-5a51-57df-9898-60fc177074af",
+          "code": "B",
+          "label": "역할을 번갈아 경험하기"
+        }
+      ],
+      "primaryCategoryCode": "EDUCATION",
+      "interestCardCodes": ["EDUCATION"],
+      "experienceModeCode": "PLAYFUL_QUICK",
+      "taxonomyVersion": "taxonomy_v2.0",
+      "riskLevel": "LOW",
+      "isPolitical": false,
+      "lifecycle": "PUBLISHED",
+      "visibility": "VISIBLE",
+      "participation": "VOTING_OPEN",
+      "resultVisibility": "PRE_VOTE_HIDDEN",
+      "feedEligibility": "ELIGIBLE",
+      "publishedAt": "2026-08-24T15:00:00.000+09:00",
+      "voteOpenAt": "2026-08-24T15:00:00.000+09:00",
+      "contentHash": "c028796c89fdddfc2c2c376a8f71537d64fa10ff8001ee0690e143b3dc85f5c6",
+      "editorialReview": {
+        "status": "PASSED",
+        "reviewedBy": "WHICH_PRODUCT_OWNER",
+        "reviewedAt": "2026-08-24T12:00:00.000+09:00",
+        "evergreen": true,
+        "sourceRequirement": "NOT_REQUIRED_SUBJECTIVE",
+        "sourceUrls": [],
+        "choiceParity": "PASSED",
+        "duplicateReview": "PASSED"
+      }
+    },
+    {
+      "id": "c573eda4-e11e-5514-bb33-c04f3ca0f089",
+      "version": 1,
+      "question": "동네 공용 공간은 어떤 분위기가 더 편한가요?",
+      "context": "주민이 함께 쓰는 작은 실내 공간을 떠올려 주세요.",
+      "choices": [
+        {
+          "id": "636a577b-eeb7-52cf-9eca-4da50ad50fad",
+          "code": "A",
+          "label": "조용한 이용을 우선하기"
+        },
+        {
+          "id": "2beababd-c113-5ce6-a569-80cbd002d60c",
+          "code": "B",
+          "label": "가벼운 대화를 허용하기"
+        }
+      ],
+      "primaryCategoryCode": "SOCIETY",
+      "interestCardCodes": ["SOCIETY"],
+      "experienceModeCode": "PLAYFUL_QUICK",
+      "taxonomyVersion": "taxonomy_v2.0",
+      "riskLevel": "LOW",
+      "isPolitical": false,
+      "lifecycle": "PUBLISHED",
+      "visibility": "VISIBLE",
+      "participation": "VOTING_OPEN",
+      "resultVisibility": "PRE_VOTE_HIDDEN",
+      "feedEligibility": "ELIGIBLE",
+      "publishedAt": "2026-08-24T15:00:00.000+09:00",
+      "voteOpenAt": "2026-08-24T15:00:00.000+09:00",
+      "contentHash": "8d4b65a92e4ec48eaab7e52580d3e5dd147a4dcef4b1d706c8c4d2e102e0527a",
+      "editorialReview": {
+        "status": "PASSED",
+        "reviewedBy": "WHICH_PRODUCT_OWNER",
+        "reviewedAt": "2026-08-24T12:00:00.000+09:00",
+        "evergreen": true,
+        "sourceRequirement": "NOT_REQUIRED_SUBJECTIVE",
+        "sourceUrls": [],
+        "choiceParity": "PASSED",
+        "duplicateReview": "PASSED"
+      }
+    },
+    {
+      "id": "5a462e12-263f-518b-884d-0a3b440031fa",
+      "version": 1,
+      "question": "다회용 컵 이용을 늘리려면 어느 방식이 더 편한가요?",
+      "context": "혜택 규모와 참여 매장 수는 비슷하다고 가정해 주세요.",
+      "choices": [
+        {
+          "id": "c9f77d19-46c9-5180-b1e1-d759ad9310bd",
+          "code": "A",
+          "label": "반납하면 보증금 돌려받기"
+        },
+        {
+          "id": "dedc97e3-68e0-5bbd-9121-60ac6b36a816",
+          "code": "B",
+          "label": "개인 컵을 쓰면 할인받기"
+        }
+      ],
+      "primaryCategoryCode": "SOCIETY",
+      "interestCardCodes": ["SOCIETY", "ECONOMY_CONSUMPTION"],
+      "experienceModeCode": "PLAYFUL_QUICK",
+      "taxonomyVersion": "taxonomy_v2.0",
+      "riskLevel": "LOW",
+      "isPolitical": false,
+      "lifecycle": "PUBLISHED",
+      "visibility": "VISIBLE",
+      "participation": "VOTING_OPEN",
+      "resultVisibility": "PRE_VOTE_HIDDEN",
+      "feedEligibility": "ELIGIBLE",
+      "publishedAt": "2026-08-24T15:00:00.000+09:00",
+      "voteOpenAt": "2026-08-24T15:00:00.000+09:00",
+      "contentHash": "9a0ad0ca2a92cf8abdf4a2c87ee82bafdf69b9ece2a3dac0b21422a16a8b25ad",
+      "editorialReview": {
+        "status": "PASSED",
+        "reviewedBy": "WHICH_PRODUCT_OWNER",
+        "reviewedAt": "2026-08-24T12:00:00.000+09:00",
+        "evergreen": true,
+        "sourceRequirement": "NOT_REQUIRED_SUBJECTIVE",
+        "sourceUrls": [],
+        "choiceParity": "PASSED",
+        "duplicateReview": "PASSED"
+      }
+    },
+    {
+      "id": "190f8e3d-79ec-5aa1-9bd7-2c56a78754d4",
+      "version": 1,
+      "question": "생활 안내를 받을 때 어떤 형식이 더 좋나요?",
+      "context": "같은 공공 정보를 휴대전화로 확인하는 상황입니다.",
+      "choices": [
+        {
+          "id": "bd954792-b079-5658-b822-716a00ab58f2",
+          "code": "A",
+          "label": "핵심만 한 번에 요약하기"
+        },
+        {
+          "id": "e0a4748e-ac66-5f44-bace-b5c1b1bdf24b",
+          "code": "B",
+          "label": "근거와 원문 링크까지 보여주기"
+        }
+      ],
+      "primaryCategoryCode": "SOCIETY",
+      "interestCardCodes": ["SOCIETY", "TECH"],
+      "experienceModeCode": "PLAYFUL_QUICK",
+      "taxonomyVersion": "taxonomy_v2.0",
+      "riskLevel": "LOW",
+      "isPolitical": false,
+      "lifecycle": "PUBLISHED",
+      "visibility": "VISIBLE",
+      "participation": "VOTING_OPEN",
+      "resultVisibility": "PRE_VOTE_HIDDEN",
+      "feedEligibility": "ELIGIBLE",
+      "publishedAt": "2026-08-24T15:00:00.000+09:00",
+      "voteOpenAt": "2026-08-24T15:00:00.000+09:00",
+      "contentHash": "8509f52a5981f3fa1cfdcd72ef80c7b34131eb6a4021a46619d0d598bcb81386",
+      "editorialReview": {
+        "status": "PASSED",
+        "reviewedBy": "WHICH_PRODUCT_OWNER",
+        "reviewedAt": "2026-08-24T12:00:00.000+09:00",
+        "evergreen": true,
+        "sourceRequirement": "NOT_REQUIRED_SUBJECTIVE",
+        "sourceUrls": [],
+        "choiceParity": "PASSED",
+        "duplicateReview": "PASSED"
+      }
+    }
+  ]
+}
