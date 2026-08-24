@@ -629,6 +629,98 @@ describe("IssueExperience", () => {
     expect(sessionStorage.getItem(`which:comment-draft:${ISSUE_ID}`)).toBeNull();
   });
 
+  it("lets a Member edit and delete their own Comment", async () => {
+    const savedResult: VoteResponse = {
+      outcome: "ACCEPTED",
+      voteAttemptId: "attempt-own-comment",
+      voteId: "vote-own-comment",
+      issueId: ISSUE_ID,
+      issueVersion: 1,
+      choice: "A",
+      result: {
+        resultVersion: 1,
+        acceptedA: 1,
+        acceptedB: 0,
+        displayedTotal: 1,
+        integrityState: "NORMAL",
+      },
+    };
+    sessionStorage.setItem(`which:vote-result:${ISSUE_ID}`, JSON.stringify(savedResult));
+    const mutationMethods: string[] = [];
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = String(input);
+        if (url === "/api/guest-subjects") return jsonResponse({ status: "ready" });
+        if (url.endsWith(`/api/issues/${ISSUE_ID}`)) return jsonResponse(issue);
+        if (url === "/api/member-session") {
+          return jsonResponse({
+            member: { id: "member-owner", displayName: "작성자", status: "ACTIVE" },
+            expiresAt: "2026-08-25T00:00:00.000Z",
+          });
+        }
+        if (url.startsWith(`/api/issues/${ISSUE_ID}/comments?`)) {
+          return jsonResponse({
+            items: [
+              {
+                id: "own-comment",
+                choice: "A",
+                author: { displayName: "작성자" },
+                body: "내가 쓴 댓글",
+                visibility: "VISIBLE",
+                threadState: "OPEN",
+                createdAt: "2026-08-24T08:00:00.000Z",
+                editedAt: null,
+                reactions: { helpfulCount: 0, viewerReacted: false },
+                reports: { viewerReported: false, canReport: false },
+                permissions: { canEdit: true, canDelete: true },
+              },
+            ],
+            nextCursor: null,
+          });
+        }
+        if (url === "/api/comments/own-comment" && init?.method === "PATCH") {
+          mutationMethods.push("PATCH");
+          return jsonResponse({
+            comment: {
+              id: "own-comment",
+              body: "수정된 내 댓글",
+              editedAt: "2026-08-24T08:30:00.000Z",
+            },
+          });
+        }
+        if (url === "/api/comments/own-comment" && init?.method === "DELETE") {
+          mutationMethods.push("DELETE");
+          return jsonResponse({ comment: { id: "own-comment", deleted: true } });
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      }),
+    );
+
+    render(<IssueExperience issueId={ISSUE_ID} />);
+    expect(await screen.findByText("내가 쓴 댓글")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "수정" }));
+    const editor = screen.getByRole("textbox", { name: "댓글 수정 내용" });
+    fireEvent.change(editor, { target: { value: "수정된 내 댓글" } });
+    fireEvent.click(screen.getByRole("button", { name: "수정 저장" }));
+
+    expect(await screen.findByText("수정된 내 댓글", { selector: "p" })).toBeInTheDocument();
+    expect(screen.getByText("수정됨")).toBeInTheDocument();
+    expect(screen.getByText("댓글을 수정했어요.")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "삭제" }));
+    expect(
+      screen.getByText("이 댓글을 삭제할까요? 삭제한 내용은 다시 표시되지 않아요."),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "댓글 삭제 확인" }));
+
+    expect(await screen.findByText("댓글을 삭제했어요.")).toBeInTheDocument();
+    expect(screen.queryByText("수정된 내 댓글")).not.toBeInTheDocument();
+    expect(mutationMethods).toEqual(["PATCH", "DELETE"]);
+  });
+
   it("optimistically toggles 공감 and reconciles the server count", async () => {
     const savedResult: VoteResponse = {
       outcome: "ACCEPTED",

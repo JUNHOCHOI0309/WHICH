@@ -3,6 +3,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { POST as reportComment } from "@/app/api/comments/[commentId]/reports/route";
 import { POST as reactToComment } from "@/app/api/comments/[commentId]/reactions/helpful/route";
+import {
+  DELETE as deleteComment,
+  PATCH as updateComment,
+} from "@/app/api/comments/[commentId]/route";
 import { POST as publishComment } from "@/app/api/issues/[issueId]/comments/route";
 import { POST as submitVote } from "@/app/api/issues/[issueId]/votes/route";
 
@@ -19,9 +23,14 @@ function jsonResponse(body: unknown, status = 200) {
   });
 }
 
-function mutationRequest(path: string, body?: unknown, origin = "https://whichone.site") {
+function mutationRequest(
+  path: string,
+  body?: unknown,
+  origin = "https://whichone.site",
+  method = "POST",
+) {
   return new NextRequest(`https://which-web.onrender.com${path}`, {
-    method: "POST",
+    method,
     headers: {
       origin,
       cookie: `which_member_session=member-token; which_guest_subject=${guestSubjectId}`,
@@ -130,6 +139,68 @@ describe("Comment mutation BFF Origin handling", () => {
 
     expect(response.status).toBe(201);
     expect(upstream).toHaveBeenCalledTimes(1);
+  });
+
+  it("protects and forwards author edit and delete requests", async () => {
+    vi.stubEnv("AUTH_BASE_URL", "https://whichone.site");
+    const upstream = vi
+      .fn<(input: string | URL | Request, init?: RequestInit) => Promise<Response>>()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          comment: {
+            id: commentId,
+            body: "수정한 댓글",
+            editedAt: "2026-08-24T08:30:00.000Z",
+          },
+        }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ comment: { id: commentId, deleted: true } }));
+    vi.stubGlobal("fetch", upstream);
+
+    const updated = await updateComment(
+      mutationRequest(
+        `/api/comments/${commentId}`,
+        { body: "수정한 댓글" },
+        "https://whichone.site",
+        "PATCH",
+      ),
+      { params: Promise.resolve({ commentId }) },
+    );
+    const deleted = await deleteComment(
+      mutationRequest(`/api/comments/${commentId}`, undefined, "https://whichone.site", "DELETE"),
+      { params: Promise.resolve({ commentId }) },
+    );
+
+    expect(updated.status).toBe(200);
+    expect(deleted.status).toBe(200);
+    expect(upstream).toHaveBeenNthCalledWith(
+      1,
+      new URL(`http://localhost:4000/v1/comments/${commentId}`),
+      expect.objectContaining({
+        method: "PATCH",
+        headers: expect.objectContaining({ authorization: "Bearer member-token" }),
+      }),
+    );
+    expect(upstream).toHaveBeenNthCalledWith(
+      2,
+      new URL(`http://localhost:4000/v1/comments/${commentId}`),
+      expect.objectContaining({
+        method: "DELETE",
+        headers: expect.objectContaining({ authorization: "Bearer member-token" }),
+      }),
+    );
+
+    const rejected = await deleteComment(
+      mutationRequest(
+        `/api/comments/${commentId}`,
+        undefined,
+        "https://attacker.example",
+        "DELETE",
+      ),
+      { params: Promise.resolve({ commentId }) },
+    );
+    expect(rejected.status).toBe(403);
+    expect(upstream).toHaveBeenCalledTimes(2);
   });
 });
 

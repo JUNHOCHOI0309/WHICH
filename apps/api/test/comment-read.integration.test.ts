@@ -294,6 +294,7 @@ describe("Guest Comment read API", () => {
         editedAt: null,
         reactions: { helpfulCount: 0, viewerReacted: false },
         reports: { viewerReported: false, canReport: true },
+        permissions: { canEdit: false, canDelete: false },
       },
     ]);
   });

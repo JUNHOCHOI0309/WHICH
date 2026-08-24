@@ -15,6 +15,7 @@ export type PublicComment = {
   editedAt: string | null;
   reactions: { helpfulCount: number; viewerReacted: boolean };
   reports: { viewerReported: boolean; canReport: boolean };
+  permissions: { canEdit: boolean; canDelete: boolean };
 };
 
 export type PublicCommentPage = {
@@ -48,6 +49,27 @@ export type MemberCommentSubmission = {
 export type MemberCommentSubmissionResult = {
   httpStatus: 201;
   body: { comment: PublicComment };
+};
+
+export type MemberCommentUpdateCommand = {
+  commentId: string;
+  sessionToken: string;
+  body: string;
+};
+
+export type MemberCommentUpdateResult = {
+  httpStatus: 200;
+  body: { comment: { id: string; body: string; editedAt: string } };
+};
+
+export type MemberCommentDeleteCommand = {
+  commentId: string;
+  sessionToken: string;
+};
+
+export type MemberCommentDeleteResult = {
+  httpStatus: 200;
+  body: { comment: { id: string; deleted: true } };
 };
 
 export type HelpfulReactionCommand = {
@@ -105,6 +127,8 @@ export type CommentModerationDecisionCommand = {
 export interface CommentService {
   listGuestComments(query: GuestCommentQuery): Promise<PublicCommentPage>;
   submitMemberComment(command: MemberCommentSubmission): Promise<MemberCommentSubmissionResult>;
+  updateMemberComment(command: MemberCommentUpdateCommand): Promise<MemberCommentUpdateResult>;
+  deleteMemberComment(command: MemberCommentDeleteCommand): Promise<MemberCommentDeleteResult>;
   toggleHelpfulReaction(command: HelpfulReactionCommand): Promise<HelpfulReactionResult>;
   reportComment(command: CommentReportCommand): Promise<CommentReportResult>;
   listModerationCases(limit: number): Promise<{ items: CommentModerationCase[] }>;

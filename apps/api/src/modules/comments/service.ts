@@ -40,8 +40,10 @@ import type {
   CommentReportResult,
   HelpfulReactionCommand,
   HelpfulReactionResult,
+  MemberCommentDeleteResult,
   MemberCommentSubmission,
   MemberCommentSubmissionResult,
+  MemberCommentUpdateResult,
   PublicComment,
 } from "./contracts.js";
 import { decodeCommentCursor, encodeCommentCursor } from "./cursor.js";
@@ -134,6 +136,7 @@ function toPublicComment(
   row: typeof comments.$inferSelect,
   reactions: PublicComment["reactions"] = { helpfulCount: 0, viewerReacted: false },
   reports: PublicComment["reports"] = { viewerReported: false, canReport: false },
+  permissions: PublicComment["permissions"] = { canEdit: false, canDelete: false },
 ): PublicComment {
   return {
     id: row.id,
@@ -146,6 +149,7 @@ function toPublicComment(
     editedAt: row.editedAt?.toISOString() ?? null,
     reactions,
     reports,
+    permissions,
   };
 }
 
@@ -250,6 +254,7 @@ export function createCommentService(database: Database["db"]): CommentService {
       return database.transaction(async (transaction) => {
         let viewerSubjectId: string;
         let acceptedVote: { issueVersion: number } | undefined;
+        let viewerCanMutate = false;
 
         if (query.sessionToken) {
           const [memberViewer] = await transaction
@@ -270,6 +275,7 @@ export function createCommentService(database: Database["db"]): CommentService {
             throw new CommentError("SESSION_REQUIRED", 401, "The Member session is invalid.");
           }
           viewerSubjectId = memberViewer.subjectId;
+          viewerCanMutate = true;
           [acceptedVote] = await transaction
             .select({ issueVersion: votes.issueVersion })
             .from(votes)
@@ -518,6 +524,10 @@ export function createCommentService(database: Database["db"]): CommentService {
                 viewerReported,
                 canReport: row.authorSubjectId !== viewerSubjectId && !viewerReported,
               },
+              {
+                canEdit: viewerCanMutate && row.authorSubjectId === viewerSubjectId,
+                canDelete: viewerCanMutate && row.authorSubjectId === viewerSubjectId,
+              },
             );
           }),
           nextCursor:
@@ -754,7 +764,12 @@ export function createCommentService(database: Database["db"]): CommentService {
 
         const response: MemberCommentSubmissionResult = {
           httpStatus: 201,
-          body: { comment: toPublicComment(comment) },
+          body: {
+            comment: toPublicComment(comment, undefined, undefined, {
+              canEdit: true,
+              canDelete: true,
+            }),
+          },
         };
         await transaction
           .update(commentWriteAttempts)
@@ -762,6 +777,180 @@ export function createCommentService(database: Database["db"]): CommentService {
           .where(eq(commentWriteAttempts.id, command.idempotencyKey));
 
         return response;
+      });
+    },
+
+    async updateMemberComment(command) {
+      const body = normalizeCommentBody(command.body);
+      const now = new Date();
+
+      return database.transaction(async (transaction): Promise<MemberCommentUpdateResult> => {
+        const [actor] = await transaction
+          .select({ subjectId: voterSubjects.id })
+          .from(memberSessions)
+          .innerJoin(members, eq(memberSessions.memberId, members.id))
+          .innerJoin(voterSubjects, eq(voterSubjects.userId, members.id))
+          .where(
+            and(
+              eq(memberSessions.tokenHash, hashToken(command.sessionToken)),
+              isNull(memberSessions.revokedAt),
+              gt(memberSessions.expiresAt, now),
+              eq(members.status, "ACTIVE"),
+              eq(voterSubjects.kind, "MEMBER"),
+            ),
+          )
+          .limit(1);
+        if (!actor) {
+          throw new CommentError("SESSION_REQUIRED", 401, "The Member session is invalid.");
+        }
+
+        const [target] = await transaction
+          .select()
+          .from(comments)
+          .where(eq(comments.id, command.commentId))
+          .limit(1)
+          .for("update");
+        if (!target || target.deletedAt) {
+          throw new CommentError("COMMENT_NOT_FOUND", 404, "The Comment does not exist.");
+        }
+        if (target.authorSubjectId !== actor.subjectId) {
+          throw new CommentError(
+            "COMMENT_AUTHOR_REQUIRED",
+            403,
+            "Only the Comment author can edit this Comment.",
+          );
+        }
+        if (
+          target.publicationState !== "PUBLISHED" ||
+          target.integrityState !== "NORMAL" ||
+          !["VISIBLE", "DEPRIORITIZED", "COLLAPSED"].includes(target.visibility)
+        ) {
+          throw new CommentError(
+            "COMMENT_MUTATION_UNAVAILABLE",
+            409,
+            "This Comment cannot be edited in its current state.",
+          );
+        }
+
+        const [updated] = await transaction
+          .update(comments)
+          .set({
+            body,
+            textPolicyVersion: TEXT_POLICY_VERSION,
+            editedAt: now,
+            version: sql`${comments.version} + 1`,
+            updatedAt: now,
+          })
+          .where(eq(comments.id, command.commentId))
+          .returning({ id: comments.id, body: comments.body, editedAt: comments.editedAt });
+        if (!updated?.editedAt) throw new Error("Comment update did not return a row.");
+
+        const eventId = randomUUID();
+        await transaction.insert(outboxEvents).values({
+          id: eventId,
+          aggregateType: "COMMENT",
+          aggregateId: updated.id,
+          eventType: "COMMENT_EDITED",
+          schemaVersion: EVENT_SCHEMA_VERSION,
+          occurredAt: now,
+          payload: {
+            event_id: eventId,
+            event_type: "COMMENT_EDITED",
+            schema_version: EVENT_SCHEMA_VERSION,
+            occurred_at: now.toISOString(),
+            aggregate_type: "COMMENT",
+            aggregate_id: updated.id,
+            data: { comment_id: updated.id, text_policy_version: TEXT_POLICY_VERSION },
+          },
+        });
+
+        return {
+          httpStatus: 200,
+          body: {
+            comment: {
+              id: updated.id,
+              body: updated.body,
+              editedAt: updated.editedAt.toISOString(),
+            },
+          },
+        };
+      });
+    },
+
+    async deleteMemberComment(command) {
+      const now = new Date();
+
+      return database.transaction(async (transaction): Promise<MemberCommentDeleteResult> => {
+        const [actor] = await transaction
+          .select({ subjectId: voterSubjects.id })
+          .from(memberSessions)
+          .innerJoin(members, eq(memberSessions.memberId, members.id))
+          .innerJoin(voterSubjects, eq(voterSubjects.userId, members.id))
+          .where(
+            and(
+              eq(memberSessions.tokenHash, hashToken(command.sessionToken)),
+              isNull(memberSessions.revokedAt),
+              gt(memberSessions.expiresAt, now),
+              eq(members.status, "ACTIVE"),
+              eq(voterSubjects.kind, "MEMBER"),
+            ),
+          )
+          .limit(1);
+        if (!actor) {
+          throw new CommentError("SESSION_REQUIRED", 401, "The Member session is invalid.");
+        }
+
+        const [target] = await transaction
+          .select({ authorSubjectId: comments.authorSubjectId, deletedAt: comments.deletedAt })
+          .from(comments)
+          .where(eq(comments.id, command.commentId))
+          .limit(1)
+          .for("update");
+        if (!target || target.deletedAt) {
+          throw new CommentError("COMMENT_NOT_FOUND", 404, "The Comment does not exist.");
+        }
+        if (target.authorSubjectId !== actor.subjectId) {
+          throw new CommentError(
+            "COMMENT_AUTHOR_REQUIRED",
+            403,
+            "Only the Comment author can delete this Comment.",
+          );
+        }
+
+        await transaction
+          .update(comments)
+          .set({
+            body: "[작성자가 삭제한 댓글]",
+            visibility: "REMOVED_BY_AUTHOR",
+            deletedAt: now,
+            version: sql`${comments.version} + 1`,
+            updatedAt: now,
+          })
+          .where(eq(comments.id, command.commentId));
+
+        const eventId = randomUUID();
+        await transaction.insert(outboxEvents).values({
+          id: eventId,
+          aggregateType: "COMMENT",
+          aggregateId: command.commentId,
+          eventType: "COMMENT_REMOVED_BY_AUTHOR",
+          schemaVersion: EVENT_SCHEMA_VERSION,
+          occurredAt: now,
+          payload: {
+            event_id: eventId,
+            event_type: "COMMENT_REMOVED_BY_AUTHOR",
+            schema_version: EVENT_SCHEMA_VERSION,
+            occurred_at: now.toISOString(),
+            aggregate_type: "COMMENT",
+            aggregate_id: command.commentId,
+            data: { comment_id: command.commentId },
+          },
+        });
+
+        return {
+          httpStatus: 200,
+          body: { comment: { id: command.commentId, deleted: true } },
+        };
       });
     },
 
