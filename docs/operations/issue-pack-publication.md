@@ -78,6 +78,30 @@ The builder creates stable UUIDs and content hashes from the approved source. An
 produce byte-identical manifests. Any editorial source change requires a new review, regenerated files,
 and new digest confirmation.
 
+## Expanded 500 candidate catalog
+
+The remediated 500-item expansion lives under
+`apps/api/content/editorial/expanded/which-expanded-500-catalog-v2.json`. It is an editorial candidate
+ledger, not an approved Pack. It must not be added to `public-v0-inventory-policy.json` or passed to the
+Publisher.
+
+Builder v2 fails closed unless the catalog, every selected LOW candidate, its source fit, and a separate
+publication plan have all been human-approved. It also resolves official source registry IDs, blocks
+past `reviewAfter`/`expiresAt` dates, routes MEDIUM candidates away from the Public path, and compares
+wording with existing approved Manifests. See
+`apps/api/content/editorial/expanded/README.md` and `remediation-report-v2.json` for the current blockers.
+
+Human review is performed with the local-only Editorial Review Console:
+
+```bash
+pnpm --filter @which/api issues:review
+```
+
+The console binds to `127.0.0.1:4317`, stores decisions separately from the candidate catalog, and
+exports only human-approved LOW candidates into a reviewed subset catalog and Publication Plan draft.
+Exported drafts still require source review, checked-in diff review, Builder v2 validation, CI, and the
+normal Publisher dry-run and digest confirmation. The console is not an operational publishing surface.
+
 ## Publisher safety contract
 
 - The checked-in Manifest parses with no unknown fields.
