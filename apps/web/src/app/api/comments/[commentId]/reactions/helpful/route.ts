@@ -8,11 +8,12 @@ import {
   MEMBER_SESSION_COOKIE,
   validGuestSubject,
 } from "@/lib/server/which-api";
+import { hasSamePublicOrigin } from "@/lib/server/request-origin";
 
 type RouteContext = { params: Promise<{ commentId: string }> };
 
 export async function POST(request: NextRequest, context: RouteContext) {
-  if (request.headers.get("origin") !== request.nextUrl.origin) {
+  if (!hasSamePublicOrigin(request)) {
     return NextResponse.json(
       { code: "CSRF_REJECTED", message: "요청 출처를 확인할 수 없습니다." },
       { status: 403 },

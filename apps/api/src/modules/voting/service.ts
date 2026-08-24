@@ -1,13 +1,16 @@
 import { createHash, randomUUID } from "node:crypto";
 
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, gt, isNull, or, sql } from "drizzle-orm";
 
 import type { Database } from "../../database/client.js";
 import {
   analyticsSessions,
+  guestMemberLinks,
   issueChoices,
   issues,
   issueVersions,
+  members,
+  memberSessions,
   outboxEvents,
   resultSnapshots,
   voteAggregates,
@@ -31,17 +34,22 @@ import { GuestVoteError } from "./errors.js";
 import { isGuestIssueAvailable } from "../issues/policy.js";
 
 const ELIGIBILITY_POLICY_VERSION = "guest-low-v1";
+const MEMBER_ELIGIBILITY_POLICY_VERSION = "member-account-v1";
 const INTEGRITY_POLICY_VERSION = "vote-integrity-v1";
 const EVENT_SCHEMA_VERSION = 1;
 
 type StoredVoteResponse = GuestVoteSubmissionResult;
 
-function fingerprint(command: GuestVoteSubmission) {
+function hashToken(token: string) {
+  return createHash("sha256").update(token).digest("hex");
+}
+
+function fingerprint(command: GuestVoteSubmission, subjectId: string, isMemberVote: boolean) {
   return createHash("sha256")
     .update(
       JSON.stringify([
         command.idempotencyKey,
-        command.anonymousSubjectId,
+        isMemberVote ? `MEMBER:${subjectId}` : command.anonymousSubjectId,
         command.issueId,
         command.issueVersion,
         command.choiceId,
@@ -502,13 +510,69 @@ export function createGuestVoteService(database: Database["db"]): GuestVoteServi
     },
 
     async submitGuestVote(command) {
-      const requestFingerprint = fingerprint(command);
-
       return database.transaction(async (transaction) => {
         await transaction.execute(
           sql`select pg_advisory_xact_lock(hashtextextended(${command.idempotencyKey}, 0))`,
         );
 
+        let subject: { id: string; memberId?: string } | undefined;
+        let isMemberVote = false;
+
+        if (command.sessionToken) {
+          [subject] = await transaction
+            .select({ id: voterSubjects.id, memberId: members.id })
+            .from(memberSessions)
+            .innerJoin(members, eq(memberSessions.memberId, members.id))
+            .innerJoin(voterSubjects, eq(voterSubjects.userId, members.id))
+            .where(
+              and(
+                eq(memberSessions.tokenHash, hashToken(command.sessionToken)),
+                isNull(memberSessions.revokedAt),
+                gt(memberSessions.expiresAt, new Date()),
+                eq(members.status, "ACTIVE"),
+              ),
+            )
+            .limit(1);
+          if (!subject) {
+            throw new GuestVoteError(
+              "SESSION_REQUIRED",
+              401,
+              "An active Member session is required.",
+            );
+          }
+          isMemberVote = true;
+          await transaction
+            .update(voterSubjects)
+            .set({ lastSeenAt: new Date() })
+            .where(eq(voterSubjects.id, subject.id));
+        } else {
+          if (!command.anonymousSubjectId) {
+            throw new GuestVoteError(
+              "VOTE_SUBJECT_REQUIRED",
+              400,
+              "A Guest subject or active Member session is required.",
+            );
+          }
+          [subject] = await transaction
+            .update(voterSubjects)
+            .set({ lastSeenAt: new Date() })
+            .where(
+              and(
+                eq(voterSubjects.kind, "GUEST"),
+                eq(voterSubjects.anonymousSubjectId, command.anonymousSubjectId),
+              ),
+            )
+            .returning({ id: voterSubjects.id });
+          if (!subject) {
+            throw new GuestVoteError(
+              "GUEST_SUBJECT_NOT_FOUND",
+              404,
+              "Create a guest subject before submitting a vote.",
+            );
+          }
+        }
+
+        const requestFingerprint = fingerprint(command, subject.id, isMemberVote);
         const [existingAttempt] = await transaction
           .select({
             requestFingerprint: voteAttempts.requestFingerprint,
@@ -536,25 +600,6 @@ export function createGuestVoteService(database: Database["db"]): GuestVoteServi
           }
 
           return existingAttempt.responseSnapshot;
-        }
-
-        const [subject] = await transaction
-          .update(voterSubjects)
-          .set({ lastSeenAt: new Date() })
-          .where(
-            and(
-              eq(voterSubjects.kind, "GUEST"),
-              eq(voterSubjects.anonymousSubjectId, command.anonymousSubjectId),
-            ),
-          )
-          .returning({ id: voterSubjects.id });
-
-        if (!subject) {
-          throw new GuestVoteError(
-            "GUEST_SUBJECT_NOT_FOUND",
-            404,
-            "Create a guest subject before submitting a vote.",
-          );
         }
 
         const [votableIssue] = await transaction
@@ -630,7 +675,7 @@ export function createGuestVoteService(database: Database["db"]): GuestVoteServi
           requestFingerprint,
         });
 
-        const [existingAcceptedVote] = await transaction
+        let [existingAcceptedVote] = await transaction
           .select({
             id: votes.id,
             choiceCode: issueChoices.code,
@@ -646,11 +691,60 @@ export function createGuestVoteService(database: Database["db"]): GuestVoteServi
           )
           .limit(1);
 
+        if (!existingAcceptedVote && isMemberVote) {
+          [existingAcceptedVote] = await transaction
+            .select({ id: votes.id, choiceCode: issueChoices.code })
+            .from(guestMemberLinks)
+            .innerJoin(votes, eq(votes.subjectId, guestMemberLinks.guestSubjectId))
+            .innerJoin(issueChoices, eq(issueChoices.id, votes.choiceId))
+            .where(
+              and(
+                eq(guestMemberLinks.memberSubjectId, subject.id),
+                eq(votes.issueId, command.issueId),
+                eq(votes.integrityState, "ACCEPTED"),
+              ),
+            )
+            .orderBy(desc(votes.acceptedAt), desc(votes.id))
+            .limit(1);
+        }
+
+        if (
+          !existingAcceptedVote &&
+          isMemberVote &&
+          subject.memberId &&
+          command.anonymousSubjectId
+        ) {
+          [existingAcceptedVote] = await transaction
+            .select({ id: votes.id, choiceCode: issueChoices.code })
+            .from(voterSubjects)
+            .innerJoin(votes, eq(votes.subjectId, voterSubjects.id))
+            .innerJoin(issueChoices, eq(issueChoices.id, votes.choiceId))
+            .leftJoin(guestMemberLinks, eq(guestMemberLinks.guestSubjectId, voterSubjects.id))
+            .where(
+              and(
+                eq(voterSubjects.kind, "GUEST"),
+                eq(voterSubjects.anonymousSubjectId, command.anonymousSubjectId),
+                eq(votes.issueId, command.issueId),
+                eq(votes.integrityState, "ACCEPTED"),
+                or(
+                  isNull(guestMemberLinks.memberId),
+                  eq(guestMemberLinks.memberId, subject.memberId),
+                ),
+              ),
+            )
+            .orderBy(desc(votes.acceptedAt), desc(votes.id))
+            .limit(1);
+        }
+
         const outcome = existingAcceptedVote ? "REJECTED_DUPLICATE" : "ACCEPTED";
         const effectiveChoice = existingAcceptedVote?.choiceCode ?? votableIssue.choiceCode;
         const reasonCode = existingAcceptedVote
-          ? "DUPLICATE_ANONYMOUS_SUBJECT"
-          : "ELIGIBLE_LOW_GUEST";
+          ? isMemberVote
+            ? "DUPLICATE_MEMBER_OR_LINKED_SUBJECT"
+            : "DUPLICATE_ANONYMOUS_SUBJECT"
+          : isMemberVote
+            ? "ELIGIBLE_ACTIVE_MEMBER"
+            : "ELIGIBLE_LOW_GUEST";
         const [vote] = await transaction
           .insert(votes)
           .values({
@@ -662,11 +756,13 @@ export function createGuestVoteService(database: Database["db"]): GuestVoteServi
             analyticsSessionId,
             integrityState: outcome,
             reasonCode,
-            userTier: "GUEST",
-            accountAssurance: "ANONYMOUS",
-            uniquenessAssurance: "BROWSER_SUBJECT",
+            userTier: isMemberVote ? "MEMBER" : "GUEST",
+            accountAssurance: isMemberVote ? "ACCOUNT" : "ANONYMOUS",
+            uniquenessAssurance: isMemberVote ? "ACCOUNT" : "BROWSER_SUBJECT",
             issueRiskLevel: votableIssue.riskLevel,
-            eligibilityPolicyVersion: ELIGIBILITY_POLICY_VERSION,
+            eligibilityPolicyVersion: isMemberVote
+              ? MEMBER_ELIGIBILITY_POLICY_VERSION
+              : ELIGIBILITY_POLICY_VERSION,
             integrityPolicyVersion: INTEGRITY_POLICY_VERSION,
             acceptedAt: outcome === "ACCEPTED" ? now : null,
           })

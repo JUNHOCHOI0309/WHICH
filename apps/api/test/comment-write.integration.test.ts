@@ -84,11 +84,21 @@ async function createSession(providerSubject: string, anonymousSubjectId?: strin
   return response.json<{ token: string; member: { id: string } }>();
 }
 
-function submitComment(issueId: string, token: string, idempotencyKey: string, body: string) {
+function submitComment(
+  issueId: string,
+  token: string,
+  idempotencyKey: string,
+  body: string,
+  anonymousSubjectId?: string,
+) {
   return app.inject({
     method: "POST",
     url: `/v1/issues/${issueId}/comments`,
-    headers: { authorization: `Bearer ${token}`, "idempotency-key": idempotencyKey },
+    headers: {
+      authorization: `Bearer ${token}`,
+      "idempotency-key": idempotencyKey,
+      ...(anonymousSubjectId ? { "x-anonymous-subject-id": anonymousSubjectId } : {}),
+    },
     payload: { body },
   });
 }
@@ -116,6 +126,124 @@ afterAll(async () => {
 });
 
 describe("Member Comment write API", () => {
+  it("supports login, Member Vote, Comment read, and Comment write as one flow", async () => {
+    const issue = await createIssue();
+    const session = await createSession("comment-member-vote-flow");
+    const vote = await app.inject({
+      method: "POST",
+      url: `/v1/issues/${issue.issueId}/votes`,
+      headers: {
+        authorization: `Bearer ${session.token}`,
+        "idempotency-key": randomUUID(),
+      },
+      payload: { issueVersion: 1, choiceId: issue.choiceAId },
+    });
+    expect(vote.statusCode).toBe(201);
+
+    const list = await app.inject({
+      method: "GET",
+      url: `/v1/issues/${issue.issueId}/comments?side=ALL&limit=10`,
+      headers: { authorization: `Bearer ${session.token}` },
+    });
+    expect(list.statusCode).toBe(200);
+    expect(list.json()).toEqual({ items: [], nextCursor: null });
+
+    const comment = await submitComment(
+      issue.issueId,
+      session.token,
+      randomUUID(),
+      "로그인 후 바로 남긴 이유",
+    );
+    expect(comment.statusCode).toBe(201);
+    expect(comment.json()).toMatchObject({ comment: { choice: "A" } });
+
+    const [storedVote] = await database.db
+      .select({ userId: voterSubjects.userId, userTier: votes.userTier })
+      .from(votes)
+      .innerJoin(voterSubjects, eq(voterSubjects.id, votes.subjectId))
+      .where(eq(votes.issueId, issue.issueId))
+      .limit(1);
+    expect(storedVote).toEqual({ userId: session.member.id, userTier: "MEMBER" });
+  });
+
+  it("rejects a Member Vote when the Member already owns a linked Guest Vote", async () => {
+    const issue = await createIssue();
+    const anonymousSubjectId = await createGuestVote(issue.issueId, issue.choiceAId);
+    const session = await createSession("comment-linked-vote-deduplication", anonymousSubjectId);
+
+    const duplicate = await app.inject({
+      method: "POST",
+      url: `/v1/issues/${issue.issueId}/votes`,
+      headers: {
+        authorization: `Bearer ${session.token}`,
+        "idempotency-key": randomUUID(),
+      },
+      payload: { issueVersion: 1, choiceId: issue.choiceBId },
+    });
+
+    expect(duplicate.statusCode).toBe(409);
+    expect(duplicate.json()).toMatchObject({ outcome: "REJECTED_DUPLICATE", choice: "A" });
+    const storedVotes = await database.db
+      .select({ integrityState: votes.integrityState })
+      .from(votes)
+      .where(eq(votes.issueId, issue.issueId));
+    expect(storedVotes.filter((vote) => vote.integrityState === "ACCEPTED")).toHaveLength(1);
+  });
+
+  it("accepts the current browser's unlinked Guest Vote for an active Member", async () => {
+    const issue = await createIssue();
+    const anonymousSubjectId = await createGuestVote(issue.issueId, issue.choiceBId);
+    const session = await createSession("comment-current-unlinked-guest");
+
+    const list = await app.inject({
+      method: "GET",
+      url: `/v1/issues/${issue.issueId}/comments?side=ALL&limit=10`,
+      headers: {
+        authorization: `Bearer ${session.token}`,
+        "x-anonymous-subject-id": anonymousSubjectId,
+      },
+    });
+    expect(list.statusCode).toBe(200);
+
+    const comment = await submitComment(
+      issue.issueId,
+      session.token,
+      randomUUID(),
+      "기존 Guest 투표에서 이어진 이유",
+      anonymousSubjectId,
+    );
+    expect(comment.statusCode).toBe(201);
+    expect(comment.json()).toMatchObject({ comment: { choice: "B" } });
+  });
+
+  it("does not accept a Guest Vote linked to a different Member", async () => {
+    const issue = await createIssue();
+    const anonymousSubjectId = await createGuestVote(issue.issueId, issue.choiceAId);
+    await createSession("comment-guest-owner", anonymousSubjectId);
+    const otherSession = await createSession("comment-guest-non-owner");
+
+    const list = await app.inject({
+      method: "GET",
+      url: `/v1/issues/${issue.issueId}/comments?side=ALL&limit=10`,
+      headers: {
+        authorization: `Bearer ${otherSession.token}`,
+        "x-anonymous-subject-id": anonymousSubjectId,
+      },
+    });
+    expect(list.statusCode).toBe(403);
+    expect(list.json()).toMatchObject({ code: "VOTE_REQUIRED" });
+
+    const comment = await submitComment(
+      issue.issueId,
+      otherSession.token,
+      randomUUID(),
+      "다른 회원의 투표를 사용할 수 없음",
+      anonymousSubjectId,
+    );
+    expect(comment.statusCode).toBe(403);
+    expect(comment.json()).toMatchObject({ code: "VOTE_REQUIRED" });
+  });
+
   it("publishes from a linked Guest Vote and replays the completed idempotent response", async () => {
     const issue = await createIssue();
     const anonymousSubjectId = await createGuestVote(issue.issueId, issue.choiceBId);

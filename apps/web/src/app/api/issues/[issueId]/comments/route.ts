@@ -8,6 +8,7 @@ import {
   MEMBER_SESSION_COOKIE,
   validGuestSubject,
 } from "@/lib/server/which-api";
+import { hasSamePublicOrigin } from "@/lib/server/request-origin";
 
 type RouteContext = {
   params: Promise<{ issueId: string }>;
@@ -50,7 +51,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
 }
 
 export async function POST(request: NextRequest, context: RouteContext) {
-  if (request.headers.get("origin") !== request.nextUrl.origin) {
+  if (!hasSamePublicOrigin(request)) {
     return NextResponse.json(
       { code: "CSRF_REJECTED", message: "요청 출처를 확인할 수 없습니다." },
       { status: 403 },
@@ -58,6 +59,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   }
 
   const token = request.cookies.get(MEMBER_SESSION_COOKIE)?.value;
+  const subjectId = validGuestSubject(request.cookies.get(GUEST_SUBJECT_COOKIE)?.value);
   if (!token) {
     return NextResponse.json(
       { code: "SESSION_REQUIRED", message: "댓글을 게시하려면 로그인이 필요합니다." },
@@ -80,6 +82,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       headers: {
         accept: "application/json",
         authorization: `Bearer ${token}`,
+        ...(subjectId ? { "x-anonymous-subject-id": subjectId } : {}),
         "content-type": "application/json",
         "idempotency-key": idempotencyKey,
       },

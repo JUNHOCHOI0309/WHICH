@@ -3,9 +3,11 @@ import { NextResponse } from "next/server";
 
 import type { ApiErrorBody, VoteResponse } from "@/lib/contracts";
 import {
+  clearMemberSessionCookie,
   createGuestSubject,
   fetchWhichApi,
   GUEST_SUBJECT_COOKIE,
+  MEMBER_SESSION_COOKIE,
   setGuestSubjectCookie,
   validGuestSubject,
 } from "@/lib/server/which-api";
@@ -26,7 +28,7 @@ type VoteRequestBody = {
 
 async function forwardVote(
   issueId: string,
-  subjectId: string,
+  identity: { subjectId?: string; token?: string },
   analyticsSessionId: string,
   body: Required<VoteRequestBody>,
 ) {
@@ -36,7 +38,8 @@ async function forwardVote(
       accept: "application/json",
       "content-type": "application/json",
       "idempotency-key": body.idempotencyKey,
-      "x-anonymous-subject-id": subjectId,
+      ...(identity.subjectId ? { "x-anonymous-subject-id": identity.subjectId } : {}),
+      ...(identity.token ? { authorization: `Bearer ${identity.token}` } : {}),
       "x-analytics-session-id": analyticsSessionId,
     },
     body: JSON.stringify({ issueVersion: body.issueVersion, choiceId: body.choiceId }),
@@ -66,24 +69,27 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
 
     const cookieSubject = validGuestSubject(request.cookies.get(GUEST_SUBJECT_COOKIE)?.value);
+    const token = request.cookies.get(MEMBER_SESSION_COOKIE)?.value;
     const analyticsSession = analyticsSessionForRequest(request);
-    let subjectId = cookieSubject ?? (await createGuestSubject());
-    let vote = await forwardVote(issueId, subjectId, analyticsSession.id, body);
+    let subjectId = cookieSubject ?? (token ? undefined : await createGuestSubject());
+    let vote = await forwardVote(issueId, { subjectId, token }, analyticsSession.id, body);
 
     if (
+      !token &&
       cookieSubject &&
       vote.upstream.status === 404 &&
       "code" in vote.responseBody &&
       vote.responseBody.code === "GUEST_SUBJECT_NOT_FOUND"
     ) {
       subjectId = await createGuestSubject();
-      vote = await forwardVote(issueId, subjectId, analyticsSession.id, body);
+      vote = await forwardVote(issueId, { subjectId }, analyticsSession.id, body);
     }
 
     const response = NextResponse.json(vote.responseBody, { status: vote.upstream.status });
-    if (!cookieSubject || subjectId !== cookieSubject) {
+    if (!token && subjectId && (!cookieSubject || subjectId !== cookieSubject)) {
       setGuestSubjectCookie(response, subjectId);
     }
+    if (token && vote.upstream.status === 401) clearMemberSessionCookie(response);
     setAnalyticsSessionCookie(response, analyticsSession);
     return response;
   } catch {

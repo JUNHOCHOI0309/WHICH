@@ -296,6 +296,27 @@ export function createCommentService(database: Database["db"]): CommentService {
               .orderBy(asc(votes.acceptedAt), asc(votes.id))
               .limit(1);
           }
+          if (!acceptedVote && query.anonymousSubjectId) {
+            [acceptedVote] = await transaction
+              .select({ issueVersion: votes.issueVersion })
+              .from(voterSubjects)
+              .innerJoin(votes, eq(votes.subjectId, voterSubjects.id))
+              .leftJoin(guestMemberLinks, eq(guestMemberLinks.guestSubjectId, voterSubjects.id))
+              .where(
+                and(
+                  eq(voterSubjects.kind, "GUEST"),
+                  eq(voterSubjects.anonymousSubjectId, query.anonymousSubjectId),
+                  eq(votes.issueId, query.issueId),
+                  eq(votes.integrityState, "ACCEPTED"),
+                  or(
+                    isNull(guestMemberLinks.memberId),
+                    eq(guestMemberLinks.memberId, memberViewer.memberId),
+                  ),
+                ),
+              )
+              .orderBy(asc(votes.acceptedAt), asc(votes.id))
+              .limit(1);
+          }
         } else {
           if (!query.anonymousSubjectId) {
             throw new CommentError(
@@ -623,6 +644,29 @@ export function createCommentService(database: Database["db"]): CommentService {
                 eq(guestMemberLinks.memberId, session.memberId),
                 eq(votes.issueId, command.issueId),
                 eq(votes.integrityState, "ACCEPTED"),
+              ),
+            )
+            .orderBy(asc(votes.acceptedAt), asc(votes.id))
+            .limit(1);
+        }
+
+        if (!eligibleVote && command.anonymousSubjectId) {
+          [eligibleVote] = await transaction
+            .select({ id: votes.id, issueVersion: votes.issueVersion, choice: issueChoices.code })
+            .from(voterSubjects)
+            .innerJoin(votes, eq(votes.subjectId, voterSubjects.id))
+            .innerJoin(issueChoices, eq(issueChoices.id, votes.choiceId))
+            .leftJoin(guestMemberLinks, eq(guestMemberLinks.guestSubjectId, voterSubjects.id))
+            .where(
+              and(
+                eq(voterSubjects.kind, "GUEST"),
+                eq(voterSubjects.anonymousSubjectId, command.anonymousSubjectId),
+                eq(votes.issueId, command.issueId),
+                eq(votes.integrityState, "ACCEPTED"),
+                or(
+                  isNull(guestMemberLinks.memberId),
+                  eq(guestMemberLinks.memberId, session.memberId),
+                ),
               ),
             )
             .orderBy(asc(votes.acceptedAt), asc(votes.id))

@@ -23,7 +23,8 @@ export type GuestVoteResponse = {
 
 export type GuestVoteSubmission = {
   idempotencyKey: string;
-  anonymousSubjectId: string;
+  anonymousSubjectId?: string;
+  sessionToken?: string;
   issueId: string;
   issueVersion: number;
   choiceId: string;
