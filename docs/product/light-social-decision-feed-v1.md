@@ -45,6 +45,19 @@ WHICH의 핵심 투표 흐름을 기존 Dark Editorial 화면에서 밝고 빠�
 - `prefers-reduced-motion` 또는 기기 모션 감소 설정에서는 자동 순환을 사용하지 않는다.
 - 한쪽에 대표 댓글이 없으면 해당 진영의 empty state를 유지한다.
 
+## Question 작성기
+
+- 활성 Member에게만 `Question` 진입점을 노출한다.
+- Desktop에서는 Feed header의 중복 CTA를 제거하고 Left Rail 최하단에 고정한다.
+- Desktop 작성기는 현재 화면 위의 blurred backdrop과 중앙 modal로 열어 Feed 맥락을 유지한다.
+- Mobile에서는 bottom navigation의 `Question` 버튼으로 같은 작성기를 열되 화면 아래에서 올라오는
+  bottom sheet로 표시한다.
+- modal과 `/create`는 동일한 작성 폼, 임시 저장, 검증, idempotency, 게시 API를 사용한다.
+- `/create` route는 직접 URL, 새로고침, 로그인 복귀, 작성기 장애 시의 독립 fallback으로 유지한다.
+- Escape, backdrop, 닫기 버튼으로 작성기를 닫을 수 있으며 keyboard focus와 body scroll을 modal
+  경계 안에 유지한다.
+- 작성기를 닫아도 브라우저 Session Draft는 보존하고 게시 성공 시에만 제거한다.
+
 ## 데이터 원칙
 
 현재 API가 제공하지 않는 작성자, 조회 수, 좋아요 수, 북마크 상태, 실시간 순위는 가짜 값으로 만들지 않는다. 해당 정보가 필요한 UI는 API 계약과 조회 성능을 먼저 확장한 뒤 도입한다.

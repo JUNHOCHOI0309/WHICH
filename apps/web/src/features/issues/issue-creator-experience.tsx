@@ -30,7 +30,11 @@ function initialDraft() {
   }
 }
 
-export function IssueCreatorExperience() {
+export function IssueCreatorExperience({
+  presentation = "page",
+}: {
+  presentation?: "page" | "modal";
+}) {
   const router = useRouter();
   const [state, setState] = useState<"loading" | "guest" | "member" | "error">("loading");
   const [registry, setRegistry] = useState<InterestCardRegistry | null>(null);
@@ -75,7 +79,14 @@ export function IssueCreatorExperience() {
           작성 중인 내용은 이 브라우저에 잠시 보관됩니다. 로그인하거나 빠르게 가입한 뒤 그대로
           이어서 작성하세요.
         </p>
-        <Link className={styles.primaryLink} href="/login?returnTo=%2Fcreate">
+        <Link
+          className={styles.primaryLink}
+          href={
+            presentation === "modal"
+              ? "/login?returnTo=%2F%3Fcompose%3Dquestion"
+              : "/login?returnTo=%2Fcreate"
+          }
+        >
           로그인하고 질문 만들기 <span aria-hidden="true">→</span>
         </Link>
       </section>
@@ -95,7 +106,7 @@ export function IssueCreatorExperience() {
 
   return (
     <form
-      className={styles.form}
+      className={`${styles.form} ${presentation === "modal" ? styles.modalForm : ""}`}
       onSubmit={(event) => {
         event.preventDefault();
         setSubmitting(true);

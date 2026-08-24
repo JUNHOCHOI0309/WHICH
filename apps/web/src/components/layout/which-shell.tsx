@@ -6,8 +6,10 @@ import { creatorSubmissionsEnabled } from "@/lib/server/feature-flags";
 import {
   HeaderMemberNavigation,
   MemberNavigationLink,
+  MemberQuestionComposerButton,
   MemberNavigationProvider,
 } from "./member-navigation";
+import { QuestionComposerProvider } from "../question-composer/question-composer";
 import styles from "./which-shell.module.css";
 
 export function WhichShell({
@@ -22,19 +24,61 @@ export function WhichShell({
   const creationEnabled = creatorSubmissionsEnabled();
   return (
     <MemberNavigationProvider>
-      <main className={styles.page}>
-        <header className={styles.header}>
-          <div className={styles.headerInner}>
-            <Link className={styles.brand} href="/" aria-label="WHICH 홈">
-              <span>W</span>HICH
-            </Link>
-            <p className={styles.productLine}>고르고, 결과를 확인하세요.</p>
-            <HeaderMemberNavigation />
-          </div>
-        </header>
+      <QuestionComposerProvider enabled={creationEnabled}>
+        <main className={styles.page}>
+          <header className={styles.header}>
+            <div className={styles.headerInner}>
+              <Link className={styles.brand} href="/" aria-label="WHICH 홈">
+                <span>W</span>HICH
+              </Link>
+              <p className={styles.productLine}>고르고, 결과를 확인하세요.</p>
+              <HeaderMemberNavigation />
+            </div>
+          </header>
 
-        <div className={styles.shell}>
-          <nav className={styles.leftRail} aria-label="주요 메뉴">
+          <div className={styles.shell}>
+            <nav className={styles.leftRail} aria-label="주요 메뉴">
+              <div className={styles.railNavigation}>
+                <ShellLink href="/" active={active === "home"} icon="⌂">
+                  홈
+                </ShellLink>
+                <ShellLink href="/interests" active={active === "interests"} icon="#">
+                  관심사
+                </ShellLink>
+                <MemberNavigationLink active={active === "me"} />
+              </div>
+              <div className={styles.railNote}>
+                <strong>RESULTS AFTER VOTE</strong>
+                <span>내가 고른 뒤에 사람들의 선택을 확인합니다.</span>
+              </div>
+              {creationEnabled ? (
+                <MemberQuestionComposerButton
+                  className={`${styles.navLink} ${styles.questionButton}`}
+                />
+              ) : null}
+            </nav>
+
+            <div className={styles.main}>{children}</div>
+
+            <aside className={styles.rightRail} aria-label="WHICH 안내">
+              {aside ?? (
+                <WhichAsideCard
+                  eyebrow="WHICH PRINCIPLE"
+                  title="먼저 선택하고, 그다음 결과를 봐요."
+                >
+                  어느 한쪽도 미리 추천하지 않습니다.
+                </WhichAsideCard>
+              )}
+            </aside>
+          </div>
+
+          <footer className={styles.footer}>
+            <span>WHICH · 2026</span>
+            <Link href="/legal/terms">서비스 이용약관</Link>
+            <Link href="/legal/privacy">개인정보 처리방침</Link>
+          </footer>
+
+          <nav className={styles.bottomNav} aria-label="모바일 주요 메뉴">
             <ShellLink href="/" active={active === "home"} icon="⌂">
               홈
             </ShellLink>
@@ -42,52 +86,14 @@ export function WhichShell({
               관심사
             </ShellLink>
             {creationEnabled ? (
-              <ShellLink href="/create" active={active === "create"} icon="＋">
-                질문 만들기
-              </ShellLink>
+              <MemberQuestionComposerButton
+                className={`${styles.navLink} ${styles.mobileQuestionButton}`}
+              />
             ) : null}
             <MemberNavigationLink active={active === "me"} />
-            <div className={styles.railNote}>
-              <strong>RESULTS AFTER VOTE</strong>
-              <span>내가 고른 뒤에 사람들의 선택을 확인합니다.</span>
-            </div>
           </nav>
-
-          <div className={styles.main}>{children}</div>
-
-          <aside className={styles.rightRail} aria-label="WHICH 안내">
-            {aside ?? (
-              <WhichAsideCard eyebrow="WHICH PRINCIPLE" title="먼저 선택하고, 그다음 결과를 봐요.">
-                어느 한쪽도 미리 추천하지 않습니다.
-              </WhichAsideCard>
-            )}
-          </aside>
-        </div>
-
-        <footer className={styles.footer}>
-          <span>WHICH · 2026</span>
-          <Link href="/legal/terms">서비스 이용약관</Link>
-          <Link href="/legal/privacy">개인정보 처리방침</Link>
-        </footer>
-
-        <nav
-          className={`${styles.bottomNav} ${creationEnabled ? styles.bottomNavFour : ""}`}
-          aria-label="모바일 주요 메뉴"
-        >
-          <ShellLink href="/" active={active === "home"} icon="⌂">
-            홈
-          </ShellLink>
-          <ShellLink href="/interests" active={active === "interests"} icon="#">
-            관심사
-          </ShellLink>
-          {creationEnabled ? (
-            <ShellLink href="/create" active={active === "create"} icon="＋">
-              만들기
-            </ShellLink>
-          ) : null}
-          <MemberNavigationLink active={active === "me"} />
-        </nav>
-      </main>
+        </main>
+      </QuestionComposerProvider>
     </MemberNavigationProvider>
   );
 }

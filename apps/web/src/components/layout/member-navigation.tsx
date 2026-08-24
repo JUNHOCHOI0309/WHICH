@@ -11,6 +11,7 @@ import {
 } from "react";
 
 import styles from "./which-shell.module.css";
+import { useQuestionComposer } from "../question-composer/question-composer";
 
 type MemberSession = {
   member: { id: string; displayName: string; status: string };
@@ -101,15 +102,23 @@ export function MemberNavigationLink({ active }: { active: boolean }) {
   );
 }
 
-export function MemberCreateLink({ className, enabled }: { className?: string; enabled: boolean }) {
+export function MemberQuestionComposerButton({ className }: { className?: string }) {
   const { state } = useContext(MemberNavigationContext);
+  const { isOpen, openComposer } = useQuestionComposer();
 
-  if (!enabled || state !== "member") return null;
+  if (state !== "member") return null;
 
   return (
-    <Link className={className} href="/create" aria-label="새 질문 만들기">
+    <button
+      className={className}
+      type="button"
+      aria-haspopup="dialog"
+      aria-expanded={isOpen}
+      aria-controls="question-composer-dialog"
+      onClick={openComposer}
+    >
       <span aria-hidden="true">＋</span>
-      질문 만들기
-    </Link>
+      <strong>Question</strong>
+    </button>
   );
 }
