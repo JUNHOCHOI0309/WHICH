@@ -1,8 +1,11 @@
 # WHICH
 
 WHICH는 질문, A/B 선택, 결과, 다음 이슈로 이어지는 모바일 우선 의견 소비 제품입니다.
-현재 저장소에는 Platform Foundation과 Data Architecture v1, Guest 핵심 투표 Transaction,
-Guest Comment Read Flow까지 구현되어 있습니다.
+현재 저장소는 초기 Platform Foundation 단계를 지나 Guest·Member 핵심 흐름을 구현했으며,
+Public v0 Release Candidate의 콘텐츠·측정·운영 준비도를 검증하는 단계입니다.
+
+구현 완료 범위, 출시 전 남은 Gate, Post-v0 비범위는
+[`docs/product/public-v0-release-scope.md`](docs/product/public-v0-release-scope.md)를 기준으로 관리합니다.
 
 ## 기술 기반
 
@@ -92,38 +95,24 @@ Comment를 중복 생성하거나 기존 Version을 덮어쓰지 않습니다.
 
 ## 현재 구현 범위
 
-현재 아래 항목이 구현되어 있습니다.
+현재 아래 제품 축이 구현되어 있습니다.
 
-- 환경 변수 검증
-- 기본 비활성 Feature Flag
-- API live/readiness 계약
-- Data Architecture v1 PostgreSQL Schema와 Migration
-- Guest Subject 발급과 멱등 Vote Transaction
-- Vote Aggregate, Result Snapshot, Versioned Outbox 기록
-- Lease 기반 Outbox Publisher, 지수 백오프, Dead Letter와 재큐잉
-- 릴리스 ID 검증, Public MVP Gate와 비파괴 Rollback Drill
-- Guest Issue Read API와 Result Visibility 처리
-- 반복 가능한 Development Issue Seed
-- 안정 Cursor를 사용하는 Guest Issue Feed API
-- HttpOnly Guest 식별자를 사용하는 Web BFF
-- Provider Subject 기반 Member Identity와 HttpOnly Member Session
-- Google·Naver·Kakao OIDC와 X OAuth 2.0 PKCE Web BFF, Guest → Member Vote 연결
-- Expo Android·iOS 공통 앱의 Guest Feed → Issue → Vote → Result 기반
-- OS Secure Storage를 사용하는 모바일 Guest Subject
-- 서버 비밀정보를 포함하지 않는 `/api/mobile/v1` 공개 BFF
-- 모바일 Guest 투표 화면과 투표 후 결과 공개
-- 이미 참여한 질문을 제외한 Result → Next Issue 이동
-- Issue Version과 작성 당시 A/B 선택을 보존하는 Comment Schema
-- 승인된 Vote 이후에만 공개되는 Guest Comment Read API
-- Comment 최신순 Cursor Pagination과 전체/A/B Filter
-- Result 화면의 Comment 목록, Empty, Error, 추가 조회 상태
-- Deep Navy 기반 Cyan–Orange 선택 디자인 시스템
-- 중복 제출·네트워크 재시도 시 최초 선택 보호
-- 실제 PostgreSQL Integration Test
-- 30분 Session, Viewable Impression, 서버 Vote 원장을 결합한 First-party Analytics
-- CI 검증 경로
+- Guest·Member Feed → Vote → Result → Next와 중복·재시도 보호
+- 이메일 계정과 Google·X·Naver·Kakao 로그인, 명시적 계정 연결, 로그아웃과 회원 탈퇴
+- 관심사 Profile, `interest_content_v1` 개인화 Ranking, Recency Fallback, 투표 완료 Feed 제외
+- Vote 이후 댓글 작성·조회, A/B 대표 댓글, 공감, 신고, 작성자 수정·삭제
+- 신고 누적 자동 접기·숨김과 내부 Moderation·Restore 흐름
+- 결과 공유와 외부 Deep-link
+- 운영 Issue Pack 검증·게시와 Transactional Outbox
+- First-party Analytics, Public Smoke, Public MVP Gate, Rollback Drill
+- 반응형 Web과 Expo Android·iOS Guest 핵심 흐름
+- PostgreSQL Integration Test를 포함한 CI 검증 경로
 
-Reply, 개인화 Feed Ranking, 강화된 Integrity Challenge와 추천 모델은 후속 Task에서 구현합니다.
+현재 우선순위는 새 Surface를 추가하는 것이 아니라 Issue Pool, 핵심 Funnel 기준선, 운영 E2E와
+제한 사용자 Beta를 순서대로 통과해 Public v0 Go/No-Go를 판단하는 것입니다. 고급 Ranking,
+Native Member OAuth·Store 배포, 대규모 Creator·Following·알림, Reply 고도화, Search·Trending·Live는
+Beta 결과 이후의 Post-v0 범위입니다.
+
 Outbox Worker 운영 방법은
 [`docs/operations/outbox-publisher.md`](docs/operations/outbox-publisher.md), 출시 판정과 복구 훈련은
 [`docs/operations/public-mvp-gate-and-rollback.md`](docs/operations/public-mvp-gate-and-rollback.md)를
