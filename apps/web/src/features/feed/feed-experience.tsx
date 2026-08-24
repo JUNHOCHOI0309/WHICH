@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { WhichShell } from "@/components/layout/which-shell";
+import { MemberCreateLink } from "@/components/layout/member-navigation";
 import { RotatingCommentHighlights } from "@/components/comments/rotating-comment-highlights";
 import { BalanceResultBar } from "@/components/vote/balance-result-bar";
 import { VoteChoiceRow } from "@/components/vote/vote-choice-row";
@@ -33,7 +34,11 @@ type CardVoteState =
 type HighlightState =
   { status: "LOADING" } | { status: "READY"; highlights: CommentHighlights } | { status: "ERROR" };
 
-export function FeedExperience() {
+export function FeedExperience({
+  creatorSubmissionsEnabled = false,
+}: {
+  creatorSubmissionsEnabled?: boolean;
+}) {
   const [screen, setScreen] = useState<FeedScreen>("loading");
   const [items, setItems] = useState<PublicFeedIssue[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -213,7 +218,10 @@ export function FeedExperience() {
             <p className={styles.eyebrow}>TODAY&apos;S CHOICES</p>
             <h1 id="feed-title">지금, 어느 쪽인가요?</h1>
           </div>
-          {screen === "ready" ? <span>{items.length}개의 질문</span> : null}
+          <div className={styles.feedActions}>
+            {screen === "ready" ? <span>{items.length}개의 질문</span> : null}
+            <MemberCreateLink className={styles.createLink} enabled={creatorSubmissionsEnabled} />
+          </div>
         </header>
 
         <div className={styles.filters} aria-label="현재 피드 정렬">

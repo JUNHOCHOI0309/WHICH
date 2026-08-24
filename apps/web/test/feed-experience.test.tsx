@@ -84,6 +84,68 @@ describe("FeedExperience", () => {
     vi.restoreAllMocks();
   });
 
+  it("shows the question creation CTA only to an active Member when submissions are enabled", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = String(input);
+        if (url === "/api/member-session") {
+          return jsonResponse({
+            member: { id: "member-1", displayName: "질문러", status: "ACTIVE" },
+          });
+        }
+        if (url === "/api/guest-subjects") return jsonResponse({ status: "ready" });
+        if (url.startsWith("/api/issues/feed?")) return jsonResponse(feed);
+        throw new Error(`Unexpected request: ${url}`);
+      }),
+    );
+
+    render(<FeedExperience creatorSubmissionsEnabled />);
+
+    const createLink = await screen.findByRole("link", { name: "새 질문 만들기" });
+    expect(createLink).toHaveAttribute("href", "/create");
+  });
+
+  it("does not show the question creation CTA to a Guest", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = String(input);
+        if (url === "/api/member-session") return jsonResponse({ code: "SESSION_INVALID" }, 401);
+        if (url === "/api/guest-subjects") return jsonResponse({ status: "ready" });
+        if (url.startsWith("/api/issues/feed?")) return jsonResponse(feed);
+        throw new Error(`Unexpected request: ${url}`);
+      }),
+    );
+
+    render(<FeedExperience creatorSubmissionsEnabled />);
+
+    expect(await screen.findByText(feed.items[0]!.question)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "새 질문 만들기" })).not.toBeInTheDocument();
+  });
+
+  it("does not show the question creation CTA when submissions are disabled", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = String(input);
+        if (url === "/api/member-session") {
+          return jsonResponse({
+            member: { id: "member-1", displayName: "질문러", status: "ACTIVE" },
+          });
+        }
+        if (url === "/api/guest-subjects") return jsonResponse({ status: "ready" });
+        if (url.startsWith("/api/issues/feed?")) return jsonResponse(feed);
+        throw new Error(`Unexpected request: ${url}`);
+      }),
+    );
+
+    render(<FeedExperience creatorSubmissionsEnabled={false} />);
+
+    expect(await screen.findByText(feed.items[0]!.question)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "새 질문 만들기" })).not.toBeInTheDocument();
+  });
+
   it("prepares the Guest before showing result-free Issue cards", async () => {
     const requests: string[] = [];
     vi.stubGlobal(
