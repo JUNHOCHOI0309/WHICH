@@ -1,6 +1,6 @@
 {
-  "id": "339760d3-99e7-4f63-9c25-ca9264d954d3",
-  "prevId": "f9ead8de-eba1-4e6b-8319-65b3b6e95d40",
+  "id": "e3dad0e8-085a-4ff8-b273-45ab09e7f927",
+  "prevId": "339760d3-99e7-4f63-9c25-ca9264d954d3",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -3737,7 +3737,7 @@
       "checkConstraints": {
         "voter_subjects_identity_shape_check": {
           "name": "voter_subjects_identity_shape_check",
-          "value": "(\"voter_subjects\".\"subject_kind\" = 'GUEST' and \"voter_subjects\".\"anonymous_subject_id\" is not null and \"voter_subjects\".\"user_id\" is null and \"voter_subjects\".\"verified_uniqueness_handle\" is null)\n        or (\"voter_subjects\".\"subject_kind\" = 'MEMBER' and \"voter_subjects\".\"anonymous_subject_id\" is null and \"voter_subjects\".\"user_id\" is not null and \"voter_subjects\".\"verified_uniqueness_handle\" is null)\n        or (\"voter_subjects\".\"subject_kind\" = 'VERIFIED_MEMBER' and \"voter_subjects\".\"anonymous_subject_id\" is null and \"voter_subjects\".\"user_id\" is not null and \"voter_subjects\".\"verified_uniqueness_handle\" is not null)"
+          "value": "(\"voter_subjects\".\"subject_kind\" = 'GUEST' and \"voter_subjects\".\"anonymous_subject_id\" is not null and \"voter_subjects\".\"user_id\" is null and \"voter_subjects\".\"verified_uniqueness_handle\" is null)\n        or (\"voter_subjects\".\"subject_kind\" = 'MEMBER' and \"voter_subjects\".\"anonymous_subject_id\" is null and \"voter_subjects\".\"user_id\" is not null and \"voter_subjects\".\"verified_uniqueness_handle\" is null)\n        or (\"voter_subjects\".\"subject_kind\" = 'VERIFIED_MEMBER' and \"voter_subjects\".\"anonymous_subject_id\" is null and \"voter_subjects\".\"user_id\" is not null and \"voter_subjects\".\"verified_uniqueness_handle\" is not null)\n        or (\"voter_subjects\".\"subject_kind\" = 'DELETED_MEMBER' and \"voter_subjects\".\"anonymous_subject_id\" is null and \"voter_subjects\".\"user_id\" is null and \"voter_subjects\".\"verified_uniqueness_handle\" is null)"
         }
       },
       "isRLSEnabled": false

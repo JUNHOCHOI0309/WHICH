@@ -1,0 +1,5 @@
+ALTER TABLE "voter_subjects" DROP CONSTRAINT "voter_subjects_identity_shape_check";--> statement-breakpoint
+ALTER TABLE "voter_subjects" ADD CONSTRAINT "voter_subjects_identity_shape_check" CHECK (("voter_subjects"."subject_kind" = 'GUEST' and "voter_subjects"."anonymous_subject_id" is not null and "voter_subjects"."user_id" is null and "voter_subjects"."verified_uniqueness_handle" is null)
+        or ("voter_subjects"."subject_kind" = 'MEMBER' and "voter_subjects"."anonymous_subject_id" is null and "voter_subjects"."user_id" is not null and "voter_subjects"."verified_uniqueness_handle" is null)
+        or ("voter_subjects"."subject_kind" = 'VERIFIED_MEMBER' and "voter_subjects"."anonymous_subject_id" is null and "voter_subjects"."user_id" is not null and "voter_subjects"."verified_uniqueness_handle" is not null)
+        or ("voter_subjects"."subject_kind" = 'DELETED_MEMBER' and "voter_subjects"."anonymous_subject_id" is null and "voter_subjects"."user_id" is null and "voter_subjects"."verified_uniqueness_handle" is null));
