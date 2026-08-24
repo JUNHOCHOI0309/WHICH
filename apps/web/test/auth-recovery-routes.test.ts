@@ -81,7 +81,7 @@ describe("authentication recovery BFF", () => {
     vi.stubGlobal("fetch", upstream);
     const response = await confirmEmail(
       new NextRequest(
-        "https://whichone.site/api/auth/email-verification/confirm?token=verification-secret-token-that-is-long-enough",
+        "http://localhost:10000/api/auth/email-verification/confirm?token=verification-secret-token-that-is-long-enough",
         { headers: { "x-forwarded-for": "203.0.113.10" } },
       ),
     );
@@ -90,6 +90,17 @@ describe("authentication recovery BFF", () => {
       "https://whichone.site/verify-email?status=verified",
     );
     expect(response.headers.get("location")).not.toContain("token=");
+  });
+
+  it("uses the public auth origin when a verification link has no token", async () => {
+    const response = await confirmEmail(
+      new NextRequest("http://localhost:10000/api/auth/email-verification/confirm"),
+    );
+
+    expect(response.status).toBe(307);
+    expect(response.headers.get("location")).toBe(
+      "https://whichone.site/verify-email?status=invalid",
+    );
   });
 
   it("clears the local session after a successful password reset", async () => {
