@@ -144,7 +144,12 @@ export async function GET(request: Request) {
     const session = await createOAuthMemberSession(flow, {
       provider: "NAVER",
       providerSubject: claims.sub,
-      displayName: typeof claims.name === "string" ? claims.name : "네이버 회원",
+      displayName:
+        typeof claims.nickname === "string"
+          ? claims.nickname
+          : typeof claims.name === "string"
+            ? claims.name
+            : "네이버 회원",
       anonymousSubjectId,
       suggestedEmail: typeof claims.email === "string" ? claims.email : undefined,
     });

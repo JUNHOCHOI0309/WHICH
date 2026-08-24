@@ -83,9 +83,10 @@ UTM에는 Member ID, Guest ID, 선택값과 같은 개인정보·행동 사실�
 - Local Callback: `http://localhost:3000/api/auth/naver/callback`
 - Production Callback: `https://whichone.site/api/auth/naver/callback`
 - 환경 변수: `NAVER_OIDC_CLIENT_ID`, `NAVER_OIDC_CLIENT_SECRET`
-- 요청 범위: `openid`만 사용하며 이메일·연령·성별·전화번호를 요청하지 않음
+- 요청 범위: `openid profile`로 식별자와 별명만 사용하며 이메일·연령·성별·전화번호를 요청하지 않음
 - CSRF·재전송 보호: 서명된 HttpOnly Flow Cookie, `state`, `nonce`, PKCE S256 검증
 - 내부 식별자: 검증된 ID Token의 `sub`를 Provider Subject로 사용
+- 표시 이름: `nickname` → `name` → `네이버 회원` 순서로 결정하며 기존 기본 이름만 다음 로그인에서 갱신
 - Token 정책: Access·Refresh·ID Token을 WHICH DB·로그·Cookie에 저장하지 않음
 
 ## 2주 검증안

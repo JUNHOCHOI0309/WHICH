@@ -29,6 +29,7 @@ import {
   votes,
 } from "../../database/schema/index.js";
 import type {
+  IdentityProvider,
   MemberIdentityService,
   MemberPrivateProfile,
   MemberProfileSettings,
@@ -99,6 +100,26 @@ function toMemberView(member: typeof members.$inferSelect): MemberView {
 function normalizedDisplayName(value: string) {
   const normalized = value.trim().replace(/\s+/g, " ");
   return normalized.length > 0 ? normalized.slice(0, 80) : "WHICH 회원";
+}
+
+const PROVIDER_PLACEHOLDER_DISPLAY_NAMES: Partial<Record<IdentityProvider, string>> = {
+  GOOGLE: "WHICH 회원",
+  X: "WHICH 회원",
+  NAVER: "네이버 회원",
+  KAKAO: "카카오 회원",
+};
+
+function shouldRefreshProviderDisplayName(
+  provider: IdentityProvider,
+  currentDisplayName: string,
+  assertedDisplayName: string,
+) {
+  const placeholder = PROVIDER_PLACEHOLDER_DISPLAY_NAMES[provider];
+  return (
+    placeholder !== undefined &&
+    currentDisplayName === placeholder &&
+    assertedDisplayName !== placeholder
+  );
 }
 
 function normalizeEmail(value: string) {
@@ -599,6 +620,23 @@ export function createMemberIdentityService(
             .update(memberIdentityLinks)
             .set({ lastAuthenticatedAt: now })
             .where(eq(memberIdentityLinks.id, identity.link.id));
+
+          const assertedDisplayName = normalizedDisplayName(assertion.displayName);
+          if (
+            shouldRefreshProviderDisplayName(
+              assertion.provider,
+              identity.member.displayName,
+              assertedDisplayName,
+            )
+          ) {
+            const [updatedMember] = await transaction
+              .update(members)
+              .set({ displayName: assertedDisplayName, updatedAt: now })
+              .where(eq(members.id, identity.member.id))
+              .returning();
+            if (!updatedMember) throw new Error("Member display name update did not return a row.");
+            identity = { ...identity, member: updatedMember };
+          }
         }
 
         if (identity.member.status !== "ACTIVE") {

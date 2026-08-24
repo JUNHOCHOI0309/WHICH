@@ -89,7 +89,7 @@ describe("Naver OIDC routes", () => {
       client_id: "naver-client",
       redirect_uri: "http://localhost:3000/api/auth/naver/callback",
       response_type: "code",
-      scope: "openid",
+      scope: "openid profile",
       state: "naver-state",
       code_challenge: "naver-challenge",
       code_challenge_method: "S256",
@@ -191,7 +191,11 @@ describe("Naver OIDC routes", () => {
           : undefined,
     );
     oidcMocks.authorizationCodeGrant.mockResolvedValue({
-      claims: () => ({ sub: "naver-subject-1" }),
+      claims: () => ({
+        sub: "naver-subject-1",
+        nickname: "네이버 별명",
+        name: "네이버 실명",
+      }),
     });
     const request = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url = String(input);
@@ -199,7 +203,7 @@ describe("Naver OIDC routes", () => {
       expect(JSON.parse(String(init?.body))).toMatchObject({
         provider: "NAVER",
         providerSubject: "naver-subject-1",
-        displayName: "네이버 회원",
+        displayName: "네이버 별명",
       });
       return Response.json(
         { token: "which-session", expiresAt: "2026-08-21T00:00:00.000Z" },

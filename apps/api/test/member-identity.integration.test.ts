@@ -86,6 +86,7 @@ function createMemberSession(input: {
   anonymousSubjectId?: string;
   createIfMissing?: boolean;
   credential?: { email: string; password: string };
+  displayName?: string;
 }) {
   return app.inject({
     method: "POST",
@@ -94,7 +95,7 @@ function createMemberSession(input: {
     payload: {
       provider: input.provider ?? "DEVELOPMENT",
       providerSubject: input.providerSubject,
-      displayName: "테스트 회원",
+      displayName: input.displayName ?? "테스트 회원",
       anonymousSubjectId: input.anonymousSubjectId,
       createIfMissing: input.createIfMissing,
       credential: input.credential,
@@ -184,6 +185,42 @@ describe("Member identity and Guest vote linking", () => {
     expect(response.json()).toMatchObject({ code: "IDENTITY_SIGNUP_REQUIRED" });
     const after = await database.db.select({ id: members.id }).from(members);
     expect(after).toHaveLength(before.length);
+  });
+
+  it("refreshes only a Provider placeholder display name on a later social login", async () => {
+    const placeholderSubject = `naver-placeholder-${randomUUID()}`;
+    const placeholderSignup = await createMemberSession({
+      provider: "NAVER",
+      providerSubject: placeholderSubject,
+      displayName: "네이버 회원",
+    });
+    expect(placeholderSignup.statusCode).toBe(201);
+
+    const refreshed = await createMemberSession({
+      provider: "NAVER",
+      providerSubject: placeholderSubject,
+      displayName: "실제 네이버 별명",
+      createIfMissing: false,
+    });
+    expect(refreshed.statusCode).toBe(201);
+    expect(refreshed.json()).toMatchObject({ member: { displayName: "실제 네이버 별명" } });
+
+    const customSubject = `naver-custom-${randomUUID()}`;
+    const customSignup = await createMemberSession({
+      provider: "NAVER",
+      providerSubject: customSubject,
+      displayName: "사용자가 정한 이름",
+    });
+    expect(customSignup.statusCode).toBe(201);
+
+    const preserved = await createMemberSession({
+      provider: "NAVER",
+      providerSubject: customSubject,
+      displayName: "새 네이버 별명",
+      createIfMissing: false,
+    });
+    expect(preserved.statusCode).toBe(201);
+    expect(preserved.json()).toMatchObject({ member: { displayName: "사용자가 정한 이름" } });
   });
 
   it("creates one Member with credential and social identities, then signs in by email", async () => {
