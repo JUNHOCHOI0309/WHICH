@@ -1,8 +1,9 @@
 import { Type } from "@sinclair/typebox";
 import type { FastifyInstance } from "fastify";
 
-import type { IssueReadService } from "./contracts.js";
-import { IssueReadError } from "./errors.js";
+import { INTEREST_CARD_CODES } from "../interests/contracts.js";
+import type { IssueReadService, IssueWriteService } from "./contracts.js";
+import { IssueReadError, IssueWriteError } from "./errors.js";
 
 const uuidSchema = Type.String({ format: "uuid" });
 
@@ -109,15 +110,30 @@ type IssueFeedRoute = {
   Headers: { "x-anonymous-subject-id"?: string; authorization?: string };
 };
 
+type IssueCreateRoute = {
+  Headers: { authorization?: string; "idempotency-key": string };
+  Body: {
+    question: string;
+    context?: string | null;
+    choiceA: string;
+    choiceB: string;
+    interestCardCode: (typeof INTEREST_CARD_CODES)[number];
+  };
+};
+
 function bearerToken(value: string | undefined) {
   const match = value?.match(/^Bearer\s+(.+)$/i);
   return match?.[1];
 }
 
-export async function registerIssueRoutes(app: FastifyInstance, service: IssueReadService) {
+export async function registerIssueRoutes(
+  app: FastifyInstance,
+  service: IssueReadService,
+  writer?: IssueWriteService,
+) {
   await app.register((issueApp) => {
     issueApp.setErrorHandler((error, request, reply) => {
-      if (error instanceof IssueReadError) {
+      if (error instanceof IssueReadError || error instanceof IssueWriteError) {
         return reply.code(error.statusCode).send({ code: error.code, message: error.message });
       }
 
@@ -139,6 +155,59 @@ export async function registerIssueRoutes(app: FastifyInstance, service: IssueRe
         message: "The Issue could not be loaded.",
       });
     });
+
+    if (writer) {
+      issueApp.post<IssueCreateRoute>(
+        "/v1/issues",
+        {
+          schema: {
+            tags: ["issues"],
+            summary: "Create and publish one safe Member-authored A/B Issue",
+            headers: Type.Object(
+              {
+                authorization: Type.Optional(Type.String({ minLength: 8, maxLength: 4096 })),
+                "idempotency-key": uuidSchema,
+              },
+              { additionalProperties: true },
+            ),
+            body: Type.Object({
+              question: Type.String({ minLength: 1, maxLength: 200 }),
+              context: Type.Optional(Type.Union([Type.String({ maxLength: 500 }), Type.Null()])),
+              choiceA: Type.String({ minLength: 1, maxLength: 100 }),
+              choiceB: Type.String({ minLength: 1, maxLength: 100 }),
+              interestCardCode: Type.Union(INTEREST_CARD_CODES.map((code) => Type.Literal(code))),
+            }),
+            response: {
+              200: Type.Object({ issue: issueResponseSchema, created: Type.Boolean() }),
+              201: Type.Object({ issue: issueResponseSchema, created: Type.Boolean() }),
+              400: errorResponseSchema,
+              401: errorResponseSchema,
+              409: errorResponseSchema,
+              422: errorResponseSchema,
+              429: errorResponseSchema,
+              500: errorResponseSchema,
+            },
+          },
+        },
+        async (request, reply) => {
+          const token = bearerToken(request.headers.authorization);
+          if (!token) {
+            throw new IssueWriteError(
+              "SESSION_REQUIRED",
+              401,
+              "질문을 만들려면 활성 Member 로그인이 필요합니다.",
+            );
+          }
+          const result = await writer.createMemberIssue({
+            sessionToken: token,
+            idempotencyKey: request.headers["idempotency-key"],
+            ...request.body,
+          });
+          const issue = await service.getGuestIssue(result.issue.id);
+          return reply.code(result.created ? 201 : 200).send({ issue, created: result.created });
+        },
+      );
+    }
 
     issueApp.get<IssueFeedRoute>(
       "/v1/issues/feed",

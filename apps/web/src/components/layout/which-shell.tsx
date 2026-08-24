@@ -14,7 +14,7 @@ export function WhichShell({
   aside,
 }: {
   children: ReactNode;
-  active?: "home" | "interests" | "me";
+  active?: "home" | "interests" | "create" | "me";
   aside?: ReactNode;
 }) {
   return (
@@ -37,6 +37,9 @@ export function WhichShell({
             </ShellLink>
             <ShellLink href="/interests" active={active === "interests"} icon="#">
               관심사
+            </ShellLink>
+            <ShellLink href="/create" active={active === "create"} icon="＋">
+              질문 만들기
             </ShellLink>
             <MemberNavigationLink active={active === "me"} />
             <div className={styles.railNote}>
@@ -68,6 +71,9 @@ export function WhichShell({
           </ShellLink>
           <ShellLink href="/interests" active={active === "interests"} icon="#">
             관심사
+          </ShellLink>
+          <ShellLink href="/create" active={active === "create"} icon="＋">
+            만들기
           </ShellLink>
           <MemberNavigationLink active={active === "me"} />
         </nav>

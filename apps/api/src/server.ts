@@ -7,6 +7,7 @@ import { getConfig } from "./config.js";
 import { createDatabase } from "./database/client.js";
 import { createCommentService } from "./modules/comments/service.js";
 import { createIssueReadService } from "./modules/issues/service.js";
+import { createIssueWriteService } from "./modules/issues/creation-service.js";
 import { createMemberIdentityService } from "./modules/identity/service.js";
 import { createInterestProfileService } from "./modules/interests/service.js";
 import { createGuestVoteService } from "./modules/voting/service.js";
@@ -25,6 +26,7 @@ const app = await buildApp(config, {
   issueReader: createIssueReadService(database.db, {
     personalizationEnabled: config.featureFlags.mlRanker,
   }),
+  issueWriter: createIssueWriteService(database.db),
   guestVotes: createGuestVoteService(database.db),
   commentReader: createCommentService(database.db),
   memberIdentity: createMemberIdentityService(database.db, {

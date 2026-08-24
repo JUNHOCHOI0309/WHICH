@@ -1,4 +1,5 @@
 import type { FeedItemRecommendation, FeedRankingContext } from "../recommendations/contracts.js";
+import type { InterestCardCode } from "../interests/contracts.js";
 
 export type PublicIssueChoice = {
   id: string;
@@ -64,4 +65,31 @@ export type GuestIssueFeedQuery = {
 export interface IssueReadService {
   getGuestIssue(issueId: string): Promise<PublicIssue>;
   listGuestIssues(query: GuestIssueFeedQuery): Promise<PublicIssueFeed>;
+}
+
+export type CreateMemberIssueCommand = {
+  sessionToken: string;
+  idempotencyKey: string;
+  question: string;
+  context?: string | null;
+  choiceA: string;
+  choiceB: string;
+  interestCardCode: InterestCardCode;
+};
+
+export type CreatedMemberIssue = {
+  issue: {
+    id: string;
+    version: 1;
+    question: string;
+    context: string | null;
+    choices: [{ code: "A"; label: string }, { code: "B"; label: string }];
+    interestCardCode: InterestCardCode;
+    publishedAt: string;
+  };
+  created: boolean;
+};
+
+export interface IssueWriteService {
+  createMemberIssue(command: CreateMemberIssueCommand): Promise<CreatedMemberIssue>;
 }
