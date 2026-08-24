@@ -1,0 +1,241 @@
+{
+  "schemaVersion": 1,
+  "asOf": "2026-08-25",
+  "policy": {
+    "communityRole": "TOPIC_DISCOVERY_AND_RELATABILITY_ONLY_NOT_FACT_EVIDENCE",
+    "factSourceRole": "VERIFY_TIME_SENSITIVE_FACTUAL_PREMISES",
+    "publicationRequirement": "HUMAN_LINK_AND_SOURCE_FIT_REVIEW"
+  },
+  "sources": [
+    {
+      "id": "COM-PANN-CAFE-LAPTOP-20260518",
+      "platform": "Nate Pann",
+      "title": "카페에서 노트북 사용하다가 눈치 받은 상황",
+      "url": "https://pann.nate.com/talk/375415403",
+      "observedAt": "2026-08-25",
+      "publishedAt": "2026-05-18",
+      "role": "DISCOVERY_SIGNAL_ONLY",
+      "themes": ["CAFE_ETIQUETTE", "SHARED_SPACE"]
+    },
+    {
+      "id": "COM-PANN-CAFE-FOOD-20260405",
+      "platform": "Nate Pann",
+      "title": "카페에서 떡 먹는거 괜찮을까요?",
+      "url": "https://pann.nate.com/talk/375340644",
+      "observedAt": "2026-08-25",
+      "publishedAt": "2026-04-05",
+      "role": "DISCOVERY_SIGNAL_ONLY",
+      "themes": ["CAFE_ETIQUETTE", "PUBLIC_NORM"]
+    },
+    {
+      "id": "COM-PANN-WEDDING-GIFT-10-20260222",
+      "platform": "Nate Pann",
+      "title": "근데 요즘 축의금 10만원만 해도 욕먹는 금액인가여?",
+      "url": "https://m.pann.nate.com/talk/375255194",
+      "observedAt": "2026-08-25",
+      "publishedAt": "2026-02-22",
+      "role": "DISCOVERY_SIGNAL_ONLY",
+      "themes": ["CEREMONY_COST", "RELATIONSHIP_MONEY"]
+    },
+    {
+      "id": "COM-PANN-WEDDING-GIFT-20-20260118",
+      "platform": "Nate Pann",
+      "title": "친구 결혼식 처음인데, 절친 축의금 20만원이면 적당한가요?",
+      "url": "https://m.pann.nate.com/talk/375170849",
+      "observedAt": "2026-08-25",
+      "publishedAt": "2026-01-18",
+      "role": "DISCOVERY_SIGNAL_ONLY",
+      "themes": ["CEREMONY_COST", "RELATIONSHIP_MONEY"]
+    },
+    {
+      "id": "COM-PANN-BABY-GIFT-20260506",
+      "platform": "Nate Pann",
+      "title": "아기 돌선물 어떻게 하는게 맞나요?",
+      "url": "https://m.pann.nate.com/talk/375396696",
+      "observedAt": "2026-08-25",
+      "publishedAt": "2026-05-06",
+      "role": "DISCOVERY_SIGNAL_ONLY",
+      "themes": ["CEREMONY_COST", "FAMILY_EXPECTATION"]
+    },
+    {
+      "id": "COM-PANN-FIRST-JOB-20260105",
+      "platform": "Nate Pann",
+      "title": "얘들아 나 카페 첫 알바인데 짤림",
+      "url": "https://pann.nate.com/talk/375139315",
+      "observedAt": "2026-08-25",
+      "publishedAt": "2026-01-05",
+      "role": "DISCOVERY_SIGNAL_ONLY",
+      "themes": ["ENTRY_JOB", "TRAINING", "WORKPLACE_EXPECTATION"]
+    },
+    {
+      "id": "COM-PANN-SEOUL-HOUSING-20260103",
+      "platform": "Nate Pann",
+      "title": "서울 집은 어떻게 사나요?",
+      "url": "https://pann.nate.com/talk/375132608",
+      "observedAt": "2026-08-25",
+      "publishedAt": "2026-01-03",
+      "role": "DISCOVERY_SIGNAL_ONLY",
+      "themes": ["HOUSING_AFFORDABILITY", "MARRIAGE_ASSETS"]
+    },
+    {
+      "id": "COM-PANN-MARRIAGE-ASSETS-20260415",
+      "platform": "Nate Pann",
+      "title": "결혼 논의 중인데요",
+      "url": "https://m.pann.nate.com/talk/375358605",
+      "observedAt": "2026-08-25",
+      "publishedAt": "2026-04-15",
+      "role": "DISCOVERY_SIGNAL_ONLY",
+      "themes": ["MARRIAGE_ASSETS", "FINANCIAL_BOUNDARY"]
+    },
+    {
+      "id": "COM-PANN-APARTMENT-PLAYGROUND-20250611",
+      "platform": "Nate Pann",
+      "title": "아파트부심이 존재하나봐요.",
+      "url": "https://pann.nate.com/talk/374450935",
+      "observedAt": "2026-08-25",
+      "publishedAt": "2025-06-11",
+      "role": "DISCOVERY_SIGNAL_ONLY",
+      "themes": ["APARTMENT_SHARED_SPACE", "NEIGHBORHOOD_BOUNDARY"]
+    },
+    {
+      "id": "COM-BLIND-SALARY-NEGOTIATION-20260206",
+      "platform": "Blind",
+      "title": "처우협의 조정 요청",
+      "url": "https://www.teamblind.com/kr/post/%EC%B2%98%EC%9A%B0%ED%98%91%EC%9D%98-%EC%A1%B0%EC%A0%95-%EC%9A%94%EC%B2%AD-zgnc2gls",
+      "observedAt": "2026-08-25",
+      "publishedAt": "2026-02-06",
+      "role": "DISCOVERY_SIGNAL_ONLY",
+      "themes": ["SALARY_TRANSPARENCY", "JOB_CHANGE"]
+    },
+    {
+      "id": "COM-BLIND-AI-ASSESSMENT-20260115",
+      "platform": "Blind",
+      "title": "AI 역량검사",
+      "url": "https://www.teamblind.com/kr/post/AI-%EC%97%AD%EB%9F%89%EA%B2%80%EC%82%AC-0fuz1q6m",
+      "observedAt": "2026-08-25",
+      "publishedAt": "2026-01-15",
+      "role": "DISCOVERY_SIGNAL_ONLY",
+      "themes": ["AI_HIRING", "JOB_SEARCH"]
+    },
+    {
+      "id": "COM-BLIND-AI-JOB-202608",
+      "platform": "Blind",
+      "title": "AI가 발전해도",
+      "url": "https://www.teamblind.com/kr/post/AI%EA%B0%80-%EB%B0%9C%EC%A0%84%ED%95%B4%EB%8F%84-b7bycpsn",
+      "observedAt": "2026-08-25",
+      "publishedAt": "2026-08-24",
+      "role": "DISCOVERY_SIGNAL_ONLY",
+      "themes": ["AI_JOB_DISPLACEMENT", "CAREER_FUTURE"]
+    },
+    {
+      "id": "COM-BLIND-REMOTE-WORK-20251217",
+      "platform": "Blind",
+      "title": "요즘 쿠팡 재택근무 분위기 어떤가요?",
+      "url": "https://www.teamblind.com/kr/company/COUPANG/posts",
+      "observedAt": "2026-08-25",
+      "publishedAt": "2025-12-17",
+      "role": "DISCOVERY_SIGNAL_ONLY",
+      "themes": ["REMOTE_WORK", "COMMUTE"]
+    },
+    {
+      "id": "COM-BLIND-VIBE-CODING-202607",
+      "platform": "Blind",
+      "title": "바이브 코딩 유행이라 나도 해봤다가 앱까지 출시함",
+      "url": "https://www.teamblind.com/kr/company/%EB%A7%81%ED%81%AC%EC%8A%A4%ED%83%80%ED%8A%B8/posts",
+      "observedAt": "2026-08-25",
+      "publishedAt": "2026-07-01",
+      "role": "DISCOVERY_SIGNAL_ONLY",
+      "themes": ["VIBE_CODING", "SIDE_PROJECT"]
+    },
+    {
+      "id": "COM-BLIND-CHILDCARE-EXTENDED-20260205",
+      "platform": "Blind",
+      "title": "어린이집 연장반..",
+      "url": "https://www.teamblind.com/kr/post/%EC%96%B4%EB%A6%B0%EC%9D%B4%EC%A7%91-%EC%97%B0%EC%9E%A5%EB%B0%98-ec1pwrb6",
+      "observedAt": "2026-08-25",
+      "publishedAt": "2026-02-05",
+      "role": "DISCOVERY_SIGNAL_ONLY",
+      "themes": ["CHILDCARE", "WORK_FLEXIBILITY", "CARE_GUILT"]
+    },
+    {
+      "id": "COM-BLIND-PUBLIC-CHILDCARE-20250206",
+      "platform": "Blind",
+      "title": "아파트내 국공립어린이집 유치 논쟁",
+      "url": "https://www.teamblind.com/kr/post/%EC%95%84%ED%8C%8C%ED%8A%B8%EB%82%B4-%EA%B5%AD%EA%B3%B5%EB%A6%BD%EC%96%B4%EB%A6%B0%EC%9D%B4%EC%A7%91-%EC%9C%A0%EC%B9%98-%EB%AA%BB%ED%95%98%EA%B2%8C-%EB%B0%98%EB%8C%80%ED%8C%8C%EB%93%A4%EC%9D%B4-%ED%88%AC%ED%91%9C%EB%A5%BC-%EB%A7%89%EA%B3%A0-%EC%9E%88%EC%96%B4-jx6VLCtP",
+      "observedAt": "2026-08-25",
+      "publishedAt": "2025-02-06",
+      "role": "DISCOVERY_SIGNAL_ONLY",
+      "themes": ["PUBLIC_CHILDCARE", "APARTMENT_SHARED_SPACE"]
+    },
+    {
+      "id": "COM-THEQOO-AI-JOB-FEAR-20260214",
+      "platform": "TheQoo",
+      "title": "개발자도, 회계사도... AI 공포에 두려운 취준생들",
+      "url": "https://theqoo.net/square/4094701314",
+      "observedAt": "2026-08-25",
+      "publishedAt": "2026-02-14",
+      "role": "DISCOVERY_SIGNAL_ONLY",
+      "themes": ["AI_JOB_DISPLACEMENT", "YOUTH_EMPLOYMENT"]
+    },
+    {
+      "id": "COM-THEQOO-AI-VIDEO-20260127",
+      "platform": "TheQoo",
+      "title": "2023 vs 2026 영상 AI 기술력 비교",
+      "url": "https://theqoo.net/square/4074655038",
+      "observedAt": "2026-08-25",
+      "publishedAt": "2026-01-27",
+      "role": "DISCOVERY_SIGNAL_ONLY",
+      "themes": ["AI_CONTENT", "SYNTHETIC_MEDIA"]
+    },
+    {
+      "id": "COM-THEQOO-AI-PATROL-20260428",
+      "platform": "TheQoo",
+      "title": "신형 AI 순찰차",
+      "url": "https://theqoo.net/square/4181557279",
+      "observedAt": "2026-08-25",
+      "publishedAt": "2026-04-28",
+      "role": "DISCOVERY_SIGNAL_ONLY",
+      "themes": ["PUBLIC_AI", "AI_CAMERA", "SAFETY"]
+    },
+    {
+      "id": "COM-RULI-AI-BIGTECH-20251002",
+      "platform": "Ruliweb",
+      "title": "AI 빅테크 사회기반 장악 우려",
+      "url": "https://m.ruliweb.com/community/board/300143/read/72513031",
+      "observedAt": "2026-08-25",
+      "publishedAt": "2025-10-02",
+      "role": "DISCOVERY_SIGNAL_ONLY",
+      "themes": ["AI_PLATFORM_POWER", "PLATFORM_GOVERNANCE"]
+    },
+    {
+      "id": "COM-RULI-GAME-DIFFICULTY-20260324",
+      "platform": "Ruliweb",
+      "title": "게임 조작 난이도 커뮤니티 반응",
+      "url": "https://bbs.ruliweb.com/hobby/board/300143/read/74562386",
+      "observedAt": "2026-08-25",
+      "publishedAt": "2026-03-24",
+      "role": "DISCOVERY_SIGNAL_ONLY",
+      "themes": ["GAME_DIFFICULTY", "ACCESSIBILITY"]
+    },
+    {
+      "id": "COM-MLBPARK-TICKETING-20260321",
+      "platform": "MLBPARK",
+      "title": "개막전 티켓팅 성공",
+      "url": "https://mlbpark.donga.com/mp/b.php?b=kbotown&id=202603210113237202&m=view",
+      "observedAt": "2026-08-25",
+      "publishedAt": "2026-03-21",
+      "role": "DISCOVERY_SIGNAL_ONLY",
+      "themes": ["SPORTS_TICKETING", "FAN_ACCESS"]
+    },
+    {
+      "id": "COM-BLINDBOARD-SUBWAY-202608",
+      "platform": "Blind",
+      "title": "지하철 빈자리 앞에 서 있는 행동 토론",
+      "url": "https://www.teamblind.com/kr/topics/%EB%94%94%EC%9E%90%EC%9D%B8",
+      "observedAt": "2026-08-25",
+      "publishedAt": "2026-08-25",
+      "role": "DISCOVERY_SIGNAL_ONLY",
+      "themes": ["PUBLIC_TRANSIT_ETIQUETTE", "DAILY_NORM"]
+    }
+  ]
+}

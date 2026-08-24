@@ -8,6 +8,11 @@ import { z } from "zod";
 
 import { INTEREST_CARD_CODES } from "./modules/interests/contracts.js";
 import { computeIssueContentHash } from "./modules/issue-publication/content-hash.js";
+import {
+  buildExpandedIssuePacks,
+  collectComparisonIssues,
+} from "./modules/issue-publication/editorial-catalog.js";
+import { loadIssueManifest } from "./modules/issue-publication/manifest.js";
 import { parseIssueManifest } from "./modules/issue-publication/manifest.js";
 
 const normalizedText = (minimum: number, maximum: number) =>
@@ -151,14 +156,64 @@ export function buildIssuePacks(value: unknown) {
 }
 
 function usage() {
-  return "Usage: issue-pack-builder <catalog.json> <output-directory>";
+  return [
+    "Usage:",
+    "  issue-pack-builder <v1-catalog.json> <output-directory>",
+    "  issue-pack-builder <v2-catalog.json> <output-directory> --source-registry <sources.json> --publication-plan <plan.json> [--comparison-manifest <manifest.json>]...",
+  ].join("\n");
+}
+
+type ExpandedArguments = {
+  sourceRegistryPath: string;
+  publicationPlanPath: string;
+  comparisonManifestPaths: string[];
+};
+
+function parseExpandedArguments(values: string[]): ExpandedArguments {
+  let sourceRegistryPath: string | undefined;
+  let publicationPlanPath: string | undefined;
+  const comparisonManifestPaths: string[] = [];
+  for (let index = 0; index < values.length; index += 2) {
+    const flag = values[index];
+    const value = values[index + 1];
+    if (!flag || !value) throw new Error(usage());
+    if (flag === "--source-registry") sourceRegistryPath = value;
+    else if (flag === "--publication-plan") publicationPlanPath = value;
+    else if (flag === "--comparison-manifest") comparisonManifestPaths.push(value);
+    else throw new Error(`Unknown option ${flag}.\n${usage()}`);
+  }
+  if (!sourceRegistryPath || !publicationPlanPath) throw new Error(usage());
+  return { sourceRegistryPath, publicationPlanPath, comparisonManifestPaths };
 }
 
 async function main() {
   const [catalogPath, outputDirectory, ...rest] = process.argv.slice(2);
-  if (!catalogPath || !outputDirectory || rest.length > 0) throw new Error(usage());
+  if (!catalogPath || !outputDirectory) throw new Error(usage());
   const catalog = JSON.parse(await readFile(resolve(catalogPath), "utf8")) as unknown;
-  const packs = buildIssuePacks(catalog);
+  const schemaVersion = z.object({ schemaVersion: z.number().int() }).parse(catalog).schemaVersion;
+  let packs;
+  if (schemaVersion === 1) {
+    if (rest.length > 0) throw new Error(usage());
+    packs = buildIssuePacks(catalog);
+  } else if (schemaVersion === 2) {
+    const arguments_ = parseExpandedArguments(rest);
+    const [registry, plan, comparisonManifests] = await Promise.all([
+      readFile(resolve(arguments_.sourceRegistryPath), "utf8").then(
+        (value) => JSON.parse(value) as unknown,
+      ),
+      readFile(resolve(arguments_.publicationPlanPath), "utf8").then(
+        (value) => JSON.parse(value) as unknown,
+      ),
+      Promise.all(arguments_.comparisonManifestPaths.map((path) => loadIssueManifest(path))),
+    ]);
+    packs = buildExpandedIssuePacks(catalog, registry, plan, {
+      comparisonIssues: collectComparisonIssues(
+        comparisonManifests.map((loaded) => loaded.manifest),
+      ),
+    });
+  } else {
+    throw new Error(`Unsupported catalog schemaVersion ${schemaVersion}.`);
+  }
   const absoluteOutputDirectory = resolve(outputDirectory);
   await mkdir(absoluteOutputDirectory, { recursive: true });
   for (const pack of packs) {
