@@ -109,11 +109,20 @@ function toggleAsGuest(
   });
 }
 
-function toggleAsMember(commentId: string, token: string, idempotencyKey = randomUUID()) {
+function toggleAsMember(
+  commentId: string,
+  token: string,
+  anonymousSubjectId?: string,
+  idempotencyKey = randomUUID(),
+) {
   return app.inject({
     method: "POST",
     url: `/v1/comments/${commentId}/reactions/helpful`,
-    headers: { authorization: `Bearer ${token}`, "idempotency-key": idempotencyKey },
+    headers: {
+      authorization: `Bearer ${token}`,
+      ...(anonymousSubjectId ? { "x-anonymous-subject-id": anonymousSubjectId } : {}),
+      "idempotency-key": idempotencyKey,
+    },
   });
 }
 
@@ -183,6 +192,72 @@ describe("Comment HELPFUL reaction API", () => {
     const response = await toggleAsGuest(commentId, anonymousSubjectId);
     expect(response.statusCode).toBe(403);
     expect(response.json()).toMatchObject({ code: "VOTE_REQUIRED" });
+  });
+
+  it("accepts the current unlinked Guest Vote for a signed-in Member", async () => {
+    const issue = await createIssue();
+    const commentId = await createPublishedComment(issue);
+    const currentGuest = await createGuestVote(issue.issueId, issue.choiceBId);
+    const member = await createSession(`unlinked-reaction-member-${issue.issueId}`);
+
+    const response = await toggleAsMember(commentId, member.token, currentGuest);
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      reaction: { code: "HELPFUL", active: true, helpfulCount: 1 },
+    });
+  });
+
+  it("does not borrow a Guest Vote linked to a different Member", async () => {
+    const issue = await createIssue();
+    const commentId = await createPublishedComment(issue);
+    const linkedGuest = await createGuestVote(issue.issueId, issue.choiceBId);
+    await createSession(`guest-owner-${issue.issueId}`, linkedGuest);
+    const otherMember = await createSession(`other-reaction-member-${issue.issueId}`);
+
+    const response = await toggleAsMember(commentId, otherMember.token, linkedGuest);
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toMatchObject({ code: "VOTE_REQUIRED" });
+  });
+
+  it("lets an author react to their own Comment", async () => {
+    const issue = await createIssue();
+    const authorGuest = await createGuestVote(issue.issueId, issue.choiceAId);
+    const author = await createSession(`self-reaction-author-${issue.issueId}`, authorGuest);
+    const comment = await app.inject({
+      method: "POST",
+      url: `/v1/issues/${issue.issueId}/comments`,
+      headers: { authorization: `Bearer ${author.token}`, "idempotency-key": randomUUID() },
+      payload: { body: "본인 공감이 허용되는 댓글" },
+    });
+    const commentId = comment.json<{ comment: { id: string } }>().comment.id;
+
+    const response = await toggleAsMember(commentId, author.token);
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      reaction: { code: "HELPFUL", active: true, helpfulCount: 1 },
+    });
+  });
+
+  it("migrates a Guest reaction on login and toggles it off as the Member", async () => {
+    const issue = await createIssue();
+    const commentId = await createPublishedComment(issue);
+    const guest = await createGuestVote(issue.issueId, issue.choiceBId);
+    expect((await toggleAsGuest(commentId, guest)).statusCode).toBe(200);
+
+    const member = await createSession(`migrated-reaction-member-${issue.issueId}`, guest);
+    expect(member.guestLink).toMatchObject({
+      migratedReactions: 1,
+      mergedDuplicateReactions: 0,
+    });
+
+    const response = await toggleAsMember(commentId, member.token);
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      reaction: { code: "HELPFUL", active: false, helpfulCount: 0 },
+    });
   });
 
   it("collapses duplicate Guest and Member reactions when identity is linked", async () => {

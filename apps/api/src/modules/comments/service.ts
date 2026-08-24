@@ -946,6 +946,24 @@ export function createCommentService(database: Database["db"]): CommentService {
             )
             .limit(1);
         }
+        if (!eligibleVote && actorMemberId && command.anonymousSubjectId) {
+          [eligibleVote] = await transaction
+            .select({ id: votes.id })
+            .from(voterSubjects)
+            .innerJoin(votes, eq(votes.subjectId, voterSubjects.id))
+            .leftJoin(guestMemberLinks, eq(guestMemberLinks.guestSubjectId, voterSubjects.id))
+            .where(
+              and(
+                eq(voterSubjects.kind, "GUEST"),
+                eq(voterSubjects.anonymousSubjectId, command.anonymousSubjectId),
+                eq(votes.issueId, target.issueId),
+                eq(votes.issueVersion, target.issueVersion),
+                eq(votes.integrityState, "ACCEPTED"),
+                or(isNull(guestMemberLinks.memberId), eq(guestMemberLinks.memberId, actorMemberId)),
+              ),
+            )
+            .limit(1);
+        }
         if (!eligibleVote) {
           throw new CommentError(
             "VOTE_REQUIRED",
