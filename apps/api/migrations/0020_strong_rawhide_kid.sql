@@ -1,1 +1,1 @@
-ALTER TYPE "public"."subject_kind" ADD VALUE 'DELETED_MEMBER';
+ALTER TYPE "public"."subject_kind" ADD VALUE IF NOT EXISTS 'DELETED_MEMBER';

@@ -7,7 +7,7 @@ CREATE TYPE "public"."outbox_status" AS ENUM('PENDING', 'PUBLISHED', 'FAILED');-
 CREATE TYPE "public"."result_integrity_state" AS ENUM('NORMAL', 'MONITORING', 'DEGRADED', 'UNDER_REVIEW', 'RESULT_LOCKED', 'CORRECTED');--> statement-breakpoint
 CREATE TYPE "public"."result_visibility" AS ENUM('PRE_VOTE_HIDDEN', 'RESULT_VISIBLE', 'RESULT_LOCKED', 'RESULT_DEGRADED', 'RESULT_UNAVAILABLE');--> statement-breakpoint
 CREATE TYPE "public"."risk_level" AS ENUM('LOW', 'MEDIUM', 'HIGH', 'RESTRICTED');--> statement-breakpoint
-CREATE TYPE "public"."subject_kind" AS ENUM('GUEST', 'MEMBER', 'VERIFIED_MEMBER');--> statement-breakpoint
+CREATE TYPE "public"."subject_kind" AS ENUM('GUEST', 'MEMBER', 'VERIFIED_MEMBER', 'DELETED_MEMBER');--> statement-breakpoint
 CREATE TYPE "public"."vote_action" AS ENUM('RESTORED', 'MERGED', 'RECLASSIFIED', 'AGGREGATE_REBUILT');--> statement-breakpoint
 CREATE TYPE "public"."vote_integrity_state" AS ENUM('ACCEPTED', 'REVIEW', 'REJECTED_DUPLICATE', 'REJECTED_ABUSE', 'INVALIDATED');--> statement-breakpoint
 CREATE TYPE "public"."vote_request_state" AS ENUM('RECEIVED', 'VALIDATING', 'CHALLENGE_REQUIRED', 'CHALLENGE_PASSED', 'PROCESSING', 'COMPLETED', 'FAILED_RETRYABLE', 'FAILED_FINAL');--> statement-breakpoint
