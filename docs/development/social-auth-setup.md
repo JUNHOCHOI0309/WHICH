@@ -78,8 +78,9 @@ User ID만 내부 Provider Subject로 사용합니다.
 - 운영 서비스 URL: `https://whichone.site`
 - 운영 Callback: `https://whichone.site/api/auth/naver/callback`
 
-WHICH는 네이버의 OIDC Discovery와 Authorization Code + PKCE를 사용합니다. 로그인 식별에는
-최소 범위인 `openid`만 요청하고, 검증된 ID Token의 pairwise `sub`만 Provider Subject로
+WHICH는 네이버의 OIDC Discovery와 Authorization Code + PKCE를 사용합니다. 요청 범위는
+`openid profile`이며, 검증된 ID Token의 pairwise `sub`만 Provider Subject로 사용합니다.
+표시 이름은 동의받은 `nickname`을 우선하고, 없으면 `name`, 둘 다 없으면 `네이버 회원`을
 사용합니다. 네이버 Access Token, Refresh Token, ID Token은 Member Session 생성 후 저장하지
 않으며 이메일 주소만으로 기존 계정을 병합하지 않습니다.
 
@@ -109,7 +110,7 @@ Kakao Developers에서 Web용 앱을 만들고 다음 순서로 설정합니다.
 2. **OpenID Connect**를 `ON`으로 전환합니다.
 3. REST API 키의 Redirect URI에 아래 Callback을 등록합니다.
 4. REST API 키의 Client Secret을 생성하고 활성화합니다.
-5. 동의항목은 프로필 정보만 사용하며 이메일은 필수로 요청하지 않습니다.
+5. 동의항목은 닉네임을 사용하며 이메일은 필수로 요청하지 않습니다.
 
 - 개발 Callback: `http://localhost:3000/api/auth/kakao/callback`
 - 운영 Callback: `https://whichone.site/api/auth/kakao/callback`
@@ -123,9 +124,13 @@ FEATURE_KAKAO_LOGIN_ENABLED=false
 ```
 
 WHICH는 Kakao OIDC Issuer `https://kauth.kakao.com`의 Discovery Metadata와 Authorization
-Code + PKCE S256을 사용합니다. 검증된 ID Token의 `sub`를 Provider Subject로 사용하고
-`nickname`은 최초 표시 이름에만 사용합니다. Access·Refresh·ID Token은 저장하지 않으며 이메일로
-Google·X·Naver 계정과 자동 병합하지 않습니다.
+Code + PKCE S256을 사용하고 `openid profile_nickname`을 요청합니다. 검증된 ID Token의 `sub`를
+Provider Subject로 사용하고 `nickname`을 표시 이름으로 사용합니다. Access·Refresh·ID Token은
+저장하지 않으며 이메일로 Google·X·Naver 계정과 자동 병합하지 않습니다.
+
+기존 계정의 표시 이름이 정확히 Provider 기본값(`네이버 회원`, `카카오 회원`, `WHICH 회원`)인
+경우에만 다음 해당 Provider 로그인에서 새로 확인한 실제 프로필 이름으로 갱신합니다. 사용자가
+직접 설정했거나 기본값과 다른 기존 표시 이름은 로그인만으로 덮어쓰지 않습니다.
 
 Credential 등록과 운영 Callback 실제 계정 QA가 끝날 때까지
 `FEATURE_KAKAO_LOGIN_ENABLED=false`를 유지합니다. 이 상태에서는 로그인 버튼이 숨겨지고 Start
