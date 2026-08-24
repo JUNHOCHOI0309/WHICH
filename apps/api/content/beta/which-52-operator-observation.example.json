@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "betaId": "which-52-limited-beta-v1",
+  "observationStartedAt": "2026-08-25T00:00:00.000Z",
+  "observationEndedAt": null,
+  "invitedUsers": 0,
+  "feedbackResponses": 0,
+  "feedbackThemes": [],
+  "incidents": [],
+  "releaseBlockers": [],
+  "notes": [
+    "이 파일에는 이름, 이메일, 계정 ID, Cookie, OAuth Subject 같은 개인정보를 기록하지 않습니다."
+  ]
+}
