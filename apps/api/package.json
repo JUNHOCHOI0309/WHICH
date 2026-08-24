@@ -9,7 +9,7 @@
     "analytics:retention": "tsx src/analytics-operator.ts retention",
     "analytics:summary": "tsx src/analytics-operator.ts summary",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
+    "db:migrate": "tsx src/database/migrate.ts",
     "db:seed": "tsx src/database/seed.ts",
     "db:studio": "drizzle-kit studio",
     "dev": "tsx watch src/server.ts",
