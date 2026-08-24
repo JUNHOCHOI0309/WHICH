@@ -145,14 +145,11 @@ button.navLink {
   justify-content: center;
   padding-inline: 18px;
   font-weight: 900;
+  text-align: center;
   transition:
     background 160ms ease,
     color 160ms ease,
     transform 160ms ease;
-}
-
-.questionButton > span {
-  color: currentcolor;
 }
 
 .questionButton:hover,
@@ -254,23 +251,7 @@ button.navLink {
 
 .bottomNav .mobileQuestionButton {
   color: var(--which-cyan-strong);
-}
-
-.bottomNav .mobileQuestionButton > span {
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  background: var(--which-cyan);
-  color: #062a31;
-  display: grid;
-  place-items: center;
-  font-size: 1.15rem;
-  line-height: 1;
-}
-
-.bottomNav .mobileQuestionButton[aria-expanded="true"] > span {
-  background: var(--which-cyan-strong);
-  color: var(--which-surface);
+  text-align: center;
 }
 
 @media (max-width: 1319px) {

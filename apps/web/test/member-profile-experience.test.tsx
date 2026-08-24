@@ -22,7 +22,7 @@ describe("Member private profile experience", () => {
       vi.fn(async () => jsonResponse({ code: "SESSION_INVALID", message: "login" }, 401)),
     );
 
-    render(<MemberProfileExperience kakaoLoginEnabled naverLoginEnabled />);
+    render(<MemberProfileExperience />);
 
     expect(await screen.findByText("로그인하면 내 선택이 이어져요.")).toBeVisible();
     expect(screen.getByText(/전체 투표 기록은 다른 사람에게 공개되지 않습니다/)).toBeVisible();
@@ -79,7 +79,7 @@ describe("Member private profile experience", () => {
       ),
     );
 
-    render(<MemberProfileExperience naverLoginEnabled={false} />);
+    render(<MemberProfileExperience />);
 
     expect(await screen.findByRole("heading", { name: "테스트 회원님의 선택" })).toBeVisible();
     expect(screen.getByText("아침형 인간 vs 저녁형 인간")).toBeVisible();
@@ -90,45 +90,7 @@ describe("Member private profile experience", () => {
       "/issues/591f2e90-996a-50c5-af46-967dd0793000",
     );
     expect(screen.getByText("선택 기록은 공개 프로필과 분리됩니다.")).toBeVisible();
-    expect(screen.getByText("Google").closest("article")).toHaveTextContent("연결됨");
-    expect(screen.getByText("X").closest("article")).toHaveTextContent("연결되지 않음");
-    expect(screen.getByText("X").closest("article")?.querySelector("a")).toHaveAttribute(
-      "href",
-      "/api/auth/x/start?returnTo=%2Fme%23connected-accounts&intent=link",
-    );
-  });
-
-  it("explains when an existing Member needs reviewed account merging", async () => {
-    window.history.replaceState({}, "", "/me?auth=merge-review#connected-accounts");
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () =>
-        jsonResponse({
-          member: {
-            id: "member-1",
-            displayName: "병합 검토 회원",
-            status: "ACTIVE",
-            joinedAt: "2026-08-01T00:00:00.000Z",
-            participationCount: 0,
-          },
-          publicProfile: null,
-          identities: [
-            {
-              provider: "NAVER",
-              linkedAt: "2026-08-01T00:00:00.000Z",
-              lastAuthenticatedAt: "2026-08-22T00:00:00.000Z",
-            },
-          ],
-          votes: { items: [], nextCursor: null },
-        }),
-      ),
-    );
-
-    render(<MemberProfileExperience kakaoLoginEnabled naverLoginEnabled />);
-
-    expect(
-      await screen.findByText("이 계정에는 별도 활동 또는 충돌이 있어 자동 병합하지 않았습니다."),
-    ).toHaveAttribute("role", "alert");
+    expect(screen.queryByRole("heading", { name: "로그인 수단 연결" })).not.toBeInTheDocument();
   });
 
   it("creates a public Creator profile from the private Me surface", async () => {
@@ -158,7 +120,7 @@ describe("Member private profile experience", () => {
       }),
     );
 
-    render(<MemberProfileExperience naverLoginEnabled={false} />);
+    render(<MemberProfileExperience />);
 
     const handle = await screen.findByRole("textbox", { name: /Handle/ });
     fireEvent.change(handle, { target: { value: "question_maker" } });
@@ -197,7 +159,7 @@ describe("Member private profile experience", () => {
       }),
     );
 
-    render(<MemberProfileExperience naverLoginEnabled={false} />);
+    render(<MemberProfileExperience />);
     fireEvent.click(await screen.findByRole("button", { name: "로그아웃" }));
 
     await waitFor(() => expect(screen.getByText("로그인하면 내 선택이 이어져요.")).toBeVisible());
@@ -236,7 +198,7 @@ describe("Member private profile experience", () => {
       }),
     );
 
-    render(<MemberProfileExperience naverLoginEnabled={false} />);
+    render(<MemberProfileExperience />);
     fireEvent.click(await screen.findByRole("button", { name: "로그아웃" }));
 
     expect(await screen.findByText("로그아웃하지 못했습니다. 다시 시도해 주세요.")).toBeVisible();
@@ -274,7 +236,7 @@ describe("Member private profile experience", () => {
       }),
     );
 
-    render(<MemberProfileExperience naverLoginEnabled={false} />);
+    render(<MemberProfileExperience />);
 
     fireEvent.click(await screen.findByRole("button", { name: "회원 탈퇴" }));
     const submit = screen.getByRole("button", { name: "회원 탈퇴 확정" });
@@ -335,7 +297,7 @@ describe("Member private profile experience", () => {
       }),
     );
 
-    render(<MemberProfileExperience naverLoginEnabled={false} />);
+    render(<MemberProfileExperience />);
     fireEvent.click(await screen.findByRole("button", { name: "회원 탈퇴" }));
     fireEvent.change(screen.getByLabelText("현재 비밀번호"), {
       target: { value: "wrong password" },
