@@ -53,6 +53,24 @@ during Feed inspection. The identifier is never used for Vote, Comment, Reaction
 - [ ] External OAuth console callback URLs match the canonical production URL.
 - [ ] Deferred Outbox status is explicitly acknowledged until a real consumer is introduced.
 
+## Operator dashboard checklist
+
+- [ ] `/ops` rejects a logged-out browser without returning an operational payload.
+- [ ] An ordinary Member receives `OPERATOR_ROLE_REQUIRED`, and the denied read is present in
+      `operator_audit_logs`.
+- [ ] The designated operator has an active grant shown by `node apps/api/dist/ops-operator.js list`.
+- [ ] Cloudflare Access protects `/ops*` and `/api/ops/*`; a request without a valid application JWT
+      is blocked before the dashboard BFF forwards it.
+- [ ] Release ID and migration count match the deployed release and Render pre-deploy migration.
+- [ ] The 1/7/30-day Funnel reports its aggregate refresh time and Vote reconciliation is
+      `CONSISTENT`.
+- [ ] No email, OAuth subject, Member session, secret, raw event, IP address, or SQL appears in the
+      browser response.
+- [ ] The latest provider backup has been checked and recorded with
+      `ops-operator.js confirm-backup`.
+- [ ] PC and mobile Web can read the dashboard without horizontal overflow; five-minute refresh does
+      not create a sustained database latency anomaly.
+
 ## User-flow matrix
 
 Use one dedicated low-risk Issue. Record `PASS`, `FAIL`, or `PRIOR EVIDENCE` with a short note.
