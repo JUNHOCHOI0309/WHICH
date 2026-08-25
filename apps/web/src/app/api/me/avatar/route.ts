@@ -66,7 +66,7 @@ export async function PUT(request: NextRequest) {
         { status: 401 },
       );
     }
-    return NextResponse.json({ member });
+    return NextResponse.json({ member: { ...member, avatarSource: "CUSTOM" as const } });
   } catch (error) {
     if (error instanceof AvatarStorageError) return storageErrorResponse(error);
     return NextResponse.json(
@@ -98,7 +98,7 @@ export async function DELETE(request: NextRequest) {
         { status: 401 },
       );
     }
-    return NextResponse.json({ member });
+    return NextResponse.json({ member: { ...member, avatarSource: "INITIALS" as const } });
   } catch {
     return NextResponse.json(
       { code: "AVATAR_DELETE_FAILED", message: "프로필 이미지를 삭제하지 못했습니다." },

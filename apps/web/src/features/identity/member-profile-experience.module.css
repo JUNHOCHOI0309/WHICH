@@ -61,6 +61,11 @@
   gap: 20px;
 }
 
+.profileIdentityCopy {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
 .profileAvatar,
 .profileAvatarFallback {
   width: 100%;
@@ -185,7 +190,13 @@
 }
 
 .avatarSuccess {
-  color: var(--which-cyan-strong);
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .avatarError {
@@ -578,5 +589,50 @@
   .historyHeading {
     align-items: start;
     flex-direction: column;
+  }
+}
+
+@media (max-width: 480px) {
+  .profile {
+    gap: 20px;
+    padding: 20px;
+  }
+
+  .profileIdentity {
+    gap: 14px;
+  }
+
+  .avatarControl {
+    width: clamp(62px, 20vw, 76px);
+  }
+
+  .profileIdentityCopy h1 {
+    max-width: none;
+    font-size: clamp(1.45rem, 7.2vw, 1.8rem);
+    letter-spacing: -0.055em;
+    overflow-wrap: anywhere;
+    word-break: normal;
+  }
+
+  .profileIdentityCopy > p {
+    font-size: 0.6rem;
+    letter-spacing: 0.09em;
+  }
+
+  .profileIdentityCopy > span {
+    margin-top: 10px;
+    font-size: 0.82rem;
+    line-height: 1.55;
+  }
+
+  .avatarPickerHint {
+    min-height: 21px;
+    font-size: 0.56rem;
+  }
+
+  .avatarDeleteButton {
+    bottom: -8px;
+    min-height: 22px;
+    padding: 4px 8px;
   }
 }

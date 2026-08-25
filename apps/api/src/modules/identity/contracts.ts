@@ -104,6 +104,7 @@ export type MemberVoteHistoryItem = {
 
 export type MemberPrivateProfile = {
   member: MemberView & {
+    avatarSource: "INITIALS" | "SOCIAL" | "CUSTOM";
     joinedAt: string;
     participationCount: number;
   };

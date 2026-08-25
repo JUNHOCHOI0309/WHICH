@@ -104,6 +104,11 @@ function toMemberView(member: typeof members.$inferSelect): MemberView {
   };
 }
 
+function privateAvatarSource(member: typeof members.$inferSelect) {
+  if (!member.avatarUrl) return "INITIALS" as const;
+  return member.avatarSourceProvider ? ("SOCIAL" as const) : ("CUSTOM" as const);
+}
+
 function normalizedDisplayName(value: string) {
   const normalized = value.trim().replace(/\s+/g, " ");
   return normalized.length > 0 ? normalized.slice(0, 80) : "WHICH 회원";
@@ -1597,6 +1602,7 @@ export function createMemberIdentityService(
       return {
         member: {
           ...toMemberView(session.member),
+          avatarSource: privateAvatarSource(session.member),
           joinedAt: session.member.createdAt.toISOString(),
           participationCount,
         },

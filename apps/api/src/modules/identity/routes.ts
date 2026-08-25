@@ -71,6 +71,11 @@ const privateProfileSchema = Type.Object({
   member: Type.Intersect([
     memberSchema,
     Type.Object({
+      avatarSource: Type.Union([
+        Type.Literal("INITIALS"),
+        Type.Literal("SOCIAL"),
+        Type.Literal("CUSTOM"),
+      ]),
       joinedAt: Type.String({ format: "date-time" }),
       participationCount: Type.Integer({ minimum: 0 }),
     }),
