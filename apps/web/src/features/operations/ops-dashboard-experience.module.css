@@ -47,6 +47,40 @@
   margin: 0 auto;
   padding: 42px 24px 72px;
 }
+.tabs {
+  display: flex;
+  gap: 8px;
+  margin: -16px 0 32px;
+  padding: 6px;
+  border: 1px solid #d8e1e5;
+  border-radius: 16px;
+  background: #fff;
+  width: fit-content;
+}
+.tabs button {
+  min-height: 40px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  color: #5d6d75;
+  font-weight: 800;
+  cursor: pointer;
+}
+.tabs button[aria-current="page"] {
+  background: #092832;
+  color: #fff;
+}
+@media (max-width: 560px) {
+  .tabs {
+    width: 100%;
+  }
+  .tabs button {
+    flex: 1;
+    padding: 0 8px;
+    font-size: 12px;
+  }
+}
 .hero {
   display: flex;
   justify-content: space-between;

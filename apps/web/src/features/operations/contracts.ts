@@ -78,3 +78,68 @@ export type OpsDashboardSnapshot = {
   warnings: Array<{ code: string; severity: "INFO" | "WARNING" | "CRITICAL"; message: string }>;
   runbooks: Array<{ label: string; path: string }>;
 };
+
+export type OpsMemberStatus = "ACTIVE" | "LIMITED" | "SUSPENDED" | "DELETED";
+
+export type OpsMemberRecord = {
+  memberId: string;
+  displayName: string;
+  status: OpsMemberStatus;
+  handle: string | null;
+  profileVisibility: "PRIVATE" | "PUBLIC" | null;
+  providers: string[];
+  joinedAt: string;
+  lastActiveAt: string | null;
+  activity: { votes: number; comments: number; issues: number };
+};
+
+export type OpsMemberPage = {
+  schemaVersion: 1;
+  generatedAt: string;
+  items: OpsMemberRecord[];
+  nextCursor: string | null;
+};
+
+export type OpsEditorialStatus = "PENDING" | "APPROVED" | "NEEDS_CHANGES" | "REJECTED";
+export type OpsEditorialScope = "ACTIVE" | "RESERVE" | "LONG_TERM";
+
+export type OpsEditorialDecision = {
+  status: Exclude<OpsEditorialStatus, "PENDING">;
+  note: string;
+  reviewedBy: string;
+  reviewedAt: string;
+  revision: number;
+  checks: {
+    binaryFit: boolean;
+    choiceParity: boolean;
+    duplicateReview: boolean;
+    sourceReview: boolean;
+  };
+};
+
+export type OpsEditorialCandidate = {
+  candidateId: string;
+  question: string;
+  context: string;
+  choices: Array<{ code: string; label: string }>;
+  category: string;
+  interestCardCodes: string[];
+  editorialArea: string;
+  riskLevel: string;
+  inventoryScope: OpsEditorialScope;
+  discoveryLead: string;
+  sourceRequirement: string;
+  sources: Array<{ id: string; kind: "FACT" | "COMMUNITY"; title?: string; url?: string }>;
+  automatedReviewStatus: string;
+  decision: OpsEditorialDecision | null;
+};
+
+export type OpsEditorialPage = {
+  schemaVersion: 1;
+  generatedAt: string;
+  catalog: { id: string; total: number; approval: string };
+  inventory: { active: number; reserve: number; longTerm: number };
+  counts: Record<OpsEditorialStatus, number>;
+  items: OpsEditorialCandidate[];
+  nextCursor: string | null;
+};

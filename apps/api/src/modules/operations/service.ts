@@ -6,10 +6,25 @@ import { and, eq, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import type { Database } from "../../database/client.js";
-import { operatorAccessGrants, operatorAuditLogs } from "../../database/schema/index.js";
+import {
+  members,
+  operatorAccessGrants,
+  operatorAuditLogs,
+  operatorEditorialDecisions,
+} from "../../database/schema/index.js";
+import { defaultReviewConsolePaths } from "../../editorial-review-console.js";
 import { loadIssueInventoryReadiness } from "../issue-publication/inventory.js";
+import { EditorialReviewConsole } from "../issue-publication/review-console.js";
 
-import type { OpsDashboardService, OpsDashboardSnapshot, OpsDashboardWindow } from "./contracts.js";
+import {
+  OpsReviewConflictError,
+  type OpsDashboardService,
+  type OpsDashboardSnapshot,
+  type OpsDashboardWindow,
+  type OpsEditorialDecision,
+  type OpsEditorialPage,
+  type OpsMemberPage,
+} from "./contracts.js";
 
 const inventoryCandidatesSchema = z.object({
   longTermCandidateIds: z.array(z.string()),
@@ -59,20 +74,472 @@ function editorialSnapshot() {
   return editorialSnapshotPromise;
 }
 
+let editorialReviewStatePromise: ReturnType<typeof loadEditorialReviewState> | undefined;
+
+async function loadEditorialReviewState() {
+  const review = await EditorialReviewConsole.load(defaultReviewConsolePaths());
+  return review.getState();
+}
+
+function editorialReviewState() {
+  editorialReviewStatePromise ??= loadEditorialReviewState();
+  return editorialReviewStatePromise;
+}
+
+function encodeMemberCursor(createdAt: Date | string, memberId: string) {
+  return Buffer.from(
+    JSON.stringify({ createdAt: new Date(createdAt).toISOString(), memberId }),
+  ).toString("base64url");
+}
+
+function decodeMemberCursor(value: string | undefined) {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(Buffer.from(value, "base64url").toString("utf8")) as {
+      createdAt?: unknown;
+      memberId?: unknown;
+    };
+    if (
+      typeof parsed.createdAt !== "string" ||
+      Number.isNaN(Date.parse(parsed.createdAt)) ||
+      typeof parsed.memberId !== "string" ||
+      !/^[0-9a-f-]{36}$/i.test(parsed.memberId)
+    ) {
+      throw new Error("invalid cursor");
+    }
+    return { createdAt: parsed.createdAt, memberId: parsed.memberId };
+  } catch {
+    throw new Error("The Member cursor is invalid.");
+  }
+}
+
+function mapDecision(row: {
+  status: string;
+  note: string;
+  reviewedBy: string;
+  reviewedAt: Date;
+  revision: number;
+  binaryFit: boolean;
+  choiceParity: boolean;
+  duplicateReview: boolean;
+  sourceReview: boolean;
+}): OpsEditorialDecision {
+  return {
+    status: row.status as OpsEditorialDecision["status"],
+    note: row.note,
+    reviewedBy: row.reviewedBy,
+    reviewedAt: row.reviewedAt.toISOString(),
+    revision: row.revision,
+    checks: {
+      binaryFit: row.binaryFit,
+      choiceParity: row.choiceParity,
+      duplicateReview: row.duplicateReview,
+      sourceReview: row.sourceReview,
+    },
+  };
+}
+
+type OpsManagementMethods = Pick<
+  OpsDashboardService,
+  "readMembers" | "readEditorial" | "saveEditorialDecision"
+>;
+
+function createOpsManagementMethods(
+  database: Database["db"],
+  operator: (memberId: string) => Promise<{ memberId: string; displayName: string } | null>,
+  audit: (input: {
+    memberId: string;
+    eventType?: string;
+    outcome: "ALLOWED" | "DENIED" | "SUCCEEDED" | "FAILED";
+    windowDays?: OpsDashboardWindow;
+    requestId?: string;
+    metadata?: Record<string, unknown>;
+  }) => Promise<void>,
+): OpsManagementMethods {
+  return {
+    async readMembers(input): Promise<OpsMemberPage | null> {
+      const actor = await operator(input.memberId);
+      if (!actor) {
+        await audit({
+          memberId: input.memberId,
+          eventType: "OPS_MEMBERS_READ",
+          outcome: "DENIED",
+          requestId: input.requestId,
+          metadata: { reason: "OPERATOR_ROLE_REQUIRED" },
+        });
+        return null;
+      }
+
+      try {
+        const cursor = decodeMemberCursor(input.cursor);
+        const statusClause = input.status ? sql`and m.status = ${input.status}` : sql``;
+        const query = input.query?.trim();
+        const queryClause = query
+          ? sql`and (
+              m.display_name ilike ${`%${query}%`}
+              or coalesce(mp.handle, '') ilike ${`%${query}%`}
+              or m.member_id::text ilike ${`${query}%`}
+            )`
+          : sql``;
+        const cursorClause = cursor
+          ? sql`and (m.created_at, m.member_id) < (${cursor.createdAt}::timestamptz, ${cursor.memberId}::uuid)`
+          : sql``;
+        const result = await database.execute<{
+          member_id: string;
+          display_name: string;
+          status: string;
+          handle: string | null;
+          profile_visibility: "PRIVATE" | "PUBLIC" | null;
+          providers: string[];
+          joined_at: Date | string;
+          last_active_at: Date | string | null;
+          votes: number;
+          comments: number;
+          issues: number;
+        }>(sql`
+          select m.member_id, m.display_name, m.status::text as status,
+            mp.handle, mp.visibility::text as profile_visibility,
+            array(
+              select provider from (
+                select mil.provider::text as provider
+                from member_identity_links mil where mil.member_id = m.member_id
+                union
+                select 'EMAIL' where exists (
+                  select 1 from member_credentials mc where mc.member_id = m.member_id
+                )
+              ) providers order by provider
+            ) as providers,
+            m.created_at as joined_at,
+            greatest(
+              (select max(ms.last_seen_at) from member_sessions ms where ms.member_id = m.member_id),
+              (select max(mil.last_authenticated_at) from member_identity_links mil
+                where mil.member_id = m.member_id),
+              (select max(vs.last_seen_at) from voter_subjects vs where vs.user_id = m.member_id)
+            ) as last_active_at,
+            (select count(*)::int from votes v join voter_subjects vs on vs.subject_id = v.subject_id
+              where vs.user_id = m.member_id and v.integrity_state = 'ACCEPTED') as votes,
+            (select count(*)::int from comments c join voter_subjects vs
+              on vs.subject_id = c.author_subject_id where vs.user_id = m.member_id) as comments,
+            (select count(*)::int from issue_authors ia where ia.member_id = m.member_id) as issues
+          from members m
+          left join member_profiles mp on mp.member_id = m.member_id
+          where true ${statusClause} ${queryClause} ${cursorClause}
+          order by m.created_at desc, m.member_id desc
+          limit ${input.limit + 1}
+        `);
+        const hasMore = result.rows.length > input.limit;
+        const rows = result.rows.slice(0, input.limit);
+        const items = rows.map((row) => ({
+          memberId: row.member_id,
+          displayName: row.display_name,
+          status: row.status as OpsMemberPage["items"][number]["status"],
+          handle: row.handle,
+          profileVisibility: row.profile_visibility,
+          providers: row.providers,
+          joinedAt: new Date(row.joined_at).toISOString(),
+          lastActiveAt: row.last_active_at ? new Date(row.last_active_at).toISOString() : null,
+          activity: {
+            votes: numberValue(row.votes),
+            comments: numberValue(row.comments),
+            issues: numberValue(row.issues),
+          },
+        }));
+        const last = rows.at(-1);
+        await audit({
+          memberId: input.memberId,
+          eventType: "OPS_MEMBERS_READ",
+          outcome: "ALLOWED",
+          requestId: input.requestId,
+          metadata: { resultCount: items.length, status: input.status ?? "ALL", searched: !!query },
+        });
+        return {
+          schemaVersion: 1,
+          generatedAt: new Date().toISOString(),
+          items,
+          nextCursor: hasMore && last ? encodeMemberCursor(last.joined_at, last.member_id) : null,
+        };
+      } catch (error) {
+        await audit({
+          memberId: input.memberId,
+          eventType: "OPS_MEMBERS_READ",
+          outcome: "FAILED",
+          requestId: input.requestId,
+          metadata: { reason: "READ_MODEL_FAILED" },
+        }).catch(() => undefined);
+        throw error;
+      }
+    },
+
+    async readEditorial(input): Promise<OpsEditorialPage | null> {
+      const actor = await operator(input.memberId);
+      if (!actor) {
+        await audit({
+          memberId: input.memberId,
+          eventType: "OPS_EDITORIAL_READ",
+          outcome: "DENIED",
+          requestId: input.requestId,
+          metadata: { reason: "OPERATOR_ROLE_REQUIRED" },
+        });
+        return null;
+      }
+
+      try {
+        const state = await editorialReviewState();
+        const storedRows = await database
+          .select({
+            candidateId: operatorEditorialDecisions.candidateId,
+            status: operatorEditorialDecisions.status,
+            note: operatorEditorialDecisions.note,
+            reviewedBy: members.displayName,
+            reviewedAt: operatorEditorialDecisions.reviewedAt,
+            revision: operatorEditorialDecisions.revision,
+            binaryFit: operatorEditorialDecisions.binaryFit,
+            choiceParity: operatorEditorialDecisions.choiceParity,
+            duplicateReview: operatorEditorialDecisions.duplicateReview,
+            sourceReview: operatorEditorialDecisions.sourceReview,
+          })
+          .from(operatorEditorialDecisions)
+          .innerJoin(members, eq(members.id, operatorEditorialDecisions.reviewedByMemberId))
+          .where(eq(operatorEditorialDecisions.catalogId, state.catalog.id));
+        const storedByCandidate = new Map(
+          storedRows.map((row) => [row.candidateId, mapDecision(row)]),
+        );
+        const all = state.candidates
+          .map((candidate) => {
+            const baseline = candidate.decision
+              ? {
+                  status: candidate.decision.status,
+                  note: candidate.decision.note,
+                  reviewedBy: candidate.decision.reviewedBy,
+                  reviewedAt: candidate.decision.reviewedAt,
+                  revision: 0,
+                  checks: candidate.decision.checks,
+                }
+              : null;
+            const decision = storedByCandidate.get(candidate.candidateId) ?? baseline;
+            return {
+              candidateId: candidate.candidateId,
+              question: candidate.question,
+              context: candidate.context,
+              choices: candidate.choices.map((choice) => ({
+                code: choice.code,
+                label: choice.label,
+              })),
+              category: candidate.category,
+              interestCardCodes: candidate.interestCardCodes,
+              editorialArea:
+                typeof candidate.editorialArea === "string" ? candidate.editorialArea : "",
+              riskLevel: String(candidate.riskLevel ?? ""),
+              inventoryScope: candidate.inventoryScope,
+              discoveryLead: candidate.sourceProfile.discoveryLead,
+              sourceRequirement: candidate.sourceProfile.sourceRequirement,
+              sources: candidate.sources.map((source) => ({
+                id: source.id,
+                kind: source.kind,
+                title: source.title,
+                url: source.url,
+              })),
+              automatedReviewStatus: candidate.automatedReview.status,
+              decision,
+            };
+          })
+          .sort((left, right) => left.candidateId.localeCompare(right.candidateId));
+        const counts: OpsEditorialPage["counts"] = {
+          PENDING: 0,
+          APPROVED: 0,
+          NEEDS_CHANGES: 0,
+          REJECTED: 0,
+        };
+        for (const candidate of all) counts[candidate.decision?.status ?? "PENDING"] += 1;
+        const query = input.query?.trim().toLocaleLowerCase("ko") ?? "";
+        const filtered = all.filter((candidate) => {
+          const status = candidate.decision?.status ?? "PENDING";
+          return (
+            (!input.status || status === input.status) &&
+            (!input.scope || candidate.inventoryScope === input.scope) &&
+            (!query ||
+              `${candidate.candidateId} ${candidate.question} ${candidate.context}`
+                .toLocaleLowerCase("ko")
+                .includes(query)) &&
+            (!input.cursor || candidate.candidateId > input.cursor)
+          );
+        });
+        const hasMore = filtered.length > input.limit;
+        const items = filtered.slice(0, input.limit);
+        await audit({
+          memberId: input.memberId,
+          eventType: "OPS_EDITORIAL_READ",
+          outcome: "ALLOWED",
+          requestId: input.requestId,
+          metadata: {
+            resultCount: items.length,
+            status: input.status ?? "ALL",
+            scope: input.scope ?? "ALL",
+            searched: !!query,
+          },
+        });
+        return {
+          schemaVersion: 1,
+          generatedAt: new Date().toISOString(),
+          catalog: state.catalog,
+          inventory: state.inventory,
+          counts,
+          items,
+          nextCursor: hasMore ? (items.at(-1)?.candidateId ?? null) : null,
+        };
+      } catch (error) {
+        await audit({
+          memberId: input.memberId,
+          eventType: "OPS_EDITORIAL_READ",
+          outcome: "FAILED",
+          requestId: input.requestId,
+          metadata: { reason: "READ_MODEL_FAILED" },
+        }).catch(() => undefined);
+        throw error;
+      }
+    },
+
+    async saveEditorialDecision(input): Promise<OpsEditorialDecision | null> {
+      const actor = await operator(input.memberId);
+      if (!actor) {
+        await audit({
+          memberId: input.memberId,
+          eventType: "OPS_EDITORIAL_DECISION_WRITE",
+          outcome: "DENIED",
+          requestId: input.requestId,
+          metadata: { candidateId: input.candidateId, reason: "OPERATOR_ROLE_REQUIRED" },
+        });
+        return null;
+      }
+      const state = await editorialReviewState();
+      const baselineCandidate = state.candidates.find(
+        (candidate) => candidate.candidateId === input.candidateId,
+      );
+      if (!baselineCandidate) throw new Error("The Editorial candidate does not exist.");
+      if (input.status === "APPROVED" && Object.values(input.checks).some((value) => !value)) {
+        throw new Error("승인하려면 네 가지 편집 검수 항목을 모두 확인해야 합니다.");
+      }
+
+      const readCurrent = async () => {
+        const rows = await database
+          .select({
+            status: operatorEditorialDecisions.status,
+            note: operatorEditorialDecisions.note,
+            reviewedBy: members.displayName,
+            reviewedAt: operatorEditorialDecisions.reviewedAt,
+            revision: operatorEditorialDecisions.revision,
+            binaryFit: operatorEditorialDecisions.binaryFit,
+            choiceParity: operatorEditorialDecisions.choiceParity,
+            duplicateReview: operatorEditorialDecisions.duplicateReview,
+            sourceReview: operatorEditorialDecisions.sourceReview,
+          })
+          .from(operatorEditorialDecisions)
+          .innerJoin(members, eq(members.id, operatorEditorialDecisions.reviewedByMemberId))
+          .where(
+            and(
+              eq(operatorEditorialDecisions.catalogId, state.catalog.id),
+              eq(operatorEditorialDecisions.candidateId, input.candidateId),
+            ),
+          )
+          .limit(1);
+        return rows[0] ? mapDecision(rows[0]) : null;
+      };
+      const current = await readCurrent();
+      if ((current?.revision ?? 0) !== input.expectedRevision) {
+        throw new OpsReviewConflictError(current);
+      }
+
+      try {
+        const savedRow = await database.transaction(async (transaction) => {
+          const values = {
+            status: input.status,
+            note: input.note,
+            reviewedByMemberId: input.memberId,
+            binaryFit: input.checks.binaryFit,
+            choiceParity: input.checks.choiceParity,
+            duplicateReview: input.checks.duplicateReview,
+            sourceReview: input.checks.sourceReview,
+            reviewedAt: new Date(),
+            updatedAt: new Date(),
+          };
+          if (current) {
+            const updated = await transaction
+              .update(operatorEditorialDecisions)
+              .set({ ...values, revision: current.revision + 1 })
+              .where(
+                and(
+                  eq(operatorEditorialDecisions.catalogId, state.catalog.id),
+                  eq(operatorEditorialDecisions.candidateId, input.candidateId),
+                  eq(operatorEditorialDecisions.revision, input.expectedRevision),
+                ),
+              )
+              .returning();
+            if (!updated[0]) throw new OpsReviewConflictError(await readCurrent());
+            return updated[0];
+          }
+          const inserted = await transaction
+            .insert(operatorEditorialDecisions)
+            .values({
+              ...values,
+              catalogId: state.catalog.id,
+              candidateId: input.candidateId,
+              revision: 1,
+            })
+            .returning();
+          return inserted[0]!;
+        });
+        const saved = mapDecision({ ...savedRow, reviewedBy: actor.displayName });
+        await audit({
+          memberId: input.memberId,
+          eventType: "OPS_EDITORIAL_DECISION_WRITE",
+          outcome: "SUCCEEDED",
+          requestId: input.requestId,
+          metadata: {
+            candidateId: input.candidateId,
+            fromStatus: current?.status ?? baselineCandidate.decision?.status ?? "PENDING",
+            toStatus: saved.status,
+            revision: saved.revision,
+          },
+        });
+        return saved;
+      } catch (error) {
+        const conflict = error instanceof OpsReviewConflictError ? error : null;
+        await audit({
+          memberId: input.memberId,
+          eventType: "OPS_EDITORIAL_DECISION_WRITE",
+          outcome: "FAILED",
+          requestId: input.requestId,
+          metadata: {
+            candidateId: input.candidateId,
+            reason: conflict ? "REVISION_CONFLICT" : "WRITE_FAILED",
+          },
+        }).catch(() => undefined);
+        if (conflict) throw conflict;
+        const latest = await readCurrent().catch(() => null);
+        if ((latest?.revision ?? 0) !== input.expectedRevision) {
+          throw new OpsReviewConflictError(latest);
+        }
+        throw error;
+      }
+    },
+  };
+}
+
 export function createOpsDashboardService(
   database: Database["db"],
   options: { releaseId: string },
 ): OpsDashboardService {
   async function audit(input: {
     memberId: string;
-    outcome: "ALLOWED" | "DENIED" | "FAILED";
-    windowDays: OpsDashboardWindow;
+    eventType?: string;
+    outcome: "ALLOWED" | "DENIED" | "SUCCEEDED" | "FAILED";
+    windowDays?: OpsDashboardWindow;
     requestId?: string;
     metadata?: Record<string, unknown>;
   }) {
     await database.insert(operatorAuditLogs).values({
       memberId: input.memberId,
-      eventType: "OPS_DASHBOARD_READ",
+      eventType: input.eventType ?? "OPS_DASHBOARD_READ",
       outcome: input.outcome,
       requestId: input.requestId,
       windowDays: input.windowDays,
@@ -80,7 +547,25 @@ export function createOpsDashboardService(
     });
   }
 
+  async function operator(memberId: string) {
+    const rows = await database
+      .select({ memberId: members.id, displayName: members.displayName })
+      .from(operatorAccessGrants)
+      .innerJoin(members, eq(members.id, operatorAccessGrants.memberId))
+      .where(
+        and(
+          eq(operatorAccessGrants.memberId, memberId),
+          eq(operatorAccessGrants.role, "OPERATOR"),
+          isNull(operatorAccessGrants.revokedAt),
+          eq(members.status, "ACTIVE"),
+        ),
+      )
+      .limit(1);
+    return rows[0] ?? null;
+  }
+
   return {
+    ...createOpsManagementMethods(database, operator, audit),
     async readDashboard(input) {
       const grant = await database
         .select({ id: operatorAccessGrants.id })
