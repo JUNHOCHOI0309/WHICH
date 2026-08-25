@@ -6,9 +6,11 @@ Public v0 Release Candidate의 콘텐츠·측정·운영 준비도를 검증하�
 
 구현 완료 범위, 출시 전 남은 Gate, Post-v0 비범위는
 [`docs/product/public-v0-release-scope.md`](docs/product/public-v0-release-scope.md)를 기준으로 관리합니다.
-Trending 질문, 고품질 Feed 추천, Fine-tuned AI 보조 구조는
+전체 v1 후보와 Beta 이후 승격 규칙은
+[`docs/product/which-v1-roadmap.md`](docs/product/which-v1-roadmap.md)에 정리되어 있습니다. Trending 질문,
+고품질 Feed 추천, Fine-tuned AI 보조 구조의 상세 설계는
 [`docs/product/post-v0-discovery-recommendation-ai-roadmap.md`](docs/product/post-v0-discovery-recommendation-ai-roadmap.md)에
-후속 작업으로 분리해 두었습니다.
+분리해 두었습니다.
 
 ## 기술 기반
 
