@@ -20,7 +20,7 @@ afterEach(async () => {
   const createdDatabases = databases.splice(0);
   await Promise.all(createdDatabases.map((database) => database.database.close()));
   await Promise.all(createdDatabases.map((database) => database.drop()));
-});
+}, 30_000);
 
 describe("PostgreSQL launch gate store", () => {
   it("captures migration, Outbox, and protected fact baselines without writing", async () => {

@@ -91,6 +91,14 @@ services:
         value: "3"
       - key: AUTH_TOKEN_CONSUME_RATE_LIMIT
         value: "10"
+      # Operator dashboard defense-in-depth. Configure both after creating the
+      # Cloudflare Access self-hosted application for /ops* and /api/ops/*.
+      - key: CF_ACCESS_TEAM_DOMAIN
+        sync: false
+      - key: CF_ACCESS_AUD
+        sync: false
+      - key: OPS_CHANGE_ACTOR
+        value: render-shell
       # Flip to true only after Resend setup and verification-link QA.
       - key: AUTH_EMAIL_VERIFICATION_REQUIRED
         value: "false"

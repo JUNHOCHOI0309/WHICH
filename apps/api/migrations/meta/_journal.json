@@ -169,6 +169,13 @@
       "when": 1787614458280,
       "tag": "0023_boring_black_bird",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1787644228966,
+      "tag": "0024_worried_vulture",
+      "breakpoints": true
     }
   ]
 }

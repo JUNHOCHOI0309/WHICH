@@ -21,6 +21,8 @@ import type { AnalyticsService } from "./modules/analytics/contracts.js";
 import { registerAnalyticsRoutes } from "./modules/analytics/routes.js";
 import type { ShareCardService } from "./modules/shares/contracts.js";
 import { registerShareCardRoutes } from "./modules/shares/routes.js";
+import type { OpsDashboardService } from "./modules/operations/contracts.js";
+import { registerOpsRoutes } from "./modules/operations/routes.js";
 
 export type AppDependencies = Pick<Database, "ping" | "close"> & {
   issueReader: IssueReadService;
@@ -31,6 +33,7 @@ export type AppDependencies = Pick<Database, "ping" | "close"> & {
   interestProfiles?: InterestProfileService;
   analytics?: AnalyticsService;
   shareCards?: ShareCardService;
+  opsDashboard?: OpsDashboardService;
 };
 
 const statusSchema = Type.Object({
@@ -118,6 +121,14 @@ export async function buildApp(config: AppConfig, database: AppDependencies) {
   }
   if (database.shareCards) {
     await registerShareCardRoutes(app, database.shareCards, config.auth.internalSecret);
+  }
+  if (database.opsDashboard) {
+    await registerOpsRoutes(
+      app,
+      database.opsDashboard,
+      database.memberIdentity,
+      config.auth.internalSecret,
+    );
   }
 
   app.addHook("onClose", async () => {
