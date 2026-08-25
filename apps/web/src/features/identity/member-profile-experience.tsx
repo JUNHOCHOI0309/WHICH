@@ -54,7 +54,11 @@ function participatedLabel(value: string) {
   }).format(new Date(value));
 }
 
-export function MemberProfileExperience() {
+export function MemberProfileExperience({
+  creationEnabled = false,
+}: {
+  creationEnabled?: boolean;
+}) {
   const [screen, setScreen] = useState<Screen>("loading");
   const [profile, setProfile] = useState<MemberPrivateProfile | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -136,6 +140,7 @@ export function MemberProfileExperience() {
   return (
     <WhichShell
       active="me"
+      creationEnabled={creationEnabled}
       aside={
         <WhichAsideCard
           eyebrow="PRIVATE BY DEFAULT"

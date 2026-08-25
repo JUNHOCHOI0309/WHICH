@@ -169,6 +169,18 @@ export function MemberQuestionComposerButton({
 
   if (state !== "member") return null;
 
+  const shouldOpenFromHome =
+    mobile && typeof window !== "undefined" && !["/", "/me"].includes(window.location.pathname);
+
+  if (shouldOpenFromHome) {
+    return (
+      <Link className={className} href="/?compose=question" aria-label="질문">
+        <span aria-hidden="true">?</span>
+        <strong>질문</strong>
+      </Link>
+    );
+  }
+
   return (
     <button
       className={className}
