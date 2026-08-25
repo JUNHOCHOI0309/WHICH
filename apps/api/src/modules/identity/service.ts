@@ -46,8 +46,9 @@ const LINK_POLICY_VERSION = "guest-member-link-v1";
 const EVENT_SCHEMA_VERSION = 1;
 const HANDLE_PATTERN = /^[a-z0-9_]{3,30}$/;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const PASSWORD_MIN_LENGTH = 15;
-const PASSWORD_MAX_LENGTH = 128;
+const PASSWORD_MIN_LENGTH = 8;
+const PASSWORD_MAX_LENGTH = 15;
+const PASSWORD_SPECIAL_CHARACTER_PATTERN = /[!-/:-@[-`{-~]/;
 const PASSWORD_HASH_OPTIONS = {
   algorithm: 2,
   memoryCost: 19_456,
@@ -175,11 +176,15 @@ function normalizeEmail(value: string) {
 }
 
 function validatePassword(value: string) {
-  if (value.length < PASSWORD_MIN_LENGTH || value.length > PASSWORD_MAX_LENGTH) {
+  if (
+    value.length < PASSWORD_MIN_LENGTH ||
+    value.length > PASSWORD_MAX_LENGTH ||
+    !PASSWORD_SPECIAL_CHARACTER_PATTERN.test(value)
+  ) {
     throw new MemberIdentityError(
       "PASSWORD_INVALID",
       400,
-      `The password must be ${PASSWORD_MIN_LENGTH} to ${PASSWORD_MAX_LENGTH} characters.`,
+      `The password must be ${PASSWORD_MIN_LENGTH} to ${PASSWORD_MAX_LENGTH} characters and contain at least one special character.`,
     );
   }
   return value;

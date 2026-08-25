@@ -2,6 +2,13 @@
 
 import { useState } from "react";
 
+import {
+  NEW_PASSWORD_MAX_LENGTH,
+  NEW_PASSWORD_MIN_LENGTH,
+  NEW_PASSWORD_REQUIREMENT,
+  newPasswordPolicyError,
+} from "@/lib/password-policy";
+
 import styles from "./member-credential-setup.module.css";
 
 export function MemberCredentialSetup({ onCompleted }: { onCompleted: () => void }) {
@@ -23,6 +30,11 @@ export function MemberCredentialSetup({ onCompleted }: { onCompleted: () => void
       <form
         onSubmit={(event) => {
           event.preventDefault();
+          const policyError = newPasswordPolicyError(password);
+          if (policyError) {
+            setError(policyError);
+            return;
+          }
           setPending(true);
           setError(null);
           void fetch("/api/auth/credentials/complete", {
@@ -54,17 +66,21 @@ export function MemberCredentialSetup({ onCompleted }: { onCompleted: () => void
           value={email}
           onChange={(event) => setEmail(event.target.value)}
         />
-        <input
-          aria-label="새 WHICH 비밀번호"
-          type="password"
-          autoComplete="new-password"
-          required
-          minLength={15}
-          maxLength={128}
-          placeholder="15자 이상의 비밀번호"
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-        />
+        <div className={styles.passwordField}>
+          <input
+            aria-label="새 WHICH 비밀번호"
+            aria-describedby="credential-setup-password-requirement"
+            type="password"
+            autoComplete="new-password"
+            required
+            minLength={NEW_PASSWORD_MIN_LENGTH}
+            maxLength={NEW_PASSWORD_MAX_LENGTH}
+            placeholder="새 비밀번호"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+          />
+          <small id="credential-setup-password-requirement">{NEW_PASSWORD_REQUIREMENT}</small>
+        </div>
         <button type="submit" disabled={pending}>
           {pending ? "설정 중…" : "이메일 로그인 설정"}
         </button>

@@ -3,6 +3,7 @@ import { type NextRequest, NextResponse } from "next/server";
 
 import { authRequestKey, sanitizeReturnTo } from "@/lib/server/member-auth";
 import { requestEmailVerification, sendAuthEmail } from "@/lib/server/auth-email";
+import { NEW_PASSWORD_POLICY_ERROR, newPasswordPolicyError } from "@/lib/password-policy";
 import {
   createCredentialMemberSession,
   MemberIdentityLinkError,
@@ -61,6 +62,12 @@ export async function POST(request: NextRequest) {
       { status: 400 },
     );
   }
+  if (body.mode === "signup" && newPasswordPolicyError(body.password)) {
+    return NextResponse.json(
+      { code: "PASSWORD_INVALID", message: NEW_PASSWORD_POLICY_ERROR },
+      { status: 400 },
+    );
+  }
 
   const returnTo = sanitizeReturnTo(typeof body.returnTo === "string" ? body.returnTo : "/me");
   const cookieStore = await cookies();
@@ -109,15 +116,17 @@ export async function POST(request: NextRequest) {
               ? 429
               : 400;
     const message =
-      status === 409
-        ? "이미 등록된 이메일입니다. 로그인해 주세요."
-        : status === 401
-          ? "이메일 또는 비밀번호를 확인해 주세요."
-          : code === "EMAIL_UNVERIFIED"
-            ? "이메일 확인을 먼저 완료해 주세요. 확인 메일을 다시 받을 수 있습니다."
-            : status === 429
-              ? "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요."
-              : "계정 처리를 완료하지 못했습니다. 입력값을 확인해 주세요.";
+      code === "PASSWORD_INVALID"
+        ? NEW_PASSWORD_POLICY_ERROR
+        : status === 409
+          ? "이미 등록된 이메일입니다. 로그인해 주세요."
+          : status === 401
+            ? "이메일 또는 비밀번호를 확인해 주세요."
+            : code === "EMAIL_UNVERIFIED"
+              ? "이메일 확인을 먼저 완료해 주세요. 확인 메일을 다시 받을 수 있습니다."
+              : status === 429
+                ? "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요."
+                : "계정 처리를 완료하지 못했습니다. 입력값을 확인해 주세요.";
     return NextResponse.json({ code, message }, { status });
   }
 }

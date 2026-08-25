@@ -19,7 +19,8 @@ WHICH의 사용자 본체는 `members` 한 행입니다. 이메일/비밀번호�
 
 - `member_credentials.email_normalized`와 `member_id`는 각각 유일합니다.
 - 비밀번호는 `@node-rs/argon2`의 Argon2id로 해시하며 평문을 저장하지 않습니다.
-- 비밀번호는 15~128자를 허용합니다.
+- 새 비밀번호는 8~15자이며 ASCII 특수문자를 1개 이상 포함해야 합니다. 정책 변경 전에 만든 기존
+  비밀번호는 로그인할 수 있지만, 신규 가입·계정 완성·비밀번호 재설정에는 새 정책을 적용합니다.
 - OAuth 가입 쿠키는 AES-256-GCM으로 인증·암호화하며 HttpOnly, SameSite=Lax, 운영 Secure 속성을 사용합니다.
 - 이메일 일치만으로 Member를 자동 병합하지 않습니다. 기존 Member 연결은 이메일/비밀번호 재인증을 요구합니다.
 - 기존 OAuth Code + PKCE, state와 OIDC nonce 검증을 유지합니다.

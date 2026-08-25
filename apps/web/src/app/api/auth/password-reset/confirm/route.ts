@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 
+import { NEW_PASSWORD_POLICY_ERROR, newPasswordPolicyError } from "@/lib/password-policy";
 import { confirmPasswordReset } from "@/lib/server/auth-email";
 import { authRequestKey } from "@/lib/server/member-auth";
 import { clearMemberSessionCookie } from "@/lib/server/which-api";
@@ -17,6 +18,12 @@ export async function POST(request: NextRequest) {
   if (!body || typeof body.token !== "string" || typeof body.password !== "string") {
     return NextResponse.json({ message: "입력값을 확인해 주세요." }, { status: 400 });
   }
+  if (newPasswordPolicyError(body.password)) {
+    return NextResponse.json(
+      { code: "PASSWORD_INVALID", message: NEW_PASSWORD_POLICY_ERROR },
+      { status: 400 },
+    );
+  }
   try {
     await confirmPasswordReset(
       body.token,
@@ -27,6 +34,10 @@ export async function POST(request: NextRequest) {
     clearMemberSessionCookie(response);
     return response;
   } catch (error) {
+    const code =
+      typeof error === "object" && error !== null && "code" in error
+        ? String(error.code)
+        : "AUTH_TOKEN_INVALID";
     const status =
       typeof error === "object" && error !== null && "status" in error && error.status === 429
         ? 429
@@ -34,9 +45,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         message:
-          status === 429
-            ? "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요."
-            : "재설정 링크가 만료되었거나 이미 사용되었습니다.",
+          code === "PASSWORD_INVALID"
+            ? NEW_PASSWORD_POLICY_ERROR
+            : status === 429
+              ? "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요."
+              : "재설정 링크가 만료되었거나 이미 사용되었습니다.",
+        code,
       },
       { status },
     );

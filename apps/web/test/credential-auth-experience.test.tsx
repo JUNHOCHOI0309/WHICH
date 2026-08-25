@@ -52,6 +52,20 @@ describe("Member credential authentication experience", () => {
     ).toBe(true);
   });
 
+  it("shows and applies the new password requirements during signup", () => {
+    render(
+      <CredentialAuthExperience
+        mode="signup"
+        returnTo="/me"
+        providers={{ naver: true, kakao: true }}
+      />,
+    );
+
+    expect(screen.getByText("8~15자, 특수문자 1개 이상 필수")).toBeVisible();
+    expect(screen.getByLabelText(/WHICH 비밀번호/)).toHaveAttribute("minlength", "8");
+    expect(screen.getByLabelText(/WHICH 비밀번호/)).toHaveAttribute("maxlength", "15");
+  });
+
   it("lets an authenticated social Guest choose quick signup or an existing account", () => {
     render(<SocialSignupExperience provider="KAKAO" suggestedEmail="member@example.com" />);
 

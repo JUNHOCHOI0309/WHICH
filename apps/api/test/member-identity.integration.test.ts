@@ -361,9 +361,35 @@ describe("Member identity and Guest vote linking", () => {
     expect(initialsProfile.json()).toMatchObject({ member: { avatarSource: "INITIALS" } });
   });
 
+  it("requires 8 to 15 characters and a special character for new passwords", async () => {
+    for (const password of ["Abcd!12", "Abcdefg1", "123456789012345!"]) {
+      const response = await createMemberSession({
+        provider: "KAKAO",
+        providerSubject: `password-policy-${randomUUID()}`,
+        credential: { email: `policy-${randomUUID()}@example.com`, password },
+      });
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toMatchObject({ code: "PASSWORD_INVALID" });
+    }
+
+    const minimumBoundary = await createMemberSession({
+      provider: "KAKAO",
+      providerSubject: `password-policy-${randomUUID()}`,
+      credential: { email: `policy-${randomUUID()}@example.com`, password: "Abcdef!1" },
+    });
+    expect(minimumBoundary.statusCode).toBe(201);
+
+    const maximumBoundary = await createMemberSession({
+      provider: "KAKAO",
+      providerSubject: `password-policy-${randomUUID()}`,
+      credential: { email: `policy-${randomUUID()}@example.com`, password: "12345678901234!" },
+    });
+    expect(maximumBoundary.statusCode).toBe(201);
+  });
+
   it("creates one Member with credential and social identities, then signs in by email", async () => {
     const email = `Member-${randomUUID()}@Example.com`;
-    const password = "correct horse battery staple";
+    const password = "Correct!123";
     const signup = await createMemberSession({
       provider: "KAKAO",
       providerSubject: `kakao-signup-${randomUUID()}`,
@@ -421,7 +447,7 @@ describe("Member identity and Guest vote linking", () => {
 
   it("deletes PII and login access while preserving anonymized activity", async () => {
     const email = `delete-${randomUUID()}@example.com`;
-    const password = "a deletion test password";
+    const password = "Delete!123";
     const providerSubject = `google-delete-${randomUUID()}`;
     const guestId = await createGuest();
     const signup = await createMemberSession({
@@ -622,7 +648,7 @@ describe("Member identity and Guest vote linking", () => {
     });
     const memberId = social.json<{ member: { id: string } }>().member.id;
     const email = `complete-${randomUUID()}@example.com`;
-    const password = "a long existing member passphrase";
+    const password = "Complete!123";
 
     const completed = await app.inject({
       method: "POST",
@@ -647,7 +673,7 @@ describe("Member identity and Guest vote linking", () => {
 
   it("uses one-time hashed password reset tokens and revokes existing sessions", async () => {
     const email = `reset-${randomUUID()}@example.com`;
-    const password = "initial correct horse battery";
+    const password = "Initial!123";
     const signup = await createMemberSession({
       provider: "EMAIL",
       providerSubject: email,
@@ -671,7 +697,7 @@ describe("Member identity and Guest vote linking", () => {
     expect(stored?.tokenHash).toHaveLength(64);
     expect(stored?.tokenHash).not.toBe(resetToken);
 
-    const newPassword = "new secure passphrase for which";
+    const newPassword = "Renewed!123";
     const reset = await app.inject({
       method: "POST",
       url: "/v1/internal/member-password-resets",

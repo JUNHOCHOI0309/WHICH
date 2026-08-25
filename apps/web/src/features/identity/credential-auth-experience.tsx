@@ -5,6 +5,12 @@ import { useState } from "react";
 
 import { WhichAsideCard, WhichShell } from "@/components/layout/which-shell";
 import { loginHref } from "@/lib/auth";
+import {
+  NEW_PASSWORD_MAX_LENGTH,
+  NEW_PASSWORD_MIN_LENGTH,
+  NEW_PASSWORD_REQUIREMENT,
+  newPasswordPolicyError,
+} from "@/lib/password-policy";
 
 import styles from "./credential-auth-experience.module.css";
 
@@ -76,6 +82,11 @@ export function CredentialAuthExperience({
           <form
             onSubmit={(event) => {
               event.preventDefault();
+              const policyError = isSignup ? newPasswordPolicyError(password) : null;
+              if (policyError) {
+                setError(policyError);
+                return;
+              }
               setPending(true);
               setError(null);
               void submitCredential({ mode, email, password, termsAccepted, returnTo })
@@ -103,13 +114,16 @@ export function CredentialAuthExperience({
                 type="password"
                 name="password"
                 autoComplete={isSignup ? "new-password" : "current-password"}
+                aria-describedby={isSignup ? "credential-password-requirement" : undefined}
                 required
-                minLength={isSignup ? 15 : 1}
-                maxLength={128}
+                minLength={isSignup ? NEW_PASSWORD_MIN_LENGTH : 1}
+                maxLength={isSignup ? NEW_PASSWORD_MAX_LENGTH : 128}
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
               />
-              {isSignup ? <small>15자 이상의 문장형 비밀번호를 권장해요.</small> : null}
+              {isSignup ? (
+                <small id="credential-password-requirement">{NEW_PASSWORD_REQUIREMENT}</small>
+              ) : null}
             </label>
             {isSignup ? (
               <label className={styles.terms}>
