@@ -1,8 +1,8 @@
 # Post-v0 Discovery, Recommendation, and AI Roadmap
 
-Status: Post-v0 backlog  
-Last updated: 2026-08-24  
-Release boundary: this document does not expand the Public v0 launch gate.
+- Status: v1 discovery·recommendation·AI detailed track
+- Last updated: 2026-08-25
+- Release boundary: this document does not expand the Public v0 launch gate.
 
 ## Purpose
 
@@ -15,7 +15,9 @@ content, measurement, operations, and limited-beta sequence. It covers three con
 
 The Public v0 boundary remains defined by
 [`public-v0-release-scope.md`](./public-v0-release-scope.md). Tasks in this document may be reordered
-after beta evidence is available.
+after beta evidence is available. The cross-functional v1 scope and task-promotion rules are defined in
+[`which-v1-roadmap.md`](./which-v1-roadmap.md); this document remains the detailed design for its
+discovery, recommendation, and AI tracks.
 
 ## Product principles
 
