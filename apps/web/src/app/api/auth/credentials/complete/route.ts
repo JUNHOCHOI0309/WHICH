@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { type NextRequest, NextResponse } from "next/server";
 
+import { NEW_PASSWORD_POLICY_ERROR, newPasswordPolicyError } from "@/lib/password-policy";
 import { requestEmailVerification, sendAuthEmail } from "@/lib/server/auth-email";
 import { authRequestKey, internalAuthSecret } from "@/lib/server/member-auth";
 import { fetchWhichApi, MEMBER_SESSION_COOKIE } from "@/lib/server/which-api";
@@ -47,6 +48,12 @@ export async function POST(request: NextRequest) {
       { status: 400 },
     );
   }
+  if (newPasswordPolicyError(body.password)) {
+    return NextResponse.json(
+      { code: "PASSWORD_INVALID", message: NEW_PASSWORD_POLICY_ERROR },
+      { status: 400 },
+    );
+  }
 
   const upstream = await fetchWhichApi("/v1/internal/member-credentials", {
     method: "POST",
@@ -67,9 +74,11 @@ export async function POST(request: NextRequest) {
       {
         code: result.code ?? "CREDENTIAL_SETUP_FAILED",
         message:
-          result.code === "CREDENTIAL_ALREADY_EXISTS"
-            ? "이미 사용 중인 이메일이거나 계정 로그인이 설정되어 있습니다."
-            : "이메일 로그인을 설정하지 못했습니다. 입력값을 확인해 주세요.",
+          result.code === "PASSWORD_INVALID"
+            ? NEW_PASSWORD_POLICY_ERROR
+            : result.code === "CREDENTIAL_ALREADY_EXISTS"
+              ? "이미 사용 중인 이메일이거나 계정 로그인이 설정되어 있습니다."
+              : "이메일 로그인을 설정하지 못했습니다. 입력값을 확인해 주세요.",
       },
       { status: upstream.status },
     );

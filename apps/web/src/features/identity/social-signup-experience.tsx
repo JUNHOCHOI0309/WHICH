@@ -4,6 +4,12 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { WhichAsideCard, WhichShell } from "@/components/layout/which-shell";
+import {
+  NEW_PASSWORD_MAX_LENGTH,
+  NEW_PASSWORD_MIN_LENGTH,
+  NEW_PASSWORD_REQUIREMENT,
+  newPasswordPolicyError,
+} from "@/lib/password-policy";
 import styles from "./credential-auth-experience.module.css";
 
 const providerLabels = { GOOGLE: "Google", X: "X", NAVER: "네이버", KAKAO: "카카오" } as const;
@@ -70,6 +76,11 @@ export function SocialSignupExperience({
           <form
             onSubmit={(event) => {
               event.preventDefault();
+              const policyError = mode === "new" ? newPasswordPolicyError(password) : null;
+              if (policyError) {
+                setError(policyError);
+                return;
+              }
               setPending(true);
               setError(null);
               void fetch("/api/auth/signup/social", {
@@ -106,12 +117,16 @@ export function SocialSignupExperience({
               <input
                 type="password"
                 autoComplete={mode === "new" ? "new-password" : "current-password"}
+                aria-describedby={mode === "new" ? "social-password-requirement" : undefined}
                 required
-                minLength={mode === "new" ? 15 : 1}
-                maxLength={128}
+                minLength={mode === "new" ? NEW_PASSWORD_MIN_LENGTH : 1}
+                maxLength={mode === "new" ? NEW_PASSWORD_MAX_LENGTH : 128}
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
               />
+              {mode === "new" ? (
+                <small id="social-password-requirement">{NEW_PASSWORD_REQUIREMENT}</small>
+              ) : null}
             </label>
             {mode === "new" ? (
               <label className={styles.terms}>

@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { type NextRequest, NextResponse } from "next/server";
 
 import { requestEmailVerification, sendAuthEmail } from "@/lib/server/auth-email";
+import { NEW_PASSWORD_POLICY_ERROR, newPasswordPolicyError } from "@/lib/password-policy";
 import {
   SOCIAL_SIGNUP_COOKIE,
   authRequestKey,
@@ -48,6 +49,12 @@ export async function POST(request: NextRequest) {
   ) {
     return NextResponse.json(
       { code: "INVALID_REQUEST", message: "입력값을 확인해 주세요." },
+      { status: 400 },
+    );
+  }
+  if (body.mode === "new" && newPasswordPolicyError(body.password)) {
+    return NextResponse.json(
+      { code: "PASSWORD_INVALID", message: NEW_PASSWORD_POLICY_ERROR },
       { status: 400 },
     );
   }
@@ -99,11 +106,13 @@ export async function POST(request: NextRequest) {
           ? 409
           : 400;
     const message =
-      code === "CREDENTIAL_INVALID"
-        ? "기존 WHICH 계정의 이메일 또는 비밀번호를 확인해 주세요."
-        : code === "CREDENTIAL_ALREADY_EXISTS"
-          ? "이미 등록된 이메일입니다. 기존 계정에 연결하기를 선택해 주세요."
-          : "계정 연결을 완료하지 못했습니다. 다시 시도해 주세요.";
+      code === "PASSWORD_INVALID"
+        ? NEW_PASSWORD_POLICY_ERROR
+        : code === "CREDENTIAL_INVALID"
+          ? "기존 WHICH 계정의 이메일 또는 비밀번호를 확인해 주세요."
+          : code === "CREDENTIAL_ALREADY_EXISTS"
+            ? "이미 등록된 이메일입니다. 기존 계정에 연결하기를 선택해 주세요."
+            : "계정 연결을 완료하지 못했습니다. 다시 시도해 주세요.";
     return NextResponse.json({ code, message }, { status });
   }
 }

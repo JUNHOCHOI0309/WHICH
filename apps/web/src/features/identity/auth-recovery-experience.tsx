@@ -4,6 +4,12 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { WhichAsideCard, WhichShell } from "@/components/layout/which-shell";
+import {
+  NEW_PASSWORD_MAX_LENGTH,
+  NEW_PASSWORD_MIN_LENGTH,
+  NEW_PASSWORD_REQUIREMENT,
+  newPasswordPolicyError,
+} from "@/lib/password-policy";
 
 import styles from "./credential-auth-experience.module.css";
 
@@ -184,10 +190,15 @@ export function ResetPasswordExperience({ token }: { token: string }) {
         </>
       ) : (
         <>
-          <p className={styles.description}>15자 이상의 문장형 비밀번호를 권장합니다.</p>
+          <p className={styles.description}>{NEW_PASSWORD_REQUIREMENT}</p>
           <form
             onSubmit={(event) => {
               event.preventDefault();
+              const policyError = newPasswordPolicyError(password);
+              if (policyError) {
+                setError(policyError);
+                return;
+              }
               if (password !== confirmation) {
                 setError("두 비밀번호가 일치하지 않습니다.");
                 return;
@@ -210,8 +221,8 @@ export function ResetPasswordExperience({ token }: { token: string }) {
               <input
                 type="password"
                 autoComplete="new-password"
-                minLength={15}
-                maxLength={128}
+                minLength={NEW_PASSWORD_MIN_LENGTH}
+                maxLength={NEW_PASSWORD_MAX_LENGTH}
                 required
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
@@ -222,8 +233,8 @@ export function ResetPasswordExperience({ token }: { token: string }) {
               <input
                 type="password"
                 autoComplete="new-password"
-                minLength={15}
-                maxLength={128}
+                minLength={NEW_PASSWORD_MIN_LENGTH}
+                maxLength={NEW_PASSWORD_MAX_LENGTH}
                 required
                 value={confirmation}
                 onChange={(event) => setConfirmation(event.target.value)}

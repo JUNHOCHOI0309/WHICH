@@ -111,7 +111,7 @@ describe("authentication recovery BFF", () => {
     const response = await confirmReset(
       postRequest("/api/auth/password-reset/confirm", {
         token: "password-reset-secret-token-that-is-long-enough",
-        password: "a replacement password with enough length",
+        password: "Replace!123",
       }),
     );
     expect(response.status).toBe(200);
