@@ -92,10 +92,111 @@ export type OpsDashboardSnapshot = {
   runbooks: Array<{ label: string; path: string }>;
 };
 
+export const OPS_MEMBER_STATUSES = ["ACTIVE", "LIMITED", "SUSPENDED", "DELETED"] as const;
+export type OpsMemberStatus = (typeof OPS_MEMBER_STATUSES)[number];
+
+export type OpsMemberRecord = {
+  memberId: string;
+  displayName: string;
+  status: OpsMemberStatus;
+  handle: string | null;
+  profileVisibility: "PRIVATE" | "PUBLIC" | null;
+  providers: string[];
+  joinedAt: string;
+  lastActiveAt: string | null;
+  activity: { votes: number; comments: number; issues: number };
+};
+
+export type OpsMemberPage = {
+  schemaVersion: 1;
+  generatedAt: string;
+  items: OpsMemberRecord[];
+  nextCursor: string | null;
+};
+
+export const OPS_EDITORIAL_STATUSES = ["PENDING", "APPROVED", "NEEDS_CHANGES", "REJECTED"] as const;
+export type OpsEditorialStatus = (typeof OPS_EDITORIAL_STATUSES)[number];
+export const OPS_EDITORIAL_SCOPES = ["ACTIVE", "RESERVE", "LONG_TERM"] as const;
+export type OpsEditorialScope = (typeof OPS_EDITORIAL_SCOPES)[number];
+
+export type OpsEditorialDecision = {
+  status: Exclude<OpsEditorialStatus, "PENDING">;
+  note: string;
+  reviewedBy: string;
+  reviewedAt: string;
+  revision: number;
+  checks: {
+    binaryFit: boolean;
+    choiceParity: boolean;
+    duplicateReview: boolean;
+    sourceReview: boolean;
+  };
+};
+
+export type OpsEditorialCandidate = {
+  candidateId: string;
+  question: string;
+  context: string;
+  choices: Array<{ code: string; label: string }>;
+  category: string;
+  interestCardCodes: string[];
+  editorialArea: string;
+  riskLevel: string;
+  inventoryScope: OpsEditorialScope;
+  discoveryLead: string;
+  sourceRequirement: string;
+  sources: Array<{ id: string; kind: "FACT" | "COMMUNITY"; title?: string; url?: string }>;
+  automatedReviewStatus: string;
+  decision: OpsEditorialDecision | null;
+};
+
+export type OpsEditorialPage = {
+  schemaVersion: 1;
+  generatedAt: string;
+  catalog: { id: string; total: number; approval: string };
+  inventory: { active: number; reserve: number; longTerm: number };
+  counts: Record<OpsEditorialStatus, number>;
+  items: OpsEditorialCandidate[];
+  nextCursor: string | null;
+};
+
+export class OpsReviewConflictError extends Error {
+  constructor(public readonly current: OpsEditorialDecision | null) {
+    super("The Editorial Review decision changed after this screen was loaded.");
+    this.name = "OpsReviewConflictError";
+  }
+}
+
 export interface OpsDashboardService {
   readDashboard(input: {
     memberId: string;
     windowDays: OpsDashboardWindow;
     requestId?: string;
   }): Promise<OpsDashboardSnapshot | null>;
+  readMembers(input: {
+    memberId: string;
+    status?: OpsMemberStatus;
+    query?: string;
+    cursor?: string;
+    limit: number;
+    requestId?: string;
+  }): Promise<OpsMemberPage | null>;
+  readEditorial(input: {
+    memberId: string;
+    status?: OpsEditorialStatus;
+    scope?: OpsEditorialScope;
+    query?: string;
+    cursor?: string;
+    limit: number;
+    requestId?: string;
+  }): Promise<OpsEditorialPage | null>;
+  saveEditorialDecision(input: {
+    memberId: string;
+    candidateId: string;
+    expectedRevision: number;
+    status: Exclude<OpsEditorialStatus, "PENDING">;
+    note: string;
+    checks: OpsEditorialDecision["checks"];
+    requestId?: string;
+  }): Promise<OpsEditorialDecision | null>;
 }

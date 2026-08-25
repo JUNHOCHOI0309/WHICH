@@ -4,7 +4,11 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
 import { getConfig } from "../src/config.js";
 import type { Database } from "../src/database/client.js";
-import { operatorAccessGrants, operatorAuditLogs } from "../src/database/schema/index.js";
+import {
+  operatorAccessGrants,
+  operatorAuditLogs,
+  operatorEditorialDecisions,
+} from "../src/database/schema/index.js";
 import { createCommentReadService } from "../src/modules/comments/service.js";
 import { createMemberIdentityService } from "../src/modules/identity/service.js";
 import { createIssueReadService } from "../src/modules/issues/service.js";
@@ -20,6 +24,7 @@ let app: Awaited<ReturnType<typeof buildApp>>;
 let dropDatabase: () => Promise<void>;
 let token: string;
 let memberId: string;
+let ordinaryToken: string;
 let opsDashboard: OpsDashboardService;
 
 beforeAll(async () => {
@@ -62,6 +67,17 @@ beforeAll(async () => {
   const session = sessionResponse.json<{ token: string; member: { id: string } }>();
   token = session.token;
   memberId = session.member.id;
+  const ordinaryResponse = await app.inject({
+    method: "POST",
+    url: "/v1/internal/member-sessions",
+    headers: { "x-internal-auth-secret": INTERNAL_SECRET },
+    payload: {
+      provider: "DEVELOPMENT",
+      providerSubject: "ops-dashboard-ordinary",
+      displayName: "일반 회원",
+    },
+  });
+  ordinaryToken = ordinaryResponse.json<{ token: string }>().token;
 }, 30_000);
 
 afterAll(async () => {
@@ -77,6 +93,23 @@ function readDashboard(days = 7) {
       authorization: `Bearer ${token}`,
       "x-internal-auth-secret": INTERNAL_SECRET,
     },
+  });
+}
+
+function opsRequest(
+  method: "GET" | "PUT",
+  url: string,
+  payload?: Record<string, unknown>,
+  sessionToken = token,
+) {
+  return app.inject({
+    method,
+    url,
+    headers: {
+      authorization: `Bearer ${sessionToken}`,
+      "x-internal-auth-secret": INTERNAL_SECRET,
+    },
+    payload,
   });
 }
 
@@ -123,5 +156,102 @@ describe("operator dashboard", () => {
   it("rejects windows outside 1, 7, and 30 days", async () => {
     const response = await readDashboard(90);
     expect(response.statusCode).toBe(400);
+  });
+
+  it("keeps Member and Editorial management routes behind the OPERATOR role", async () => {
+    const [membersResponse, editorialResponse] = await Promise.all([
+      opsRequest("GET", "/v1/internal/ops/members", undefined, ordinaryToken),
+      opsRequest("GET", "/v1/internal/ops/editorial", undefined, ordinaryToken),
+    ]);
+    expect(membersResponse.statusCode).toBe(403);
+    expect(editorialResponse.statusCode).toBe(403);
+  });
+
+  it("returns a PII-safe Member directory page", async () => {
+    const response = await opsRequest(
+      "GET",
+      "/v1/internal/ops/members?limit=10&q=%EC%9A%B4%EC%98%81%EC%9E%90",
+    );
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json()).toMatchObject({
+      schemaVersion: 1,
+      items: [
+        {
+          memberId,
+          displayName: "운영자",
+          status: "ACTIVE",
+          activity: { votes: 0, comments: 0, issues: 0 },
+        },
+      ],
+    });
+    const serialized = response.body.toLocaleLowerCase("en-US");
+    for (const forbidden of [
+      "email",
+      "providersubject",
+      "token",
+      "session",
+      "ipaddress",
+      "useragent",
+    ]) {
+      expect(serialized).not.toContain(forbidden);
+    }
+  });
+
+  it("persists Editorial decisions and rejects stale revisions", async () => {
+    const listResponse = await opsRequest("GET", "/v1/internal/ops/editorial?limit=1");
+    expect(listResponse.statusCode, listResponse.body).toBe(200);
+    const candidate = listResponse.json<{
+      items: Array<{ candidateId: string; decision: { revision: number } | null }>;
+    }>().items[0]!;
+
+    const invalidApproval = await opsRequest(
+      "PUT",
+      `/v1/internal/ops/editorial/${candidate.candidateId}/decision`,
+      {
+        expectedRevision: candidate.decision?.revision ?? 0,
+        status: "APPROVED",
+        note: "검수 미완료",
+        checks: {
+          binaryFit: false,
+          choiceParity: false,
+          duplicateReview: false,
+          sourceReview: false,
+        },
+      },
+    );
+    expect(invalidApproval.statusCode).toBe(400);
+
+    const savedResponse = await opsRequest(
+      "PUT",
+      `/v1/internal/ops/editorial/${candidate.candidateId}/decision`,
+      {
+        expectedRevision: 0,
+        status: "NEEDS_CHANGES",
+        note: "선택지 표현을 맞춰 주세요.",
+        checks: { binaryFit: true, choiceParity: false, duplicateReview: true, sourceReview: true },
+      },
+    );
+    expect(savedResponse.statusCode, savedResponse.body).toBe(200);
+    expect(savedResponse.json()).toMatchObject({ status: "NEEDS_CHANGES", revision: 1 });
+
+    const staleResponse = await opsRequest(
+      "PUT",
+      `/v1/internal/ops/editorial/${candidate.candidateId}/decision`,
+      {
+        expectedRevision: 0,
+        status: "REJECTED",
+        note: "stale",
+        checks: { binaryFit: true, choiceParity: true, duplicateReview: true, sourceReview: true },
+      },
+    );
+    expect(staleResponse.statusCode).toBe(409);
+    expect(staleResponse.json()).toMatchObject({
+      code: "REVISION_CONFLICT",
+      current: { status: "NEEDS_CHANGES", revision: 1 },
+    });
+
+    const rows = await database.db.select().from(operatorEditorialDecisions);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ candidateId: candidate.candidateId, revision: 1 });
   });
 });

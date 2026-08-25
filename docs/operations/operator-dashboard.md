@@ -1,11 +1,13 @@
 # Operator dashboard
 
-Task: WHICH-72  
-Surface: `https://whichone.site/ops`  
-Mode: production read-only
+Tasks: WHICH-72, WHICH-73
 
-The dashboard exposes aggregate operational evidence only. It does not publish Issues, change
-moderation state, rebuild analytics, requeue Outbox events, or browse arbitrary tables.
+Surface: `https://whichone.site/ops`
+
+Mode: aggregate/member read-only + bounded Editorial Review decisions
+
+The console has three tabs: Overview, 사용자 DB, and Issue Review. It does not publish Issues,
+change moderation state, rebuild analytics, requeue Outbox events, or browse arbitrary tables.
 
 ## Access model
 
@@ -14,9 +16,9 @@ Two independent checks protect every dashboard read:
 1. A valid WHICH Member session whose Member has an active `OPERATOR` grant.
 2. When configured, a valid Cloudflare Access application JWT with the configured issuer and AUD.
 
-Every allowed read, denied read from a valid Member, grant, revoke, and backup confirmation is
-written to `operator_audit_logs`. Audit metadata must remain aggregate and must not contain tokens,
-OAuth subjects, email addresses, raw user agents, or IP addresses.
+Every allowed read, denied read from a valid Member, Editorial decision, grant, revoke, and backup
+confirmation is written to `operator_audit_logs`. Audit metadata must remain aggregate and must not
+contain tokens, OAuth subjects, email addresses, raw user agents, or IP addresses.
 
 ## First operator
 
@@ -79,6 +81,26 @@ Only an active operator can create this record.
 - Moderation, integrity, and rate-limit values are aggregate counts only.
 
 The browser receives no email, OAuth provider subject, session identifier, secret, raw event, or SQL.
+
+## 사용자 DB
+
+The Member directory is a deliberately bounded read model. It exposes Member UUID, display name,
+status, public Handle/visibility, connected provider names, joined/last-active timestamps, and
+Vote/Comment/Issue counts. It never returns credential email, password hash, provider subject,
+session/token data, IP address, or user agent. Search is limited to display name, Handle, and Member
+UUID, and cursor pagination is capped at 50 rows per request.
+
+## Issue Review
+
+The candidate catalog and source registries remain immutable repository inputs. The operator can
+record `APPROVED`, `NEEDS_CHANGES`, or `REJECTED`; direct candidate text editing and Pack publication
+are intentionally separate workflows. Approval requires all four explicit checks: binary fit,
+choice parity, duplicate review, and source review.
+
+Decisions are stored in `operator_editorial_decisions`. Each update increments `revision`; a stale
+browser receives `409 REVISION_CONFLICT` and must reload before retrying. This prevents one operator
+from silently overwriting a newer decision. Existing local JSON decisions are not automatically
+imported into PostgreSQL.
 
 ## Refresh and incidents
 
