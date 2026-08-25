@@ -80,6 +80,7 @@ const feedResponseSchema = Type.Object({
         reasonCodes: Type.Array(
           Type.Union([
             Type.Literal("INTEREST_MATCH"),
+            Type.Literal("DEFAULT_TOPIC_BOOST"),
             Type.Literal("EXPLORATION"),
             Type.Literal("RECENT_FALLBACK"),
           ]),
@@ -91,7 +92,7 @@ const feedResponseSchema = Type.Object({
   nextCursor: Type.Union([Type.String(), Type.Null()]),
   ranking: Type.Object({
     requestId: uuidSchema,
-    version: Type.Literal("interest_content_v1"),
+    version: Type.Literal("interest_content_v2_refresh"),
     mode: Type.Union([Type.Literal("PERSONALIZED"), Type.Literal("RECENCY")]),
     reasonCode: Type.Union([
       Type.Literal("INTEREST_PROFILE_MATCH"),

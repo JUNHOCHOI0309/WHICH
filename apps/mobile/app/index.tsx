@@ -16,6 +16,7 @@ import type {
 } from "@/contracts";
 import { MobileApiError } from "@/lib/mobile-api";
 import { guestSubjects, mobileApi } from "@/lib/runtime";
+import { subjectStorage } from "@/lib/secure-subject-storage";
 import { colors } from "@/theme";
 
 type CardVoteState =
@@ -25,6 +26,8 @@ type CardVoteState =
   | { status: "RESULT"; vote: VoteResponse };
 type HighlightState =
   { status: "LOADING" } | { status: "READY"; highlights: CommentHighlights } | { status: "ERROR" };
+
+const LAST_FIRST_ISSUE_KEY = "which:feed:last-first-issue";
 
 export default function FeedScreen() {
   const [issues, setIssues] = useState<PublicFeedIssue[]>([]);
@@ -39,8 +42,13 @@ export default function FeedScreen() {
 
   const fetchFeed = useCallback(async () => {
     const subjectId = await guestSubjects.getOrCreate();
-    const feed = await mobileApi.loadFeed(subjectId, 12);
+    const previousFirstIssueId = await subjectStorage.getItem(LAST_FIRST_ISSUE_KEY);
+    let feed = await mobileApi.loadFeed(subjectId, 12, previousFirstIssueId ?? undefined);
+    if (feed.items.length === 0 && previousFirstIssueId) {
+      feed = await mobileApi.loadFeed(subjectId, 12);
+    }
     const firstIssue = feed.items[0];
+    if (firstIssue) await subjectStorage.setItem(LAST_FIRST_ISSUE_KEY, firstIssue.id);
     if (
       firstIssue &&
       feed.ranking.mode === "PERSONALIZED" &&
@@ -230,12 +238,16 @@ export default function FeedScreen() {
             <View style={styles.filters}>
               <View style={styles.filterActive}>
                 <Text style={styles.filterActiveText}>
-                  {ranking?.mode === "PERSONALIZED" ? "추천" : "최신"}
+                  {ranking?.mode === "PERSONALIZED" ? "추천" : "둘러보기"}
                 </Text>
               </View>
               {ranking?.mode === "PERSONALIZED" ? (
                 <View style={styles.filterSoft}>
                   <Text style={styles.filterSoftText}>관심사 기반</Text>
+                </View>
+              ) : ranking?.reasonCode === "PROFILE_NOT_READY" ? (
+                <View style={styles.filterSoft}>
+                  <Text style={styles.filterSoftText}>사회·일상 우선</Text>
                 </View>
               ) : null}
               <Text style={styles.filterHint}>결과는 투표 후 공개</Text>
