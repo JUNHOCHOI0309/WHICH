@@ -10,6 +10,7 @@ import { logoutMemberSession, MEMBER_LOGOUT_ERROR } from "@/lib/member-session";
 import styles from "./member-profile-experience.module.css";
 import { MemberPublicProfileSettings } from "./member-public-profile-settings";
 import { MemberCredentialSetup } from "./member-credential-setup";
+import { MemberAvatarSettings } from "./member-avatar-settings";
 
 type Screen = "loading" | "guest" | "ready" | "error";
 
@@ -223,6 +224,13 @@ export function MemberProfileExperience() {
                 <span>참여한 질문</span>
               </div>
             </section>
+
+            <MemberAvatarSettings
+              member={profile.member}
+              onUpdated={(member) =>
+                setProfile((current) => (current ? { ...current, member } : current))
+              }
+            />
 
             <MemberPublicProfileSettings
               value={profile.publicProfile}

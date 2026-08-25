@@ -1,5 +1,6 @@
 import { fetchWhichApi } from "./which-api";
 import { internalAuthSecret } from "./member-auth";
+import { cacheSocialAvatar } from "./member-avatar-bridge";
 import type { AuthFlow, AuthOutcome } from "./member-auth";
 
 type SocialProvider = "GOOGLE" | "X" | "NAVER" | "KAKAO";
@@ -143,7 +144,7 @@ export async function completeSocialSignup(input: {
   authRequestKey?: string;
 }) {
   if (input.mode === "new") {
-    return requireSessionResponse(
+    const session = requireSessionResponse(
       await requestMemberSession(
         { ...input.social, authRequestKey: input.authRequestKey },
         true,
@@ -154,6 +155,8 @@ export async function completeSocialSignup(input: {
         },
       ),
     );
+    void cacheSocialAvatar(session.token, input.social.provider, input.social.avatarUrl);
+    return session;
   }
 
   const credentialSession = requireSessionResponse(
@@ -190,6 +193,7 @@ export async function completeSocialSignup(input: {
     }).catch(() => undefined);
     throw new MemberIdentityLinkError(body.code ?? "IDENTITY_LINK_FAILED");
   }
+  void cacheSocialAvatar(body.token, input.social.provider, input.social.avatarUrl);
   return { token: body.token, expiresAt: body.expiresAt, memberId: credentialSession.memberId };
 }
 
@@ -240,6 +244,7 @@ export async function createOAuthMemberSession(flow: AuthFlow, input: SocialSess
     if (!result.upstream.ok || !result.body.token || !result.body.expiresAt) {
       throw new Error("WHICH Member session creation failed.");
     }
+    void cacheSocialAvatar(result.body.token, input.provider, input.avatarUrl);
     return {
       kind: "session",
       token: result.body.token,
@@ -266,6 +271,7 @@ export async function createOAuthMemberSession(flow: AuthFlow, input: SocialSess
   if (!upstream.ok || !body.token || !body.expiresAt) {
     throw new MemberIdentityLinkError(body.code ?? "IDENTITY_LINK_FAILED");
   }
+  void cacheSocialAvatar(body.token, input.provider, input.avatarUrl);
   return {
     kind: "session",
     token: body.token,

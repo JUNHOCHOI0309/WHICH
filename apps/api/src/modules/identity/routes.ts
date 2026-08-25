@@ -542,6 +542,112 @@ export async function registerMemberIdentityRoutes(
       },
     );
 
+    identityApp.put<{
+      Headers: { authorization?: string; "x-internal-auth-secret"?: string };
+      Body: {
+        avatarUrl: string;
+        objectKey: string;
+        sourceProvider?: "GOOGLE" | "X" | "NAVER" | "KAKAO";
+        expectedSourceUrl?: string;
+      };
+    }>(
+      "/v1/internal/member-avatar",
+      {
+        schema: {
+          hide: true,
+          headers: Type.Object(
+            {
+              authorization: Type.Optional(Type.String()),
+              "x-internal-auth-secret": Type.Optional(Type.String()),
+            },
+            { additionalProperties: true },
+          ),
+          body: Type.Object({
+            avatarUrl: Type.String({ format: "uri", maxLength: 2048 }),
+            objectKey: Type.String({ minLength: 1, maxLength: 512 }),
+            sourceProvider: Type.Optional(
+              Type.Union([
+                Type.Literal("GOOGLE"),
+                Type.Literal("X"),
+                Type.Literal("NAVER"),
+                Type.Literal("KAKAO"),
+              ]),
+            ),
+            expectedSourceUrl: Type.Optional(Type.String({ format: "uri", maxLength: 2048 })),
+          }),
+          response: {
+            200: Type.Object({
+              updated: Type.Boolean(),
+              member: memberSchema,
+              replacedObjectKey: Type.Union([Type.String(), Type.Null()]),
+            }),
+            400: errorSchema,
+            401: errorSchema,
+            403: errorSchema,
+          },
+        },
+      },
+      async (request, reply) => {
+        if (!secretMatches(request.headers["x-internal-auth-secret"], internalSecret)) {
+          return reply
+            .code(401)
+            .send({ code: "UNAUTHORIZED", message: "Internal authentication failed." });
+        }
+        const token = bearerToken(request.headers.authorization);
+        const result = token ? await service.setAvatar(token, request.body) : null;
+        if (!result) {
+          return reply.code(401).send({
+            code: "SESSION_INVALID",
+            message: "The Member session is invalid or expired.",
+          });
+        }
+        return reply.send(result);
+      },
+    );
+
+    identityApp.delete<{
+      Headers: { authorization?: string; "x-internal-auth-secret"?: string };
+    }>(
+      "/v1/internal/member-avatar",
+      {
+        schema: {
+          hide: true,
+          headers: Type.Object(
+            {
+              authorization: Type.Optional(Type.String()),
+              "x-internal-auth-secret": Type.Optional(Type.String()),
+            },
+            { additionalProperties: true },
+          ),
+          response: {
+            200: Type.Object({
+              updated: Type.Boolean(),
+              member: memberSchema,
+              replacedObjectKey: Type.Union([Type.String(), Type.Null()]),
+            }),
+            401: errorSchema,
+            403: errorSchema,
+          },
+        },
+      },
+      async (request, reply) => {
+        if (!secretMatches(request.headers["x-internal-auth-secret"], internalSecret)) {
+          return reply
+            .code(401)
+            .send({ code: "UNAUTHORIZED", message: "Internal authentication failed." });
+        }
+        const token = bearerToken(request.headers.authorization);
+        const result = token ? await service.clearAvatar(token) : null;
+        if (!result) {
+          return reply.code(401).send({
+            code: "SESSION_INVALID",
+            message: "The Member session is invalid or expired.",
+          });
+        }
+        return reply.send(result);
+      },
+    );
+
     identityApp.get<{ Headers: { authorization?: string } }>(
       "/v1/member-session",
       {
@@ -665,7 +771,10 @@ export async function registerMemberIdentityRoutes(
             confirmation: Type.Literal("DELETE"),
           }),
           response: {
-            200: Type.Object({ deleted: Type.Literal(true) }),
+            200: Type.Object({
+              deleted: Type.Literal(true),
+              deletedAvatarObjectKey: Type.Optional(Type.String()),
+            }),
             400: errorSchema,
             401: errorSchema,
             409: errorSchema,

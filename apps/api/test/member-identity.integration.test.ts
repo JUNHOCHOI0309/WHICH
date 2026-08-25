@@ -256,6 +256,93 @@ describe("Member identity and Guest vote linking", () => {
     });
   });
 
+  it("replaces a social avatar with an R2 WebP and lets the Member manage the result", async () => {
+    const sourceUrl = "https://lh3.googleusercontent.com/avatar-source";
+    const signup = await createMemberSession({
+      provider: "GOOGLE",
+      providerSubject: `google-r2-avatar-${randomUUID()}`,
+      avatarUrl: sourceUrl,
+    });
+    const session = signup.json<{ token: string; member: { id: string } }>();
+    const firstObjectKey = `avatars/${session.member.id}/${randomUUID()}.webp`;
+    const firstUrl = `https://images.whichone.site/${firstObjectKey}`;
+
+    const cached = await app.inject({
+      method: "PUT",
+      url: "/v1/internal/member-avatar",
+      headers: {
+        authorization: `Bearer ${session.token}`,
+        "x-internal-auth-secret": INTERNAL_SECRET,
+      },
+      payload: {
+        avatarUrl: firstUrl,
+        objectKey: firstObjectKey,
+        sourceProvider: "GOOGLE",
+        expectedSourceUrl: sourceUrl,
+      },
+    });
+    expect(cached.statusCode).toBe(200);
+    expect(cached.json()).toMatchObject({
+      updated: true,
+      replacedObjectKey: null,
+      member: { avatar: { kind: "IMAGE", url: firstUrl } },
+    });
+
+    const staleObjectKey = `avatars/${session.member.id}/${randomUUID()}.webp`;
+    const staleSocialCache = await app.inject({
+      method: "PUT",
+      url: "/v1/internal/member-avatar",
+      headers: {
+        authorization: `Bearer ${session.token}`,
+        "x-internal-auth-secret": INTERNAL_SECRET,
+      },
+      payload: {
+        avatarUrl: `https://images.whichone.site/${staleObjectKey}`,
+        objectKey: staleObjectKey,
+        sourceProvider: "GOOGLE",
+        expectedSourceUrl: sourceUrl,
+      },
+    });
+    expect(staleSocialCache.statusCode).toBe(200);
+    expect(staleSocialCache.json()).toMatchObject({
+      updated: false,
+      member: { avatar: { kind: "IMAGE", url: firstUrl } },
+    });
+
+    const customObjectKey = `avatars/${session.member.id}/${randomUUID()}.webp`;
+    const customUrl = `https://images.whichone.site/${customObjectKey}`;
+    const customized = await app.inject({
+      method: "PUT",
+      url: "/v1/internal/member-avatar",
+      headers: {
+        authorization: `Bearer ${session.token}`,
+        "x-internal-auth-secret": INTERNAL_SECRET,
+      },
+      payload: { avatarUrl: customUrl, objectKey: customObjectKey },
+    });
+    expect(customized.statusCode).toBe(200);
+    expect(customized.json()).toMatchObject({
+      updated: true,
+      replacedObjectKey: firstObjectKey,
+      member: { avatar: { kind: "IMAGE", url: customUrl } },
+    });
+
+    const removed = await app.inject({
+      method: "DELETE",
+      url: "/v1/internal/member-avatar",
+      headers: {
+        authorization: `Bearer ${session.token}`,
+        "x-internal-auth-secret": INTERNAL_SECRET,
+      },
+    });
+    expect(removed.statusCode).toBe(200);
+    expect(removed.json()).toMatchObject({
+      updated: true,
+      replacedObjectKey: customObjectKey,
+      member: { avatar: { kind: "INITIALS" } },
+    });
+  });
+
   it("creates one Member with credential and social identities, then signs in by email", async () => {
     const email = `Member-${randomUUID()}@Example.com`;
     const password = "correct horse battery staple";

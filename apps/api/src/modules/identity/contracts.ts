@@ -43,6 +43,13 @@ export type MemberCredentialResult = {
 
 export type MemberAccountDeletionResult = {
   deleted: true;
+  deletedAvatarObjectKey?: string;
+};
+
+export type MemberAvatarUpdateResult = {
+  updated: boolean;
+  member: MemberView;
+  replacedObjectKey: string | null;
 };
 
 export type MemberSessionResult = {
@@ -190,6 +197,16 @@ export interface MemberIdentityService {
     query: MemberVoteHistoryQuery,
   ): Promise<MemberPrivateProfile | null>;
   updateProfile(token: string, command: MemberProfileUpdate): Promise<MemberProfileSettings | null>;
+  setAvatar(
+    token: string,
+    command: {
+      avatarUrl: string;
+      objectKey: string;
+      sourceProvider?: Exclude<IdentityProvider, "EMAIL" | "DEVELOPMENT">;
+      expectedSourceUrl?: string;
+    },
+  ): Promise<MemberAvatarUpdateResult | null>;
+  clearAvatar(token: string): Promise<MemberAvatarUpdateResult | null>;
   deleteAccount(token: string, password: string): Promise<MemberAccountDeletionResult | null>;
   getPublicCreatorProfile(handle: string): Promise<PublicCreatorProfile | null>;
   findPrivateVote(

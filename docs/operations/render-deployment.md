@@ -78,6 +78,18 @@ After `which-web` is healthy at its `onrender.com` address:
 9. After existing credentials can request a verification email and PC/Android
    QA passes, set `AUTH_EMAIL_VERIFICATION_REQUIRED=true` and redeploy.
 
+## Profile image storage
+
+Profile image upload is optional and fails closed when R2 is not configured. Create one
+private R2 bucket and expose only its read path through an R2 custom domain, then set
+`R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`, and
+`R2_PUBLIC_BASE_URL` on `which-web`.
+
+The token only needs object read/write/delete access for that bucket. The Web BFF accepts
+JPG/PNG uploads up to 5 MB, strips metadata while decoding, center-crops to 512×512, and
+stores only WebP objects under `avatars/{memberId}/`. Social provider images use the same
+pipeline. Replaced images and a deleted account's stored image are removed from R2.
+
 `whichone.site` is the canonical origin. Do not add a second origin to
 `AUTH_BASE_URL` or `WEB_ORIGIN` without updating every OAuth/OIDC provider and testing
 the session cookies.
