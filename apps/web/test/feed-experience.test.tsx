@@ -155,7 +155,7 @@ describe("FeedExperience", () => {
     expect(screen.queryByRole("button", { name: "질문" })).not.toBeInTheDocument();
   });
 
-  it("does not show the question creation CTA when submissions are disabled", async () => {
+  it("keeps only the mobile question entry when inline submissions are disabled", async () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("FEATURE_CREATOR_SUBMISSIONS_ENABLED", "false");
     vi.stubGlobal(
@@ -177,7 +177,7 @@ describe("FeedExperience", () => {
 
     expect(await screen.findByText(feed.items[0]!.question)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Question" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "질문" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "질문" })).toBeInTheDocument();
   });
 
   it("prepares the Guest before showing result-free Issue cards", async () => {

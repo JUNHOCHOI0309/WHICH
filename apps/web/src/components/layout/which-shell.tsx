@@ -84,12 +84,10 @@ export function WhichShell({
             <ShellLink href="/interests" active={active === "interests"} icon="#">
               관심사
             </ShellLink>
-            {creationEnabled ? (
-              <MemberQuestionComposerButton
-                className={`${styles.navLink} ${styles.mobileQuestionButton}`}
-                mobile
-              />
-            ) : null}
+            <MemberQuestionComposerButton
+              className={`${styles.navLink} ${styles.mobileQuestionButton}`}
+              mobile
+            />
             <MemberNavigationLink active={active === "me"} />
           </nav>
         </main>

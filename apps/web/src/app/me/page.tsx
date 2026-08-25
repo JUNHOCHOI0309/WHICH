@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { MemberProfileExperience } from "@/features/identity/member-profile-experience";
+import { creatorSubmissionsEnabled } from "@/lib/server/feature-flags";
 
 export const metadata: Metadata = {
   title: "내 기록",
@@ -8,5 +9,5 @@ export const metadata: Metadata = {
 };
 
 export default function MePage() {
-  return <MemberProfileExperience />;
+  return <MemberProfileExperience creationEnabled={creatorSubmissionsEnabled()} />;
 }
