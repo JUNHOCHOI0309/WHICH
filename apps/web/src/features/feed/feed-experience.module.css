@@ -1,5 +1,53 @@
 .feed {
   min-width: 0;
+  overscroll-behavior-y: contain;
+}
+
+.pullRefresh {
+  position: fixed;
+  z-index: 55;
+  top: 66px;
+  left: 50%;
+  min-height: 38px;
+  border: 1px solid var(--which-border);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 96%);
+  box-shadow: 0 8px 24px rgb(15 23 42 / 12%);
+  color: var(--which-text-secondary);
+  display: none;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 13px;
+  font-size: 0.7rem;
+  font-weight: 850;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, calc(var(--pull-distance) - 48px));
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease;
+}
+
+.pullRefresh[data-state="PULLING"],
+.pullRefresh[data-state="READY"],
+.pullRefresh[data-state="REFRESHING"],
+.pullRefresh[data-state="ERROR"] {
+  opacity: 1;
+}
+
+.pullRefresh[data-state="READY"],
+.pullRefresh[data-state="REFRESHING"] {
+  border-color: var(--which-cyan);
+  color: var(--which-cyan-strong);
+}
+
+.pullRefresh[data-state="REFRESHING"] span {
+  animation: refresh-spin 800ms linear infinite;
+}
+
+.pullRefresh[data-state="ERROR"] {
+  border-color: var(--which-orange);
+  color: var(--which-orange-strong);
 }
 
 .feedHeader {
@@ -307,7 +355,17 @@
   }
 }
 
+@keyframes refresh-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 @media (max-width: 767px) {
+  .pullRefresh {
+    display: flex;
+  }
+
   .feedHeader {
     padding: 5px 4px 14px;
   }
@@ -342,7 +400,9 @@
 
 @media (prefers-reduced-motion: reduce) {
   .card,
-  .loadingList div {
+  .loadingList div,
+  .pullRefresh,
+  .pullRefresh span {
     animation: none;
     transition: none;
   }
