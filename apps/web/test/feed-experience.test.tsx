@@ -56,7 +56,7 @@ const feed: PublicIssueFeed = {
   nextCursor: null,
   ranking: {
     requestId: "20000000-0000-4000-8000-000000000001",
-    version: "interest_content_v1",
+    version: "interest_content_v2_refresh",
     mode: "RECENCY",
     reasonCode: "PROFILE_NOT_READY",
     profileVersion: null,
@@ -85,9 +85,35 @@ const personalizedFeed: PublicIssueFeed = {
 describe("FeedExperience", () => {
   beforeEach(() => {
     resetGuestPreparation();
+    sessionStorage.clear();
     navigation.push.mockReset();
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
+  });
+
+  it("excludes the previous first question after a browser refresh", async () => {
+    sessionStorage.setItem("which:feed:last-first-issue", feed.items[0]!.id);
+    const requests: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = String(input);
+        requests.push(url);
+        if (url === "/api/member-session") return jsonResponse({ code: "SESSION_INVALID" }, 401);
+        if (url === "/api/guest-subjects") return jsonResponse({ status: "ready" });
+        if (url.startsWith("/api/issues/feed?")) return jsonResponse(feed);
+        throw new Error(`Unexpected request: ${url}`);
+      }),
+    );
+
+    render(<FeedExperience />);
+
+    expect(await screen.findByText(feed.items[0]!.question)).toBeInTheDocument();
+    expect(
+      requests.some((url) =>
+        url.includes(`excludeIssueId=${encodeURIComponent(feed.items[0]!.id)}`),
+      ),
+    ).toBe(true);
   });
 
   it("opens the Question composer from the rail for an active Member", async () => {

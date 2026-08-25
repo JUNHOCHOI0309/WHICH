@@ -22,7 +22,7 @@ export type PublicFeedIssue = {
   recommendation: {
     requestId: string;
     score: number;
-    reasonCodes: ("INTEREST_MATCH" | "EXPLORATION" | "RECENT_FALLBACK")[];
+    reasonCodes: ("INTEREST_MATCH" | "DEFAULT_TOPIC_BOOST" | "EXPLORATION" | "RECENT_FALLBACK")[];
     matchedCardCodes: InterestCardCode[];
   };
 };
@@ -41,7 +41,7 @@ export type PublicIssueFeed = {
   nextCursor: string | null;
   ranking: {
     requestId: string;
-    version: "interest_content_v1";
+    version: "interest_content_v2_refresh";
     mode: "PERSONALIZED" | "RECENCY";
     reasonCode:
       | "INTEREST_PROFILE_MATCH"

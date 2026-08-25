@@ -230,7 +230,7 @@ describe("IssueExperience", () => {
             nextCursor: null,
             ranking: {
               requestId: "30000000-0000-4000-8000-000000000001",
-              version: "interest_content_v1",
+              version: "interest_content_v2_refresh",
               mode: "RECENCY",
               reasonCode: "PROFILE_NOT_READY",
               profileVersion: null,

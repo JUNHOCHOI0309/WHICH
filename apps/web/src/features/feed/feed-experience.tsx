@@ -33,6 +33,35 @@ type CardVoteState =
 type HighlightState =
   { status: "LOADING" } | { status: "READY"; highlights: CommentHighlights } | { status: "ERROR" };
 
+const LAST_FIRST_ISSUE_KEY = "which:feed:last-first-issue";
+
+function previousFirstIssueId() {
+  try {
+    return sessionStorage.getItem(LAST_FIRST_ISSUE_KEY) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function rememberFirstIssue(feed: PublicIssueFeed) {
+  const firstIssue = feed.items[0];
+  if (!firstIssue) return;
+  try {
+    sessionStorage.setItem(LAST_FIRST_ISSUE_KEY, firstIssue.id);
+  } catch {
+    // The server-side ranking seed still provides refresh diversity when storage is unavailable.
+  }
+}
+
+async function loadRefreshFeed(signal?: AbortSignal) {
+  const excludeIssueId = previousFirstIssueId();
+  const feed = await loadIssueFeed({ limit: 6, excludeIssueId, signal });
+  if (feed.items.length === 0 && excludeIssueId) {
+    return loadIssueFeed({ limit: 6, signal });
+  }
+  return feed;
+}
+
 export function FeedExperience({ creationEnabled = false }: { creationEnabled?: boolean }) {
   const [screen, setScreen] = useState<FeedScreen>("loading");
   const [items, setItems] = useState<PublicFeedIssue[]>([]);
@@ -44,6 +73,7 @@ export function FeedExperience({ creationEnabled = false }: { creationEnabled?: 
   const viewedRecommendationRequests = useRef(new Set<string>());
 
   const applyFeed = useCallback((feed: PublicIssueFeed) => {
+    rememberFirstIssue(feed);
     setItems(feed.items);
     setNextCursor(feed.nextCursor);
     setRanking(feed.ranking);
@@ -54,7 +84,7 @@ export function FeedExperience({ creationEnabled = false }: { creationEnabled?: 
     setScreen("loading");
     try {
       await ensureGuestSubject();
-      applyFeed(await loadIssueFeed({ limit: 6 }));
+      applyFeed(await loadRefreshFeed());
     } catch {
       setScreen("error");
     }
@@ -65,7 +95,7 @@ export function FeedExperience({ creationEnabled = false }: { creationEnabled?: 
     const controller = new AbortController();
 
     void ensureGuestSubject()
-      .then(() => loadIssueFeed({ limit: 6, signal: controller.signal }))
+      .then(() => loadRefreshFeed(controller.signal))
       .then((feed) => {
         if (active) applyFeed(feed);
       })
@@ -220,10 +250,12 @@ export function FeedExperience({ creationEnabled = false }: { creationEnabled?: 
 
         <div className={styles.filters} aria-label="현재 피드 정렬">
           <span className={styles.filterActive}>
-            {ranking?.mode === "PERSONALIZED" ? "추천" : "최신"}
+            {ranking?.mode === "PERSONALIZED" ? "추천" : "둘러보기"}
           </span>
           {ranking?.mode === "PERSONALIZED" ? (
             <span className={styles.personalizedBadge}>관심사 기반</span>
+          ) : ranking?.reasonCode === "PROFILE_NOT_READY" ? (
+            <span className={styles.personalizedBadge}>사회·일상 우선</span>
           ) : null}
           <Link href="/interests">관심사 조정</Link>
         </div>

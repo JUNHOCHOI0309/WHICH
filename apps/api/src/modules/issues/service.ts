@@ -46,7 +46,7 @@ import {
   type RankedIssue,
   type RankingProfile,
 } from "../recommendations/contracts.js";
-import { rankIssues } from "../recommendations/ranker.js";
+import { rankDiscoveryIssues, rankIssues } from "../recommendations/ranker.js";
 import { loadRankingProfile, recordRecommendation } from "../recommendations/service.js";
 
 export function createIssueReadService(
@@ -229,6 +229,15 @@ export function createIssueReadService(
       }
 
       const rankingRequestId = randomUUID();
+      const rankingSeed = cursor?.rankingSeed ?? randomUUID();
+      const legacyRecencyCursor =
+        cursor?.mode === "RECENCY" && (!cursor.rankingSeed || cursor.score === undefined);
+      const discoveryRanking =
+        (options.personalizationEnabled ?? false) &&
+        profile.mode === "RECENCY" &&
+        !legacyRecencyCursor &&
+        (Boolean(cursor?.rankingSeed) || profile.reasonCode === "PROFILE_NOT_READY");
+      const seededRanking = profile.mode === "PERSONALIZED" || discoveryRanking;
       const result = await database.transaction(async (transaction) => {
         const now = new Date();
         const latestPublishedVersions = transaction
@@ -283,7 +292,7 @@ export function createIssueReadService(
           filters.push(ne(issues.id, query.excludeIssueId));
         }
 
-        if (cursor?.mode === "RECENCY") {
+        if (legacyRecencyCursor) {
           filters.push(
             or(
               lt(latestPublishedVersions.publishedAt, cursor.publishedAt),
@@ -378,7 +387,7 @@ export function createIssueReadService(
           );
         }
 
-        const candidateLimit = profile.mode === "PERSONALIZED" ? 200 : query.limit + 1;
+        const candidateLimit = seededRanking ? 200 : query.limit + 1;
         const candidateRows = await transaction
           .select({
             id: issues.id,
@@ -431,6 +440,7 @@ export function createIssueReadService(
               profile.selectedCardCodes,
               subjectId,
               profile.profileVersion,
+              rankingSeed,
             );
           } catch {
             profile = { ...profile, mode: "RECENCY", reasonCode: "RANKER_FALLBACK" };
@@ -445,6 +455,16 @@ export function createIssueReadService(
               matchedCardCodes: [],
             }));
           }
+        } else if (discoveryRanking) {
+          rankedRows = rankDiscoveryIssues(
+            candidateRows.map((row) => ({
+              id: row.id,
+              version: row.version,
+              publishedAt: row.publishedAt!,
+              cardWeights: weightsByIssue.get(`${row.id}:${row.version}`) ?? new Map(),
+            })),
+            rankingSeed,
+          );
         } else {
           rankedRows = candidateRows.map((row) => ({
             id: row.id,
@@ -458,12 +478,16 @@ export function createIssueReadService(
           }));
         }
 
-        if (cursor?.mode === "PERSONALIZED") {
+        const cursorScore = cursor?.score;
+        if (
+          (cursor?.mode === "PERSONALIZED" || (cursor?.mode === "RECENCY" && cursor.rankingSeed)) &&
+          cursorScore !== undefined
+        ) {
           rankedRows = rankedRows.filter(
             (row) =>
-              row.score < cursor.score ||
-              (row.score === cursor.score && row.publishedAt < cursor.publishedAt) ||
-              (row.score === cursor.score &&
+              row.score < cursorScore ||
+              (row.score === cursorScore && row.publishedAt < cursor.publishedAt) ||
+              (row.score === cursorScore &&
                 row.publishedAt.valueOf() === cursor.publishedAt.valueOf() &&
                 row.id < cursor.issueId),
           );
@@ -527,16 +551,28 @@ export function createIssueReadService(
                 ? encodePersonalizedIssueFeedCursor({
                     mode: "PERSONALIZED",
                     rankingVersion: RANKING_VERSION,
+                    rankingSeed,
                     profileVersion: profile.profileVersion,
                     score: lastItem.ranked.score,
                     publishedAt: lastItem.publishedAt,
                     issueId: lastItem.id,
                   })
-                : encodeIssueFeedCursor({
-                    mode: "RECENCY",
-                    publishedAt: lastItem.publishedAt,
-                    issueId: lastItem.id,
-                  })
+                : encodeIssueFeedCursor(
+                    discoveryRanking
+                      ? {
+                          mode: "RECENCY",
+                          rankingVersion: RANKING_VERSION,
+                          rankingSeed,
+                          score: lastItem.ranked.score,
+                          publishedAt: lastItem.publishedAt,
+                          issueId: lastItem.id,
+                        }
+                      : {
+                          mode: "RECENCY",
+                          publishedAt: lastItem.publishedAt,
+                          issueId: lastItem.id,
+                        },
+                  )
               : null,
           ranking,
           auditItems: pageRankedRows,

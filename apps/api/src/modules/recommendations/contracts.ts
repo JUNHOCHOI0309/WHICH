@@ -1,6 +1,6 @@
 import type { InterestCardCode } from "../interests/contracts.js";
 
-export const RANKING_VERSION = "interest_content_v1";
+export const RANKING_VERSION = "interest_content_v2_refresh";
 
 export type RankingMode = "PERSONALIZED" | "RECENCY";
 export type RankingReasonCode =
@@ -20,7 +20,7 @@ export type FeedRankingContext = {
 
 export type FeedItemRecommendation = {
   score: number;
-  reasonCodes: Array<"INTEREST_MATCH" | "EXPLORATION" | "RECENT_FALLBACK">;
+  reasonCodes: Array<"INTEREST_MATCH" | "DEFAULT_TOPIC_BOOST" | "EXPLORATION" | "RECENT_FALLBACK">;
   matchedCardCodes: InterestCardCode[];
 };
 

@@ -172,9 +172,9 @@ describe("Personalized Feed Ranker v0", () => {
     expect(second.items.map((item) => item.id)).not.toContain(olderTech);
   });
 
-  it("keeps recency order when the Interest Profile is not completed", async () => {
-    const older = await createIssue("GAME", new Date("2026-08-20T12:00:00.000Z"));
-    const newer = await createIssue("FOOD", new Date("2026-08-20T13:00:00.000Z"));
+  it("uses society and daily-life boosts when the Interest Profile is not completed", async () => {
+    const society = await createIssue("SOCIETY", new Date("2026-08-20T12:00:00.000Z"));
+    const dailyLife = await createIssue("DAILY_LIFE", new Date("2026-08-20T13:00:00.000Z"));
     const guest = await createGuestProfile([], "SKIPPED");
 
     const response = await app.inject({
@@ -182,12 +182,37 @@ describe("Personalized Feed Ranker v0", () => {
       url: "/v1/issues/feed?limit=20",
       headers: { "x-anonymous-subject-id": guest.anonymousSubjectId },
     });
-    const body = response.json<{ items: Array<{ id: string }>; ranking: { mode: string } }>();
+    const body = response.json<{
+      items: Array<{ id: string; recommendation: { reasonCodes: string[] } }>;
+      ranking: { mode: string };
+    }>();
     expect(response.statusCode).toBe(200);
     expect(body.ranking.mode).toBe("RECENCY");
-    expect(body.items.findIndex((item) => item.id === newer)).toBeLessThan(
-      body.items.findIndex((item) => item.id === older),
+    expect(body.items.find((item) => item.id === society)?.recommendation.reasonCodes).toContain(
+      "DEFAULT_TOPIC_BOOST",
     );
+    expect(body.items.find((item) => item.id === dailyLife)?.recommendation.reasonCodes).toContain(
+      "DEFAULT_TOPIC_BOOST",
+    );
+
+    const firstPageResponse = await app.inject({
+      method: "GET",
+      url: "/v1/issues/feed?limit=1",
+      headers: { "x-anonymous-subject-id": guest.anonymousSubjectId },
+    });
+    const firstPage = firstPageResponse.json<{
+      items: Array<{ id: string }>;
+      nextCursor: string;
+    }>();
+    const secondPageResponse = await app.inject({
+      method: "GET",
+      url: `/v1/issues/feed?limit=20&cursor=${encodeURIComponent(firstPage.nextCursor)}`,
+      headers: { "x-anonymous-subject-id": guest.anonymousSubjectId },
+    });
+    const secondPage = secondPageResponse.json<{ items: Array<{ id: string }> }>();
+    expect(firstPageResponse.statusCode).toBe(200);
+    expect(secondPageResponse.statusCode).toBe(200);
+    expect(secondPage.items.map((item) => item.id)).not.toContain(firstPage.items[0]?.id);
   });
 
   it("falls back to recency while the ranker feature flag is disabled", async () => {
@@ -255,10 +280,23 @@ describe("Personalized Feed Ranker v0", () => {
       url: "/v1/issues/feed?limit=1",
       headers: { authorization: `Bearer ${sessionToken}` },
     });
-    const body = response.json<{ items: Array<{ id: string }>; ranking: { mode: string } }>();
+    const body = response.json<{
+      items: Array<{ id: string; recommendation: { matchedCardCodes: string[] } }>;
+      ranking: { mode: string };
+    }>();
     expect(response.statusCode).toBe(200);
     expect(body.ranking.mode).toBe("PERSONALIZED");
-    expect(body.items[0]?.id).toBe(educationIssue);
+    expect(body.items[0]?.recommendation.matchedCardCodes).toEqual(
+      expect.arrayContaining([expect.stringMatching(/^(EDUCATION|SOCIETY|WORK)$/)]),
+    );
+    const expandedFeed = await app.inject({
+      method: "GET",
+      url: "/v1/issues/feed?limit=20",
+      headers: { authorization: `Bearer ${sessionToken}` },
+    });
+    expect(
+      expandedFeed.json<{ items: Array<{ id: string }> }>().items.map((item) => item.id),
+    ).toContain(educationIssue);
   });
 
   it("excludes the Member's direct, linked Guest, and current unlinked Guest votes", async () => {
