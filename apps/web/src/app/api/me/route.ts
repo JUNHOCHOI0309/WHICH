@@ -7,6 +7,7 @@ import {
   MEMBER_SESSION_COOKIE,
 } from "@/lib/server/which-api";
 import { publicOriginForRequest } from "@/lib/server/request-origin";
+import { deleteStoredAvatar } from "@/lib/server/avatar-storage";
 
 export async function GET(request: NextRequest) {
   const token = request.cookies.get(MEMBER_SESSION_COOKIE)?.value;
@@ -90,7 +91,12 @@ export async function DELETE(request: NextRequest) {
     });
     const body = await upstream.json();
     const response = NextResponse.json(body, { status: upstream.status });
-    if (upstream.ok && body?.deleted === true) clearMemberSessionCookie(response);
+    if (upstream.ok && body?.deleted === true) {
+      clearMemberSessionCookie(response);
+      if (typeof body.deletedAvatarObjectKey === "string") {
+        await deleteStoredAvatar(body.deletedAvatarObjectKey).catch(() => undefined);
+      }
+    }
     return response;
   } catch {
     return NextResponse.json(

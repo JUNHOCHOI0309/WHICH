@@ -92,6 +92,17 @@ export function MemberNavigationProvider({ children }: { children: ReactNode }) 
     };
   }, []);
 
+  useEffect(() => {
+    const updateAvatar = (event: Event) => {
+      const avatar = (event as CustomEvent<{ avatar?: MemberSession["member"]["avatar"] }>).detail
+        ?.avatar;
+      if (!avatar) return;
+      setMember((current) => (current ? { ...current, avatar } : current));
+    };
+    window.addEventListener("which:member-avatar-updated", updateAvatar);
+    return () => window.removeEventListener("which:member-avatar-updated", updateAvatar);
+  }, []);
+
   return (
     <MemberNavigationContext.Provider value={{ loginHref: loginHref(returnTo), member, state }}>
       {children}

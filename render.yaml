@@ -102,6 +102,18 @@ services:
         sync: false
       - key: SUPPORT_EMAIL
         sync: false
+      # Optional profile-image storage. The app remains healthy when these are unset.
+      # R2 stores only normalized 512px WebP objects under avatars/{memberId}/.
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_BUCKET_NAME
+        sync: false
+      - key: R2_PUBLIC_BASE_URL
+        sync: false
       - key: FEATURE_COMMENTS_ENABLED
         value: "false"
       - key: FEATURE_CREATOR_SUBMISSIONS_ENABLED

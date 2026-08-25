@@ -51,6 +51,8 @@ const memberIdentity: MemberIdentityService = {
   getSession: vi.fn(),
   getPrivateProfile: vi.fn(),
   updateProfile: vi.fn(),
+  setAvatar: vi.fn(),
+  clearAvatar: vi.fn(),
   deleteAccount: vi.fn(),
   getPublicCreatorProfile: vi.fn(),
   findPrivateVote: vi.fn(),
