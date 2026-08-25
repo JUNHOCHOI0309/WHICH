@@ -1,0 +1,322 @@
+.page {
+  display: grid;
+  gap: 22px;
+  padding-bottom: 52px;
+}
+
+.hero,
+.message,
+.monthGroup,
+.empty {
+  border: 1px solid var(--which-border);
+  border-radius: 18px;
+  background: var(--which-surface);
+  box-shadow: 0 8px 24px rgb(15 23 42 / 4%);
+}
+
+.hero {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 24px;
+  padding: clamp(24px, 5vw, 42px);
+}
+
+.hero p,
+.message > p {
+  margin: 0 0 10px;
+  color: var(--which-cyan-strong);
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+}
+
+.hero h1,
+.message h1 {
+  margin: 0;
+  font-size: clamp(2rem, 5vw, 3.4rem);
+  letter-spacing: -0.065em;
+  line-height: 1.08;
+  word-break: keep-all;
+}
+
+.hero span,
+.message span {
+  display: block;
+  margin-top: 14px;
+  color: var(--which-text-secondary);
+  line-height: 1.6;
+}
+
+.hero > a,
+.message a,
+.message button,
+.empty a,
+.moreButton {
+  width: fit-content;
+  min-height: 44px;
+  border: 1px solid var(--which-border-strong);
+  border-radius: 999px;
+  background: var(--which-surface);
+  color: var(--which-text);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 900;
+  padding: 9px 16px;
+  text-decoration: none;
+}
+
+.message {
+  min-height: 420px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: clamp(24px, 5vw, 42px);
+}
+
+.message a,
+.message button {
+  margin-top: 24px;
+  border-color: var(--which-cyan);
+  background: var(--which-cyan);
+}
+
+.profileTabs {
+  border: 1px solid var(--which-border);
+  border-radius: 14px;
+  background: var(--which-surface);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 6px;
+}
+
+.profileTabs a {
+  min-height: 44px;
+  border-radius: 10px;
+  color: var(--which-text-secondary);
+  display: grid;
+  place-items: center;
+  font-size: 0.82rem;
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.profileTabs a:focus-visible,
+.hero a:focus-visible,
+.timelineItem > a:focus-visible,
+.moreButton:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--which-cyan) 40%, transparent);
+  outline-offset: 2px;
+}
+
+.profileTabs .profileTabActive {
+  background: var(--which-cyan-soft);
+  color: var(--which-cyan-strong);
+}
+
+.monthList {
+  display: grid;
+  gap: 16px;
+}
+
+.monthGroup {
+  padding: clamp(20px, 4vw, 32px);
+}
+
+.monthGroup > header {
+  border-bottom: 1px solid var(--which-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 15px;
+}
+
+.monthGroup h2 {
+  margin: 0;
+  font-size: 1.25rem;
+  letter-spacing: -0.04em;
+}
+
+.monthGroup > header span {
+  color: var(--which-text-tertiary);
+  font-size: 0.7rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.timeline {
+  display: grid;
+}
+
+.timelineItem {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(180px, 0.7fr) auto;
+  align-items: center;
+  gap: 24px;
+  padding: 22px 0;
+}
+
+.timelineItem + .timelineItem {
+  border-top: 1px solid var(--which-border);
+}
+
+.voteCopy {
+  min-width: 0;
+}
+
+.voteMeta {
+  color: var(--which-text-tertiary);
+  display: flex;
+  gap: 12px;
+  font-size: 0.64rem;
+  font-weight: 850;
+  letter-spacing: 0.06em;
+}
+
+.voteCopy h3 {
+  margin: 8px 0 10px;
+  font-size: 1.02rem;
+  letter-spacing: -0.025em;
+  line-height: 1.45;
+  word-break: keep-all;
+}
+
+.voteCopy p {
+  margin: 0;
+  color: var(--which-text-secondary);
+  font-size: 0.76rem;
+}
+
+.voteCopy strong {
+  margin-left: 5px;
+  color: var(--which-text);
+}
+
+.result {
+  min-width: 0;
+}
+
+.resultLabels {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.76rem;
+  font-weight: 950;
+}
+
+.resultLabels span:first-child {
+  color: var(--which-cyan-strong);
+}
+
+.resultLabels span:last-child {
+  color: var(--which-orange-strong);
+}
+
+.resultBar {
+  height: 7px;
+  margin-top: 8px;
+  border-radius: 999px;
+  background: var(--which-orange);
+  overflow: hidden;
+}
+
+.resultBar span {
+  min-width: 0;
+  height: 100%;
+  background: var(--which-cyan);
+  display: block;
+}
+
+.result small {
+  margin-top: 7px;
+  color: var(--which-text-tertiary);
+  display: block;
+  font-size: 0.66rem;
+  text-align: right;
+}
+
+.timelineItem > a {
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--which-border-strong);
+  border-radius: 50%;
+  color: var(--which-text);
+  display: grid;
+  place-items: center;
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.empty {
+  padding: clamp(24px, 5vw, 42px);
+}
+
+.empty h2 {
+  margin: 0;
+}
+
+.empty p {
+  color: var(--which-text-secondary);
+  line-height: 1.6;
+}
+
+.moreButton {
+  margin: 0 auto;
+  border-color: var(--which-cyan);
+  background: var(--which-cyan);
+}
+
+.moreButton:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.loadMoreError {
+  margin: 0;
+  border-left: 4px solid var(--which-orange);
+  border-radius: 8px;
+  background: var(--which-orange-soft);
+  color: var(--which-text);
+  font-size: 0.8rem;
+  font-weight: 800;
+  padding: 12px 14px;
+}
+
+@media (max-width: 760px) {
+  .hero {
+    align-items: start;
+    flex-direction: column;
+  }
+
+  .timelineItem {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 14px;
+  }
+
+  .result {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .timelineItem > a {
+    grid-column: 2;
+    grid-row: 1;
+  }
+}
+
+@media (max-width: 480px) {
+  .hero h1,
+  .message h1 {
+    font-size: clamp(1.8rem, 10vw, 2.5rem);
+  }
+
+  .monthGroup {
+    padding: 18px;
+  }
+}

@@ -34,10 +34,12 @@ describe("Member private profile experience", () => {
   });
 
   it("shows only the current Member's profile and accepted vote history", async () => {
+    const requests: string[] = [];
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () =>
-        jsonResponse({
+      vi.fn(async (input: string | URL | Request) => {
+        requests.push(String(input));
+        return jsonResponse({
           member: {
             id: "member-1",
             displayName: "테스트 회원",
@@ -75,8 +77,8 @@ describe("Member private profile experience", () => {
             ],
             nextCursor: null,
           },
-        }),
-      ),
+        });
+      }),
     );
 
     render(<MemberProfileExperience />);
@@ -90,6 +92,12 @@ describe("Member private profile experience", () => {
       "/issues/591f2e90-996a-50c5-af46-967dd0793000",
     );
     expect(screen.getByText("선택 기록은 공개 프로필과 분리됩니다.")).toBeVisible();
+    expect(screen.getByRole("link", { name: /전체 투표 기록 보기/ })).toHaveAttribute(
+      "href",
+      "/me/votes",
+    );
+    expect(screen.getByRole("link", { name: "프로필" })).toHaveAttribute("aria-current", "page");
+    expect(requests).toContain("/api/me?limit=3");
     expect(screen.queryByRole("heading", { name: "로그인 수단 연결" })).not.toBeInTheDocument();
   });
 

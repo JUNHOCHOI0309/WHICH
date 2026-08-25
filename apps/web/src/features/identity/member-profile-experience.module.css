@@ -23,6 +23,41 @@
   gap: 24px;
 }
 
+.profileTabs {
+  border: 1px solid var(--which-border);
+  border-radius: 14px;
+  background: var(--which-surface);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 6px;
+}
+
+.profileTabs a {
+  min-height: 44px;
+  border-radius: 10px;
+  color: var(--which-text-secondary);
+  display: grid;
+  place-items: center;
+  font-size: 0.82rem;
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.profileTabs a:hover,
+.profileTabs a:focus-visible {
+  color: var(--which-text);
+}
+
+.profileTabs a:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--which-cyan) 38%, transparent);
+  outline-offset: -2px;
+}
+
+.profileTabs .profileTabActive {
+  background: var(--which-cyan-soft);
+  color: var(--which-cyan-strong);
+}
+
 .profileIdentityCopy > p,
 .historyHeading p,
 .privacyNote p,
@@ -302,13 +337,13 @@
 
 .voteGrid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
   margin-top: 20px;
 }
 
 .voteCard {
-  min-height: 250px;
+  min-height: 230px;
   border: 1px solid var(--which-border);
   border-radius: 16px;
   background: var(--which-surface-subtle);
@@ -399,12 +434,22 @@
   line-height: 1.6;
 }
 
-.moreButton {
-  margin: 24px auto 0;
+.viewAllLink {
+  width: 100%;
+  min-height: 48px;
+  margin-top: 20px;
+  border: 1px solid var(--which-border-strong);
+  border-radius: 13px;
+  color: var(--which-text);
   display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.82rem;
+  font-weight: 900;
+  padding: 10px 16px;
+  text-decoration: none;
 }
 
-.moreButton:disabled,
 .privacyNote button:disabled {
   cursor: wait;
   opacity: 0.6;
@@ -583,12 +628,32 @@
   }
 
   .voteGrid {
-    grid-template-columns: 1fr;
+    width: calc(100% + 20px);
+    grid-auto-columns: minmax(82%, 1fr);
+    grid-auto-flow: column;
+    grid-template-columns: none;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    padding: 0 20px 10px 0;
+    scroll-padding-inline: 0 20px;
+    scroll-snap-type: inline mandatory;
+    scrollbar-width: thin;
+  }
+
+  .voteCard {
+    min-width: 0;
+    scroll-snap-align: start;
   }
 
   .historyHeading {
     align-items: start;
     flex-direction: column;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .voteGrid {
+    scroll-behavior: auto;
   }
 }
 
