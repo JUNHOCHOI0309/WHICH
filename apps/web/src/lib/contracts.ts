@@ -160,6 +160,7 @@ export type MemberPrivateProfile = {
     displayName: string;
     status: "ACTIVE" | "LIMITED" | "SUSPENDED" | "DELETED";
     avatar: MemberAvatar;
+    avatarSource: "INITIALS" | "SOCIAL" | "CUSTOM";
     joinedAt: string;
     participationCount: number;
   };

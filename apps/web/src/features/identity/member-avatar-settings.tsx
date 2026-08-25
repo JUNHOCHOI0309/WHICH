@@ -7,7 +7,7 @@ import type { MemberPrivateProfile } from "@/lib/contracts";
 import styles from "./member-profile-experience.module.css";
 
 type Member = MemberPrivateProfile["member"];
-type AvatarMemberUpdate = Pick<Member, "id" | "displayName" | "status" | "avatar">;
+type AvatarMemberUpdate = Pick<Member, "id" | "displayName" | "status" | "avatar" | "avatarSource">;
 type AvatarApiResponse = { member?: AvatarMemberUpdate; message?: string };
 
 function fallbackInitials(displayName: string) {
@@ -98,6 +98,7 @@ export function MemberAvatarSettings({
   }
 
   const avatar = member.avatar;
+  const customAvatar = avatar?.kind === "IMAGE" && member.avatarSource === "CUSTOM";
   const initials =
     avatar?.kind === "INITIALS" ? avatar.initials : fallbackInitials(member.displayName);
 
@@ -121,9 +122,11 @@ export function MemberAvatarSettings({
               {initials}
             </span>
           )}
-          <span className={styles.avatarPickerHint} aria-hidden="true">
-            {pending ? "저장 중" : avatar?.kind === "IMAGE" ? "변경" : "선택"}
-          </span>
+          {pending || !customAvatar ? (
+            <span className={styles.avatarPickerHint} aria-hidden="true">
+              {pending ? "저장 중" : "변경"}
+            </span>
+          ) : null}
           <input
             ref={fileInput}
             className={styles.avatarInput}
@@ -145,7 +148,7 @@ export function MemberAvatarSettings({
             }}
           />
         </label>
-        {avatar?.kind === "IMAGE" ? (
+        {customAvatar ? (
           <button
             className={styles.avatarDeleteButton}
             type="button"

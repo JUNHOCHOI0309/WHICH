@@ -44,7 +44,9 @@ describe("Member avatar BFF", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ member });
+    expect(await response.json()).toEqual({
+      member: { ...member, avatarSource: "CUSTOM" },
+    });
     expect(avatarBridge.uploadMemberAvatar).toHaveBeenCalledWith(
       "member-token",
       expect.any(Buffer),
@@ -85,6 +87,9 @@ describe("Member avatar BFF", () => {
     );
 
     expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      member: { avatar: { kind: "INITIALS" }, avatarSource: "INITIALS" },
+    });
     expect(avatarBridge.removeMemberAvatar).toHaveBeenCalledWith("member-token");
   });
 });

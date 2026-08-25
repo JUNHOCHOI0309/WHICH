@@ -104,6 +104,7 @@ describe("Member private profile experience", () => {
               displayName: "이미지 변경 회원",
               status: "ACTIVE",
               avatar: { kind: "IMAGE", url: "https://images.whichone.site/avatar.webp" },
+              avatarSource: "CUSTOM",
             },
           });
         }
@@ -113,6 +114,7 @@ describe("Member private profile experience", () => {
             displayName: "이미지 변경 회원",
             status: "ACTIVE",
             avatar: { kind: "INITIALS", initials: "이미" },
+            avatarSource: "INITIALS",
             joinedAt: "2026-08-01T00:00:00.000Z",
             participationCount: 3,
           },
@@ -141,6 +143,7 @@ describe("Member private profile experience", () => {
       "https://images.whichone.site/avatar.webp",
     );
     expect(screen.getByRole("button", { name: "프로필 이미지 삭제" })).toBeVisible();
+    expect(screen.queryByText("변경")).not.toBeInTheDocument();
     expect(screen.queryByText("PROFILE IMAGE")).not.toBeInTheDocument();
     expect(screen.queryByText(/512px WebP로 자동 변환/)).not.toBeInTheDocument();
   });
@@ -156,6 +159,7 @@ describe("Member private profile experience", () => {
               displayName: "이미지 삭제 회원",
               status: "ACTIVE",
               avatar: { kind: "INITIALS", initials: "이미" },
+              avatarSource: "INITIALS",
             },
           });
         }
@@ -165,6 +169,7 @@ describe("Member private profile experience", () => {
             displayName: "이미지 삭제 회원",
             status: "ACTIVE",
             avatar: { kind: "IMAGE", url: "https://images.whichone.site/avatar.webp" },
+            avatarSource: "CUSTOM",
             joinedAt: "2026-08-01T00:00:00.000Z",
             participationCount: 1,
           },
@@ -184,6 +189,34 @@ describe("Member private profile experience", () => {
     expect(screen.queryByRole("img", { name: "이미지 삭제 회원 프로필" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "프로필 이미지 삭제" })).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "이미지 삭제 회원님의 선택" })).toBeVisible();
+  });
+
+  it("offers change without delete for the initial social avatar", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        jsonResponse({
+          member: {
+            id: "member-1",
+            displayName: "소셜 이미지 회원",
+            status: "ACTIVE",
+            avatar: { kind: "IMAGE", url: "https://images.whichone.site/social-avatar.webp" },
+            avatarSource: "SOCIAL",
+            joinedAt: "2026-08-01T00:00:00.000Z",
+            participationCount: 0,
+          },
+          publicProfile: null,
+          identities: [],
+          votes: { items: [], nextCursor: null },
+        }),
+      ),
+    );
+
+    render(<MemberProfileExperience />);
+
+    expect(await screen.findByRole("img", { name: "소셜 이미지 회원 프로필" })).toBeVisible();
+    expect(screen.getByText("변경")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "프로필 이미지 삭제" })).not.toBeInTheDocument();
   });
 
   it("creates a public Creator profile from the private Me surface", async () => {

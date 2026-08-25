@@ -287,6 +287,12 @@ describe("Member identity and Guest vote linking", () => {
       replacedObjectKey: null,
       member: { avatar: { kind: "IMAGE", url: firstUrl } },
     });
+    const socialProfile = await app.inject({
+      method: "GET",
+      url: "/v1/me",
+      headers: { authorization: `Bearer ${session.token}` },
+    });
+    expect(socialProfile.json()).toMatchObject({ member: { avatarSource: "SOCIAL" } });
 
     const staleObjectKey = `avatars/${session.member.id}/${randomUUID()}.webp`;
     const staleSocialCache = await app.inject({
@@ -326,6 +332,12 @@ describe("Member identity and Guest vote linking", () => {
       replacedObjectKey: firstObjectKey,
       member: { avatar: { kind: "IMAGE", url: customUrl } },
     });
+    const customProfile = await app.inject({
+      method: "GET",
+      url: "/v1/me",
+      headers: { authorization: `Bearer ${session.token}` },
+    });
+    expect(customProfile.json()).toMatchObject({ member: { avatarSource: "CUSTOM" } });
 
     const removed = await app.inject({
       method: "DELETE",
@@ -341,6 +353,12 @@ describe("Member identity and Guest vote linking", () => {
       replacedObjectKey: customObjectKey,
       member: { avatar: { kind: "INITIALS" } },
     });
+    const initialsProfile = await app.inject({
+      method: "GET",
+      url: "/v1/me",
+      headers: { authorization: `Bearer ${session.token}` },
+    });
+    expect(initialsProfile.json()).toMatchObject({ member: { avatarSource: "INITIALS" } });
   });
 
   it("creates one Member with credential and social identities, then signs in by email", async () => {
