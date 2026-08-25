@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { WhichShell } from "@/components/layout/which-shell";
 import { RotatingCommentHighlights } from "@/components/comments/rotating-comment-highlights";
+import { FloatingTopButton } from "@/components/navigation/floating-top-button";
 import { BalanceResultBar } from "@/components/vote/balance-result-bar";
 import { VoteChoiceRow } from "@/components/vote/vote-choice-row";
 import {
@@ -21,6 +22,7 @@ import type {
   PublicIssueFeed,
   VoteResponse,
 } from "@/lib/contracts";
+import { usePullToRefresh } from "@/hooks/use-pull-to-refresh";
 
 import styles from "./feed-experience.module.css";
 
@@ -89,6 +91,13 @@ export function FeedExperience({ creationEnabled = false }: { creationEnabled?: 
       setScreen("error");
     }
   }, [applyFeed]);
+
+  const refreshFeed = useCallback(async () => {
+    await ensureGuestSubject();
+    applyFeed(await loadRefreshFeed());
+  }, [applyFeed]);
+
+  const pullToRefresh = usePullToRefresh(refreshFeed);
 
   useEffect(() => {
     let active = true;
@@ -237,6 +246,7 @@ export function FeedExperience({ creationEnabled = false }: { creationEnabled?: 
 
   return (
     <WhichShell active="home" creationEnabled={creationEnabled}>
+      <PullRefreshIndicator distance={pullToRefresh.distance} state={pullToRefresh.state} />
       <section className={styles.feed} aria-labelledby="feed-title">
         <header className={styles.feedHeader}>
           <div>
@@ -312,7 +322,39 @@ export function FeedExperience({ creationEnabled = false }: { creationEnabled?: 
           </>
         ) : null}
       </section>
+      <FloatingTopButton />
     </WhichShell>
+  );
+}
+
+function PullRefreshIndicator({
+  distance,
+  state,
+}: {
+  distance: number;
+  state: ReturnType<typeof usePullToRefresh>["state"];
+}) {
+  const label =
+    state === "READY"
+      ? "놓아서 새로고침"
+      : state === "REFRESHING"
+        ? "새 질문을 불러오는 중"
+        : state === "ERROR"
+          ? "새로고침하지 못했어요"
+          : "당겨서 새로고침";
+
+  return (
+    <div
+      className={styles.pullRefresh}
+      data-state={state}
+      style={{ "--pull-distance": `${distance}px` } as React.CSSProperties}
+      role="status"
+      aria-live="polite"
+      aria-hidden={state === "IDLE"}
+    >
+      <span aria-hidden="true">↓</span>
+      {label}
+    </div>
   );
 }
 

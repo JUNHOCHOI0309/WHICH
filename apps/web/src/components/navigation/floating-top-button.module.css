@@ -1,0 +1,46 @@
+.button {
+  position: fixed;
+  z-index: 55;
+  right: clamp(16px, 2.5vw, 32px);
+  bottom: calc(24px + env(safe-area-inset-bottom));
+  width: 52px;
+  height: 52px;
+  border: 1px solid rgb(255 255 255 / 45%);
+  border-radius: 50%;
+  background: var(--which-text);
+  box-shadow: 0 12px 30px rgb(15 23 42 / 22%);
+  color: var(--which-surface);
+  cursor: pointer;
+  font-size: 0.68rem;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(12px) scale(0.92);
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease;
+}
+
+.button[data-visible="true"] {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0) scale(1);
+}
+
+.button:focus-visible {
+  outline: 3px solid var(--which-cyan);
+  outline-offset: 3px;
+}
+
+@media (max-width: 1023px) {
+  .button {
+    bottom: calc(80px + env(safe-area-inset-bottom));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .button {
+    transition: none;
+  }
+}

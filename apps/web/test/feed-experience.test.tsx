@@ -89,6 +89,147 @@ describe("FeedExperience", () => {
     navigation.push.mockReset();
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
+    Object.defineProperty(window, "scrollY", { configurable: true, value: 0, writable: true });
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 1024,
+      writable: true,
+    });
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      value: vi.fn((query: string) => ({
+        matches: query === "(max-width: 767px)" ? window.innerWidth <= 767 : false,
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    });
+  });
+
+  it("refreshes the mobile feed after a valid pull gesture without clearing the current cards", async () => {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 390, writable: true });
+    let feedAttempts = 0;
+    const refreshedFeed = {
+      ...feed,
+      items: [{ ...feed.items[1]!, question: "새로 불러온 모바일 질문" }, feed.items[0]!],
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = String(input);
+        if (url === "/api/member-session") return jsonResponse({ code: "SESSION_INVALID" }, 401);
+        if (url === "/api/guest-subjects") return jsonResponse({ status: "ready" });
+        if (url.startsWith("/api/issues/feed?")) {
+          feedAttempts += 1;
+          return jsonResponse(feedAttempts === 1 ? feed : refreshedFeed);
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      }),
+    );
+
+    render(<FeedExperience />);
+    expect(await screen.findByText(feed.items[0]!.question)).toBeInTheDocument();
+
+    fireEvent.touchStart(window, { touches: [{ clientX: 100, clientY: 10 }] });
+    fireEvent.touchMove(window, {
+      touches: [{ clientX: 102, clientY: 170 }],
+      cancelable: true,
+    });
+    expect(screen.getByRole("status")).toHaveTextContent("놓아서 새로고침");
+    expect(screen.getByText(feed.items[0]!.question)).toBeInTheDocument();
+    fireEvent.touchEnd(window);
+
+    expect(await screen.findByText("새로 불러온 모바일 질문")).toBeInTheDocument();
+    await waitFor(() => expect(feedAttempts).toBe(2));
+  });
+
+  it("ignores short and horizontal mobile gestures", async () => {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 390, writable: true });
+    let feedAttempts = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = String(input);
+        if (url === "/api/member-session") return jsonResponse({ code: "SESSION_INVALID" }, 401);
+        if (url === "/api/guest-subjects") return jsonResponse({ status: "ready" });
+        if (url.startsWith("/api/issues/feed?")) {
+          feedAttempts += 1;
+          return jsonResponse(feed);
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      }),
+    );
+
+    render(<FeedExperience />);
+    expect(await screen.findByText(feed.items[0]!.question)).toBeInTheDocument();
+
+    fireEvent.touchStart(window, { touches: [{ clientX: 100, clientY: 10 }] });
+    fireEvent.touchMove(window, { touches: [{ clientX: 101, clientY: 70 }] });
+    fireEvent.touchEnd(window);
+    fireEvent.touchStart(window, { touches: [{ clientX: 20, clientY: 20 }] });
+    fireEvent.touchMove(window, { touches: [{ clientX: 160, clientY: 70 }] });
+    fireEvent.touchEnd(window);
+
+    expect(feedAttempts).toBe(1);
+  });
+
+  it("keeps the current mobile feed when pull-to-refresh fails", async () => {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 390, writable: true });
+    let feedAttempts = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = String(input);
+        if (url === "/api/member-session") return jsonResponse({ code: "SESSION_INVALID" }, 401);
+        if (url === "/api/guest-subjects") return jsonResponse({ status: "ready" });
+        if (url.startsWith("/api/issues/feed?")) {
+          feedAttempts += 1;
+          return feedAttempts === 1
+            ? jsonResponse(feed)
+            : jsonResponse({ code: "API_UNAVAILABLE", message: "down" }, 502);
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      }),
+    );
+
+    render(<FeedExperience />);
+    expect(await screen.findByText(feed.items[0]!.question)).toBeInTheDocument();
+    fireEvent.touchStart(window, { touches: [{ clientX: 100, clientY: 10 }] });
+    fireEvent.touchMove(window, { touches: [{ clientX: 100, clientY: 170 }] });
+    fireEvent.touchEnd(window);
+
+    expect(await screen.findByText("새로고침하지 못했어요")).toBeInTheDocument();
+    expect(screen.getByText(feed.items[0]!.question)).toBeInTheDocument();
+  });
+
+  it("shows a TOP control after scrolling and moves the page to the top", async () => {
+    const scrollTo = vi.fn();
+    Object.defineProperty(window, "scrollTo", { configurable: true, value: scrollTo });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = String(input);
+        if (url === "/api/member-session") return jsonResponse({ code: "SESSION_INVALID" }, 401);
+        if (url === "/api/guest-subjects") return jsonResponse({ status: "ready" });
+        if (url.startsWith("/api/issues/feed?")) return jsonResponse(feed);
+        throw new Error(`Unexpected request: ${url}`);
+      }),
+    );
+
+    render(<FeedExperience />);
+    expect(await screen.findByText(feed.items[0]!.question)).toBeInTheDocument();
+    const topButton = screen.getByLabelText("페이지 맨 위로 이동", { selector: "button" });
+    expect(topButton).toHaveAttribute("aria-hidden", "true");
+
+    window.scrollY = 800;
+    fireEvent.scroll(window);
+    expect(topButton).toHaveAttribute("aria-hidden", "false");
+    fireEvent.click(topButton);
+    expect(scrollTo).toHaveBeenCalledWith({ top: 0, behavior: "smooth" });
   });
 
   it("excludes the previous first question after a browser refresh", async () => {
