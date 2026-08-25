@@ -290,7 +290,13 @@ export function IssueExperience({
         {issue.context ? <p className={styles.context}>{issue.context}</p> : null}
         {issue.author ? (
           <Link className={styles.authorLink} href={`/user/${issue.author.handle}`}>
-            <span aria-hidden="true">{issue.author.avatar.initials}</span>
+            <span aria-hidden="true">
+              {issue.author.avatar.kind === "IMAGE" ? (
+                <img src={issue.author.avatar.url} alt="" referrerPolicy="no-referrer" />
+              ) : (
+                issue.author.avatar.initials
+              )}
+            </span>
             <span>
               <small>QUESTION BY</small>
               <strong>{issue.author.displayName}</strong>
@@ -392,7 +398,13 @@ function ResultScreen({
         <div className={styles.resultQuestion}>{issue.question}</div>
         {issue.author ? (
           <Link className={styles.authorLink} href={`/user/${issue.author.handle}`}>
-            <span aria-hidden="true">{issue.author.avatar.initials}</span>
+            <span aria-hidden="true">
+              {issue.author.avatar.kind === "IMAGE" ? (
+                <img src={issue.author.avatar.url} alt="" referrerPolicy="no-referrer" />
+              ) : (
+                issue.author.avatar.initials
+              )}
+            </span>
             <span>
               <small>QUESTION BY</small>
               <strong>{issue.author.displayName}</strong>

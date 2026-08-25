@@ -18,6 +18,10 @@ export const members = pgTable("members", {
   id: uuid("member_id").defaultRandom().primaryKey(),
   status: memberStatusEnum("status").default("ACTIVE").notNull(),
   displayName: varchar("display_name", { length: 80 }).notNull(),
+  avatarUrl: varchar("avatar_url", { length: 2048 }),
+  avatarSourceProvider: identityProviderEnum("avatar_source_provider"),
+  avatarObjectKey: varchar("avatar_object_key", { length: 512 }),
+  avatarUpdatedAt: timestamp("avatar_updated_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });

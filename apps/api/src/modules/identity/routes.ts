@@ -7,6 +7,10 @@ import type { MemberIdentityService } from "./contracts.js";
 import { decodeMemberVoteHistoryCursor } from "./cursor.js";
 import { MemberIdentityError } from "./errors.js";
 
+const avatarSchema = Type.Union([
+  Type.Object({ kind: Type.Literal("INITIALS"), initials: Type.String() }),
+  Type.Object({ kind: Type.Literal("IMAGE"), url: Type.String({ format: "uri" }) }),
+]);
 const memberSchema = Type.Object({
   id: Type.String({ format: "uuid" }),
   displayName: Type.String(),
@@ -16,6 +20,7 @@ const memberSchema = Type.Object({
     Type.Literal("SUSPENDED"),
     Type.Literal("DELETED"),
   ]),
+  avatar: avatarSchema,
 });
 
 const errorSchema = Type.Object({ code: Type.String(), message: Type.String() });
@@ -89,7 +94,7 @@ const publicCreatorProfileSchema = Type.Object({
     handle: Type.String(),
     bio: Type.Union([Type.String(), Type.Null()]),
     joinedMonth: Type.String({ pattern: "^[0-9]{4}-[0-9]{2}$" }),
-    avatar: Type.Object({ kind: Type.Literal("INITIALS"), initials: Type.String() }),
+    avatar: avatarSchema,
   }),
   stats: Type.Object({
     publishedIssueCount: Type.Integer({ minimum: 0 }),
@@ -163,6 +168,7 @@ export async function registerMemberIdentityRoutes(
         provider: "EMAIL" | "GOOGLE" | "X" | "NAVER" | "KAKAO" | "DEVELOPMENT";
         providerSubject: string;
         displayName: string;
+        avatarUrl?: string;
         anonymousSubjectId?: string;
         createIfMissing?: boolean;
         credential?: { email: string; password: string };
@@ -188,6 +194,7 @@ export async function registerMemberIdentityRoutes(
             ]),
             providerSubject: Type.String({ minLength: 1, maxLength: 255 }),
             displayName: Type.String({ minLength: 1, maxLength: 160 }),
+            avatarUrl: Type.Optional(Type.String({ format: "uri", maxLength: 2048 })),
             anonymousSubjectId: Type.Optional(Type.String({ format: "uuid" })),
             createIfMissing: Type.Optional(Type.Boolean()),
             credential: Type.Optional(
@@ -487,6 +494,7 @@ export async function registerMemberIdentityRoutes(
         provider: "GOOGLE" | "X" | "NAVER" | "KAKAO" | "DEVELOPMENT";
         providerSubject: string;
         displayName: string;
+        avatarUrl?: string;
       };
     }>(
       "/v1/internal/member-identity-links",
@@ -502,6 +510,7 @@ export async function registerMemberIdentityRoutes(
             provider: identityProviderSchema,
             providerSubject: Type.String({ minLength: 1, maxLength: 255 }),
             displayName: Type.String({ minLength: 1, maxLength: 160 }),
+            avatarUrl: Type.Optional(Type.String({ format: "uri", maxLength: 2048 })),
           }),
           response: {
             201: Type.Object({
@@ -530,6 +539,112 @@ export async function registerMemberIdentityRoutes(
         }
         const result = await service.linkIdentity(request.body.memberId, request.body);
         return reply.code(201).send(result);
+      },
+    );
+
+    identityApp.put<{
+      Headers: { authorization?: string; "x-internal-auth-secret"?: string };
+      Body: {
+        avatarUrl: string;
+        objectKey: string;
+        sourceProvider?: "GOOGLE" | "X" | "NAVER" | "KAKAO";
+        expectedSourceUrl?: string;
+      };
+    }>(
+      "/v1/internal/member-avatar",
+      {
+        schema: {
+          hide: true,
+          headers: Type.Object(
+            {
+              authorization: Type.Optional(Type.String()),
+              "x-internal-auth-secret": Type.Optional(Type.String()),
+            },
+            { additionalProperties: true },
+          ),
+          body: Type.Object({
+            avatarUrl: Type.String({ format: "uri", maxLength: 2048 }),
+            objectKey: Type.String({ minLength: 1, maxLength: 512 }),
+            sourceProvider: Type.Optional(
+              Type.Union([
+                Type.Literal("GOOGLE"),
+                Type.Literal("X"),
+                Type.Literal("NAVER"),
+                Type.Literal("KAKAO"),
+              ]),
+            ),
+            expectedSourceUrl: Type.Optional(Type.String({ format: "uri", maxLength: 2048 })),
+          }),
+          response: {
+            200: Type.Object({
+              updated: Type.Boolean(),
+              member: memberSchema,
+              replacedObjectKey: Type.Union([Type.String(), Type.Null()]),
+            }),
+            400: errorSchema,
+            401: errorSchema,
+            403: errorSchema,
+          },
+        },
+      },
+      async (request, reply) => {
+        if (!secretMatches(request.headers["x-internal-auth-secret"], internalSecret)) {
+          return reply
+            .code(401)
+            .send({ code: "UNAUTHORIZED", message: "Internal authentication failed." });
+        }
+        const token = bearerToken(request.headers.authorization);
+        const result = token ? await service.setAvatar(token, request.body) : null;
+        if (!result) {
+          return reply.code(401).send({
+            code: "SESSION_INVALID",
+            message: "The Member session is invalid or expired.",
+          });
+        }
+        return reply.send(result);
+      },
+    );
+
+    identityApp.delete<{
+      Headers: { authorization?: string; "x-internal-auth-secret"?: string };
+    }>(
+      "/v1/internal/member-avatar",
+      {
+        schema: {
+          hide: true,
+          headers: Type.Object(
+            {
+              authorization: Type.Optional(Type.String()),
+              "x-internal-auth-secret": Type.Optional(Type.String()),
+            },
+            { additionalProperties: true },
+          ),
+          response: {
+            200: Type.Object({
+              updated: Type.Boolean(),
+              member: memberSchema,
+              replacedObjectKey: Type.Union([Type.String(), Type.Null()]),
+            }),
+            401: errorSchema,
+            403: errorSchema,
+          },
+        },
+      },
+      async (request, reply) => {
+        if (!secretMatches(request.headers["x-internal-auth-secret"], internalSecret)) {
+          return reply
+            .code(401)
+            .send({ code: "UNAUTHORIZED", message: "Internal authentication failed." });
+        }
+        const token = bearerToken(request.headers.authorization);
+        const result = token ? await service.clearAvatar(token) : null;
+        if (!result) {
+          return reply.code(401).send({
+            code: "SESSION_INVALID",
+            message: "The Member session is invalid or expired.",
+          });
+        }
+        return reply.send(result);
       },
     );
 
@@ -656,7 +771,10 @@ export async function registerMemberIdentityRoutes(
             confirmation: Type.Literal("DELETE"),
           }),
           response: {
-            200: Type.Object({ deleted: Type.Literal(true) }),
+            200: Type.Object({
+              deleted: Type.Literal(true),
+              deletedAvatarObjectKey: Type.Optional(Type.String()),
+            }),
             400: errorSchema,
             401: errorSchema,
             409: errorSchema,

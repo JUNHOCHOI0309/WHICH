@@ -46,7 +46,10 @@ const issueResponseSchema = Type.Object({
     Type.Object({
       displayName: Type.String(),
       handle: Type.String(),
-      avatar: Type.Object({ kind: Type.Literal("INITIALS"), initials: Type.String() }),
+      avatar: Type.Union([
+        Type.Object({ kind: Type.Literal("INITIALS"), initials: Type.String() }),
+        Type.Object({ kind: Type.Literal("IMAGE"), url: Type.String({ format: "uri" }) }),
+      ]),
     }),
     Type.Null(),
   ]),

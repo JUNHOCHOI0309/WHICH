@@ -93,6 +93,57 @@ describe("Member private profile experience", () => {
     expect(screen.queryByRole("heading", { name: "로그인 수단 연결" })).not.toBeInTheDocument();
   });
 
+  it("keeps the complete private profile after changing only the avatar", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        if (String(input) === "/api/me/avatar" && init?.method === "PUT") {
+          return jsonResponse({
+            member: {
+              id: "member-1",
+              displayName: "이미지 변경 회원",
+              status: "ACTIVE",
+              avatar: { kind: "IMAGE", url: "https://images.whichone.site/avatar.webp" },
+            },
+          });
+        }
+        return jsonResponse({
+          member: {
+            id: "member-1",
+            displayName: "이미지 변경 회원",
+            status: "ACTIVE",
+            avatar: { kind: "INITIALS", initials: "이미" },
+            joinedAt: "2026-08-01T00:00:00.000Z",
+            participationCount: 3,
+          },
+          publicProfile: null,
+          identities: [],
+          votes: { items: [], nextCursor: null },
+        });
+      }),
+    );
+
+    const { container } = render(<MemberProfileExperience />);
+
+    expect(await screen.findByRole("heading", { name: "이미지 변경 회원님의 선택" })).toBeVisible();
+    const fileInput = container.querySelector<HTMLInputElement>('input[type="file"]');
+    expect(fileInput).not.toBeNull();
+    fireEvent.change(fileInput!, {
+      target: { files: [new File(["avatar"], "avatar.png", { type: "image/png" })] },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "이미지 변경" }));
+
+    expect(await screen.findByText("프로필 이미지를 변경했습니다.")).toBeVisible();
+    expect(screen.getByRole("heading", { name: "이미지 변경 회원님의 선택" })).toBeVisible();
+    expect(screen.getByText(/2026년 8월부터 WHICH에 참여했어요/)).toBeVisible();
+    expect(screen.getByText("3")).toBeVisible();
+    expect(screen.getByRole("img", { name: "이미지 변경 회원 프로필" })).toHaveAttribute(
+      "src",
+      "https://images.whichone.site/avatar.webp",
+    );
+    expect(screen.queryByText(/512px WebP로 자동 변환/)).not.toBeInTheDocument();
+  });
+
   it("creates a public Creator profile from the private Me surface", async () => {
     vi.stubGlobal(
       "fetch",

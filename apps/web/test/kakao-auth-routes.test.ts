@@ -79,7 +79,7 @@ describe("Kakao OIDC routes", () => {
       client_id: "kakao-client",
       redirect_uri: "http://localhost:3000/api/auth/kakao/callback",
       response_type: "code",
-      scope: "openid profile_nickname",
+      scope: "openid profile_nickname profile_image",
       state: "kakao-state",
       nonce: "kakao-nonce",
       code_challenge: "kakao-challenge",
@@ -122,7 +122,11 @@ describe("Kakao OIDC routes", () => {
           : undefined,
     );
     oidcMocks.authorizationCodeGrant.mockResolvedValue({
-      claims: () => ({ sub: "kakao-subject-1", nickname: "카카오 사용자" }),
+      claims: () => ({
+        sub: "kakao-subject-1",
+        nickname: "카카오 사용자",
+        picture: "https://k.kakaocdn.net/kakao-avatar.jpg",
+      }),
     });
     const request = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       expect(String(input)).toBe("http://localhost:4000/v1/internal/member-sessions");
@@ -130,6 +134,7 @@ describe("Kakao OIDC routes", () => {
         provider: "KAKAO",
         providerSubject: "kakao-subject-1",
         displayName: "카카오 사용자",
+        avatarUrl: "https://k.kakaocdn.net/kakao-avatar.jpg",
       });
       return Response.json(
         { token: "which-session", expiresAt: "2026-08-23T00:00:00.000Z" },

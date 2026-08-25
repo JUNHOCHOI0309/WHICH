@@ -94,12 +94,51 @@ function hashToken(token: string) {
 }
 
 function toMemberView(member: typeof members.$inferSelect): MemberView {
-  return { id: member.id, displayName: member.displayName, status: member.status };
+  return {
+    id: member.id,
+    displayName: member.displayName,
+    status: member.status,
+    avatar: member.avatarUrl
+      ? { kind: "IMAGE", url: member.avatarUrl }
+      : { kind: "INITIALS", initials: publicProfileInitials(member.displayName) },
+  };
 }
 
 function normalizedDisplayName(value: string) {
   const normalized = value.trim().replace(/\s+/g, " ");
   return normalized.length > 0 ? normalized.slice(0, 80) : "WHICH 회원";
+}
+
+function normalizedAvatarUrl(value: string | undefined) {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    if (url.protocol === "http:") url.protocol = "https:";
+    if (url.protocol !== "https:") return null;
+    url.username = "";
+    url.password = "";
+    url.hash = "";
+    const normalized = url.toString();
+    return normalized.length <= 2048 ? normalized : null;
+  } catch {
+    return null;
+  }
+}
+
+function validAvatarObjectKey(memberId: string, value: string) {
+  return (
+    value.length <= 512 &&
+    value.startsWith(`avatars/${memberId}/`) &&
+    /^[A-Za-z0-9/_-]+\.webp$/.test(value)
+  );
+}
+
+function avatarUrlMatchesObjectKey(avatarUrl: string, objectKey: string) {
+  try {
+    return new URL(avatarUrl).pathname.endsWith(`/${objectKey}`);
+  } catch {
+    return false;
+  }
 }
 
 const PROVIDER_PLACEHOLDER_DISPLAY_NAMES: Partial<Record<IdentityProvider, string>> = {
@@ -510,6 +549,7 @@ export function createMemberIdentityService(
         assertion.provider === "EMAIL"
           ? normalizeEmail(assertion.providerSubject)
           : assertion.providerSubject;
+      const avatarUrl = normalizedAvatarUrl(assertion.avatarUrl);
       if (assertion.provider === "EMAIL" && credential && credential.email !== providerSubject) {
         throw new MemberIdentityError(
           "EMAIL_INVALID",
@@ -569,7 +609,12 @@ export function createMemberIdentityService(
 
           const [member] = await transaction
             .insert(members)
-            .values({ displayName: normalizedDisplayName(assertion.displayName) })
+            .values({
+              displayName: normalizedDisplayName(assertion.displayName),
+              avatarUrl,
+              avatarSourceProvider: avatarUrl ? assertion.provider : null,
+              avatarUpdatedAt: avatarUrl ? now : null,
+            })
             .returning();
           if (!member) throw new Error("Member insert did not return a row.");
 
@@ -636,6 +681,19 @@ export function createMemberIdentityService(
               .returning();
             if (!updatedMember) throw new Error("Member display name update did not return a row.");
             identity = { ...identity, member: updatedMember };
+          }
+          if (!identity.member.avatarUrl && avatarUrl) {
+            const [updatedMember] = await transaction
+              .update(members)
+              .set({
+                avatarUrl,
+                avatarSourceProvider: assertion.provider,
+                avatarUpdatedAt: now,
+                updatedAt: now,
+              })
+              .where(and(eq(members.id, identity.member.id), isNull(members.avatarUrl)))
+              .returning();
+            if (updatedMember) identity = { ...identity, member: updatedMember };
           }
         }
 
@@ -1242,6 +1300,7 @@ export function createMemberIdentityService(
       const now = new Date();
       const expiresAt = new Date(now.getTime() + options.sessionTtlSeconds * 1_000);
       const token = randomBytes(32).toString("base64url");
+      const avatarUrl = normalizedAvatarUrl(assertion.avatarUrl);
 
       return database.transaction(async (transaction) => {
         await transaction.execute(
@@ -1268,7 +1327,7 @@ export function createMemberIdentityService(
           );
         }
 
-        const [member] = await transaction
+        let [member] = await transaction
           .select()
           .from(members)
           .where(eq(members.id, memberId))
@@ -1425,7 +1484,14 @@ export function createMemberIdentityService(
             );
           await transaction
             .update(members)
-            .set({ status: "DELETED", updatedAt: now })
+            .set({
+              status: "DELETED",
+              avatarUrl: null,
+              avatarSourceProvider: null,
+              avatarObjectKey: null,
+              avatarUpdatedAt: null,
+              updatedAt: now,
+            })
             .where(eq(members.id, sourceMemberId));
 
           const eventId = randomUUID();
@@ -1467,6 +1533,20 @@ export function createMemberIdentityService(
             lastAuthenticatedAt: now,
           });
           linked = true;
+        }
+
+        if (!member.avatarUrl && avatarUrl) {
+          const [updatedMember] = await transaction
+            .update(members)
+            .set({
+              avatarUrl,
+              avatarSourceProvider: assertion.provider,
+              avatarUpdatedAt: now,
+              updatedAt: now,
+            })
+            .where(and(eq(members.id, memberId), isNull(members.avatarUrl)))
+            .returning();
+          if (updatedMember) member = updatedMember;
         }
 
         await transaction.insert(memberSessions).values({
@@ -1583,6 +1663,121 @@ export function createMemberIdentityService(
       });
     },
 
+    async setAvatar(token, command) {
+      const session = await activeMemberSession(database, token);
+      if (!session) return null;
+
+      const avatarUrl = normalizedAvatarUrl(command.avatarUrl);
+      if (
+        !avatarUrl ||
+        !validAvatarObjectKey(session.member.id, command.objectKey) ||
+        !avatarUrlMatchesObjectKey(avatarUrl, command.objectKey)
+      ) {
+        throw new MemberIdentityError(
+          "AVATAR_INVALID",
+          400,
+          "The profile image reference is invalid.",
+        );
+      }
+      const expectedSourceUrl = command.expectedSourceUrl
+        ? normalizedAvatarUrl(command.expectedSourceUrl)
+        : null;
+      if (command.sourceProvider && !expectedSourceUrl) {
+        throw new MemberIdentityError(
+          "AVATAR_SOURCE_INVALID",
+          400,
+          "The social profile image source is invalid.",
+        );
+      }
+
+      return database.transaction(async (transaction) => {
+        const locked = await transaction.execute<{
+          avatar_url: string | null;
+          avatar_source_provider: IdentityProvider | null;
+          avatar_object_key: string | null;
+        }>(sql`
+          select avatar_url, avatar_source_provider, avatar_object_key
+          from members
+          where member_id = ${session.member.id}
+            and status = 'ACTIVE'
+          for update
+        `);
+        const current = locked.rows[0];
+        if (!current) {
+          throw new MemberIdentityError("MEMBER_NOT_ACTIVE", 403, "The Member is not active.");
+        }
+
+        const socialCacheAllowed = command.sourceProvider
+          ? current.avatar_object_key === null &&
+            current.avatar_source_provider === command.sourceProvider &&
+            normalizedAvatarUrl(current.avatar_url ?? undefined) === expectedSourceUrl
+          : true;
+        if (!socialCacheAllowed) {
+          const [member] = await transaction
+            .select()
+            .from(members)
+            .where(eq(members.id, session.member.id))
+            .limit(1);
+          if (!member) throw new Error("Member avatar read did not return a row.");
+          return { updated: false, member: toMemberView(member), replacedObjectKey: null };
+        }
+
+        const [member] = await transaction
+          .update(members)
+          .set({
+            avatarUrl,
+            avatarSourceProvider: command.sourceProvider ?? null,
+            avatarObjectKey: command.objectKey,
+            avatarUpdatedAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(eq(members.id, session.member.id))
+          .returning();
+        if (!member) throw new Error("Member avatar update did not return a row.");
+        return {
+          updated: true,
+          member: toMemberView(member),
+          replacedObjectKey: current.avatar_object_key,
+        };
+      });
+    },
+
+    async clearAvatar(token) {
+      const session = await activeMemberSession(database, token);
+      if (!session) return null;
+
+      return database.transaction(async (transaction) => {
+        const locked = await transaction.execute<{ avatar_object_key: string | null }>(sql`
+          select avatar_object_key
+          from members
+          where member_id = ${session.member.id}
+            and status = 'ACTIVE'
+          for update
+        `);
+        const current = locked.rows[0];
+        if (!current) {
+          throw new MemberIdentityError("MEMBER_NOT_ACTIVE", 403, "The Member is not active.");
+        }
+        const [member] = await transaction
+          .update(members)
+          .set({
+            avatarUrl: null,
+            avatarSourceProvider: null,
+            avatarObjectKey: null,
+            avatarUpdatedAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(eq(members.id, session.member.id))
+          .returning();
+        if (!member) throw new Error("Member avatar removal did not return a row.");
+        return {
+          updated: current.avatar_object_key !== null || session.member.avatarUrl !== null,
+          member: toMemberView(member),
+          replacedObjectKey: current.avatar_object_key,
+        };
+      });
+    },
+
     async deleteAccount(token, password) {
       const session = await activeMemberSession(database, token);
       if (!session) return null;
@@ -1671,7 +1866,15 @@ export function createMemberIdentityService(
 
         await transaction
           .update(members)
-          .set({ status: "DELETED", displayName: "탈퇴한 사용자", updatedAt: now })
+          .set({
+            status: "DELETED",
+            displayName: "탈퇴한 사용자",
+            avatarUrl: null,
+            avatarSourceProvider: null,
+            avatarObjectKey: null,
+            avatarUpdatedAt: null,
+            updatedAt: now,
+          })
           .where(eq(members.id, session.member.id));
 
         const eventId = randomUUID();
@@ -1693,7 +1896,12 @@ export function createMemberIdentityService(
           },
         });
 
-        return { deleted: true } as const;
+        return {
+          deleted: true,
+          ...(session.member.avatarObjectKey
+            ? { deletedAvatarObjectKey: session.member.avatarObjectKey }
+            : {}),
+        } as const;
       });
     },
 
@@ -1722,10 +1930,7 @@ export function createMemberIdentityService(
           handle: profile.profile.handle,
           bio: profile.profile.bio,
           joinedMonth: profile.member.createdAt.toISOString().slice(0, 7),
-          avatar: {
-            kind: "INITIALS",
-            initials: publicProfileInitials(profile.member.displayName),
-          },
+          avatar: toMemberView(profile.member).avatar,
         },
         stats: {
           publishedIssueCount: rows.length,

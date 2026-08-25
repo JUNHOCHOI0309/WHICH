@@ -8,7 +8,8 @@
 .history,
 .message,
 .privacyNote,
-.accountDeletion {
+.accountDeletion,
+.avatarSettings {
   border: 1px solid var(--which-border);
   border-radius: 18px;
   background: var(--which-surface);
@@ -26,7 +27,8 @@
 .profile p,
 .historyHeading p,
 .privacyNote p,
-.message > p {
+.message > p,
+.avatarSettings > div:first-child > p {
   margin: 0 0 10px;
   color: var(--which-cyan-strong);
   font-size: 0.68rem;
@@ -44,7 +46,7 @@
   word-break: keep-all;
 }
 
-.profile > div > span,
+.profileIdentity > div > span,
 .message > span {
   display: block;
   max-width: 58ch;
@@ -52,6 +54,36 @@
   color: var(--which-text-secondary);
   line-height: 1.65;
   word-break: keep-all;
+}
+
+.profileIdentity {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.profileAvatar,
+.profileAvatarFallback {
+  width: clamp(72px, 10vw, 104px);
+  height: clamp(72px, 10vw, 104px);
+  flex: 0 0 auto;
+  border: 1px solid var(--which-border-strong);
+  border-radius: 50%;
+}
+
+.profileAvatar {
+  display: block;
+  object-fit: cover;
+}
+
+.profileAvatarFallback {
+  display: grid;
+  place-items: center;
+  background: var(--which-cyan-soft);
+  color: var(--which-text);
+  font-size: 1.2rem;
+  font-weight: 950;
 }
 
 .summary {
@@ -97,6 +129,8 @@
 .moreButton,
 .privacyNote button,
 .accountDeletion button,
+.avatarSettingsControls button,
+.avatarFileLabel,
 .empty a {
   width: fit-content;
   min-height: 46px;
@@ -113,6 +147,78 @@
   font-weight: 900;
   padding: 10px 18px;
   text-decoration: none;
+}
+
+.avatarSettings {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 20px 28px;
+}
+
+.avatarSettings h2 {
+  margin: 0;
+  font-size: clamp(1.45rem, 3vw, 2rem);
+  letter-spacing: -0.045em;
+}
+
+.avatarSettings > div:first-child > span {
+  display: block;
+  max-width: 60ch;
+  margin-top: 10px;
+  color: var(--which-text-secondary);
+  line-height: 1.65;
+}
+
+.avatarSettingsControls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.avatarFileLabel {
+  position: relative;
+  overflow: hidden;
+}
+
+.avatarFileLabel input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.avatarSettingsControls .avatarRemoveButton {
+  border-color: var(--which-border-strong);
+  background: transparent;
+}
+
+.avatarSettingsControls button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.avatarFileName,
+.avatarSuccess,
+.avatarError {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.avatarFileName {
+  color: var(--which-text-secondary);
+}
+
+.avatarSuccess {
+  color: var(--which-cyan-strong);
+}
+
+.avatarError {
+  color: var(--which-orange-strong);
 }
 
 .message button,
@@ -407,12 +513,24 @@
   .profile,
   .privacyNote,
   .accountDeletion,
+  .avatarSettings,
   .accountDeletionForm {
     grid-template-columns: 1fr;
     align-items: start;
   }
 
   .accountDeletion > button {
+    width: 100%;
+  }
+
+  .avatarSettingsControls {
+    display: grid;
+    grid-template-columns: 1fr;
+    width: 100%;
+  }
+
+  .avatarSettingsControls button,
+  .avatarFileLabel {
     width: 100%;
   }
 
@@ -427,6 +545,10 @@
 
   .summary {
     min-width: 0;
+  }
+
+  .profileIdentity {
+    align-items: flex-start;
   }
 
   .voteGrid {

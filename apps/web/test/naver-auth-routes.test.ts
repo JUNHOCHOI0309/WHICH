@@ -195,6 +195,7 @@ describe("Naver OIDC routes", () => {
         sub: "naver-subject-1",
         nickname: "네이버 별명",
         name: "네이버 실명",
+        picture: "https://phinf.pstatic.net/naver-avatar.jpg",
       }),
     });
     const request = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
@@ -204,6 +205,7 @@ describe("Naver OIDC routes", () => {
         provider: "NAVER",
         providerSubject: "naver-subject-1",
         displayName: "네이버 별명",
+        avatarUrl: "https://phinf.pstatic.net/naver-avatar.jpg",
       });
       return Response.json(
         { token: "which-session", expiresAt: "2026-08-21T00:00:00.000Z" },

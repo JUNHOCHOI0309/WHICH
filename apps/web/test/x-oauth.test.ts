@@ -38,9 +38,16 @@ describe("X OAuth client", () => {
         expect(String(init?.body)).toContain("code_verifier=verifier");
         return Response.json({ access_token: "ephemeral-access-token" });
       }
-      expect(url).toBe("https://api.x.com/2/users/me");
+      expect(url).toBe("https://api.x.com/2/users/me?user.fields=profile_image_url");
       expect(new Headers(init?.headers).get("authorization")).toBe("Bearer ephemeral-access-token");
-      return Response.json({ data: { id: "x-user-1", name: "X 사용자", username: "which_x" } });
+      return Response.json({
+        data: {
+          id: "x-user-1",
+          name: "X 사용자",
+          username: "which_x",
+          profile_image_url: "https://pbs.twimg.com/profile_images/x-user.jpg",
+        },
+      });
     });
 
     const accessToken = await exchangeXAuthorizationCode(
@@ -54,7 +61,12 @@ describe("X OAuth client", () => {
     );
     const profile = await fetchXProfile(accessToken, request);
 
-    expect(profile).toEqual({ id: "x-user-1", name: "X 사용자", username: "which_x" });
+    expect(profile).toEqual({
+      id: "x-user-1",
+      name: "X 사용자",
+      username: "which_x",
+      profileImageUrl: "https://pbs.twimg.com/profile_images/x-user.jpg",
+    });
     expect(xDisplayName(profile)).toBe("X 사용자");
     expect(request).toHaveBeenCalledTimes(2);
   });
