@@ -26,7 +26,7 @@ function accountDeletionMessage(error: AccountDeletionError, status: number) {
 }
 
 async function readProfile(cursor?: string) {
-  const query = new URLSearchParams({ limit: "12" });
+  const query = new URLSearchParams({ limit: "3" });
   if (cursor) query.set("cursor", cursor);
   const response = await fetch(`/api/me?${query}`, { cache: "no-store" });
   if (response.status === 401) return null;
@@ -61,7 +61,6 @@ export function MemberProfileExperience({
 }) {
   const [screen, setScreen] = useState<Screen>("loading");
   const [profile, setProfile] = useState<MemberPrivateProfile | null>(null);
-  const [loadingMore, setLoadingMore] = useState(false);
   const [logoutPending, setLogoutPending] = useState(false);
   const [logoutError, setLogoutError] = useState<string | null>(null);
   const [accountDeletionOpen, setAccountDeletionOpen] = useState(false);
@@ -107,35 +106,6 @@ export function MemberProfileExperience({
       active = false;
     };
   }, []);
-
-  const loadMore = useCallback(async () => {
-    const cursor = profile?.votes.nextCursor;
-    if (!profile || !cursor || loadingMore) return;
-    setLoadingMore(true);
-    try {
-      const next = await readProfile(cursor);
-      if (!next) {
-        setProfile(null);
-        setScreen("guest");
-        return;
-      }
-      setProfile((current) =>
-        current
-          ? {
-              ...next,
-              votes: {
-                items: [...current.votes.items, ...next.votes.items],
-                nextCursor: next.votes.nextCursor,
-              },
-            }
-          : next,
-      );
-    } catch {
-      setScreen("error");
-    } finally {
-      setLoadingMore(false);
-    }
-  }, [loadingMore, profile]);
 
   return (
     <WhichShell
@@ -212,6 +182,13 @@ export function MemberProfileExperience({
               </div>
             </section>
 
+            <nav className={styles.profileTabs} aria-label="내 기록 메뉴">
+              <Link aria-current="page" className={styles.profileTabActive} href="/me">
+                프로필
+              </Link>
+              <Link href="/me/votes">투표 기록</Link>
+            </nav>
+
             <MemberPublicProfileSettings
               value={profile.publicProfile}
               onUpdated={(publicProfile) =>
@@ -258,7 +235,7 @@ export function MemberProfileExperience({
                 </div>
               ) : (
                 <div className={styles.voteGrid}>
-                  {profile.votes.items.map((vote) => (
+                  {profile.votes.items.slice(0, 3).map((vote) => (
                     <article className={styles.voteCard} key={vote.voteId}>
                       <div className={styles.voteMeta}>
                         <span>{vote.categoryCode.replaceAll("_", " ")}</span>
@@ -278,15 +255,10 @@ export function MemberProfileExperience({
                 </div>
               )}
 
-              {profile.votes.nextCursor ? (
-                <button
-                  className={styles.moreButton}
-                  type="button"
-                  disabled={loadingMore}
-                  onClick={() => void loadMore()}
-                >
-                  {loadingMore ? "기록을 더 불러오는 중…" : "이전 기록 더 보기"}
-                </button>
+              {profile.votes.items.length > 0 ? (
+                <Link className={styles.viewAllLink} href="/me/votes">
+                  전체 투표 기록 보기 <span aria-hidden="true">→</span>
+                </Link>
               ) : null}
             </section>
 
