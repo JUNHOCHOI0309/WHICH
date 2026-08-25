@@ -7,14 +7,15 @@ import type { MemberPrivateProfile } from "@/lib/contracts";
 import styles from "./member-profile-experience.module.css";
 
 type Member = MemberPrivateProfile["member"];
-type AvatarApiResponse = { member?: Member; message?: string };
+type AvatarMemberUpdate = Pick<Member, "id" | "displayName" | "status" | "avatar">;
+type AvatarApiResponse = { member?: AvatarMemberUpdate; message?: string };
 
 export function MemberAvatarSettings({
   member,
   onUpdated,
 }: {
   member: Member;
-  onUpdated: (member: Member) => void;
+  onUpdated: (member: AvatarMemberUpdate) => void;
 }) {
   const fileInput = useRef<HTMLInputElement>(null);
   const [selected, setSelected] = useState<File | null>(null);
@@ -22,7 +23,7 @@ export function MemberAvatarSettings({
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  function applyMember(next: Member) {
+  function applyMember(next: AvatarMemberUpdate) {
     onUpdated(next);
     window.dispatchEvent(
       new CustomEvent("which:member-avatar-updated", { detail: { avatar: next.avatar } }),
@@ -89,7 +90,7 @@ export function MemberAvatarSettings({
       <div>
         <p>PROFILE IMAGE</p>
         <h2 id="avatar-settings-title">프로필 이미지</h2>
-        <span>5MB 이하 JPG 또는 PNG를 선택하세요. 저장할 때 512px WebP로 자동 변환합니다.</span>
+        <span>5MB 이하 JPG 또는 PNG를 선택하세요.</span>
       </div>
       <div className={styles.avatarSettingsControls}>
         <label className={styles.avatarFileLabel}>

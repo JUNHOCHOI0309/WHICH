@@ -228,7 +228,9 @@ export function MemberProfileExperience() {
             <MemberAvatarSettings
               member={profile.member}
               onUpdated={(member) =>
-                setProfile((current) => (current ? { ...current, member } : current))
+                setProfile((current) =>
+                  current ? { ...current, member: { ...current.member, ...member } } : current,
+                )
               }
             />
 
