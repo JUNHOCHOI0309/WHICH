@@ -123,15 +123,14 @@ describe("Member private profile experience", () => {
       }),
     );
 
-    const { container } = render(<MemberProfileExperience />);
+    render(<MemberProfileExperience />);
 
     expect(await screen.findByRole("heading", { name: "이미지 변경 회원님의 선택" })).toBeVisible();
-    const fileInput = container.querySelector<HTMLInputElement>('input[type="file"]');
-    expect(fileInput).not.toBeNull();
-    fireEvent.change(fileInput!, {
+    const fileInput = screen.getByLabelText("프로필 이미지 선택 또는 변경");
+    expect(fileInput).toHaveAttribute("accept", "image/jpeg,image/png");
+    fireEvent.change(fileInput, {
       target: { files: [new File(["avatar"], "avatar.png", { type: "image/png" })] },
     });
-    fireEvent.click(screen.getByRole("button", { name: "이미지 변경" }));
 
     expect(await screen.findByText("프로필 이미지를 변경했습니다.")).toBeVisible();
     expect(screen.getByRole("heading", { name: "이미지 변경 회원님의 선택" })).toBeVisible();
@@ -141,7 +140,50 @@ describe("Member private profile experience", () => {
       "src",
       "https://images.whichone.site/avatar.webp",
     );
+    expect(screen.getByRole("button", { name: "프로필 이미지 삭제" })).toBeVisible();
+    expect(screen.queryByText("PROFILE IMAGE")).not.toBeInTheDocument();
     expect(screen.queryByText(/512px WebP로 자동 변환/)).not.toBeInTheDocument();
+  });
+
+  it("removes an existing avatar from the profile circle", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        if (String(input) === "/api/me/avatar" && init?.method === "DELETE") {
+          return jsonResponse({
+            member: {
+              id: "member-1",
+              displayName: "이미지 삭제 회원",
+              status: "ACTIVE",
+              avatar: { kind: "INITIALS", initials: "이미" },
+            },
+          });
+        }
+        return jsonResponse({
+          member: {
+            id: "member-1",
+            displayName: "이미지 삭제 회원",
+            status: "ACTIVE",
+            avatar: { kind: "IMAGE", url: "https://images.whichone.site/avatar.webp" },
+            joinedAt: "2026-08-01T00:00:00.000Z",
+            participationCount: 1,
+          },
+          publicProfile: null,
+          identities: [],
+          votes: { items: [], nextCursor: null },
+        });
+      }),
+    );
+
+    render(<MemberProfileExperience />);
+
+    expect(await screen.findByRole("img", { name: "이미지 삭제 회원 프로필" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "프로필 이미지 삭제" }));
+
+    expect(await screen.findByText("프로필 이미지를 비웠습니다.")).toBeVisible();
+    expect(screen.queryByRole("img", { name: "이미지 삭제 회원 프로필" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "프로필 이미지 삭제" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "이미지 삭제 회원님의 선택" })).toBeVisible();
   });
 
   it("creates a public Creator profile from the private Me surface", async () => {
