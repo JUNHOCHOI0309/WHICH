@@ -301,26 +301,6 @@ button.navLink {
     display: none;
   }
 
-  .shell[data-preserve-aside="true"] {
-    grid-template-rows: auto auto;
-  }
-
-  .shell[data-preserve-aside="true"] .leftRail {
-    grid-row: 1 / span 2;
-  }
-
-  .shell[data-preserve-aside="true"] .main {
-    grid-column: 2;
-    grid-row: 2;
-  }
-
-  .shell[data-preserve-aside="true"] .rightRail {
-    position: static;
-    display: block;
-    grid-column: 2;
-    grid-row: 1;
-  }
-
   .footer {
     padding-bottom: 24px;
   }
@@ -334,11 +314,6 @@ button.navLink {
 
   .leftRail {
     display: none;
-  }
-
-  .shell[data-preserve-aside="true"] .main,
-  .shell[data-preserve-aside="true"] .rightRail {
-    grid-column: 1;
   }
 
   .bottomNav {
@@ -368,10 +343,5 @@ button.navLink {
   .shell {
     display: block;
     padding: 14px 12px 36px;
-  }
-
-  .shell[data-preserve-aside="true"] {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
   }
 }

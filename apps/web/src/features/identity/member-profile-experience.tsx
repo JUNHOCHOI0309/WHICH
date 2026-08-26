@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { toast } from "@/components/feedback/toast-provider";
-import { WhichShell } from "@/components/layout/which-shell";
+import { WhichAsideCard, WhichShell } from "@/components/layout/which-shell";
 import type {
   MemberPointLedgerItem,
   MemberPointView,
@@ -92,91 +92,6 @@ function pointAmountLabel(item: MemberPointLedgerItem) {
   return `${item.amount > 0 ? "+" : ""}${item.amount.toLocaleString("ko-KR")}P`;
 }
 
-function MemberPointPanel({
-  points,
-  screen,
-  morePending,
-  onRetry,
-  onLoadMore,
-}: {
-  points: MemberPointView | null;
-  screen: PointScreen;
-  morePending: boolean;
-  onRetry: () => void;
-  onLoadMore: () => void;
-}) {
-  return (
-    <section
-      className={`${styles.pointPanel} ${styles.pointPanelRail}`}
-      aria-labelledby="point-title"
-    >
-      <div className={styles.pointHeading}>
-        <div>
-          <p>W POINT</p>
-          <h2 id="point-title">나의 W Point</h2>
-        </div>
-        {screen === "ready" && points ? (
-          <div className={styles.pointBalance}>
-            <strong>{points.account.balance.toLocaleString("ko-KR")}P</strong>
-            <span>오늘 +{points.account.todayEarned.toLocaleString("ko-KR")}P</span>
-          </div>
-        ) : null}
-      </div>
-
-      {screen === "loading" || screen === "idle" ? (
-        <div className={styles.pointState} aria-busy="true" aria-live="polite">
-          W Point를 확인하고 있어요.
-        </div>
-      ) : null}
-      {screen === "error" ? (
-        <div className={styles.pointState} role="status">
-          <span>W Point만 잠시 불러오지 못했어요. 다른 기능은 그대로 사용할 수 있습니다.</span>
-          <button type="button" onClick={onRetry}>
-            다시 확인
-          </button>
-        </div>
-      ) : null}
-      {screen === "ready" && points ? (
-        <>
-          {points.account.hasPendingRecovery ? (
-            <p className={styles.pointRecovery}>
-              일부 기록을 다시 확인하고 있어 현재 사용할 수 있는 잔액만 표시합니다.
-            </p>
-          ) : null}
-          {points.ledger.items.length === 0 ? (
-            <div className={styles.pointEmpty}>
-              <strong>아직 W Point 내역이 없어요.</strong>
-              <span>로그인, 투표, 확인된 공유 활동부터 차곡차곡 기록됩니다.</span>
-            </div>
-          ) : (
-            <ul className={styles.pointLedger}>
-              {points.ledger.items.map((item) => (
-                <li key={item.id}>
-                  <div>
-                    <strong>{item.reasonLabel}</strong>
-                    <time dateTime={item.createdAt}>{pointDateLabel(item.createdAt)}</time>
-                  </div>
-                  <span data-positive={item.amount > 0}>{pointAmountLabel(item)}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-          {points.ledger.nextCursor ? (
-            <button
-              type="button"
-              className={styles.pointMore}
-              disabled={morePending}
-              onClick={onLoadMore}
-            >
-              {morePending ? "불러오는 중…" : "내역 더 보기"}
-            </button>
-          ) : null}
-        </>
-      ) : null}
-    </section>
-  );
-}
-
 export function MemberProfileExperience({
   creationEnabled = false,
 }: {
@@ -205,28 +120,6 @@ export function MemberProfileExperience({
       setPointScreen("error");
     }
   }, []);
-
-  const loadMorePoints = useCallback(() => {
-    if (!points?.ledger.nextCursor || pointMorePending) return;
-    setPointMorePending(true);
-    void readPoints(points.ledger.nextCursor)
-      .then((next) => {
-        if (!next) return;
-        setPoints((current) =>
-          current
-            ? {
-                account: next.account,
-                ledger: {
-                  items: [...current.ledger.items, ...next.ledger.items],
-                  nextCursor: next.ledger.nextCursor,
-                },
-              }
-            : next,
-        );
-      })
-      .catch(() => toast.error("W Point 내역을 더 불러오지 못했어요."))
-      .finally(() => setPointMorePending(false));
-  }, [pointMorePending, points]);
 
   const load = useCallback(async () => {
     setScreen("loading");
@@ -281,17 +174,14 @@ export function MemberProfileExperience({
       active="me"
       creationEnabled={creationEnabled}
       aside={
-        screen === "ready" && profile ? (
-          <MemberPointPanel
-            points={points}
-            screen={pointScreen}
-            morePending={pointMorePending}
-            onRetry={() => void loadPoints()}
-            onLoadMore={loadMorePoints}
-          />
-        ) : undefined
+        <WhichAsideCard
+          eyebrow="PRIVATE BY DEFAULT"
+          title="선택 기록은 로그인한 본인만 볼 수 있어요."
+          tone="orange"
+        >
+          공개 프로필에는 내가 만든 질문만 선택적으로 노출됩니다.
+        </WhichAsideCard>
       }
-      preserveAsideOnNarrow={screen === "ready" && Boolean(profile)}
     >
       <div className={styles.page}>
         {screen === "loading" ? (
@@ -358,6 +248,93 @@ export function MemberProfileExperience({
                 <strong>{profile.member.participationCount.toLocaleString("ko-KR")}</strong>
                 <span>참여한 질문</span>
               </div>
+            </section>
+
+            <section className={styles.pointPanel} aria-labelledby="point-title">
+              <div className={styles.pointHeading}>
+                <div>
+                  <p>W POINT</p>
+                  <h2 id="point-title">나의 W Point</h2>
+                </div>
+                {pointScreen === "ready" && points ? (
+                  <div className={styles.pointBalance}>
+                    <strong>{points.account.balance.toLocaleString("ko-KR")}P</strong>
+                    <span>오늘 +{points.account.todayEarned.toLocaleString("ko-KR")}P</span>
+                  </div>
+                ) : null}
+              </div>
+
+              {pointScreen === "loading" || pointScreen === "idle" ? (
+                <div className={styles.pointState} aria-busy="true" aria-live="polite">
+                  W Point를 확인하고 있어요.
+                </div>
+              ) : null}
+              {pointScreen === "error" ? (
+                <div className={styles.pointState} role="status">
+                  <span>
+                    W Point만 잠시 불러오지 못했어요. 다른 기능은 그대로 사용할 수 있습니다.
+                  </span>
+                  <button type="button" onClick={() => void loadPoints()}>
+                    다시 확인
+                  </button>
+                </div>
+              ) : null}
+              {pointScreen === "ready" && points ? (
+                <>
+                  {points.account.hasPendingRecovery ? (
+                    <p className={styles.pointRecovery}>
+                      일부 기록을 다시 확인하고 있어 현재 사용할 수 있는 잔액만 표시합니다.
+                    </p>
+                  ) : null}
+                  {points.ledger.items.length === 0 ? (
+                    <div className={styles.pointEmpty}>
+                      <strong>아직 W Point 내역이 없어요.</strong>
+                      <span>로그인, 투표, 확인된 공유 활동부터 차곡차곡 기록됩니다.</span>
+                    </div>
+                  ) : (
+                    <ul className={styles.pointLedger}>
+                      {points.ledger.items.map((item) => (
+                        <li key={item.id}>
+                          <div>
+                            <strong>{item.reasonLabel}</strong>
+                            <time dateTime={item.createdAt}>{pointDateLabel(item.createdAt)}</time>
+                          </div>
+                          <span data-positive={item.amount > 0}>{pointAmountLabel(item)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {points.ledger.nextCursor ? (
+                    <button
+                      type="button"
+                      className={styles.pointMore}
+                      disabled={pointMorePending}
+                      onClick={() => {
+                        setPointMorePending(true);
+                        void readPoints(points.ledger.nextCursor ?? undefined)
+                          .then((next) => {
+                            if (!next) return;
+                            setPoints((current) =>
+                              current
+                                ? {
+                                    account: next.account,
+                                    ledger: {
+                                      items: [...current.ledger.items, ...next.ledger.items],
+                                      nextCursor: next.ledger.nextCursor,
+                                    },
+                                  }
+                                : next,
+                            );
+                          })
+                          .catch(() => toast.error("W Point 내역을 더 불러오지 못했어요."))
+                          .finally(() => setPointMorePending(false));
+                      }}
+                    >
+                      {pointMorePending ? "불러오는 중…" : "내역 더 보기"}
+                    </button>
+                  ) : null}
+                </>
+              ) : null}
             </section>
 
             <nav className={styles.profileTabs} aria-label="내 기록 메뉴">

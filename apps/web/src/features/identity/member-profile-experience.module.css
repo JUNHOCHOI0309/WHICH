@@ -24,44 +24,6 @@
   padding: clamp(24px, 5vw, 36px);
 }
 
-@media (min-width: 1320px) {
-  .pointPanelRail {
-    max-height: calc(100svh - 128px);
-    overflow: auto;
-    padding: 22px;
-    scrollbar-width: thin;
-  }
-
-  .pointPanelRail .pointHeading {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 14px;
-  }
-
-  .pointPanelRail .pointHeading h2 {
-    font-size: 1.55rem;
-  }
-
-  .pointPanelRail .pointBalance {
-    text-align: left;
-  }
-
-  .pointPanelRail .pointBalance strong {
-    font-size: 2.25rem;
-  }
-
-  .pointPanelRail .pointState,
-  .pointPanelRail .pointEmpty {
-    align-items: stretch;
-    flex-direction: column;
-    padding: 15px;
-  }
-
-  .pointPanelRail .pointState button {
-    width: 100%;
-  }
-}
-
 .pointHeading {
   display: flex;
   align-items: end;
