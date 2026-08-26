@@ -80,15 +80,19 @@ export function MemberCredentialSetup({ onCompleted }: { onCompleted: () => void
           />
           <small id="credential-setup-password-requirement">{NEW_PASSWORD_REQUIREMENT}</small>
         </div>
-        <button type="submit" disabled={pending}>
-          {pending ? "연결 중…" : "이메일 로그인 연결"}
-        </button>
+        <div className={styles.actions}>
+          {error ? (
+            <p className={styles.error} role="alert">
+              {error}
+            </p>
+          ) : (
+            <span />
+          )}
+          <button type="submit" disabled={pending}>
+            {pending ? "연결 중…" : "이메일 로그인 연결"}
+          </button>
+        </div>
       </form>
-      {error ? (
-        <p className={styles.error} role="alert">
-          {error}
-        </p>
-      ) : null}
     </section>
   );
 }
