@@ -1105,62 +1105,6 @@ export function createMemberIdentityService(
       });
     },
 
-    async addCredential(memberId, input) {
-      const email = normalizeEmail(input.email);
-      const passwordHash = await hashPassword(
-        validatePassword(input.password),
-        PASSWORD_HASH_OPTIONS,
-      );
-      const now = new Date();
-      return database.transaction(async (transaction) => {
-        await transaction.execute(
-          sql`select pg_advisory_xact_lock(hashtextextended(${`credential:${email}`}, 0))`,
-        );
-        await transaction.execute(
-          sql`select pg_advisory_xact_lock(hashtextextended(${`member-credential:${memberId}`}, 0))`,
-        );
-        const [member] = await transaction
-          .select()
-          .from(members)
-          .where(eq(members.id, memberId))
-          .limit(1);
-        if (!member || member.status !== "ACTIVE") {
-          throw new MemberIdentityError("MEMBER_NOT_ACTIVE", 403, "This member is not active.");
-        }
-        const [existing] = await transaction
-          .select({ id: memberCredentials.id })
-          .from(memberCredentials)
-          .where(
-            sql`${memberCredentials.memberId} = ${memberId} or ${memberCredentials.emailNormalized} = ${email}`,
-          )
-          .limit(1);
-        if (existing) {
-          throw new MemberIdentityError(
-            "CREDENTIAL_ALREADY_EXISTS",
-            409,
-            "This Member or email already has a credential.",
-          );
-        }
-        await transaction.insert(memberCredentials).values({
-          memberId,
-          emailNormalized: email,
-          passwordHash,
-          emailVerifiedAt: null,
-          passwordChangedAt: now,
-          createdAt: now,
-          updatedAt: now,
-        });
-        await transaction.insert(memberIdentityLinks).values({
-          memberId,
-          provider: "EMAIL",
-          providerSubject: email,
-          linkedAt: now,
-          lastAuthenticatedAt: now,
-        });
-        return { member: toMemberView(member), email };
-      });
-    },
-
     async requestEmailVerification(input) {
       return issueAuthEmailToken("EMAIL_VERIFICATION", input.email, input.authRequestKey);
     },

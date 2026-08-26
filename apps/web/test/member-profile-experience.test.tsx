@@ -104,9 +104,9 @@ describe("Member private profile experience", () => {
     );
     expect(screen.getByRole("link", { name: "프로필" })).toHaveAttribute("aria-current", "page");
     expect(
-      screen.getByRole("heading", { name: "이메일 로그인을 WHICH 계정에 연결해요." }),
-    ).toBeVisible();
-    expect(screen.getByRole("button", { name: "이메일 로그인 연결" })).toBeVisible();
+      screen.queryByRole("heading", { name: "이메일 로그인을 WHICH 계정에 연결해요." }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "이메일 로그인 연결" })).not.toBeInTheDocument();
     expect(requests).toContain("/api/me?limit=3");
     expect(screen.queryByRole("heading", { name: "로그인 수단 연결" })).not.toBeInTheDocument();
   });

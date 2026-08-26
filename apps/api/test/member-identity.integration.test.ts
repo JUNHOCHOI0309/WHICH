@@ -641,36 +641,6 @@ describe("Member identity and Guest vote linking", () => {
     expect(reused.json()).not.toMatchObject({ member: { id: signupBody.member.id } });
   });
 
-  it("lets an existing social-only Member complete email and password login", async () => {
-    const social = await createMemberSession({
-      provider: "NAVER",
-      providerSubject: `naver-complete-${randomUUID()}`,
-    });
-    const memberId = social.json<{ member: { id: string } }>().member.id;
-    const email = `complete-${randomUUID()}@example.com`;
-    const password = "Complete!123";
-
-    const completed = await app.inject({
-      method: "POST",
-      url: "/v1/internal/member-credentials",
-      headers: { "x-internal-auth-secret": INTERNAL_SECRET },
-      payload: { memberId, email, password },
-    });
-    expect(completed.statusCode).toBe(201);
-    expect(completed.json()).toMatchObject({ member: { id: memberId }, email });
-
-    await verifyCredentialEmail(email);
-
-    const login = await app.inject({
-      method: "POST",
-      url: "/v1/internal/member-credential-sessions",
-      headers: { "x-internal-auth-secret": INTERNAL_SECRET },
-      payload: { email, password },
-    });
-    expect(login.statusCode).toBe(201);
-    expect(login.json()).toMatchObject({ member: { id: memberId } });
-  });
-
   it("uses one-time hashed password reset tokens and revokes existing sessions", async () => {
     const email = `reset-${randomUUID()}@example.com`;
     const password = "Initial!123";

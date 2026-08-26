@@ -42,7 +42,6 @@ const commentReader: CommentService = {
 const memberIdentity: MemberIdentityService = {
   createSession: vi.fn(),
   createCredentialSession: vi.fn(),
-  addCredential: vi.fn(),
   requestEmailVerification: vi.fn(),
   verifyEmail: vi.fn(),
   requestPasswordReset: vi.fn(),

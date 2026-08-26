@@ -10,7 +10,6 @@ import { logoutMemberSession, MEMBER_LOGOUT_ERROR } from "@/lib/member-session";
 
 import styles from "./member-profile-experience.module.css";
 import { MemberPublicProfileSettings } from "./member-public-profile-settings";
-import { MemberCredentialSetup } from "./member-credential-setup";
 import { MemberAvatarSettings } from "./member-avatar-settings";
 
 type Screen = "loading" | "guest" | "ready" | "error";
@@ -195,28 +194,6 @@ export function MemberProfileExperience({
                 setProfile((current) => (current ? { ...current, publicProfile } : current))
               }
             />
-
-            {!profile.identities.some((identity) => identity.provider === "EMAIL") ? (
-              <MemberCredentialSetup
-                onCompleted={() =>
-                  setProfile((current) =>
-                    current
-                      ? {
-                          ...current,
-                          identities: [
-                            ...current.identities,
-                            {
-                              provider: "EMAIL",
-                              linkedAt: new Date().toISOString(),
-                              lastAuthenticatedAt: new Date().toISOString(),
-                            },
-                          ],
-                        }
-                      : current,
-                  )
-                }
-              />
-            ) : null}
 
             <section className={styles.history} aria-labelledby="history-title">
               <div className={styles.historyHeading}>

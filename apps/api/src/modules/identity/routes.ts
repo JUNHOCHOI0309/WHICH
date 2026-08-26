@@ -456,44 +456,6 @@ export async function registerMemberIdentityRoutes(
 
     identityApp.post<{
       Headers: { "x-internal-auth-secret"?: string };
-      Body: { memberId: string; email: string; password: string };
-    }>(
-      "/v1/internal/member-credentials",
-      {
-        schema: {
-          hide: true,
-          headers: Type.Object(
-            { "x-internal-auth-secret": Type.Optional(Type.String()) },
-            { additionalProperties: true },
-          ),
-          body: Type.Object({
-            memberId: Type.String({ format: "uuid" }),
-            email: Type.String({ minLength: 3, maxLength: 320 }),
-            password: Type.String({ minLength: 1, maxLength: 128 }),
-          }),
-          response: {
-            201: Type.Object({ member: memberSchema, email: Type.String() }),
-            400: errorSchema,
-            401: errorSchema,
-            403: errorSchema,
-            409: errorSchema,
-            500: errorSchema,
-          },
-        },
-      },
-      async (request, reply) => {
-        if (!secretMatches(request.headers["x-internal-auth-secret"], internalSecret)) {
-          return reply
-            .code(401)
-            .send({ code: "UNAUTHORIZED", message: "Internal authentication failed." });
-        }
-        const result = await service.addCredential(request.body.memberId, request.body);
-        return reply.code(201).send(result);
-      },
-    );
-
-    identityApp.post<{
-      Headers: { "x-internal-auth-secret"?: string };
       Body: {
         memberId: string;
         provider: "GOOGLE" | "X" | "NAVER" | "KAKAO" | "DEVELOPMENT";
