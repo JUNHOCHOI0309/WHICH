@@ -32,6 +32,7 @@ export type PointLedgerMutationResult = {
   entryId: string;
   account: {
     cachedBalance: number;
+    restrictedDebt: number;
     lifetimeEarned: number;
     lifetimeSpent: number;
     version: number;
@@ -199,6 +200,7 @@ export function createPointLedgerService(database: Database["db"]) {
             const [account] = await transaction
               .select({
                 cachedBalance: pointAccounts.cachedBalance,
+                restrictedDebt: pointAccounts.restrictedDebt,
                 lifetimeEarned: pointAccounts.lifetimeEarned,
                 lifetimeSpent: pointAccounts.lifetimeSpent,
                 version: pointAccounts.version,
@@ -291,6 +293,7 @@ export function createPointLedgerService(database: Database["db"]) {
           const [account] = await transaction
             .select({
               cachedBalance: pointAccounts.cachedBalance,
+              restrictedDebt: pointAccounts.restrictedDebt,
               lifetimeEarned: pointAccounts.lifetimeEarned,
               lifetimeSpent: pointAccounts.lifetimeSpent,
               version: pointAccounts.version,
@@ -304,10 +307,24 @@ export function createPointLedgerService(database: Database["db"]) {
 
         const earnedIncrement = command.entryType === "EARN" ? command.amount : 0;
         const spentIncrement = command.entryType === "SPEND" ? -command.amount : 0;
+        const isForcedNegative =
+          command.amount < 0 &&
+          (command.entryType === "REVERSAL" || command.entryType === "ADJUSTMENT");
+        const isPositive = command.amount > 0;
+        const absoluteAmount = Math.abs(command.amount);
         const [account] = await transaction
           .update(pointAccounts)
           .set({
-            cachedBalance: sql`${pointAccounts.cachedBalance} + ${command.amount}`,
+            cachedBalance: isPositive
+              ? sql`${pointAccounts.cachedBalance} + greatest(${command.amount} - ${pointAccounts.restrictedDebt}, 0)`
+              : isForcedNegative
+                ? sql`greatest(${pointAccounts.cachedBalance} + ${command.amount}, 0)`
+                : sql`${pointAccounts.cachedBalance} + ${command.amount}`,
+            restrictedDebt: isPositive
+              ? sql`greatest(${pointAccounts.restrictedDebt} - ${command.amount}, 0)`
+              : isForcedNegative
+                ? sql`${pointAccounts.restrictedDebt} + greatest(${absoluteAmount} - ${pointAccounts.cachedBalance}, 0)`
+                : pointAccounts.restrictedDebt,
             lifetimeEarned: sql`${pointAccounts.lifetimeEarned} + ${earnedIncrement}`,
             lifetimeSpent: sql`${pointAccounts.lifetimeSpent} + ${spentIncrement}`,
             version: sql`${pointAccounts.version} + 1`,
@@ -316,11 +333,17 @@ export function createPointLedgerService(database: Database["db"]) {
           .where(
             and(
               eq(pointAccounts.memberId, command.memberId),
-              sql`${pointAccounts.cachedBalance} + ${command.amount} >= 0`,
+              command.entryType === "SPEND"
+                ? and(
+                    eq(pointAccounts.restrictedDebt, 0),
+                    sql`${pointAccounts.cachedBalance} + ${command.amount} >= 0`,
+                  )
+                : sql`true`,
             ),
           )
           .returning({
             cachedBalance: pointAccounts.cachedBalance,
+            restrictedDebt: pointAccounts.restrictedDebt,
             lifetimeEarned: pointAccounts.lifetimeEarned,
             lifetimeSpent: pointAccounts.lifetimeSpent,
             version: pointAccounts.version,

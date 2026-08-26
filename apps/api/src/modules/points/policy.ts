@@ -9,6 +9,7 @@ import {
   memberProfiles,
   outboxEvents,
   pointEventReceipts,
+  pointLedgerEntries,
   shareRewardClaims,
   voterSubjects,
   votes,
@@ -18,16 +19,18 @@ import { createPointLedgerService, PointLedgerError } from "./service.js";
 export const POINT_POLICY_VERSION = "w_point_v1";
 export const POINT_OPERATION_TIME_ZONE = "Asia/Seoul";
 
-const REWARD_EVENT_TYPES = [
+const POINT_EVENT_TYPES = [
   "MEMBER_DAILY_ATTENDANCE_CONFIRMED",
   "VOTE_ACCEPTED",
   "SHARE_REWARD_CONFIRMED",
   "COMMENT_REACTION_ACTIVATED",
   "INTEREST_PROFILE_COMPLETED",
   "MEMBER_PUBLIC_PROFILE_COMPLETED",
+  "VOTE_INVALIDATED",
 ] as const;
 
-type ReceiptOutcome = "AWARDED" | "DUPLICATE" | "CAP_REACHED" | "INELIGIBLE" | "DISABLED";
+type ReceiptOutcome =
+  "AWARDED" | "REVERSED" | "DUPLICATE" | "CAP_REACHED" | "INELIGIBLE" | "DISABLED";
 
 type RewardFact = {
   memberId: string;
@@ -251,6 +254,56 @@ export function createPointPolicyConsumer(
 
   async function processEvent(event: EventRow) {
     const operationDay = operationDayAt(event.occurredAt);
+    if (event.eventType === "VOTE_INVALIDATED") {
+      const voteId = stringValue(payloadData(event).vote_id);
+      if (!voteId) {
+        await recordReceipt(event, operationDay, "INELIGIBLE", undefined, "vote_id_missing");
+        return "INELIGIBLE" as const;
+      }
+      const [original] = await database
+        .select({
+          entryId: pointLedgerEntries.id,
+          memberId: pointLedgerEntries.memberId,
+          amount: pointLedgerEntries.amount,
+        })
+        .from(pointLedgerEntries)
+        .innerJoin(votes, eq(votes.id, voteId))
+        .where(
+          and(
+            eq(pointLedgerEntries.sourceType, "VOTE"),
+            eq(pointLedgerEntries.sourceId, voteId),
+            eq(pointLedgerEntries.reasonCode, "VOTE_ACCEPTED"),
+            inArray(votes.integrityState, ["INVALIDATED", "REJECTED_ABUSE"]),
+          ),
+        )
+        .limit(1);
+      if (!original) {
+        await recordReceipt(
+          event,
+          operationDay,
+          "INELIGIBLE",
+          undefined,
+          "award_not_found_or_vote_not_invalidated",
+        );
+        return "INELIGIBLE" as const;
+      }
+      const result = await ledger.applyEntry({
+        memberId: original.memberId,
+        entryType: "REVERSAL",
+        amount: -original.amount,
+        reasonCode: "INVALIDATED_ACTIVITY_REVERSAL",
+        sourceType: "VOTE_REVERSAL",
+        sourceId: voteId,
+        operationDay,
+        reversesEntryId: original.entryId,
+        idempotencyKey: `outbox:${event.id}:reversal:${POINT_POLICY_VERSION}`,
+        policyVersion: POINT_POLICY_VERSION,
+        metadata: { eventId: event.id, eventType: event.eventType },
+      });
+      const outcome = result.applied ? "REVERSED" : "DUPLICATE";
+      await recordReceipt(event, operationDay, outcome, result.entryId);
+      return outcome;
+    }
     if (!options.enabled) {
       await recordReceipt(event, operationDay, "DISABLED", undefined, "feature_flag_disabled");
       return "DISABLED" as const;
@@ -303,7 +356,7 @@ export function createPointPolicyConsumer(
         .from(outboxEvents)
         .where(
           and(
-            inArray(outboxEvents.eventType, [...REWARD_EVENT_TYPES]),
+            inArray(outboxEvents.eventType, [...POINT_EVENT_TYPES]),
             notExists(
               database
                 .select({ eventId: pointEventReceipts.eventId })
