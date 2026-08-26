@@ -180,7 +180,6 @@ export function MemberVoteHistoryExperience({
                 <h1>{profile.member.displayName}님의 선택 기록</h1>
                 <span>총 {profile.member.participationCount.toLocaleString("ko-KR")}개의 선택</span>
               </div>
-              <Link href="/me">프로필로 돌아가기</Link>
             </header>
 
             <nav className={styles.profileTabs} aria-label="내 기록 메뉴">

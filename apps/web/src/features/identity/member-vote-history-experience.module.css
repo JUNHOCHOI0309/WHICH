@@ -48,7 +48,6 @@
   line-height: 1.6;
 }
 
-.hero > a,
 .message a,
 .message button,
 .empty a,
@@ -106,7 +105,6 @@
 }
 
 .profileTabs a:focus-visible,
-.hero a:focus-visible,
 .timelineItem > a:focus-visible,
 .moreButton:focus-visible {
   outline: 3px solid color-mix(in srgb, var(--which-cyan) 40%, transparent);
