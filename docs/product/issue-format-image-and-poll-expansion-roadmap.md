@@ -6,6 +6,7 @@
 - Accepted architecture decision: [`ADR-0003: Issue format and media policy`](../architecture/adr/0003-issue-format-and-media-policy.md)
 - PICK migration decision: [`ADR-0004: PICK 3~4지선다 migration boundary`](../architecture/adr/0004-pick-multichoice-migration.md)
 - Trusted uploader decision: [`ADR-0005: Trusted image uploader capability`](../architecture/adr/0005-trusted-image-uploader-capability.md)
+- Future format decision: [`ADR-0006: Series, Tournament, and Prediction boundary`](../architecture/adr/0006-series-tournament-prediction-boundary.md)
 - Accepted editorial contract: [`Question Archetype, Editorial Rubric, and Authoring Linter Contract`](./question-archetype-editorial-rubric-authoring-linter.md)
 - Related roadmap: [`post-v0-discovery-recommendation-ai-roadmap.md`](./post-v0-discovery-recommendation-ai-roadmap.md)
 - Release boundary: this document does not expand the Public v0 launch gate.
@@ -48,6 +49,11 @@ WHICH-89에서는 Member status와 분리된 `ISSUE_IMAGE_UPLOAD` capability, 30
 공개 전 자동 검사와 사람 승인, 자산별 신고·14일 소명·복원, 반복 위반 회수와 정량 Pilot
 Go/No-Go를 ADR-0005로 확정했다. Production Member/Guest 이미지 업로드는 후속 Vertical Slice
 전까지 계속 꺼 둔다.
+
+WHICH-90에서는 Tournament의 Series·Round·Match·진출 원장과 Prediction의 마감·Resolution
+revision·VOID·적중 projection을 일반 Issue 수명주기에서 분리했다. 정직한 제품 문구, Vertical별
+정책 의존성과 v2 Go/No-Go를 ADR-0006으로 확정했으며 두 형식은 후속 승인 전까지 Production에서
+계속 비활성이다.
 
 ## 현재 WHICH 구조와 적용 경계
 
