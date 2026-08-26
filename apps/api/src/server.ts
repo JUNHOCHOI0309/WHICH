@@ -14,6 +14,11 @@ import { createGuestVoteService } from "./modules/voting/service.js";
 import { createAnalyticsService } from "./modules/analytics/service.js";
 import { createShareCardService } from "./modules/shares/service.js";
 import { createOpsDashboardService } from "./modules/operations/service.js";
+import { createIssueMediaService } from "./modules/issue-media/service.js";
+import {
+  createR2IssueMediaStorage,
+  issueMediaStorageConfig,
+} from "./modules/issue-media/storage.js";
 import { createPointIntegrityService } from "./modules/points/integrity.js";
 
 loadEnvironment({
@@ -23,6 +28,7 @@ loadEnvironment({
 
 const config = getConfig();
 const database = createDatabase(config.databaseUrl);
+const mediaStorageConfig = issueMediaStorageConfig();
 const app = await buildApp(config, {
   ...database,
   issueReader: createIssueReadService(database.db, {
@@ -45,6 +51,14 @@ const app = await buildApp(config, {
     enabled: config.featureFlags.resultSharing,
   }),
   opsDashboard: createOpsDashboardService(database.db, { releaseId: config.releaseId }),
+  ...(mediaStorageConfig
+    ? {
+        issueMedia: createIssueMediaService(
+          database.db,
+          createR2IssueMediaStorage(mediaStorageConfig),
+        ),
+      }
+    : {}),
   pointIntegrity: createPointIntegrityService(database.db, {
     targetEnvironment: config.environment,
   }),

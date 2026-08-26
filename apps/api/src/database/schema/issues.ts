@@ -71,6 +71,8 @@ export const issueVersions = pgTable(
     contentHash: varchar("content_hash", { length: 64 }).notNull(),
     primaryCategoryCode: varchar("primary_category_code", { length: 64 }).notNull(),
     experienceModeCode: varchar("experience_mode_code", { length: 64 }).notNull(),
+    formatMode: varchar("format_mode", { length: 24 }).default("VS").notNull(),
+    mediaMode: varchar("media_mode", { length: 24 }).default("TEXT_ONLY").notNull(),
     taxonomyVersion: varchar("taxonomy_version", { length: 32 }).notNull(),
     lockedAt: timestamp("locked_at", { withTimezone: true }),
     publishedAt: timestamp("published_at", { withTimezone: true }),
@@ -79,6 +81,11 @@ export const issueVersions = pgTable(
   (table) => [
     primaryKey({ columns: [table.issueId, table.version], name: "issue_versions_pk" }),
     check("issue_versions_positive_version_check", sql`${table.version} > 0`),
+    check("issue_versions_format_mode_check", sql`${table.formatMode} in ('VS')`),
+    check(
+      "issue_versions_media_mode_check",
+      sql`${table.mediaMode} in ('TEXT_ONLY', 'OPTION_IMAGES')`,
+    ),
   ],
 );
 
