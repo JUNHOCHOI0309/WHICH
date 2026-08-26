@@ -21,10 +21,9 @@ export function MemberCredentialSetup({ onCompleted }: { onCompleted: () => void
     <section className={styles.panel} aria-labelledby="credential-setup-title">
       <div>
         <p>COMPLETE YOUR WHICH ACCOUNT</p>
-        <h2 id="credential-setup-title">소셜 로그인이 없어도 들어올 수 있게 해둘까요?</h2>
+        <h2 id="credential-setup-title">이메일 로그인을 WHICH 계정에 연결해요.</h2>
         <span>
-          이메일과 WHICH 비밀번호를 한 번 설정하면 모든 연결된 로그인 수단이 같은 Member로
-          이어집니다.
+          이메일과 WHICH 비밀번호를 설정하면 연결된 소셜 로그인과 같은 계정으로 이어집니다.
         </span>
       </div>
       <form
@@ -82,7 +81,7 @@ export function MemberCredentialSetup({ onCompleted }: { onCompleted: () => void
           <small id="credential-setup-password-requirement">{NEW_PASSWORD_REQUIREMENT}</small>
         </div>
         <button type="submit" disabled={pending}>
-          {pending ? "설정 중…" : "이메일 로그인 설정"}
+          {pending ? "연결 중…" : "이메일 로그인 연결"}
         </button>
       </form>
       {error ? (

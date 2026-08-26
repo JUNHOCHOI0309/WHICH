@@ -84,6 +84,7 @@ describe("Member vote history experience", () => {
     expect(screen.getAllByLabelText("현재 결과 A 60%, B 40%")).toHaveLength(2);
     expect(screen.getByText("A · 바로 하기")).toBeVisible();
     expect(screen.getByRole("link", { name: "투표 기록" })).toHaveAttribute("aria-current", "page");
+    expect(screen.queryByRole("link", { name: "프로필로 돌아가기" })).not.toBeInTheDocument();
     expect(requests).toContain("/api/me?limit=20");
 
     fireEvent.click(screen.getByRole("button", { name: "이전 기록 더 보기" }));

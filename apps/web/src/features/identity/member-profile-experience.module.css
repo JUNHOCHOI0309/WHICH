@@ -527,8 +527,13 @@
 }
 
 .accountDeletion button {
-  border-color: var(--which-orange);
+  border-color: var(--which-border-strong);
   background: transparent;
+}
+
+.accountDeletion > button {
+  border-color: var(--which-danger);
+  color: var(--which-danger);
 }
 
 .accountDeletionForm {
@@ -589,7 +594,9 @@
 }
 
 .accountDeletionActions button:last-child {
-  background: var(--which-orange);
+  border-color: var(--which-danger);
+  background: var(--which-danger);
+  color: #fff;
 }
 
 .accountDeletion button:disabled {
