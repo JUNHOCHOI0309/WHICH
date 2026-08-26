@@ -1,4 +1,10 @@
-import { fireEvent, render as testingRender, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render as testingRender,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import type { ReactElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -507,6 +513,9 @@ describe("Member private profile experience", () => {
     render(<MemberProfileExperience />);
 
     expect(await screen.findByText("30P")).toBeVisible();
+    const pointRail = screen.getByRole("complementary", { name: "WHICH 안내" });
+    expect(within(pointRail).getByRole("heading", { name: "나의 W Point" })).toBeVisible();
+    expect(screen.queryByText("PRIVATE BY DEFAULT")).not.toBeInTheDocument();
     expect(screen.getByText("오늘 +20P")).toBeVisible();
     expect(screen.getByText("투표 참여")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "내역 더 보기" }));
