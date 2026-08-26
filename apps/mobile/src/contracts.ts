@@ -63,6 +63,26 @@ export type VoteResponse = {
   result: IssueTally;
 };
 
+export type MemberPointLedgerItem = {
+  id: string;
+  entryType: "EARN" | "SPEND" | "REFUND" | "REVERSAL" | "ADJUSTMENT";
+  amount: number;
+  reasonCode: string;
+  reasonLabel: string;
+  createdAt: string;
+};
+
+export type MemberPointView = {
+  account: {
+    balance: number;
+    todayEarned: number;
+    lifetimeEarned: number;
+    lifetimeSpent: number;
+    hasPendingRecovery: boolean;
+  };
+  ledger: { items: MemberPointLedgerItem[]; nextCursor: string | null };
+};
+
 export type CommentHighlight = {
   id: string;
   choice: "A" | "B";

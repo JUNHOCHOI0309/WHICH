@@ -113,6 +113,8 @@ export async function confirmShareReward(shareCardId: string) {
     },
   );
   if (!response.ok) throw new Error("Share reward confirmation failed.");
+  const body = (await response.json()) as { claimed?: boolean };
+  return body.claimed === true;
 }
 
 let guestPreparation: Promise<void> | null = null;
