@@ -5,6 +5,8 @@
 - `adr/`: 되돌릴 수 있는 기술 결정과 그 근거
 - [ADR-0003: Issue format and media policy](./adr/0003-issue-format-and-media-policy.md):
   Issue 형식, 미디어 상태, A/B 호환과 단계별 Migration 경계
+- [ADR-0004: PICK 3~4지선다 migration boundary](./adr/0004-pick-multichoice-migration.md):
+  기본 A/B 작성 경험을 유지하는 PICK 데이터·API·UI 전환과 rollback 계약
 - [Data Architecture v1](./data-architecture-v1.md): 논리 ERD, PostgreSQL 계약, Event Schema, PII·보존, 복구 절차
 
 기획 문서의 Decision ID와 ADR을 연결하고, 결정이 바뀌면 기존 ADR을 삭제하지 않고
