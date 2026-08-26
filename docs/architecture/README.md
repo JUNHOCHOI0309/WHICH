@@ -7,6 +7,8 @@
   Issue 형식, 미디어 상태, A/B 호환과 단계별 Migration 경계
 - [ADR-0004: PICK 3~4지선다 migration boundary](./adr/0004-pick-multichoice-migration.md):
   기본 A/B 작성 경험을 유지하는 PICK 데이터·API·UI 전환과 rollback 계약
+- [ADR-0005: Trusted image uploader capability](./adr/0005-trusted-image-uploader-capability.md):
+  신뢰 사용자 이미지 권한, 자동 검사, 신고·소명과 제한 Pilot Gate
 - [Data Architecture v1](./data-architecture-v1.md): 논리 ERD, PostgreSQL 계약, Event Schema, PII·보존, 복구 절차
 
 기획 문서의 Decision ID와 ADR을 연결하고, 결정이 바뀌면 기존 ADR을 삭제하지 않고
