@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { WhichAsideCard, WhichShell } from "@/components/layout/which-shell";
+import { WhichShell } from "@/components/layout/which-shell";
 import type { MemberPrivateProfile, MemberPrivateVote } from "@/lib/contracts";
 
 import styles from "./member-vote-history-experience.module.css";
+import { MemberPointPanel } from "./member-point-panel";
 
 type Screen = "loading" | "guest" | "ready" | "error";
 
@@ -134,15 +135,8 @@ export function MemberVoteHistoryExperience({
     <WhichShell
       active="me"
       creationEnabled={creationEnabled}
-      aside={
-        <WhichAsideCard
-          eyebrow="PRIVATE VOTE LOG"
-          title="내 선택과 현재 여론을 한눈에 봐요."
-          tone="orange"
-        >
-          투표 기록은 로그인한 본인에게만 제공됩니다.
-        </WhichAsideCard>
-      }
+      aside={screen === "ready" && profile ? <MemberPointPanel /> : undefined}
+      preserveAsideOnNarrow={screen === "ready" && Boolean(profile)}
     >
       <div className={styles.page}>
         {screen === "loading" ? (

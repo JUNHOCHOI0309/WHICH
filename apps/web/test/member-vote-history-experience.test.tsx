@@ -59,6 +59,30 @@ describe("Member vote history experience", () => {
       vi.fn(async (input: string | URL | Request) => {
         const url = String(input);
         requests.push(url);
+        if (url.startsWith("/api/me/points")) {
+          return jsonResponse({
+            account: {
+              balance: 120,
+              todayEarned: 10,
+              lifetimeEarned: 120,
+              lifetimeSpent: 0,
+              hasPendingRecovery: false,
+            },
+            ledger: {
+              items: [
+                {
+                  id: "point-1",
+                  entryType: "EARN",
+                  amount: 10,
+                  reasonCode: "VOTE_ACCEPTED",
+                  reasonLabel: "투표 참여",
+                  createdAt: "2026-08-26T01:00:00.000Z",
+                },
+              ],
+              nextCursor: null,
+            },
+          });
+        }
         if (url.includes("cursor=cursor-1")) {
           return jsonResponse(
             profile([vote("vote-3", "2026-07-20T09:00:00.000Z", "휴가는 산 vs 바다")], null),
@@ -84,8 +108,12 @@ describe("Member vote history experience", () => {
     expect(screen.getAllByLabelText("현재 결과 A 60%, B 40%")).toHaveLength(2);
     expect(screen.getByText("A · 바로 하기")).toBeVisible();
     expect(screen.getByRole("link", { name: "투표 기록" })).toHaveAttribute("aria-current", "page");
+    const pointRail = screen.getByRole("complementary", { name: "WHICH 안내" });
+    expect(await screen.findByText("120P")).toBeVisible();
+    expect(pointRail).toContainElement(screen.getByRole("heading", { name: "나의 W Point" }));
     expect(screen.queryByRole("link", { name: "프로필로 돌아가기" })).not.toBeInTheDocument();
     expect(requests).toContain("/api/me?limit=20");
+    expect(requests).toContain("/api/me/points?limit=5");
 
     fireEvent.click(screen.getByRole("button", { name: "이전 기록 더 보기" }));
 

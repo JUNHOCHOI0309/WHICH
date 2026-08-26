@@ -5,20 +5,15 @@ import { useCallback, useEffect, useState } from "react";
 
 import { toast } from "@/components/feedback/toast-provider";
 import { WhichShell } from "@/components/layout/which-shell";
-import type {
-  MemberPointLedgerItem,
-  MemberPointView,
-  MemberPrivateProfile,
-  MemberPrivateVote,
-} from "@/lib/contracts";
+import type { MemberPrivateProfile, MemberPrivateVote } from "@/lib/contracts";
 import { logoutMemberSession, MEMBER_LOGOUT_ERROR } from "@/lib/member-session";
 
 import styles from "./member-profile-experience.module.css";
+import { MemberPointPanel } from "./member-point-panel";
 import { MemberPublicProfileSettings } from "./member-public-profile-settings";
 import { MemberAvatarSettings } from "./member-avatar-settings";
 
 type Screen = "loading" | "guest" | "ready" | "error";
-type PointScreen = "idle" | "loading" | "ready" | "error";
 
 type AccountDeletionError = { code?: string; message?: string };
 
@@ -38,25 +33,6 @@ async function readProfile(cursor?: string) {
   if (response.status === 401) return null;
   if (!response.ok) throw new Error("Profile read failed");
   return (await response.json()) as MemberPrivateProfile;
-}
-
-async function readPoints(cursor?: string) {
-  const query = new URLSearchParams({ limit: "5" });
-  if (cursor) query.set("cursor", cursor);
-  const response = await fetch(`/api/me/points?${query}`, { cache: "no-store" });
-  if (response.status === 401) return null;
-  if (!response.ok) throw new Error("Point read failed");
-  const body = (await response.json()) as Partial<MemberPointView>;
-  if (
-    !body.account ||
-    typeof body.account.balance !== "number" ||
-    typeof body.account.todayEarned !== "number" ||
-    !body.ledger ||
-    !Array.isArray(body.ledger.items)
-  ) {
-    throw new Error("Point response invalid");
-  }
-  return body as MemberPointView;
 }
 
 function resultPercent(vote: MemberPrivateVote, code: "A" | "B") {
@@ -79,104 +55,6 @@ function participatedLabel(value: string) {
   }).format(new Date(value));
 }
 
-function pointDateLabel(value: string) {
-  return new Intl.DateTimeFormat("ko-KR", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(value));
-}
-
-function pointAmountLabel(item: MemberPointLedgerItem) {
-  return `${item.amount > 0 ? "+" : ""}${item.amount.toLocaleString("ko-KR")}P`;
-}
-
-function MemberPointPanel({
-  points,
-  screen,
-  morePending,
-  onRetry,
-  onLoadMore,
-}: {
-  points: MemberPointView | null;
-  screen: PointScreen;
-  morePending: boolean;
-  onRetry: () => void;
-  onLoadMore: () => void;
-}) {
-  return (
-    <section
-      className={`${styles.pointPanel} ${styles.pointPanelRail}`}
-      aria-labelledby="point-title"
-    >
-      <div className={styles.pointHeading}>
-        <div>
-          <p>W POINT</p>
-          <h2 id="point-title">나의 W Point</h2>
-        </div>
-        {screen === "ready" && points ? (
-          <div className={styles.pointBalance}>
-            <strong>{points.account.balance.toLocaleString("ko-KR")}P</strong>
-            <span>오늘 +{points.account.todayEarned.toLocaleString("ko-KR")}P</span>
-          </div>
-        ) : null}
-      </div>
-
-      {screen === "loading" || screen === "idle" ? (
-        <div className={styles.pointState} aria-busy="true" aria-live="polite">
-          W Point를 확인하고 있어요.
-        </div>
-      ) : null}
-      {screen === "error" ? (
-        <div className={styles.pointState} role="status">
-          <span>W Point만 잠시 불러오지 못했어요. 다른 기능은 그대로 사용할 수 있습니다.</span>
-          <button type="button" onClick={onRetry}>
-            다시 확인
-          </button>
-        </div>
-      ) : null}
-      {screen === "ready" && points ? (
-        <>
-          {points.account.hasPendingRecovery ? (
-            <p className={styles.pointRecovery}>
-              일부 기록을 다시 확인하고 있어 현재 사용할 수 있는 잔액만 표시합니다.
-            </p>
-          ) : null}
-          {points.ledger.items.length === 0 ? (
-            <div className={styles.pointEmpty}>
-              <strong>아직 W Point 내역이 없어요.</strong>
-              <span>로그인, 투표, 확인된 공유 활동부터 차곡차곡 기록됩니다.</span>
-            </div>
-          ) : (
-            <ul className={styles.pointLedger}>
-              {points.ledger.items.map((item) => (
-                <li key={item.id}>
-                  <div>
-                    <strong>{item.reasonLabel}</strong>
-                    <time dateTime={item.createdAt}>{pointDateLabel(item.createdAt)}</time>
-                  </div>
-                  <span data-positive={item.amount > 0}>{pointAmountLabel(item)}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-          {points.ledger.nextCursor ? (
-            <button
-              type="button"
-              className={styles.pointMore}
-              disabled={morePending}
-              onClick={onLoadMore}
-            >
-              {morePending ? "불러오는 중…" : "내역 더 보기"}
-            </button>
-          ) : null}
-        </>
-      ) : null}
-    </section>
-  );
-}
-
 export function MemberProfileExperience({
   creationEnabled = false,
 }: {
@@ -184,9 +62,6 @@ export function MemberProfileExperience({
 }) {
   const [screen, setScreen] = useState<Screen>("loading");
   const [profile, setProfile] = useState<MemberPrivateProfile | null>(null);
-  const [points, setPoints] = useState<MemberPointView | null>(null);
-  const [pointScreen, setPointScreen] = useState<PointScreen>("idle");
-  const [pointMorePending, setPointMorePending] = useState(false);
   const [logoutPending, setLogoutPending] = useState(false);
   const [accountDeletionOpen, setAccountDeletionOpen] = useState(false);
   const [accountDeletionPassword, setAccountDeletionPassword] = useState("");
@@ -194,39 +69,6 @@ export function MemberProfileExperience({
   const [accountDeletionPending, setAccountDeletionPending] = useState(false);
   const [accountDeletionError, setAccountDeletionError] = useState<string | null>(null);
   const [accountDeleted, setAccountDeleted] = useState(false);
-
-  const loadPoints = useCallback(async () => {
-    setPointScreen("loading");
-    try {
-      const next = await readPoints();
-      setPoints(next);
-      setPointScreen(next ? "ready" : "error");
-    } catch {
-      setPointScreen("error");
-    }
-  }, []);
-
-  const loadMorePoints = useCallback(() => {
-    if (!points?.ledger.nextCursor || pointMorePending) return;
-    setPointMorePending(true);
-    void readPoints(points.ledger.nextCursor)
-      .then((next) => {
-        if (!next) return;
-        setPoints((current) =>
-          current
-            ? {
-                account: next.account,
-                ledger: {
-                  items: [...current.ledger.items, ...next.ledger.items],
-                  nextCursor: next.ledger.nextCursor,
-                },
-              }
-            : next,
-        );
-      })
-      .catch(() => toast.error("W Point 내역을 더 불러오지 못했어요."))
-      .finally(() => setPointMorePending(false));
-  }, [pointMorePending, points]);
 
   const load = useCallback(async () => {
     setScreen("loading");
@@ -239,11 +81,10 @@ export function MemberProfileExperience({
       }
       setProfile(next);
       setScreen("ready");
-      void loadPoints();
     } catch {
       setScreen("error");
     }
-  }, [loadPoints]);
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -257,16 +98,6 @@ export function MemberProfileExperience({
         }
         setProfile(next);
         setScreen("ready");
-        setPointScreen("loading");
-        void readPoints()
-          .then((pointView) => {
-            if (!active) return;
-            setPoints(pointView);
-            setPointScreen(pointView ? "ready" : "error");
-          })
-          .catch(() => {
-            if (active) setPointScreen("error");
-          });
       })
       .catch(() => {
         if (active) setScreen("error");
@@ -281,15 +112,7 @@ export function MemberProfileExperience({
       active="me"
       creationEnabled={creationEnabled}
       aside={
-        screen === "ready" && profile ? (
-          <MemberPointPanel
-            points={points}
-            screen={pointScreen}
-            morePending={pointMorePending}
-            onRetry={() => void loadPoints()}
-            onLoadMore={loadMorePoints}
-          />
-        ) : undefined
+        screen === "ready" && profile ? <MemberPointPanel /> : undefined
       }
       preserveAsideOnNarrow={screen === "ready" && Boolean(profile)}
     >
