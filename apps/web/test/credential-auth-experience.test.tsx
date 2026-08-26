@@ -14,6 +14,7 @@ describe("Member credential authentication experience", () => {
       />,
     );
 
+    expect(screen.getByRole("heading", { name: "WHICH" })).toBeVisible();
     expect(screen.getByRole("textbox", { name: "이메일" })).toBeVisible();
     expect(screen.getByLabelText("WHICH 비밀번호")).toBeVisible();
     expect(screen.getByRole("button", { name: "로그인" })).toBeVisible();

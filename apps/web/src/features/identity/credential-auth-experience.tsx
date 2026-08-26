@@ -72,7 +72,15 @@ export function CredentialAuthExperience({
       <div className={styles.page}>
         <section className={styles.card}>
           <p className={styles.eyebrow}>ONE ACCOUNT, MANY WAYS IN</p>
-          <h1>{isSignup ? "빠르게 WHICH 계정을 만들어요." : "내 WHICH 계정으로 들어가요."}</h1>
+          <h1>
+            {isSignup ? (
+              "빠르게 WHICH 계정을 만들어요."
+            ) : (
+              <>
+                <span className={styles.wordmarkAccent}>W</span>HICH
+              </>
+            )}
+          </h1>
           <p className={styles.description}>
             {isSignup
               ? "이메일과 비밀번호만 정하면 됩니다. Handle과 소개는 나중에 설정할 수 있어요."
