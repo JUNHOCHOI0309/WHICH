@@ -35,6 +35,7 @@
     "ops:revoke": "tsx src/ops-operator.ts revoke",
     "ops:list": "tsx src/ops-operator.ts list",
     "ops:confirm-backup": "tsx src/ops-operator.ts confirm-backup",
+    "ops:import-editorial": "tsx src/ops-operator.ts import-editorial",
     "start": "node dist/server.js",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"

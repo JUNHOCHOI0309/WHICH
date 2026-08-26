@@ -1,4 +1,4 @@
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 
 import { config as loadEnvironment } from "dotenv";
 import { and, desc, eq, isNull } from "drizzle-orm";
@@ -12,6 +12,11 @@ import {
   operatorAuditLogs,
   operatorBackupConfirmations,
 } from "./database/schema/index.js";
+import {
+  applyEditorialDecisionImport,
+  loadEditorialDecisionImport,
+  planEditorialDecisionImport,
+} from "./modules/operations/editorial-import.js";
 
 loadEnvironment({
   path: [resolve(process.cwd(), "../../.env.local"), resolve(process.cwd(), "../../.env")],
@@ -134,6 +139,31 @@ async function listOperators(database: Database["db"]) {
     .orderBy(desc(operatorAccessGrants.grantedAt));
 }
 
+async function importEditorialDecisions(input: {
+  database: Database["db"];
+  identifier: string;
+  decisionsPath: string;
+  confirmation?: string;
+  actor: string;
+  targetEnvironment: string;
+}) {
+  const memberId = await resolveMemberId(input.database, input.identifier);
+  if (!memberId) throw new Error("An active Member matching the identifier was not found.");
+  const catalogPath = resolve(dirname(input.decisionsPath), "which-expanded-500-catalog-v2.json");
+  const bundle = await loadEditorialDecisionImport(input.decisionsPath, catalogPath);
+  const plan = await planEditorialDecisionImport(input.database, bundle, input.targetEnvironment);
+  if (!input.confirmation) return { mode: "DRY_RUN" as const, operatorMemberId: memberId, ...plan };
+  const applied = await applyEditorialDecisionImport({
+    database: input.database,
+    bundle,
+    targetEnvironment: input.targetEnvironment,
+    confirmation: input.confirmation,
+    operatorMemberId: memberId,
+    actor: input.actor,
+  });
+  return { mode: "APPLIED" as const, operatorMemberId: memberId, ...applied };
+}
+
 async function main() {
   const [command, identifier, value, ...rest] = process.argv.slice(2);
   const database = createDatabase(getConfig().databaseUrl);
@@ -161,8 +191,37 @@ async function main() {
       console.log(JSON.stringify(await listOperators(database.db), null, 2));
       return;
     }
+    if (command === "import-editorial" && identifier) {
+      const decisionsPath = resolve(
+        value && value !== "--confirm"
+          ? value
+          : "content/editorial/expanded/editorial-review-decisions-v1.json",
+      );
+      const confirmationArguments = value === "--confirm" ? [value, ...rest] : rest;
+      const confirmationIndex = confirmationArguments.indexOf("--confirm");
+      const confirmation =
+        confirmationIndex >= 0 ? confirmationArguments[confirmationIndex + 1] : undefined;
+      if (confirmationIndex >= 0 && !confirmation) {
+        throw new Error("--confirm requires the exact token printed by the dry run.");
+      }
+      console.log(
+        JSON.stringify(
+          await importEditorialDecisions({
+            database: database.db,
+            identifier,
+            decisionsPath,
+            confirmation,
+            actor,
+            targetEnvironment: process.env.NODE_ENV === "production" ? "production" : "development",
+          }),
+          null,
+          2,
+        ),
+      );
+      return;
+    }
     throw new Error(
-      "Usage: ops-operator <grant|revoke> <member-id-or-email> | list | confirm-backup <member-id-or-email> <reference> [notes]",
+      "Usage: ops-operator <grant|revoke> <member-id-or-email> | list | confirm-backup <member-id-or-email> <reference> [notes] | import-editorial <member-id-or-email> [decisions-path] [--confirm <token>]",
     );
   } finally {
     await database.close();
