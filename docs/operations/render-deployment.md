@@ -85,6 +85,20 @@ private R2 bucket and expose only its read path through an R2 custom domain, the
 `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`, and
 `R2_PUBLIC_BASE_URL` on `which-web`.
 
+### Operator Issue media storage
+
+The API uses the shared R2 account credentials with two separate buckets:
+
+- `R2_ISSUE_MEDIA_STAGING_BUCKET`: private upload, processing, and quarantine area
+- `R2_ISSUE_MEDIA_PUBLISHED_BUCKET`: approved public assets only
+- `R2_ISSUE_MEDIA_PUBLIC_BASE_URL`: HTTPS public base URL for the published bucket
+
+Set these three values on `which-api`. The staging and published bucket names must differ.
+When any value is missing, the buckets are identical, or the public base URL is not HTTPS,
+the Issue media routes stay disabled while existing text-only Issues continue to work.
+
+See [Issue media asset operations](./issue-media-assets.md) for lifecycle and rollback details.
+
 The token only needs object read/write/delete access for that bucket. The Web BFF accepts
 JPG/PNG uploads up to 5 MB, strips metadata while decoding, center-crops to 512×512, and
 stores only WebP objects under `avatars/{memberId}/`. Social provider images use the same

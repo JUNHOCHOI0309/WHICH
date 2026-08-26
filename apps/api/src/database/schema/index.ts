@@ -4,6 +4,7 @@ export * from "./comments.js";
 export * from "./identity.js";
 export * from "./interests.js";
 export * from "./issues.js";
+export * from "./issue-media.js";
 export * from "./outbox.js";
 export * from "./operations.js";
 export * from "./points.js";
