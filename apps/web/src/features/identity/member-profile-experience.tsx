@@ -111,9 +111,7 @@ export function MemberProfileExperience({
     <WhichShell
       active="me"
       creationEnabled={creationEnabled}
-      aside={
-        screen === "ready" && profile ? <MemberPointPanel /> : undefined
-      }
+      aside={screen === "ready" && profile ? <MemberPointPanel /> : undefined}
       preserveAsideOnNarrow={screen === "ready" && Boolean(profile)}
     >
       <div className={styles.page}>

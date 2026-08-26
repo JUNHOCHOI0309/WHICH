@@ -404,8 +404,7 @@ button.navLink {
     grid-column: auto;
     grid-row: auto;
     overflow: hidden;
-    padding: max(14px, env(safe-area-inset-top)) 14px
-      calc(78px + env(safe-area-inset-bottom));
+    padding: max(14px, env(safe-area-inset-top)) 14px calc(78px + env(safe-area-inset-bottom));
     box-shadow: -18px 0 48px rgb(15 23 42 / 18%);
     pointer-events: none;
     transform: translateX(calc(100% + 24px));
