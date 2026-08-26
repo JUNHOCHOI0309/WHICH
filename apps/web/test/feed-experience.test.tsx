@@ -24,9 +24,10 @@ const feed: PublicIssueFeed = {
       question: "여행은 미리 계획하는 편인가요?",
       publishedAt: "2026-08-17T02:00:00.000Z",
       categoryCode: "TRAVEL",
+      mediaMode: "TEXT_ONLY",
       choices: [
-        { id: "choice-a", code: "A", label: "미리 계획한다" },
-        { id: "choice-b", code: "B", label: "가서 정한다" },
+        { id: "choice-a", code: "A", label: "미리 계획한다", media: null },
+        { id: "choice-b", code: "B", label: "가서 정한다", media: null },
       ],
       recommendation: {
         requestId: "20000000-0000-4000-8000-000000000001",
@@ -41,9 +42,10 @@ const feed: PublicIssueFeed = {
       question: "휴일에는 밖으로 나가는 편인가요?",
       publishedAt: "2026-08-17T01:00:00.000Z",
       categoryCode: "DAILY_LIFE",
+      mediaMode: "TEXT_ONLY",
       choices: [
-        { id: "choice-c", code: "A", label: "일단 나간다" },
-        { id: "choice-d", code: "B", label: "집에서 쉰다" },
+        { id: "choice-c", code: "A", label: "일단 나간다", media: null },
+        { id: "choice-d", code: "B", label: "집에서 쉰다", media: null },
       ],
       recommendation: {
         requestId: "20000000-0000-4000-8000-000000000001",

@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "experimentId": "which-86-option-images-v1",
+  "status": "PLANNED",
+  "hypothesis": "권리·검수를 통과한 대칭 A/B 이미지를 함께 보여주면 텍스트형 카드보다 질문 노출 후 투표 전환이 높아진다.",
+  "population": {
+    "trafficClass": "PRODUCT",
+    "riskLevel": "LOW",
+    "excludePolitical": true,
+    "assignmentUnit": "viewer_key_and_issue_id"
+  },
+  "arms": [
+    { "id": "control", "weight": 50, "mediaMode": "TEXT_ONLY" },
+    { "id": "treatment", "weight": 50, "mediaMode": "OPTION_IMAGES" }
+  ],
+  "primaryMetric": "exposureToVoteRate",
+  "secondaryMetrics": ["medianDecisionDurationMs", "secondVoteConversion"],
+  "guardrails": ["mediaLoadFailureRate", "commentReportRate", "voteAcceptanceRate"],
+  "minimumRuntimeDays": 7,
+  "minimumViewableIssueSessionsPerArm": 200,
+  "stoppingRule": "최소 기간과 표본을 모두 충족하기 전에는 승자를 선언하지 않으며, 이미지 로드 실패율이 운영 임계치를 넘으면 즉시 TEXT_ONLY로 롤백한다.",
+  "activation": "FEATURE_ISSUE_MEDIA_ENABLED=true와 1~100의 ISSUE_MEDIA_EXPERIMENT_PERCENT가 함께 설정될 때만 승인된 완전한 A/B 이미지 쌍에 노출한다. 기본값 false/0은 즉시 롤백 상태다."
+}

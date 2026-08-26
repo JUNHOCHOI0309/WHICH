@@ -130,6 +130,12 @@ services:
         value: "true"
       - key: FEATURE_RESULT_SHARING_ENABLED
         value: "true"
+      - key: FEATURE_ISSUE_MEDIA_ENABLED
+        value: "false"
+      - key: ISSUE_MEDIA_EXPERIMENT_PERCENT
+        value: "0"
+      - key: QUALITY_RANKER_MODE
+        value: "SHADOW"
       - key: FEATURE_POINTS_ENABLED
         value: "true"
       - key: FEATURE_RISK_CHALLENGE_ENABLED

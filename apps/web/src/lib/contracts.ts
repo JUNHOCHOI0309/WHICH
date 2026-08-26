@@ -2,6 +2,13 @@ export type IssueChoice = {
   id: string;
   code: "A" | "B";
   label: string;
+  media: {
+    url: string;
+    altText: string;
+    cropMode: "COVER" | "CONTAIN";
+    width: number;
+    height: number;
+  } | null;
 };
 
 export type IssueTally = {
@@ -23,6 +30,7 @@ export type PublicIssue = {
   publishedAt: string;
   categoryCode: string;
   experienceModeCode: string;
+  mediaMode: "TEXT_ONLY" | "OPTION_IMAGES";
   choices: IssueChoice[];
   author: {
     displayName: string;
@@ -80,10 +88,13 @@ export type PublicIssueFeed = {
   nextCursor: string | null;
   ranking: {
     requestId: string;
-    version: "interest_content_v2_refresh";
+    version: "interest_content_v2_refresh" | "quality_feed_v1";
     mode: RankingMode;
     reasonCode: RankingReasonCode;
     profileVersion: number | null;
+    policyVersion?: "quality-feed-v1.0";
+    qualityMode?: "OFF" | "SHADOW" | "LIVE";
+    fallbackReason?: string | null;
   };
 };
 

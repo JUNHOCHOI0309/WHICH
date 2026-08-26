@@ -7,7 +7,7 @@ import { WhichShell } from "@/components/layout/which-shell";
 import { RotatingCommentHighlights } from "@/components/comments/rotating-comment-highlights";
 import { FloatingTopButton } from "@/components/navigation/floating-top-button";
 import { BalanceResultBar } from "@/components/vote/balance-result-bar";
-import { VoteChoiceRow } from "@/components/vote/vote-choice-row";
+import { ChoiceMediaPair, VoteChoiceRow } from "@/components/vote/vote-choice-row";
 import {
   ensureGuestSubject,
   loadCommentHighlights,
@@ -74,6 +74,7 @@ export function FeedExperience({ creationEnabled = false }: { creationEnabled?: 
   const [highlightStates, setHighlightStates] = useState<Record<string, HighlightState>>({});
   const viewedRecommendationRequests = useRef(new Set<string>());
   const decisionStartedAt = useRef(new Map<string, number>());
+  const recordedMediaLoads = useRef(new Set<string>());
 
   const applyFeed = useCallback((feed: PublicIssueFeed) => {
     rememberFirstIssue(feed);
@@ -198,7 +199,7 @@ export function FeedExperience({ creationEnabled = false }: { creationEnabled?: 
           ),
           canonicalChoiceId: choice.id,
           shownPosition: issue.choices.findIndex((item) => item.id === choice.id),
-          mediaMode: "TEXT_ONLY",
+          mediaMode: issue.mediaMode,
         },
       });
 
@@ -260,8 +261,29 @@ export function FeedExperience({ creationEnabled = false }: { creationEnabled?: 
       eventType: "ISSUE_VIEWABLE_IMPRESSION",
       issueId: issue.id,
       issueVersion: issue.version,
+      quality: { mediaMode: issue.mediaMode },
     });
   }, []);
+
+  const recordMediaLoad = useCallback(
+    (issue: PublicFeedIssue, choice: IssueChoice, outcome: "SUCCESS" | "FAILURE") => {
+      const key = `${issue.id}:${choice.id}:${outcome}`;
+      if (recordedMediaLoads.current.has(key)) return;
+      recordedMediaLoads.current.add(key);
+      void recordAnalyticsEvent({
+        eventType: "ISSUE_MEDIA_LOAD",
+        issueId: issue.id,
+        issueVersion: issue.version,
+        quality: {
+          canonicalChoiceId: choice.id,
+          shownPosition: issue.choices.findIndex((item) => item.id === choice.id),
+          mediaMode: issue.mediaMode,
+          mediaLoadOutcome: outcome,
+        },
+      });
+    },
+    [],
+  );
 
   return (
     <WhichShell active="home" creationEnabled={creationEnabled}>
@@ -325,6 +347,7 @@ export function FeedExperience({ creationEnabled = false }: { creationEnabled?: 
                   onOpen={() => recordOpen(item)}
                   onViewable={recordViewable}
                   onRetryHighlights={() => void loadHighlights(item.id)}
+                  onMediaLoad={(choice, outcome) => recordMediaLoad(item, choice, outcome)}
                   key={item.id}
                 />
               ))}
@@ -388,6 +411,7 @@ function FeedCard({
   onOpen,
   onViewable,
   onRetryHighlights,
+  onMediaLoad,
 }: {
   issue: PublicFeedIssue;
   state: CardVoteState;
@@ -398,6 +422,7 @@ function FeedCard({
   onOpen: () => void;
   onViewable: (issue: PublicFeedIssue) => void;
   onRetryHighlights: () => void;
+  onMediaLoad: (choice: IssueChoice, outcome: "SUCCESS" | "FAILURE") => void;
 }) {
   const choiceA = issue.choices.find((choice) => choice.code === "A");
   const choiceB = issue.choices.find((choice) => choice.code === "B");
@@ -457,6 +482,7 @@ function FeedCard({
               selected={pendingChoice?.id === choiceA.id}
               pending={state.status === "SUBMITTING" && pendingChoice?.id === choiceA.id}
               disabled={state.status === "SUBMITTING"}
+              onMediaLoad={(outcome) => onMediaLoad(choiceA, outcome)}
               onSelect={onChoose}
             />
           ) : null}
@@ -466,6 +492,7 @@ function FeedCard({
               selected={pendingChoice?.id === choiceB.id}
               pending={state.status === "SUBMITTING" && pendingChoice?.id === choiceB.id}
               disabled={state.status === "SUBMITTING"}
+              onMediaLoad={(outcome) => onMediaLoad(choiceB, outcome)}
               onSelect={onChoose}
             />
           ) : null}
@@ -499,6 +526,7 @@ function FeedCard({
               ? `처음 선택한 ${state.vote.choice}가 유지되고 있어요.`
               : `${state.vote.choice} 선택이 반영됐어요.`}
           </p>
+          <ChoiceMediaPair choices={[choiceA, choiceB]} onMediaLoad={onMediaLoad} />
           <BalanceResultBar
             aLabel={choiceA.label}
             bLabel={choiceB.label}

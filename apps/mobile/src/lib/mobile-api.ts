@@ -86,10 +86,15 @@ export function createMobileApiClient(
       return bodyOrError<PublicIssueFeed>(response);
     },
 
-    async loadIssue(issueId: string) {
+    async loadIssue(issueId: string, subjectId?: string) {
       const response = await request(
         `${baseUrl}/api/mobile/v1/issues/${encodeURIComponent(issueId)}`,
-        { headers: { accept: "application/json" } },
+        {
+          headers: {
+            accept: "application/json",
+            ...(subjectId ? { "x-anonymous-subject-id": subjectId } : {}),
+          },
+        },
       );
       return bodyOrError<PublicIssue>(response);
     },
@@ -153,6 +158,7 @@ export function createMobileApiClient(
       sessionId: string;
       eventId: string;
       eventType:
+        | "ISSUE_VIEWABLE_IMPRESSION"
         | "VOTE_SUBMIT"
         | "RESULT_VIEW"
         | "INTEREST_PROMPT_VIEW"
@@ -160,6 +166,7 @@ export function createMobileApiClient(
         | "INTEREST_PROMPT_SKIP"
         | "PERSONALIZED_FEED_VIEW"
         | "PERSONALIZED_ISSUE_OPEN"
+        | "ISSUE_MEDIA_LOAD"
         | "SHARE_OPEN"
         | "SHARE_CHOICE_TOGGLE"
         | "SHARE_COMPLETE";
@@ -168,6 +175,13 @@ export function createMobileApiClient(
       recommendationRequestId?: string;
       shareCardId?: string;
       occurredAt: string;
+      quality?: {
+        durationMs?: number;
+        canonicalChoiceId?: string;
+        shownPosition?: number;
+        mediaMode?: "TEXT_ONLY" | "OPTION_IMAGES";
+        mediaLoadOutcome?: "SUCCESS" | "FAILURE";
+      };
     }) {
       const response = await request(`${baseUrl}/api/mobile/v1/analytics/events`, {
         method: "POST",
@@ -183,6 +197,7 @@ export function createMobileApiClient(
           issueVersion: command.issueVersion,
           recommendationRequestId: command.recommendationRequestId,
           shareCardId: command.shareCardId,
+          quality: command.quality,
           occurredAt: command.occurredAt,
         }),
       });

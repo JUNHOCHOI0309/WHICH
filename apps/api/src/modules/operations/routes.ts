@@ -139,6 +139,44 @@ export async function registerOpsRoutes(
 
     opsApp.get<{
       Headers: OpsHeaders;
+      Querystring: { limit?: number };
+    }>(
+      "/v1/internal/ops/ranking-preview",
+      {
+        schema: {
+          hide: true,
+          headers: opsHeadersSchema,
+          querystring: Type.Object({
+            limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
+          }),
+          response: {
+            200: Type.Any(),
+            401: Type.Object({ code: Type.String(), message: Type.String() }),
+            403: Type.Object({ code: Type.String(), message: Type.String() }),
+            500: Type.Object({ code: Type.String(), message: Type.String() }),
+          },
+        },
+      },
+      async (request, reply) => {
+        const memberId = await authenticate(request, reply);
+        if (!memberId) return;
+        const preview = await service.readRankingPreview({
+          memberId,
+          limit: request.query.limit ?? 50,
+          requestId: request.id,
+        });
+        if (!preview) {
+          return reply.code(403).send({
+            code: "OPERATOR_ROLE_REQUIRED",
+            message: "This Member does not have active OPERATOR access.",
+          });
+        }
+        return reply.send(preview);
+      },
+    );
+
+    opsApp.get<{
+      Headers: OpsHeaders;
       Querystring: {
         status?: (typeof OPS_MEMBER_STATUSES)[number];
         q?: string;

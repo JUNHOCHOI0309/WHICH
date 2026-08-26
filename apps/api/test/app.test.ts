@@ -287,9 +287,20 @@ describe("OpenAPI contract", () => {
       publishedAt: "2026-08-25T03:00:00.000Z",
       categoryCode: "LIFE",
       experienceModeCode: "PLAYFUL_QUICK",
+      mediaMode: "TEXT_ONLY",
       choices: [
-        { id: "9f64f67d-c0e8-4f6a-ab8d-0508926c7e51", code: "A", label: "바로 자기" },
-        { id: "2375d356-56fb-43ba-a675-d14f3d60ef16", code: "B", label: "조금 더 놀기" },
+        {
+          id: "9f64f67d-c0e8-4f6a-ab8d-0508926c7e51",
+          code: "A",
+          label: "바로 자기",
+          media: null,
+        },
+        {
+          id: "2375d356-56fb-43ba-a675-d14f3d60ef16",
+          code: "B",
+          label: "조금 더 놀기",
+          media: null,
+        },
       ],
       author: null,
       result: { visibility: "PRE_VOTE_HIDDEN", tally: null },

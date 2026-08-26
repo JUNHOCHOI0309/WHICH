@@ -114,6 +114,31 @@ export type OpsMemberPage = {
   nextCursor: string | null;
 };
 
+export type OpsRankingPreview = {
+  schemaVersion: 1;
+  generatedAt: string;
+  configuredMode: "OFF" | "SHADOW" | "LIVE";
+  policyVersion: string;
+  items: Array<{
+    requestId: string;
+    servedPosition: number;
+    shadowPosition: number | null;
+    issueId: string;
+    question: string;
+    categoryCode: string;
+    servedScore: number;
+    qualityScore: number;
+    candidateSources: string[];
+    scoreComponents: Record<string, number>;
+    qualityEligible: boolean;
+    eligibilityReasons: string[];
+    controversyEligible: boolean;
+    rankingReason: string;
+    fallbackReason: string | null;
+    createdAt: string;
+  }>;
+};
+
 export const OPS_EDITORIAL_STATUSES = ["PENDING", "APPROVED", "NEEDS_CHANGES", "REJECTED"] as const;
 export type OpsEditorialStatus = (typeof OPS_EDITORIAL_STATUSES)[number];
 export const OPS_EDITORIAL_SCOPES = ["ACTIVE", "RESERVE", "LONG_TERM"] as const;
@@ -181,6 +206,11 @@ export interface OpsDashboardService {
     limit: number;
     requestId?: string;
   }): Promise<OpsMemberPage | null>;
+  readRankingPreview(input: {
+    memberId: string;
+    limit: number;
+    requestId?: string;
+  }): Promise<OpsRankingPreview | null>;
   readEditorial(input: {
     memberId: string;
     status?: OpsEditorialStatus;

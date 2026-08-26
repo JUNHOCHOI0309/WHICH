@@ -5,6 +5,13 @@ export type PublicIssueChoice = {
   id: string;
   code: "A" | "B";
   label: string;
+  media: {
+    url: string;
+    altText: string;
+    cropMode: "COVER" | "CONTAIN";
+    width: number;
+    height: number;
+  } | null;
 };
 
 export type PublicIssueTally = {
@@ -24,6 +31,7 @@ export type PublicIssue = {
   publishedAt: string;
   categoryCode: string;
   experienceModeCode: string;
+  mediaMode: "TEXT_ONLY" | "OPTION_IMAGES";
   choices: PublicIssueChoice[];
   author: {
     displayName: string;
@@ -63,7 +71,10 @@ export type GuestIssueFeedQuery = {
 };
 
 export interface IssueReadService {
-  getGuestIssue(issueId: string): Promise<PublicIssue>;
+  getGuestIssue(
+    issueId: string,
+    viewer?: { anonymousSubjectId?: string; sessionToken?: string },
+  ): Promise<PublicIssue>;
   listGuestIssues(query: GuestIssueFeedQuery): Promise<PublicIssueFeed>;
 }
 

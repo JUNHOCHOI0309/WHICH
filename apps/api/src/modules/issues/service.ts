@@ -14,14 +14,20 @@ import {
   ne,
   notExists,
   or,
+  gte,
+  sql,
   type SQL,
 } from "drizzle-orm";
 
 import type { Database } from "../../database/client.js";
 import {
   issueChoices,
+  issueChoiceMedia,
   issueAuthors,
   issueInterestCards,
+  issueMediaAssets,
+  analyticsEvents,
+  analyticsSessions,
   guestMemberLinks,
   issues,
   issueVersions,
@@ -32,7 +38,7 @@ import {
   votes,
 } from "../../database/schema/index.js";
 import type { InterestCardCode } from "../interests/contracts.js";
-import type { IssueReadService, PublicIssueTally } from "./contracts.js";
+import type { IssueReadService, PublicIssue, PublicIssueTally } from "./contracts.js";
 import {
   decodeIssueFeedCursor,
   encodeIssueFeedCursor,
@@ -43,19 +49,120 @@ import { publicProfileInitials } from "../identity/profile.js";
 import { isGuestIssueAvailable } from "./policy.js";
 import {
   RANKING_VERSION,
+  QUALITY_RANKING_POLICY_VERSION,
+  type IssueQualitySignals,
+  type QualityRankerMode,
   type RankedIssue,
   type RankingProfile,
 } from "../recommendations/contracts.js";
-import { rankDiscoveryIssues, rankIssues } from "../recommendations/ranker.js";
+import {
+  attachShadowRanking,
+  rankDiscoveryIssues,
+  rankIssues,
+  rankQualityIssues,
+  rankRecencyIssues,
+} from "../recommendations/ranker.js";
 import { loadRankingProfile, recordRecommendation } from "../recommendations/service.js";
+import {
+  issueMediaTreatmentEnabled,
+  issueMediaViewerKey,
+  type IssueMediaExperimentOptions,
+} from "./media-experiment.js";
+
+type IssueWithSourceMediaMode = Pick<PublicIssue, "id" | "version" | "choices" | "mediaMode"> & {
+  sourceMediaMode: string;
+};
+
+function withoutSourceMediaMode<T extends IssueWithSourceMediaMode>(value: T) {
+  const { sourceMediaMode, ...issue } = value;
+  void sourceMediaMode;
+  return issue;
+}
+
+async function withPublicChoiceMediaBatch<T extends IssueWithSourceMediaMode>(
+  database: Database["db"],
+  issuesToExpose: T[],
+  mediaExperiment: IssueMediaExperimentOptions | undefined,
+  viewerKey: string | undefined,
+) {
+  const eligibleIssues = issuesToExpose.filter(
+    (issue) =>
+      issue.sourceMediaMode === "OPTION_IMAGES" &&
+      issueMediaTreatmentEnabled(mediaExperiment, viewerKey, issue.id),
+  );
+  const publicUrl = mediaExperiment?.publicUrl;
+  if (!publicUrl || eligibleIssues.length === 0) {
+    return issuesToExpose.map(withoutSourceMediaMode);
+  }
+
+  const issueFilters = eligibleIssues.map((issue) =>
+    and(eq(issueChoiceMedia.issueId, issue.id), eq(issueChoiceMedia.issueVersion, issue.version)),
+  );
+
+  const rows = await database
+    .select({
+      choiceId: issueChoiceMedia.choiceId,
+      altText: issueChoiceMedia.altText,
+      cropMode: issueChoiceMedia.cropMode,
+      objectKey: issueMediaAssets.publishedObjectKey,
+      width: issueMediaAssets.outputWidth,
+      height: issueMediaAssets.outputHeight,
+    })
+    .from(issueChoiceMedia)
+    .innerJoin(issueMediaAssets, eq(issueMediaAssets.id, issueChoiceMedia.mediaAssetId))
+    .where(
+      and(
+        or(...issueFilters),
+        eq(issueMediaAssets.processingState, "READY"),
+        eq(issueMediaAssets.moderationState, "APPROVED"),
+        eq(issueMediaAssets.storageState, "PUBLISHED"),
+        inArray(issueMediaAssets.rightsState, ["ASSERTED", "CLEARED"]),
+        isNotNull(issueMediaAssets.publishedObjectKey),
+      ),
+    );
+
+  const mediaByChoice = new Map(rows.map((row) => [row.choiceId, row]));
+  return issuesToExpose.map((sourceIssue) => {
+    const issue = withoutSourceMediaMode(sourceIssue);
+    if (!eligibleIssues.some((eligible) => eligible.id === issue.id)) return issue;
+    if (
+      issue.choices.length !== 2 ||
+      issue.choices.some((choice) => !mediaByChoice.has(choice.id))
+    ) {
+      return issue;
+    }
+
+    return {
+      ...issue,
+      mediaMode: "OPTION_IMAGES" as const,
+      choices: issue.choices.map((choice) => {
+        const media = mediaByChoice.get(choice.id)!;
+        return {
+          ...choice,
+          media: {
+            url: publicUrl(media.objectKey!),
+            altText: media.altText,
+            cropMode: media.cropMode as "COVER" | "CONTAIN",
+            width: media.width,
+            height: media.height,
+          },
+        };
+      }),
+    };
+  });
+}
 
 export function createIssueReadService(
   database: Database["db"],
-  options: { personalizationEnabled?: boolean } = {},
+  options: {
+    personalizationEnabled?: boolean;
+    mediaExperiment?: IssueMediaExperimentOptions;
+    qualityRankerMode?: QualityRankerMode;
+  } = {},
 ): IssueReadService {
   return {
-    async getGuestIssue(issueId) {
-      return database.transaction(async (transaction) => {
+    async getGuestIssue(issueId, viewer = {}) {
+      const loaded = await database.transaction(async (transaction) => {
         const [issue] = await transaction
           .select({
             id: issues.id,
@@ -92,6 +199,7 @@ export function createIssueReadService(
             publishedAt: issueVersions.publishedAt,
             categoryCode: issueVersions.primaryCategoryCode,
             experienceModeCode: issueVersions.experienceModeCode,
+            mediaMode: issueVersions.mediaMode,
           })
           .from(issueVersions)
           .where(and(eq(issueVersions.issueId, issueId), isNotNull(issueVersions.publishedAt)))
@@ -176,7 +284,8 @@ export function createIssueReadService(
           publishedAt: version.publishedAt.toISOString(),
           categoryCode: version.categoryCode,
           experienceModeCode: version.experienceModeCode,
-          choices,
+          choices: choices.map((choice) => ({ ...choice, media: null })),
+          mediaMode: "TEXT_ONLY" as const,
           author: author
             ? {
                 displayName: author.displayName,
@@ -193,8 +302,16 @@ export function createIssueReadService(
             visibility: issue.resultVisibility,
             tally,
           },
+          sourceMediaMode: version.mediaMode,
         };
       });
+      const [issue] = await withPublicChoiceMediaBatch(
+        database,
+        [loaded],
+        options.mediaExperiment,
+        issueMediaViewerKey(viewer),
+      );
+      return issue!;
     },
 
     async listGuestIssues(query) {
@@ -247,6 +364,9 @@ export function createIssueReadService(
             question: issueVersions.question,
             publishedAt: issueVersions.publishedAt,
             categoryCode: issueVersions.primaryCategoryCode,
+            mediaMode: issueVersions.mediaMode,
+            context: issueVersions.context,
+            contentHash: issueVersions.contentHash,
           })
           .from(issueVersions)
           .where(and(isNotNull(issueVersions.publishedAt), lte(issueVersions.publishedAt, now)))
@@ -395,9 +515,14 @@ export function createIssueReadService(
             question: latestPublishedVersions.question,
             publishedAt: latestPublishedVersions.publishedAt,
             categoryCode: latestPublishedVersions.categoryCode,
+            mediaMode: latestPublishedVersions.mediaMode,
+            context: latestPublishedVersions.context,
+            contentHash: latestPublishedVersions.contentHash,
+            authorId: issueAuthors.memberId,
           })
           .from(issues)
           .innerJoin(latestPublishedVersions, eq(latestPublishedVersions.issueId, issues.id))
+          .leftJoin(issueAuthors, eq(issueAuthors.issueId, issues.id))
           .where(and(...filters))
           .orderBy(desc(latestPublishedVersions.publishedAt), desc(issues.id))
           .limit(candidateLimit);
@@ -419,6 +544,21 @@ export function createIssueReadService(
               .from(issueInterestCards)
               .where(or(...mappingFilters))
           : [];
+        const candidateChoiceFilters = candidateRows.map((row) =>
+          and(eq(issueChoices.issueId, row.id), eq(issueChoices.issueVersion, row.version)),
+        );
+        const candidateChoices = candidateChoiceFilters.length
+          ? await transaction
+              .select({
+                issueId: issueChoices.issueId,
+                issueVersion: issueChoices.issueVersion,
+                code: issueChoices.code,
+                label: issueChoices.label,
+              })
+              .from(issueChoices)
+              .where(or(...candidateChoiceFilters))
+              .orderBy(issueChoices.issueId, issueChoices.code)
+          : [];
         const weightsByIssue = new Map<string, RankedIssue["cardWeights"]>();
         for (const mapping of mappings) {
           const key = `${mapping.issueId}:${mapping.issueVersion}`;
@@ -427,16 +567,111 @@ export function createIssueReadService(
           weightsByIssue.set(key, weights);
         }
 
+        const qualitySignals = new Map<string, IssueQualitySignals>();
+        if ((options.qualityRankerMode ?? "OFF") !== "OFF" && candidateRows.length > 0) {
+          const issueIds = candidateRows.map((row) => row.id);
+          const since = new Date(now.valueOf() - 30 * 86_400_000);
+          const [eventRows, voteRows] = await Promise.all([
+            transaction
+              .select({
+                issueId: analyticsEvents.issueId,
+                issueVersion: analyticsEvents.issueVersion,
+                viewableImpressions: sql<number>`count(*) filter (where ${analyticsEvents.eventType} = 'ISSUE_VIEWABLE_IMPRESSION')::int`,
+                averageDecisionMs: sql<
+                  number | null
+                >`avg(${analyticsEvents.durationMs}) filter (where ${analyticsEvents.eventType} = 'VOTE_SUBMIT')`,
+                nextIssueOpens: sql<number>`count(*) filter (where ${analyticsEvents.eventType} = 'NEXT_ISSUE_OPEN')::int`,
+                commentCompletions: sql<number>`count(*) filter (where ${analyticsEvents.eventType} = 'COMMENT_COMPLETE')::int`,
+                shareCompletions: sql<number>`count(*) filter (where ${analyticsEvents.eventType} = 'SHARE_COMPLETE')::int`,
+                skips: sql<number>`count(*) filter (where ${analyticsEvents.eventType} in ('ISSUE_SKIP', 'ISSUE_HIDE'))::int`,
+                reports: sql<number>`count(*) filter (where ${analyticsEvents.eventType} = 'COMMENT_REPORT_COMPLETE')::int`,
+              })
+              .from(analyticsEvents)
+              .innerJoin(analyticsSessions, eq(analyticsSessions.id, analyticsEvents.sessionId))
+              .where(
+                and(
+                  inArray(analyticsEvents.issueId, issueIds),
+                  gte(analyticsEvents.occurredAt, since),
+                  eq(analyticsSessions.trafficClass, "PRODUCT"),
+                ),
+              )
+              .groupBy(analyticsEvents.issueId, analyticsEvents.issueVersion),
+            transaction
+              .select({
+                issueId: votes.issueId,
+                issueVersion: votes.issueVersion,
+                code: issueChoices.code,
+                count: sql<number>`count(*)::int`,
+              })
+              .from(votes)
+              .innerJoin(issueChoices, eq(issueChoices.id, votes.choiceId))
+              .where(
+                and(
+                  inArray(votes.issueId, issueIds),
+                  eq(votes.integrityState, "ACCEPTED"),
+                  eq(votes.isTestSubject, false),
+                  gte(votes.acceptedAt, since),
+                ),
+              )
+              .groupBy(votes.issueId, votes.issueVersion, issueChoices.code),
+          ]);
+          for (const row of eventRows) {
+            qualitySignals.set(`${row.issueId}:${row.issueVersion}`, {
+              viewableImpressions: Number(row.viewableImpressions),
+              acceptedA: 0,
+              acceptedB: 0,
+              averageDecisionMs:
+                row.averageDecisionMs === null ? null : Number(row.averageDecisionMs),
+              nextIssueOpens: Number(row.nextIssueOpens),
+              commentCompletions: Number(row.commentCompletions),
+              shareCompletions: Number(row.shareCompletions),
+              skips: Number(row.skips),
+              reports: Number(row.reports),
+            });
+          }
+          for (const row of voteRows) {
+            const key = `${row.issueId}:${row.issueVersion}`;
+            const current = qualitySignals.get(key) ?? {
+              viewableImpressions: 0,
+              acceptedA: 0,
+              acceptedB: 0,
+              averageDecisionMs: null,
+              nextIssueOpens: 0,
+              commentCompletions: 0,
+              shareCompletions: 0,
+              skips: 0,
+              reports: 0,
+            };
+            if (row.code === "A") current.acceptedA = Number(row.count);
+            if (row.code === "B") current.acceptedB = Number(row.count);
+            qualitySignals.set(key, current);
+          }
+        }
+
+        const rankableRows = candidateRows.map((row) => {
+          const labels = candidateChoices
+            .filter((choice) => choice.issueId === row.id && choice.issueVersion === row.version)
+            .map((choice) => choice.label);
+          return {
+            id: row.id,
+            version: row.version,
+            publishedAt: row.publishedAt!,
+            cardWeights: weightsByIssue.get(`${row.id}:${row.version}`) ?? new Map(),
+            categoryCode: row.categoryCode,
+            authorId: row.authorId,
+            contentHash: row.contentHash,
+            question: row.question,
+            context: row.context,
+            choiceLabels: [labels[0] ?? "", labels[1] ?? ""] as [string, string],
+            qualitySignals: qualitySignals.get(`${row.id}:${row.version}`),
+          };
+        });
+
         let rankedRows: RankedIssue[];
         if (profile.mode === "PERSONALIZED") {
           try {
             rankedRows = rankIssues(
-              candidateRows.map((row) => ({
-                id: row.id,
-                version: row.version,
-                publishedAt: row.publishedAt!,
-                cardWeights: weightsByIssue.get(`${row.id}:${row.version}`) ?? new Map(),
-              })),
+              rankableRows,
               profile.selectedCardCodes,
               subjectId,
               profile.profileVersion,
@@ -444,38 +679,30 @@ export function createIssueReadService(
             );
           } catch {
             profile = { ...profile, mode: "RECENCY", reasonCode: "RANKER_FALLBACK" };
-            rankedRows = candidateRows.map((row) => ({
-              id: row.id,
-              version: row.version,
-              publishedAt: row.publishedAt!,
-              cardWeights: new Map(),
-              score: 0,
-              explorationScore: 0,
-              reasonCodes: ["RECENT_FALLBACK"],
-              matchedCardCodes: [],
-            }));
+            rankedRows = rankRecencyIssues(rankableRows);
           }
         } else if (discoveryRanking) {
-          rankedRows = rankDiscoveryIssues(
-            candidateRows.map((row) => ({
-              id: row.id,
-              version: row.version,
-              publishedAt: row.publishedAt!,
-              cardWeights: weightsByIssue.get(`${row.id}:${row.version}`) ?? new Map(),
-            })),
-            rankingSeed,
-          );
+          rankedRows = rankDiscoveryIssues(rankableRows, rankingSeed);
         } else {
-          rankedRows = candidateRows.map((row) => ({
-            id: row.id,
-            version: row.version,
-            publishedAt: row.publishedAt!,
-            cardWeights: new Map(),
-            score: 0,
-            explorationScore: 0,
-            reasonCodes: ["RECENT_FALLBACK"],
-            matchedCardCodes: [],
-          }));
+          rankedRows = rankRecencyIssues(rankableRows);
+        }
+
+        const qualityMode = options.qualityRankerMode ?? "OFF";
+        let fallbackReason: string | null = null;
+        if (qualityMode !== "OFF") {
+          const qualityRows = rankQualityIssues(
+            rankableRows,
+            profile.selectedCardCodes,
+            rankingSeed,
+            now,
+          );
+          if (qualityMode === "LIVE") {
+            const eligibleRows = qualityRows.filter((row) => row.qualityEligible);
+            if (eligibleRows.length > 0) rankedRows = eligibleRows;
+            else fallbackReason = "NO_QUALITY_ELIGIBLE_CANDIDATES";
+          } else {
+            rankedRows = attachShadowRanking(rankedRows, qualityRows);
+          }
         }
 
         const cursorScore = cursor?.score;
@@ -526,7 +753,9 @@ export function createIssueReadService(
           categoryCode: row.categoryCode,
           choices: choices
             .filter((choice) => choice.issueId === row.id && choice.issueVersion === row.version)
-            .map(({ id, code, label }) => ({ id, code, label })),
+            .map(({ id, code, label }) => ({ id, code, label, media: null })),
+          mediaMode: "TEXT_ONLY" as const,
+          sourceMediaMode: row.mediaMode,
           recommendation: {
             requestId: rankingRequestId,
             score: row.ranked.score,
@@ -541,6 +770,9 @@ export function createIssueReadService(
           mode: profile.mode,
           reasonCode: profile.reasonCode,
           profileVersion: profile.profileVersion,
+          policyVersion: QUALITY_RANKING_POLICY_VERSION,
+          qualityMode,
+          fallbackReason,
         } as const;
 
         return {
@@ -586,7 +818,17 @@ export function createIssueReadService(
         result.subjectId,
         result.auditItems,
       ).catch(() => undefined);
-      return { items: result.items, nextCursor: result.nextCursor, ranking: result.ranking };
+      const items = await withPublicChoiceMediaBatch(
+        database,
+        result.items,
+        options.mediaExperiment,
+        issueMediaViewerKey(query),
+      );
+      return {
+        items,
+        nextCursor: result.nextCursor,
+        ranking: result.ranking,
+      };
     },
   };
 }

@@ -1,7 +1,8 @@
 # Issue media asset operations
 
 WHICH-84 establishes the server-side asset lifecycle for operator-managed A/B option images.
-Review UI and client exposure are intentionally deferred to WHICH-85 and WHICH-86.
+WHICH-85 adds the controlled review console and immutable decision/rights history. WHICH-86 adds
+guarded public exposure and leaves it off by default until the experiment is activated.
 
 ## Scope and security boundary
 
@@ -62,11 +63,13 @@ Both choices must have media before the version switches from `TEXT_ONLY` to `OP
 
 ## Operator sequence
 
-1. Stage an upload with a 20-2000 character rights attestation.
-2. Inspect its metadata and hashes.
-3. Approve and publish the asset.
-4. Attach one published asset to each unlocked, unpublished A/B choice with alt text and crop mode.
-5. Publish the Issue through the existing Issue workflow.
+1. Open `/ops` through Cloudflare Access and select `Image Review`.
+2. Stage an upload with a 20-2000 character rights attestation. It stays in the private bucket.
+3. Inspect its normalized preview, source/rights basis, dimensions, hashes, and linked Issue.
+4. Record a policy-versioned approval or rejection with a reason code and rationale.
+5. Only approval moves the object to the published bucket and creates a public URL.
+6. Attach one published asset to each unlocked, unpublished A/B choice with alt text and crop mode.
+7. Publish the Issue through the existing Issue workflow.
 
 All lifecycle calls write operator audit events. Published or locked Issue versions cannot be
 mutated in place; create a new Issue version instead.
@@ -81,6 +84,40 @@ mutated in place; create a new Issue version instead.
   the text Issue data for audit/history behavior.
 - Purged assets retain metadata and hashes; the binary object is irrecoverably removed.
 
+## Review states and immutable history
+
+The Ops queue exposes five effective states: `PENDING`, `APPROVED`, `REJECTED`, `HIDDEN`, and
+`DELETED`. `RESTORED` is an operator action that returns a rights-cleared hidden asset to
+`APPROVED`; it is stored as a decision event rather than a sixth current state.
+
+Every decision is append-only and records target scope (`ASSET` or `ISSUE`), target ID, action,
+reason code, free-text rationale, policy version, operator, request ID, and timestamp. Asset-level
+blind affects one image. Issue-level blind affects every linked image and creates an explicit
+Issue-scoped decision, so the two operations are distinguishable during audit.
+
+## Privacy, defamation, and copyright desk
+
+The Image Review tab records `PRIVACY`, `DEFAMATION`, and `COPYRIGHT` cases independently of the
+decision history. Opening a case immediately moves the targeted image or Issue media to private
+quarantine and records a `HIDDEN` decision. The request retains the requester reference, details,
+initial action decision, recorder, and final resolution. `ACTIONED` preserves the block;
+`DISMISSED` clears the rights challenge but deliberately requires a separate restore decision.
+
+## Emergency QA
+
+Before enabling image Issues publicly, verify this sequence against staging R2:
+
+1. Upload an image and confirm its Ops preview works while no public URL exists.
+2. Approve it and confirm the published URL works.
+3. Apply asset blind and confirm only that image loses its public URL.
+4. Restore it and confirm the same normalized WebP returns.
+5. Apply Issue blind and confirm every linked image is quarantined; then restore the Issue.
+6. Open each rights request type and confirm immediate quarantine, immutable history, and final
+   resolution metadata.
+7. Delete a test asset and confirm binary restoration is rejected while metadata/history remain.
+8. Verify corresponding `operator_audit_logs` contain operator, request ID, action, reason code,
+   target, outcome, and decision ID.
+
 ## Orphan cleanup
 
 The operator-only orphan purge removes staged assets that are older than the supplied threshold
@@ -89,8 +126,32 @@ do not expose it to public clients.
 
 ## Rollback and compatibility
 
+Public rendering requires both environment controls:
+
+```dotenv
+FEATURE_ISSUE_MEDIA_ENABLED=true
+ISSUE_MEDIA_EXPERIMENT_PERCENT=10
+```
+
+Start at 10%, verify Web and Mobile load-failure and vote metrics, then move to 50% for the
+preregistered comparison. `ISSUE_MEDIA_EXPERIMENT_PERCENT=0` or
+`FEATURE_ISSUE_MEDIA_ENABLED=false` immediately returns every public card to `TEXT_ONLY` without
+changing asset or Issue rows. Assignment is deterministic per viewer and Issue. An eligible
+treatment requires two complete, published, approved, rights-cleared choice assets; an incomplete
+pair always falls back as one text-only A/B card.
+
+Choice labels remain visible beside images and image failures collapse only the failed visual,
+leaving voting functional. Result sharing intentionally remains a text-only, privacy-safe card;
+R2 URLs, filenames, rights attestations, and image metadata are never copied into share payloads.
+
+- Experiment preregistration: `apps/api/content/experiments/which-86-option-images-v1.json`
+- Compare `ISSUE_VIEWABLE_IMPRESSION` and accepted Votes by `media_mode`.
+- Monitor `ISSUE_MEDIA_LOAD` `SUCCESS | FAILURE`, decision duration, reports, and vote acceptance.
+
 - Migration `0030_flimsy_hobgoblin.sql` is additive and backfills every existing Issue version
   as `format_mode = 'VS'` and `media_mode = 'TEXT_ONLY'`.
+- Migration `0031_violet_peter_quill.sql` adds only append-only review decisions and rights request
+  records. It does not expose existing media or alter text-only Issues.
 - Removing the R2 Issue media variables disables new media operations without affecting voting,
   comments, or text-only Issue rendering.
 - To roll back one unpublished media draft, detach its links and quarantine or purge its assets.

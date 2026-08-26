@@ -31,6 +31,16 @@ const choiceSchema = Type.Object({
   id: uuidSchema,
   code: Type.Union([Type.Literal("A"), Type.Literal("B")]),
   label: Type.String(),
+  media: Type.Union([
+    Type.Object({
+      url: Type.String({ format: "uri" }),
+      altText: Type.String({ minLength: 1 }),
+      cropMode: Type.Union([Type.Literal("COVER"), Type.Literal("CONTAIN")]),
+      width: Type.Integer({ minimum: 1 }),
+      height: Type.Integer({ minimum: 1 }),
+    }),
+    Type.Null(),
+  ]),
 });
 
 const issueResponseSchema = Type.Object({
@@ -41,6 +51,7 @@ const issueResponseSchema = Type.Object({
   publishedAt: Type.String({ format: "date-time" }),
   categoryCode: Type.String(),
   experienceModeCode: Type.String(),
+  mediaMode: Type.Union([Type.Literal("TEXT_ONLY"), Type.Literal("OPTION_IMAGES")]),
   choices: Type.Array(choiceSchema, { minItems: 2, maxItems: 2 }),
   author: Type.Union([
     Type.Object({
@@ -73,6 +84,7 @@ const feedResponseSchema = Type.Object({
       question: Type.String(),
       publishedAt: Type.String({ format: "date-time" }),
       categoryCode: Type.String(),
+      mediaMode: Type.Union([Type.Literal("TEXT_ONLY"), Type.Literal("OPTION_IMAGES")]),
       choices: Type.Array(choiceSchema, { minItems: 2, maxItems: 2 }),
       recommendation: Type.Object({
         requestId: uuidSchema,
@@ -92,7 +104,7 @@ const feedResponseSchema = Type.Object({
   nextCursor: Type.Union([Type.String(), Type.Null()]),
   ranking: Type.Object({
     requestId: uuidSchema,
-    version: Type.Literal("interest_content_v2_refresh"),
+    version: Type.Literal("quality_feed_v1"),
     mode: Type.Union([Type.Literal("PERSONALIZED"), Type.Literal("RECENCY")]),
     reasonCode: Type.Union([
       Type.Literal("INTEREST_PROFILE_MATCH"),
@@ -102,11 +114,15 @@ const feedResponseSchema = Type.Object({
       Type.Literal("RANKER_FALLBACK"),
     ]),
     profileVersion: Type.Union([Type.Integer({ minimum: 1 }), Type.Null()]),
+    policyVersion: Type.Literal("quality-feed-v1.0"),
+    qualityMode: Type.Union([Type.Literal("OFF"), Type.Literal("SHADOW"), Type.Literal("LIVE")]),
+    fallbackReason: Type.Union([Type.String(), Type.Null()]),
   }),
 });
 
 type IssueRoute = {
   Params: { issueId: string };
+  Headers: { "x-anonymous-subject-id"?: string; authorization?: string };
 };
 
 type IssueFeedRoute = {
@@ -256,6 +272,13 @@ export async function registerIssueRoutes(
           tags: ["issues"],
           summary: "Read the current Guest-available Issue Version",
           params: Type.Object({ issueId: uuidSchema }),
+          headers: Type.Object(
+            {
+              "x-anonymous-subject-id": Type.Optional(uuidSchema),
+              authorization: Type.Optional(Type.String({ minLength: 8, maxLength: 4096 })),
+            },
+            { additionalProperties: true },
+          ),
           response: {
             200: issueResponseSchema,
             400: errorResponseSchema,
@@ -265,7 +288,11 @@ export async function registerIssueRoutes(
           },
         },
       },
-      async (request) => service.getGuestIssue(request.params.issueId),
+      async (request) =>
+        service.getGuestIssue(request.params.issueId, {
+          anonymousSubjectId: request.headers["x-anonymous-subject-id"],
+          sessionToken: bearerToken(request.headers.authorization),
+        }),
     );
   });
 }
