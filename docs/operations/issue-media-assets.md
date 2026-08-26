@@ -1,8 +1,8 @@
 # Issue media asset operations
 
 WHICH-84 establishes the server-side asset lifecycle for operator-managed A/B option images.
-WHICH-85 adds the controlled review console and immutable decision/rights history. Public product
-exposure remains deferred to WHICH-86.
+WHICH-85 adds the controlled review console and immutable decision/rights history. WHICH-86 adds
+guarded public exposure and leaves it off by default until the experiment is activated.
 
 ## Scope and security boundary
 
@@ -125,6 +125,28 @@ The operator-only orphan purge removes staged assets that are older than the sup
 do not expose it to public clients.
 
 ## Rollback and compatibility
+
+Public rendering requires both environment controls:
+
+```dotenv
+FEATURE_ISSUE_MEDIA_ENABLED=true
+ISSUE_MEDIA_EXPERIMENT_PERCENT=10
+```
+
+Start at 10%, verify Web and Mobile load-failure and vote metrics, then move to 50% for the
+preregistered comparison. `ISSUE_MEDIA_EXPERIMENT_PERCENT=0` or
+`FEATURE_ISSUE_MEDIA_ENABLED=false` immediately returns every public card to `TEXT_ONLY` without
+changing asset or Issue rows. Assignment is deterministic per viewer and Issue. An eligible
+treatment requires two complete, published, approved, rights-cleared choice assets; an incomplete
+pair always falls back as one text-only A/B card.
+
+Choice labels remain visible beside images and image failures collapse only the failed visual,
+leaving voting functional. Result sharing intentionally remains a text-only, privacy-safe card;
+R2 URLs, filenames, rights attestations, and image metadata are never copied into share payloads.
+
+- Experiment preregistration: `apps/api/content/experiments/which-86-option-images-v1.json`
+- Compare `ISSUE_VIEWABLE_IMPRESSION` and accepted Votes by `media_mode`.
+- Monitor `ISSUE_MEDIA_LOAD` `SUCCESS | FAILURE`, decision duration, reports, and vote acceptance.
 
 - Migration `0030_flimsy_hobgoblin.sql` is additive and backfills every existing Issue version
   as `format_mode = 'VS'` and `media_mode = 'TEXT_ONLY'`.

@@ -8,7 +8,7 @@ import type { ReactNode } from "react";
 
 import { toast } from "@/components/feedback/toast-provider";
 import { BalanceResultBar } from "@/components/vote/balance-result-bar";
-import { VoteChoiceRow } from "@/components/vote/vote-choice-row";
+import { ChoiceMediaPair, VoteChoiceRow } from "@/components/vote/vote-choice-row";
 import { WhichAsideCard, WhichShell } from "@/components/layout/which-shell";
 import type {
   CommentReportReason,
@@ -108,6 +108,28 @@ export function IssueExperience({
   const submissionLocked = useRef(false);
   const issueCardRef = useRef<HTMLElement | null>(null);
   const decisionStartedAt = useRef(0);
+  const recordedMediaLoads = useRef(new Set<string>());
+
+  const recordMediaLoad = useCallback(
+    (choice: IssueChoice, outcome: "SUCCESS" | "FAILURE") => {
+      if (!issue) return;
+      const key = `${choice.id}:${outcome}`;
+      if (recordedMediaLoads.current.has(key)) return;
+      recordedMediaLoads.current.add(key);
+      void recordAnalyticsEvent({
+        eventType: "ISSUE_MEDIA_LOAD",
+        issueId: issue.id,
+        issueVersion: issue.version,
+        quality: {
+          canonicalChoiceId: choice.id,
+          shownPosition: issue.choices.findIndex((item) => item.id === choice.id),
+          mediaMode: issue.mediaMode,
+          mediaLoadOutcome: outcome,
+        },
+      });
+    },
+    [issue],
+  );
 
   useEffect(() => {
     if (issue && screen === "ready") decisionStartedAt.current = Date.now();
@@ -131,6 +153,7 @@ export function IssueExperience({
               eventType: "ISSUE_VIEWABLE_IMPRESSION",
               issueId: issue.id,
               issueVersion: issue.version,
+              quality: { mediaMode: issue.mediaMode },
             }).catch(() => undefined);
           }, 500);
         } else if (!visible && timer !== null) {
@@ -151,7 +174,8 @@ export function IssueExperience({
     setLoadError(null);
 
     try {
-      const [loadedIssue] = await Promise.all([loadPublicIssue(issueId), ensureGuestSubject()]);
+      await ensureGuestSubject();
+      const loadedIssue = await loadPublicIssue(issueId);
       setIssue(loadedIssue);
       const restoredResult =
         readSavedResult(issueId) ?? (await loadExistingVote(issueId).catch(() => null));
@@ -170,8 +194,9 @@ export function IssueExperience({
     let active = true;
     const controller = new AbortController();
 
-    void Promise.all([loadPublicIssue(issueId, controller.signal), ensureGuestSubject()])
-      .then(async ([loadedIssue]) => {
+    void ensureGuestSubject()
+      .then(() => loadPublicIssue(issueId, controller.signal))
+      .then(async (loadedIssue) => {
         if (!active) return;
         setIssue(loadedIssue);
         const restoredResult =
@@ -214,7 +239,7 @@ export function IssueExperience({
           ),
           canonicalChoiceId: action.choice.id,
           shownPosition: issue.choices.findIndex((choice) => choice.id === action.choice.id),
-          mediaMode: "TEXT_ONLY",
+          mediaMode: issue.mediaMode,
         },
       });
       try {
@@ -289,6 +314,7 @@ export function IssueExperience({
         result={result}
         kakaoLoginEnabled={kakaoLoginEnabled}
         naverLoginEnabled={naverLoginEnabled}
+        onMediaLoad={recordMediaLoad}
       />
     );
   }
@@ -332,6 +358,7 @@ export function IssueExperience({
               disabled={screen === "submitting" || screen === "submit-error"}
               pending={screen === "submitting" && selectedChoice?.id === choice.id}
               selected={selectedChoice?.id === choice.id}
+              onMediaLoad={(outcome) => recordMediaLoad(choice, outcome)}
               onSelect={choose}
             />
           ))}
@@ -382,11 +409,13 @@ function ResultScreen({
   result,
   kakaoLoginEnabled,
   naverLoginEnabled,
+  onMediaLoad,
 }: {
   issue: PublicIssue;
   result: VoteResponse;
   kakaoLoginEnabled: boolean;
   naverLoginEnabled: boolean;
+  onMediaLoad: (choice: IssueChoice, outcome: "SUCCESS" | "FAILURE") => void;
 }) {
   const total = result.result.displayedTotal;
   const duplicate = result.outcome === "REJECTED_DUPLICATE";
@@ -445,6 +474,7 @@ function ResultScreen({
         <p className={styles.myVoteNotice}>
           ✓ 당신은 “{result.choice === "A" ? choiceA : choiceB}”에 투표했어요.
         </p>
+        <ChoiceMediaPair choices={issue.choices} onMediaLoad={onMediaLoad} />
         <BalanceResultBar
           aLabel={choiceA}
           bLabel={choiceB}

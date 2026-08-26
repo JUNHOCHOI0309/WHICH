@@ -2,6 +2,13 @@ export type IssueChoice = {
   id: string;
   code: "A" | "B";
   label: string;
+  media: {
+    url: string;
+    altText: string;
+    cropMode: "COVER" | "CONTAIN";
+    width: number;
+    height: number;
+  } | null;
 };
 
 export type IssueTally = {
@@ -23,6 +30,7 @@ export type PublicIssue = {
   publishedAt: string;
   categoryCode: string;
   experienceModeCode: string;
+  mediaMode: "TEXT_ONLY" | "OPTION_IMAGES";
   choices: IssueChoice[];
   author: {
     displayName: string;

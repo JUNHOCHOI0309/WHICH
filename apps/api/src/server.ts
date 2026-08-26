@@ -39,6 +39,11 @@ const app = await buildApp(config, {
   ...database,
   issueReader: createIssueReadService(database.db, {
     personalizationEnabled: config.featureFlags.mlRanker,
+    mediaExperiment: {
+      enabled: config.featureFlags.issueMedia,
+      exposurePercent: config.featureFlags.issueMediaExperimentPercent,
+      ...(issueMediaStorage ? { publicUrl: (key) => issueMediaStorage.publicUrl(key) } : {}),
+    },
   }),
   ...(config.environment !== "production" || config.featureFlags.creatorSubmissions
     ? { issueWriter: createIssueWriteService(database.db) }

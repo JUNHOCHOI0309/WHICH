@@ -14,8 +14,11 @@ import {
 } from "../src/database/development-seed.js";
 import {
   issueChoices,
+  issueChoiceMedia,
+  issueMediaAssets,
   issues,
   issueVersions,
+  members,
   voteAggregates,
 } from "../src/database/schema/index.js";
 import { createIssueReadService } from "../src/modules/issues/service.js";
@@ -28,7 +31,13 @@ type PublicIssueBody = {
   id: string;
   version: number;
   question: string;
-  choices: Array<{ id: string; code: "A" | "B"; label: string }>;
+  mediaMode: "TEXT_ONLY" | "OPTION_IMAGES";
+  choices: Array<{
+    id: string;
+    code: "A" | "B";
+    label: string;
+    media: null | { url: string; altText: string; cropMode: "COVER" | "CONTAIN" };
+  }>;
   result: {
     visibility: string;
     tally: null | {
@@ -159,6 +168,95 @@ describe("development Issue seed", () => {
 });
 
 describe("Guest Issue read API", () => {
+  it("exposes only a complete approved image pair to an assigned viewer", async () => {
+    const issue = await createReadableIssue();
+    const operatorId = randomUUID();
+    const assetAId = randomUUID();
+    const assetBId = randomUUID();
+    await database.db.insert(members).values({ id: operatorId, displayName: "Media Operator" });
+    await database.db
+      .update(issueVersions)
+      .set({ mediaMode: "OPTION_IMAGES" })
+      .where(and(eq(issueVersions.issueId, issue.issueId), eq(issueVersions.version, 1)));
+    const asset = (id: string, hashCharacter: string, objectKey: string) => ({
+      id,
+      uploadedByMemberId: operatorId,
+      sourceType: "OPERATOR_UPLOAD",
+      rightsAttestation: "Documented publication rights for this integration fixture.",
+      rightsAttestedAt: new Date(),
+      sha256: hashCharacter.repeat(64),
+      perceptualHash: hashCharacter.repeat(16),
+      inputMimeType: "image/png",
+      inputByteSize: 100,
+      inputWidth: 1200,
+      inputHeight: 675,
+      outputByteSize: 80,
+      outputWidth: 1200,
+      outputHeight: 675,
+      processingState: "READY",
+      moderationState: "APPROVED",
+      storageState: "PUBLISHED",
+      rightsState: "ASSERTED",
+      publishedObjectKey: objectKey,
+      publishedAt: new Date(),
+    });
+    await database.db
+      .insert(issueMediaAssets)
+      .values([asset(assetAId, "a", "published/a.webp"), asset(assetBId, "b", "published/b.webp")]);
+    await database.db.insert(issueChoiceMedia).values([
+      {
+        issueId: issue.issueId,
+        issueVersion: 1,
+        choiceId: issue.choiceAId,
+        mediaAssetId: assetAId,
+        altText: "A option image",
+        cropMode: "COVER",
+        displayPosition: 0,
+        linkedByMemberId: operatorId,
+      },
+      {
+        issueId: issue.issueId,
+        issueVersion: 1,
+        choiceId: issue.choiceBId,
+        mediaAssetId: assetBId,
+        altText: "B option image",
+        cropMode: "CONTAIN",
+        displayPosition: 1,
+        linkedByMemberId: operatorId,
+      },
+    ]);
+
+    const enabledReader = createIssueReadService(database.db, {
+      mediaExperiment: {
+        enabled: true,
+        exposurePercent: 100,
+        publicUrl: (key) => `https://media.which.test/${key}`,
+      },
+    });
+    const exposed = await enabledReader.getGuestIssue(issue.issueId, {
+      anonymousSubjectId: randomUUID(),
+    });
+    expect(exposed).toMatchObject({
+      mediaMode: "OPTION_IMAGES",
+      choices: [
+        { media: { url: "https://media.which.test/published/a.webp", altText: "A option image" } },
+        { media: { url: "https://media.which.test/published/b.webp", altText: "B option image" } },
+      ],
+    });
+
+    await database.db
+      .update(issueMediaAssets)
+      .set({ moderationState: "REVOKED" })
+      .where(eq(issueMediaAssets.id, assetBId));
+    const fallback = await enabledReader.getGuestIssue(issue.issueId, {
+      anonymousSubjectId: randomUUID(),
+    });
+    expect(fallback).toMatchObject({
+      mediaMode: "TEXT_ONLY",
+      choices: [{ media: null }, { media: null }],
+    });
+  });
+
   it("returns the latest published Version while hiding pre-vote result counts", async () => {
     const issue = await createReadableIssue();
 
