@@ -14,11 +14,13 @@ export function WhichShell({
   children,
   active,
   aside,
+  preserveAsideOnNarrow = false,
   creationEnabled = false,
 }: {
   children: ReactNode;
   active?: "home" | "interests" | "create" | "me";
   aside?: ReactNode;
+  preserveAsideOnNarrow?: boolean;
   creationEnabled?: boolean;
 }) {
   return (
@@ -35,7 +37,10 @@ export function WhichShell({
             </div>
           </header>
 
-          <div className={styles.shell}>
+          <div
+            className={styles.shell}
+            data-preserve-aside={preserveAsideOnNarrow ? "true" : undefined}
+          >
             <nav className={styles.leftRail} aria-label="주요 메뉴">
               <div className={styles.railNavigation}>
                 <ShellLink href="/" active={active === "home"} icon="⌂">
