@@ -36,11 +36,6 @@ export type AuthEmailDelivery = {
   expiresAt: string;
 };
 
-export type MemberCredentialResult = {
-  member: MemberView;
-  email: string;
-};
-
 export type MemberAccountDeletionResult = {
   deleted: true;
   deletedAvatarObjectKey?: string;
@@ -170,10 +165,6 @@ export type MemberVoteLookupResult = {
 export interface MemberIdentityService {
   createSession(assertion: IdentityAssertion): Promise<MemberSessionResult>;
   createCredentialSession(assertion: CredentialSessionAssertion): Promise<MemberSessionResult>;
-  addCredential(
-    memberId: string,
-    credential: { email: string; password: string },
-  ): Promise<MemberCredentialResult>;
   requestEmailVerification(input: {
     email: string;
     authRequestKey?: string;
