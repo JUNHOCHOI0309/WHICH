@@ -107,6 +107,41 @@ export type MemberSessionView = {
   member: MemberView;
 };
 
+export type MemberPrivateVote = {
+  voteId: string;
+  issueId: string;
+  issueVersion: number;
+  question: string;
+  categoryCode: string;
+  choice: "A" | "B";
+  choiceLabel: string;
+  acceptedAt: string;
+  result: IssueTally;
+};
+
+export type MemberPrivateProfile = {
+  member: MemberView & {
+    avatarSource: "INITIALS" | "SOCIAL" | "CUSTOM";
+    joinedAt: string;
+    participationCount: number;
+  };
+  publicProfile: {
+    handle: string;
+    bio: string | null;
+    visibility: "PRIVATE" | "PUBLIC";
+    publicUrl: string | null;
+  } | null;
+  identities: {
+    provider: "EMAIL" | "GOOGLE" | "X" | "NAVER" | "KAKAO" | "DEVELOPMENT";
+    linkedAt: string;
+    lastAuthenticatedAt: string;
+  }[];
+  votes: {
+    items: MemberPrivateVote[];
+    nextCursor: string | null;
+  };
+};
+
 export type CommentHighlight = {
   id: string;
   choice: "A" | "B";

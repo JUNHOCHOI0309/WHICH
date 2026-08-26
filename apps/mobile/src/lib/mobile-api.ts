@@ -5,6 +5,7 @@ import type {
   InterestCardRegistry,
   InterestProfile,
   MemberPointView,
+  MemberPrivateProfile,
   MemberSessionView,
   MemberView,
   PublicIssue,
@@ -74,6 +75,18 @@ export function createMobileApiClient(
         headers: { accept: "application/json", authorization: `Bearer ${sessionToken}` },
       });
       return bodyOrError<MemberPointView>(response);
+    },
+
+    async loadMemberProfile(
+      sessionToken: string,
+      options: { limit?: number; cursor?: string } = {},
+    ) {
+      const search = new URLSearchParams({ limit: String(options.limit ?? 5) });
+      if (options.cursor) search.set("cursor", options.cursor);
+      const response = await request(`${baseUrl}/api/mobile/v1/me?${search.toString()}`, {
+        headers: { accept: "application/json", authorization: `Bearer ${sessionToken}` },
+      });
+      return bodyOrError<MemberPrivateProfile>(response);
     },
 
     async exchangeMobileSession(command: {

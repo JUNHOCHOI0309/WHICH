@@ -10,6 +10,36 @@ function jsonResponse(body: unknown, status = 200) {
 }
 
 describe("mobile API client", () => {
+  it("loads the authenticated Member profile and vote history", async () => {
+    const request = vi.fn(async () =>
+      jsonResponse({
+        member: {
+          id: "591f2e90-996a-50c5-af46-967dd0793000",
+          displayName: "Native Member",
+          status: "ACTIVE",
+          avatar: { kind: "INITIALS", initials: "NM" },
+          avatarSource: "INITIALS",
+          joinedAt: "2026-08-01T00:00:00.000Z",
+          participationCount: 1,
+        },
+        publicProfile: null,
+        identities: [],
+        votes: { items: [], nextCursor: null },
+      }),
+    );
+    const api = createMobileApiClient({ baseUrl: "https://whichone.site", request });
+
+    await expect(api.loadMemberProfile("member-session", { limit: 5 })).resolves.toMatchObject({
+      member: { displayName: "Native Member", participationCount: 1 },
+    });
+    expect(request).toHaveBeenCalledWith(
+      "https://whichone.site/api/mobile/v1/me?limit=5",
+      expect.objectContaining({
+        headers: expect.objectContaining({ authorization: "Bearer member-session" }),
+      }),
+    );
+  });
+
   it("uses the same authenticated W Point contract as the web Member view", async () => {
     const request = vi.fn(async () =>
       jsonResponse({
