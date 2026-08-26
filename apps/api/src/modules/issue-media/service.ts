@@ -30,7 +30,9 @@ export class IssueMediaError extends Error {
       | "MEDIA_RIGHTS_BLOCKED"
       | "ISSUE_CHOICE_NOT_FOUND"
       | "ISSUE_VERSION_LOCKED"
-      | "MEDIA_STORAGE_UNAVAILABLE",
+      | "MEDIA_STORAGE_UNAVAILABLE"
+      | "MEDIA_REVIEW_TRANSITION_INVALID"
+      | "RIGHTS_REQUEST_NOT_FOUND",
     public readonly statusCode: 400 | 404 | 409 | 422 | 503,
     message: string,
   ) {

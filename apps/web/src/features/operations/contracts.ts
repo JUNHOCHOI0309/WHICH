@@ -143,3 +143,64 @@ export type OpsEditorialPage = {
   items: OpsEditorialCandidate[];
   nextCursor: string | null;
 };
+
+export type OpsMediaReviewStatus = "PENDING" | "APPROVED" | "REJECTED" | "HIDDEN" | "DELETED";
+export type OpsMediaReviewDecision = {
+  id: string;
+  scope: "ASSET" | "ISSUE";
+  assetId: string | null;
+  issueId: string | null;
+  status: OpsMediaReviewStatus | "RESTORED";
+  reasonCode: string;
+  rationale: string;
+  policyVersion: string;
+  reviewedBy: string;
+  requestId: string;
+  createdAt: string;
+};
+export type OpsMediaReviewAsset = {
+  id: string;
+  sha256: string;
+  perceptualHash: string | null;
+  input: { mimeType: string; byteSize: number; width: number; height: number };
+  output: { mimeType: "image/webp"; byteSize: number; width: number; height: number };
+  effectiveStatus: OpsMediaReviewStatus;
+  rightsState: "ASSERTED" | "CHALLENGED" | "CLEARED" | "WITHDRAWN";
+  rightsAttestation: string;
+  rightsAttestedAt: string;
+  uploadedBy: string;
+  publishedUrl: string | null;
+  link: null | {
+    issueId: string;
+    issueVersion: number;
+    choiceId: string;
+    choiceCode: string;
+    choiceLabel: string;
+    question: string;
+    altText: string;
+  };
+  latestDecision: OpsMediaReviewDecision | null;
+  history: OpsMediaReviewDecision[];
+  createdAt: string;
+  updatedAt: string;
+};
+export type OpsMediaReviewPage = {
+  schemaVersion: 1;
+  generatedAt: string;
+  counts: Record<OpsMediaReviewStatus, number>;
+  items: OpsMediaReviewAsset[];
+};
+export type OpsMediaRightsRequest = {
+  id: string;
+  requestType: "PRIVACY" | "DEFAMATION" | "COPYRIGHT";
+  assetId: string | null;
+  issueId: string | null;
+  requesterReference: string;
+  details: string;
+  status: "OPEN" | "ACTIONED" | "DISMISSED";
+  resolution: string | null;
+  recordedBy: string;
+  resolvedBy: string | null;
+  createdAt: string;
+  resolvedAt: string | null;
+};
