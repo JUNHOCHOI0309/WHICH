@@ -19,6 +19,7 @@ import {
   createR2IssueMediaStorage,
   issueMediaStorageConfig,
 } from "./modules/issue-media/storage.js";
+import { createPointIntegrityService } from "./modules/points/integrity.js";
 
 loadEnvironment({
   path: [resolve(process.cwd(), "../../.env.local"), resolve(process.cwd(), "../../.env")],
@@ -58,6 +59,9 @@ const app = await buildApp(config, {
         ),
       }
     : {}),
+  pointIntegrity: createPointIntegrityService(database.db, {
+    targetEnvironment: config.environment,
+  }),
 });
 
 try {

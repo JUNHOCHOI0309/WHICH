@@ -1,6 +1,6 @@
 {
-  "id": "deb742a2-dd04-4bc9-b53c-f7d8001734dc",
-  "prevId": "17a6be90-d206-4656-97a5-7bcf74f457ad",
+  "id": "fde222ef-af2b-4b6f-848f-a7ad5f6aa148",
+  "prevId": "deb742a2-dd04-4bc9-b53c-f7d8001734dc",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -2919,6 +2919,13 @@
           "notNull": true,
           "default": 0
         },
+        "restricted_debt": {
+          "name": "restricted_debt",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
         "lifetime_earned": {
           "name": "lifetime_earned",
           "type": "integer",
@@ -2990,6 +2997,10 @@
         "point_accounts_balance_nonnegative_check": {
           "name": "point_accounts_balance_nonnegative_check",
           "value": "\"point_accounts\".\"cached_balance\" >= 0"
+        },
+        "point_accounts_restricted_debt_check": {
+          "name": "point_accounts_restricted_debt_check",
+          "value": "\"point_accounts\".\"restricted_debt\" >= 0"
         },
         "point_accounts_lifetime_earned_check": {
           "name": "point_accounts_lifetime_earned_check",
@@ -3199,7 +3210,7 @@
       "checkConstraints": {
         "point_event_receipts_outcome_check": {
           "name": "point_event_receipts_outcome_check",
-          "value": "\"point_event_receipts\".\"outcome\" in ('AWARDED', 'DUPLICATE', 'CAP_REACHED', 'INELIGIBLE', 'DISABLED')"
+          "value": "\"point_event_receipts\".\"outcome\" in ('AWARDED', 'REVERSED', 'DUPLICATE', 'CAP_REACHED', 'INELIGIBLE', 'DISABLED')"
         }
       },
       "isRLSEnabled": false

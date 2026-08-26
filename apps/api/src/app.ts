@@ -25,6 +25,8 @@ import type { OpsDashboardService } from "./modules/operations/contracts.js";
 import { registerOpsRoutes } from "./modules/operations/routes.js";
 import type { IssueMediaService } from "./modules/issue-media/contracts.js";
 import { registerIssueMediaRoutes } from "./modules/issue-media/routes.js";
+import type { PointIntegrityService } from "./modules/points/integrity.js";
+import { registerPointOpsRoutes } from "./modules/points/ops-routes.js";
 
 export type AppDependencies = Pick<Database, "ping" | "close"> & {
   issueReader: IssueReadService;
@@ -37,6 +39,7 @@ export type AppDependencies = Pick<Database, "ping" | "close"> & {
   shareCards?: ShareCardService;
   opsDashboard?: OpsDashboardService;
   issueMedia?: IssueMediaService;
+  pointIntegrity?: PointIntegrityService;
 };
 
 const statusSchema = Type.Object({
@@ -137,6 +140,14 @@ export async function buildApp(config: AppConfig, database: AppDependencies) {
     await registerIssueMediaRoutes(
       app,
       database.issueMedia,
+      database.memberIdentity,
+      config.auth.internalSecret,
+    );
+  }
+  if (database.pointIntegrity) {
+    await registerPointOpsRoutes(
+      app,
+      database.pointIntegrity,
       database.memberIdentity,
       config.auth.internalSecret,
     );
