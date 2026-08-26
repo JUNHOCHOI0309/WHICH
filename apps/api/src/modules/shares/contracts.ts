@@ -32,4 +32,9 @@ export type PublicShareCard = {
 export interface ShareCardService {
   createShareCard(command: CreateShareCardCommand): Promise<PublicShareCard>;
   getShareCard(shareCardId: string): Promise<PublicShareCard>;
+  confirmRewardClaim(command: {
+    shareCardId: string;
+    sessionToken: string;
+    idempotencyKey: string;
+  }): Promise<{ claimed: boolean }>;
 }

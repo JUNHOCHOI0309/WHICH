@@ -130,6 +130,8 @@ services:
         value: "true"
       - key: FEATURE_RESULT_SHARING_ENABLED
         value: "true"
+      - key: FEATURE_POINTS_ENABLED
+        value: "false"
       - key: FEATURE_RISK_CHALLENGE_ENABLED
         value: "false"
       - key: GOOGLE_OIDC_CLIENT_ID

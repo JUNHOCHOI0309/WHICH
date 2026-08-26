@@ -21,6 +21,8 @@ export type ApplyPointLedgerEntryCommand = {
   idempotencyKey: string;
   policyVersion: string;
   counterKey?: string;
+  dailyQualifyingLimit?: number;
+  dailyPointLimit?: number;
   reversesEntryId?: string;
   metadata?: Record<string, unknown>;
 };
@@ -41,6 +43,7 @@ export type PointLedgerErrorCode =
   | "MEMBER_NOT_FOUND"
   | "MEMBER_NOT_ELIGIBLE"
   | "POINT_IDEMPOTENCY_CONFLICT"
+  | "POINT_DAILY_LIMIT_REACHED"
   | "INSUFFICIENT_POINT_BALANCE";
 
 export class PointLedgerError extends Error {
@@ -74,6 +77,14 @@ function assertCommand(command: ApplyPointLedgerEntryCommand) {
   }
   if (command.entryType === "EARN" && !command.counterKey) {
     throw new PointLedgerError("INVALID_POINT_ENTRY", "Earn entries require a daily counter key.");
+  }
+  for (const limit of [command.dailyQualifyingLimit, command.dailyPointLimit]) {
+    if (limit !== undefined && (!Number.isSafeInteger(limit) || limit <= 0)) {
+      throw new PointLedgerError(
+        "INVALID_POINT_ENTRY",
+        "Daily point limits must be positive integers.",
+      );
+    }
   }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(command.operationDay)) {
     throw new PointLedgerError(
@@ -146,6 +157,84 @@ export function createPointLedgerService(database: Database["db"]) {
           .insert(pointAccounts)
           .values({ memberId: command.memberId })
           .onConflictDoNothing({ target: pointAccounts.memberId });
+
+        if (command.entryType === "EARN") {
+          await transaction.execute(
+            sql`select pg_advisory_xact_lock(hashtextextended(${`${command.memberId}:${command.operationDay}:${command.counterKey}`}, 0))`,
+          );
+
+          const [existing] = await transaction
+            .select({
+              id: pointLedgerEntries.id,
+              memberId: pointLedgerEntries.memberId,
+              entryType: pointLedgerEntries.entryType,
+              amount: pointLedgerEntries.amount,
+              reasonCode: pointLedgerEntries.reasonCode,
+              sourceType: pointLedgerEntries.sourceType,
+              sourceId: pointLedgerEntries.sourceId,
+              operationDay: pointLedgerEntries.operationDay,
+              reversesEntryId: pointLedgerEntries.reversesEntryId,
+              policyVersion: pointLedgerEntries.policyVersion,
+            })
+            .from(pointLedgerEntries)
+            .where(
+              or(
+                eq(pointLedgerEntries.idempotencyKey, command.idempotencyKey),
+                and(
+                  eq(pointLedgerEntries.sourceType, command.sourceType),
+                  eq(pointLedgerEntries.sourceId, command.sourceId),
+                  eq(pointLedgerEntries.reasonCode, command.reasonCode),
+                ),
+              ),
+            )
+            .limit(1);
+
+          if (existing) {
+            if (!sameLedgerFact(existing, command)) {
+              throw new PointLedgerError(
+                "POINT_IDEMPOTENCY_CONFLICT",
+                "The idempotency or source key is already bound to a different point fact.",
+              );
+            }
+            const [account] = await transaction
+              .select({
+                cachedBalance: pointAccounts.cachedBalance,
+                lifetimeEarned: pointAccounts.lifetimeEarned,
+                lifetimeSpent: pointAccounts.lifetimeSpent,
+                version: pointAccounts.version,
+              })
+              .from(pointAccounts)
+              .where(eq(pointAccounts.memberId, command.memberId))
+              .limit(1);
+            return { applied: false, entryId: existing.id, account: account! };
+          }
+
+          const [counter] = await transaction
+            .select({
+              qualifyingCount: pointDailyCounters.qualifyingCount,
+              awardedPoints: pointDailyCounters.awardedPoints,
+            })
+            .from(pointDailyCounters)
+            .where(
+              and(
+                eq(pointDailyCounters.memberId, command.memberId),
+                eq(pointDailyCounters.operationDay, command.operationDay),
+                eq(pointDailyCounters.counterKey, command.counterKey!),
+              ),
+            )
+            .limit(1);
+          if (
+            (command.dailyQualifyingLimit !== undefined &&
+              (counter?.qualifyingCount ?? 0) >= command.dailyQualifyingLimit) ||
+            (command.dailyPointLimit !== undefined &&
+              (counter?.awardedPoints ?? 0) + command.amount > command.dailyPointLimit)
+          ) {
+            throw new PointLedgerError(
+              "POINT_DAILY_LIMIT_REACHED",
+              "The daily award limit has already been reached.",
+            );
+          }
+        }
 
         const inserted = await transaction
           .insert(pointLedgerEntries)

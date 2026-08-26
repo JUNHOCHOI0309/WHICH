@@ -141,5 +141,48 @@ export async function registerShareCardRoutes(
       },
       async (request) => service.getShareCard(request.params.shareCardId),
     );
+
+    shareApp.post<{
+      Params: { shareCardId: string };
+      Headers: { authorization?: string; "idempotency-key"?: string };
+    }>(
+      "/v1/share-cards/:shareCardId/reward-claims",
+      {
+        schema: {
+          tags: ["shares"],
+          summary: "Confirm a successful Member share as a reward Domain Fact",
+          params: Type.Object({ shareCardId: uuidSchema }),
+          headers: Type.Object(
+            {
+              authorization: Type.Optional(Type.String()),
+              "idempotency-key": Type.Optional(Type.String({ minLength: 16, maxLength: 128 })),
+            },
+            { additionalProperties: true },
+          ),
+          response: {
+            200: Type.Object({ claimed: Type.Boolean() }),
+            400: errorSchema,
+            401: errorSchema,
+            404: errorSchema,
+            500: errorSchema,
+          },
+        },
+      },
+      async (request) => {
+        const authorization = request.headers.authorization;
+        const token = authorization?.startsWith("Bearer ")
+          ? authorization.slice("Bearer ".length).trim()
+          : "";
+        const idempotencyKey = request.headers["idempotency-key"] ?? "";
+        if (!token || !idempotencyKey) {
+          throw new ShareCardError("SESSION_INVALID", 401, "A valid Member session is required.");
+        }
+        return service.confirmRewardClaim({
+          shareCardId: request.params.shareCardId,
+          sessionToken: token,
+          idempotencyKey,
+        });
+      },
+    );
   });
 }
