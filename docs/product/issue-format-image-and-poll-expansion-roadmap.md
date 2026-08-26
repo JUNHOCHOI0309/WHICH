@@ -4,6 +4,7 @@
 - Last updated: 2026-08-26
 - Notion plan: [Issue 형식·이미지·질문 품질 확장 계획 v1](https://app.notion.com/p/3c828b27a55981b99e9bcd461fd62d41?pvs=204)
 - Accepted architecture decision: [`ADR-0003: Issue format and media policy`](../architecture/adr/0003-issue-format-and-media-policy.md)
+- Accepted editorial contract: [`Question Archetype, Editorial Rubric, and Authoring Linter Contract`](./question-archetype-editorial-rubric-authoring-linter.md)
 - Related roadmap: [`post-v0-discovery-recommendation-ai-roadmap.md`](./post-v0-discovery-recommendation-ai-roadmap.md)
 - Release boundary: this document does not expand the Public v0 launch gate.
 
@@ -32,6 +33,10 @@
 WHICH-81에서 위 결정의 데이터 소유권, 상태축, A/B 호환과 Migration boundary를 ADR-0003으로
 확정했다. 이 로드맵의 후속 Task는 ADR을 바꾸지 않으며, 경계를 변경해야 할 경우 새 ADR로
 대체 결정을 남긴다.
+
+WHICH-82에서는 여섯 질문 원형, versioned Rubric Finding, provenance·변환·중복 검수와 Member/Ops
+공통 Authoring Linter 계약을 확정했다. 추천 품질은 단일 100점이 아니라 이 계약의 규칙별 결과와
+사람의 Editorial 결정을 사용한다.
 
 ## 현재 WHICH 구조와 적용 경계
 
