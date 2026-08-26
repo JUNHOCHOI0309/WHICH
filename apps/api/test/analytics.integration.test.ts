@@ -7,6 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   applyAnalyticsRetention,
   readAnalyticsReconciliation,
+  readAnalyticsQualitySummary,
   readAnalyticsSummary,
   readMeasurementBaseline,
 } from "../src/analytics-operator.js";
@@ -280,6 +281,100 @@ describe("first-party analytics", () => {
     expect(summary.trafficCoverage).toEqual(
       expect.arrayContaining([expect.objectContaining({ traffic_class: "TEST", sessions: 1 })]),
     );
+  });
+
+  it("stores quality context, rejects conflicting duplicates, and derives quality metrics", async () => {
+    const analytics = createAnalyticsService(database.db);
+    const app = Fastify({ logger: false });
+    await registerAnalyticsRoutes(app, analytics, "analytics-test-secret");
+    const sessionId = randomUUID();
+    const voteEventId = randomUUID();
+    const base = {
+      sessionId,
+      issueId,
+      issueVersion: 1,
+      occurredAt: new Date().toISOString(),
+      context: {
+        entrySurface: "HOME" as const,
+        audienceSegment: "MEMBER" as const,
+        deviceSegment: "DESKTOP" as const,
+        trafficClass: "PRODUCT" as const,
+      },
+    };
+    await analytics.recordEvent({
+      ...base,
+      eventId: randomUUID(),
+      eventType: "ISSUE_VIEWABLE_IMPRESSION",
+    });
+    const voteCommand = {
+      ...base,
+      eventId: voteEventId,
+      eventType: "VOTE_SUBMIT" as const,
+      quality: {
+        durationMs: 1350,
+        canonicalChoiceId: choiceAId,
+        shownPosition: 1,
+        mediaMode: "TEXT_ONLY" as const,
+      },
+    };
+    expect(await analytics.recordEvent(voteCommand)).toEqual({ accepted: true, duplicate: false });
+    expect(await analytics.recordEvent(voteCommand)).toEqual({ accepted: true, duplicate: true });
+    const conflict = await app.inject({
+      method: "POST",
+      url: "/v1/internal/analytics/events",
+      headers: { "x-internal-auth-secret": "analytics-test-secret" },
+      payload: { ...voteCommand, eventType: "RESULT_VIEW", quality: undefined },
+    });
+    expect(conflict.statusCode).toBe(409);
+    expect(conflict.json()).toMatchObject({ code: "EVENT_ID_CONFLICT" });
+    const invalid = await app.inject({
+      method: "POST",
+      url: "/v1/internal/analytics/events",
+      headers: { "x-internal-auth-secret": "analytics-test-secret" },
+      payload: {
+        ...base,
+        eventId: randomUUID(),
+        eventType: "RESULT_DWELL_COMPLETE",
+      },
+    });
+    expect(invalid.statusCode).toBe(400);
+    expect(invalid.json()).toMatchObject({ code: "INVALID_QUALITY_PAYLOAD" });
+    for (const eventType of [
+      "RESULT_VIEW",
+      "NEXT_ISSUE_OPEN",
+      "COMMENT_COMPLETE",
+      "SHARE_COMPLETE",
+      "COMMENT_REPORT_COMPLETE",
+    ] as const) {
+      await analytics.recordEvent({ ...base, eventId: randomUUID(), eventType });
+    }
+    await analytics.recordEvent({
+      ...base,
+      eventId: randomUUID(),
+      eventType: "RESULT_DWELL_COMPLETE",
+      quality: { durationMs: 1800 },
+    });
+
+    const [storedVote] = await database.db
+      .select()
+      .from(analyticsEvents)
+      .where(eq(analyticsEvents.id, voteEventId));
+    expect(storedVote).toMatchObject({
+      durationMs: 1350,
+      canonicalChoiceId: choiceAId,
+      shownPosition: 1,
+      mediaMode: "TEXT_ONLY",
+    });
+    const quality = await readAnalyticsQualitySummary(database.db, 1);
+    expect(quality.metrics).toMatchObject({
+      exposureToVoteRate: 0.5,
+      voteToNextRate: 1,
+      commentAfterVoteRate: 1,
+      shareAfterVoteRate: 1,
+      quickExitRate: 0.5,
+      reportAfterVoteRate: 1,
+    });
+    await app.close();
   });
 
   it("aggregates before deleting raw events older than 90 days", async () => {

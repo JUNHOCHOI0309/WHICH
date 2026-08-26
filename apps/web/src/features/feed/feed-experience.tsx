@@ -73,6 +73,7 @@ export function FeedExperience({ creationEnabled = false }: { creationEnabled?: 
   const [cardStates, setCardStates] = useState<Record<string, CardVoteState>>({});
   const [highlightStates, setHighlightStates] = useState<Record<string, HighlightState>>({});
   const viewedRecommendationRequests = useRef(new Set<string>());
+  const decisionStartedAt = useRef(new Map<string, number>());
 
   const applyFeed = useCallback((feed: PublicIssueFeed) => {
     rememberFirstIssue(feed);
@@ -190,7 +191,16 @@ export function FeedExperience({ creationEnabled = false }: { creationEnabled?: 
         eventType: "VOTE_SUBMIT",
         issueId: issue.id,
         issueVersion: issue.version,
-      }).catch(() => undefined);
+        quality: {
+          durationMs: Math.min(
+            1_800_000,
+            Math.max(0, Date.now() - (decisionStartedAt.current.get(issue.id) ?? Date.now())),
+          ),
+          canonicalChoiceId: choice.id,
+          shownPosition: issue.choices.findIndex((item) => item.id === choice.id),
+          mediaMode: "TEXT_ONLY",
+        },
+      });
 
       try {
         const vote = await submitGuestVote({
@@ -243,6 +253,15 @@ export function FeedExperience({ creationEnabled = false }: { creationEnabled?: 
     },
     [ranking?.mode],
   );
+
+  const recordViewable = useCallback((issue: PublicFeedIssue) => {
+    decisionStartedAt.current.set(issue.id, Date.now());
+    void recordAnalyticsEvent({
+      eventType: "ISSUE_VIEWABLE_IMPRESSION",
+      issueId: issue.id,
+      issueVersion: issue.version,
+    });
+  }, []);
 
   return (
     <WhichShell active="home" creationEnabled={creationEnabled}>
@@ -304,6 +323,7 @@ export function FeedExperience({ creationEnabled = false }: { creationEnabled?: 
                     }))
                   }
                   onOpen={() => recordOpen(item)}
+                  onViewable={recordViewable}
                   onRetryHighlights={() => void loadHighlights(item.id)}
                   key={item.id}
                 />
@@ -366,6 +386,7 @@ function FeedCard({
   onRetry,
   onReset,
   onOpen,
+  onViewable,
   onRetryHighlights,
 }: {
   issue: PublicFeedIssue;
@@ -375,15 +396,46 @@ function FeedCard({
   onRetry: (choice: IssueChoice, idempotencyKey: string) => void;
   onReset: () => void;
   onOpen: () => void;
+  onViewable: (issue: PublicFeedIssue) => void;
   onRetryHighlights: () => void;
 }) {
   const choiceA = issue.choices.find((choice) => choice.code === "A");
   const choiceB = issue.choices.find((choice) => choice.code === "B");
   const pendingChoice =
     state.status === "SUBMITTING" || state.status === "ERROR" ? state.choice : null;
+  const cardRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    const element = cardRef.current;
+    if (!element || !("IntersectionObserver" in window)) return;
+    let timer: number | null = null;
+    let recorded = false;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries.some(
+          (entry) => entry.target === element && entry.intersectionRatio >= 0.5,
+        );
+        if (visible && timer === null && !recorded) {
+          timer = window.setTimeout(() => {
+            recorded = true;
+            onViewable(issue);
+          }, 500);
+        } else if (!visible && timer !== null) {
+          window.clearTimeout(timer);
+          timer = null;
+        }
+      },
+      { threshold: [0.5] },
+    );
+    observer.observe(element);
+    return () => {
+      if (timer !== null) window.clearTimeout(timer);
+      observer.disconnect();
+    };
+  }, [issue, onViewable]);
 
   return (
-    <article className={styles.card} aria-busy={state.status === "SUBMITTING"}>
+    <article ref={cardRef} className={styles.card} aria-busy={state.status === "SUBMITTING"}>
       <div className={styles.cardMeta}>
         <span>{issue.categoryCode.replaceAll("_", " ")}</span>
         <time dateTime={issue.publishedAt}>

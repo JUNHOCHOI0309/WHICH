@@ -16,6 +16,15 @@ type EventBody = {
   issueId?: string;
   issueVersion?: number;
   occurredAt?: string;
+  recommendationRequestId?: string;
+  shareCardId?: string;
+  quality?: {
+    durationMs?: number;
+    canonicalChoiceId?: string;
+    shownPosition?: number;
+    mediaMode?: string;
+    mediaLoadOutcome?: string;
+  };
 };
 
 export async function POST(request: NextRequest) {
@@ -42,7 +51,22 @@ export async function POST(request: NextRequest) {
         "x-internal-auth-secret": internalAuthSecret(),
       },
       body: JSON.stringify({
-        ...body,
+        eventId: body.eventId,
+        eventType: body.eventType,
+        issueId: body.issueId,
+        issueVersion: body.issueVersion,
+        occurredAt: body.occurredAt,
+        recommendationRequestId: body.recommendationRequestId,
+        shareCardId: body.shareCardId,
+        quality: body.quality
+          ? {
+              durationMs: body.quality.durationMs,
+              canonicalChoiceId: body.quality.canonicalChoiceId,
+              shownPosition: body.quality.shownPosition,
+              mediaMode: body.quality.mediaMode,
+              mediaLoadOutcome: body.quality.mediaLoadOutcome,
+            }
+          : undefined,
         sessionId: session.id,
         context: analyticsContextForRequest(request, Boolean(safeAttribution)),
         ...(safeAttribution ? { attribution: safeAttribution } : {}),

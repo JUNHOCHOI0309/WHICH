@@ -14,7 +14,22 @@ export async function POST(request: NextRequest) {
     );
   }
   try {
-    const event = (await request.json()) as Record<string, unknown>;
+    const event = (await request.json()) as {
+      eventId?: string;
+      eventType?: string;
+      issueId?: string;
+      issueVersion?: number;
+      occurredAt?: string;
+      recommendationRequestId?: string;
+      shareCardId?: string;
+      quality?: {
+        durationMs?: number;
+        canonicalChoiceId?: string;
+        shownPosition?: number;
+        mediaMode?: string;
+        mediaLoadOutcome?: string;
+      };
+    };
     const upstream = await fetchWhichApi("/v1/internal/analytics/events", {
       method: "POST",
       headers: {
@@ -23,7 +38,22 @@ export async function POST(request: NextRequest) {
         "x-internal-auth-secret": internalAuthSecret(),
       },
       body: JSON.stringify({
-        ...event,
+        eventId: event.eventId,
+        eventType: event.eventType,
+        issueId: event.issueId,
+        issueVersion: event.issueVersion,
+        occurredAt: event.occurredAt,
+        recommendationRequestId: event.recommendationRequestId,
+        shareCardId: event.shareCardId,
+        quality: event.quality
+          ? {
+              durationMs: event.quality.durationMs,
+              canonicalChoiceId: event.quality.canonicalChoiceId,
+              shownPosition: event.quality.shownPosition,
+              mediaMode: event.quality.mediaMode,
+              mediaLoadOutcome: event.quality.mediaLoadOutcome,
+            }
+          : undefined,
         sessionId,
         context: mobileAnalyticsContextForRequest(request),
       }),

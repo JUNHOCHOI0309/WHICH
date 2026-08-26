@@ -41,7 +41,21 @@ export type AnalyticsEventType =
   | "PERSONALIZED_ISSUE_OPEN"
   | "SHARE_OPEN"
   | "SHARE_CHOICE_TOGGLE"
-  | "SHARE_COMPLETE";
+  | "SHARE_COMPLETE"
+  | "RESULT_DWELL_COMPLETE"
+  | "COMMENT_COMPLETE"
+  | "ISSUE_SKIP"
+  | "ISSUE_HIDE"
+  | "COMMENT_REPORT_COMPLETE"
+  | "ISSUE_MEDIA_LOAD";
+
+export type AnalyticsQualityPayload = {
+  durationMs?: number;
+  canonicalChoiceId?: string;
+  shownPosition?: number;
+  mediaMode?: "TEXT_ONLY" | "OPTION_IMAGES";
+  mediaLoadOutcome?: "SUCCESS" | "FAILURE";
+};
 
 export async function recordAnalyticsEvent(command: {
   eventType: AnalyticsEventType;
@@ -49,22 +63,28 @@ export async function recordAnalyticsEvent(command: {
   issueVersion: number;
   recommendationRequestId?: string;
   shareCardId?: string;
+  quality?: AnalyticsQualityPayload;
 }) {
-  const response = await fetch("/api/analytics/events", {
-    method: "POST",
-    keepalive: true,
-    headers: { accept: "application/json", "content-type": "application/json" },
-    body: JSON.stringify({
-      eventId: crypto.randomUUID(),
-      eventType: command.eventType,
-      issueId: command.issueId,
-      issueVersion: command.issueVersion,
-      recommendationRequestId: command.recommendationRequestId,
-      shareCardId: command.shareCardId,
-      occurredAt: new Date().toISOString(),
-    }),
-  });
-  if (!response.ok) throw new Error("Analytics event was not accepted.");
+  try {
+    const response = await fetch("/api/analytics/events", {
+      method: "POST",
+      keepalive: true,
+      headers: { accept: "application/json", "content-type": "application/json" },
+      body: JSON.stringify({
+        eventId: crypto.randomUUID(),
+        eventType: command.eventType,
+        issueId: command.issueId,
+        issueVersion: command.issueVersion,
+        recommendationRequestId: command.recommendationRequestId,
+        shareCardId: command.shareCardId,
+        quality: command.quality,
+        occurredAt: new Date().toISOString(),
+      }),
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
 }
 
 export async function createResultShareCard(command: {

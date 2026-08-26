@@ -12,7 +12,7 @@ import {
   varchar,
 } from "drizzle-orm/pg-core";
 
-import { issueVersions } from "./issues.js";
+import { issueChoices, issueVersions } from "./issues.js";
 import { recommendationRequests } from "./recommendations.js";
 import { shareCards } from "./shares.js";
 
@@ -72,6 +72,11 @@ export const analyticsEvents = pgTable(
     shareCardId: uuid("share_card_id").references(() => shareCards.id, {
       onDelete: "set null",
     }),
+    durationMs: integer("duration_ms"),
+    canonicalChoiceId: uuid("canonical_choice_id"),
+    shownPosition: integer("shown_position"),
+    mediaMode: varchar("media_mode", { length: 24 }),
+    mediaLoadOutcome: varchar("media_load_outcome", { length: 16 }),
     occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
     receivedAt: timestamp("received_at", { withTimezone: true }).defaultNow().notNull(),
   },
@@ -81,11 +86,30 @@ export const analyticsEvents = pgTable(
       foreignColumns: [issueVersions.issueId, issueVersions.version],
       name: "analytics_events_issue_version_fk",
     }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.issueId, table.issueVersion, table.canonicalChoiceId],
+      foreignColumns: [issueChoices.issueId, issueChoices.issueVersion, issueChoices.id],
+      name: "analytics_events_canonical_choice_fk",
+    }).onDelete("restrict"),
     index("analytics_events_session_occurred_idx").on(table.sessionId, table.occurredAt),
     index("analytics_events_type_occurred_idx").on(table.eventType, table.occurredAt),
     check(
       "analytics_events_type_check",
-      sql`${table.eventType} in ('ISSUE_VIEWABLE_IMPRESSION', 'VOTE_SUBMIT', 'RESULT_VIEW', 'NEXT_ISSUE_OPEN', 'NEXT_ISSUE_EXHAUSTED', 'INTEREST_PROMPT_VIEW', 'INTEREST_SELECTION_COMPLETE', 'INTEREST_PROMPT_SKIP', 'INTEREST_PROFILE_RESET', 'PERSONALIZED_FEED_VIEW', 'PERSONALIZED_ISSUE_OPEN', 'SHARE_OPEN', 'SHARE_CHOICE_TOGGLE', 'SHARE_COMPLETE')`,
+      sql`${table.eventType} in ('ISSUE_VIEWABLE_IMPRESSION', 'VOTE_SUBMIT', 'RESULT_VIEW', 'NEXT_ISSUE_OPEN', 'NEXT_ISSUE_EXHAUSTED', 'INTEREST_PROMPT_VIEW', 'INTEREST_SELECTION_COMPLETE', 'INTEREST_PROMPT_SKIP', 'INTEREST_PROFILE_RESET', 'PERSONALIZED_FEED_VIEW', 'PERSONALIZED_ISSUE_OPEN', 'SHARE_OPEN', 'SHARE_CHOICE_TOGGLE', 'SHARE_COMPLETE', 'RESULT_DWELL_COMPLETE', 'COMMENT_COMPLETE', 'ISSUE_SKIP', 'ISSUE_HIDE', 'COMMENT_REPORT_COMPLETE', 'ISSUE_MEDIA_LOAD')`,
+    ),
+    check(
+      "analytics_events_duration_check",
+      sql`${table.durationMs} is null or (${table.durationMs} >= 0 and ${table.durationMs} <= 1800000)`,
+    ),
+    check(
+      "analytics_events_choice_position_check",
+      sql`(${table.canonicalChoiceId} is null and ${table.shownPosition} is null)
+        or (${table.canonicalChoiceId} is not null and ${table.shownPosition} between 0 and 3)`,
+    ),
+    check(
+      "analytics_events_media_check",
+      sql`(${table.mediaMode} is null or ${table.mediaMode} in ('TEXT_ONLY', 'OPTION_IMAGES'))
+        and (${table.mediaLoadOutcome} is null or ${table.mediaLoadOutcome} in ('SUCCESS', 'FAILURE'))`,
     ),
   ],
 );

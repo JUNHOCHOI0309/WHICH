@@ -8,12 +8,26 @@ import {
   ANALYTICS_DEVICE_SEGMENTS,
   ANALYTICS_ENTRY_SURFACES,
   ANALYTICS_EVENT_TYPES,
+  ANALYTICS_MEDIA_LOAD_OUTCOMES,
+  ANALYTICS_MEDIA_MODES,
   ANALYTICS_TRAFFIC_CLASSES,
   type AnalyticsService,
 } from "./contracts.js";
 import { AnalyticsEventError } from "./service.js";
 
 const uuidSchema = Type.String({ format: "uuid" });
+const qualitySchema = Type.Object(
+  {
+    durationMs: Type.Optional(Type.Integer({ minimum: 0, maximum: 1_800_000 })),
+    canonicalChoiceId: Type.Optional(uuidSchema),
+    shownPosition: Type.Optional(Type.Integer({ minimum: 0, maximum: 3 })),
+    mediaMode: Type.Optional(Type.Union(ANALYTICS_MEDIA_MODES.map((value) => Type.Literal(value)))),
+    mediaLoadOutcome: Type.Optional(
+      Type.Union(ANALYTICS_MEDIA_LOAD_OUTCOMES.map((value) => Type.Literal(value))),
+    ),
+  },
+  { additionalProperties: false },
+);
 const attributionSchema = Type.Union([
   Type.Object({
     source: Type.Literal("naver"),
@@ -99,6 +113,7 @@ export async function registerAnalyticsRoutes(
             recommendationRequestId: Type.Optional(uuidSchema),
             shareCardId: Type.Optional(uuidSchema),
             occurredAt: Type.String({ format: "date-time" }),
+            quality: Type.Optional(qualitySchema),
             attribution: Type.Optional(attributionSchema),
             context: Type.Optional(
               Type.Object({
@@ -122,6 +137,7 @@ export async function registerAnalyticsRoutes(
             400: Type.Object({ code: Type.String(), message: Type.String() }),
             401: Type.Object({ code: Type.String(), message: Type.String() }),
             404: Type.Object({ code: Type.String(), message: Type.String() }),
+            409: Type.Object({ code: Type.String(), message: Type.String() }),
             500: Type.Object({ code: Type.String(), message: Type.String() }),
           },
         },

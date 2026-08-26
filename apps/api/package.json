@@ -8,6 +8,7 @@
     "analytics:aggregate": "tsx src/analytics-operator.ts aggregate",
     "analytics:retention": "tsx src/analytics-operator.ts retention",
     "analytics:summary": "tsx src/analytics-operator.ts summary",
+    "analytics:quality": "tsx src/analytics-operator.ts quality",
     "analytics:reconcile": "tsx src/analytics-operator.ts reconcile",
     "analytics:baseline": "tsx src/analytics-operator.ts baseline",
     "beta:review": "tsx src/beta-operator.ts review",
