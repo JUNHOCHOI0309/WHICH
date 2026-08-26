@@ -153,6 +153,35 @@ export const memberSessions = pgTable(
   ],
 );
 
+export const mobileAuthExchangeTickets = pgTable(
+  "mobile_auth_exchange_tickets",
+  {
+    id: uuid("mobile_auth_exchange_ticket_id").defaultRandom().primaryKey(),
+    memberId: uuid("member_id")
+      .notNull()
+      .references(() => members.id, { onDelete: "cascade" }),
+    ticketHash: varchar("ticket_hash", { length: 64 }).notNull(),
+    codeChallenge: varchar("code_challenge", { length: 43 }).notNull(),
+    stateHash: varchar("state_hash", { length: 64 }).notNull(),
+    nonceHash: varchar("nonce_hash", { length: 64 }).notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    consumedAt: timestamp("consumed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    unique("mobile_auth_exchange_tickets_hash_unique").on(table.ticketHash),
+    index("mobile_auth_exchange_tickets_member_created_idx").on(table.memberId, table.createdAt),
+    index("mobile_auth_exchange_tickets_active_expiry_idx")
+      .on(table.expiresAt)
+      .where(sql`${table.consumedAt} is null`),
+    check("mobile_auth_exchange_tickets_challenge_check", sql`length(${table.codeChallenge}) = 43`),
+    check(
+      "mobile_auth_exchange_tickets_expiry_check",
+      sql`${table.expiresAt} > ${table.createdAt}`,
+    ),
+  ],
+);
+
 export const guestMemberLinks = pgTable(
   "guest_member_links",
   {

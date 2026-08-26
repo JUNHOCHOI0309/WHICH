@@ -94,6 +94,19 @@ export type MemberPointView = {
   ledger: { items: MemberPointLedgerItem[]; nextCursor: string | null };
 };
 
+export type MemberView = {
+  id: string;
+  displayName: string;
+  status: "ACTIVE" | "LIMITED" | "SUSPENDED" | "DELETED";
+  avatar: { kind: "INITIALS"; initials: string } | { kind: "IMAGE"; url: string };
+};
+
+export type MemberSessionView = {
+  token: string;
+  expiresAt: string;
+  member: MemberView;
+};
+
 export type CommentHighlight = {
   id: string;
   choice: "A" | "B";

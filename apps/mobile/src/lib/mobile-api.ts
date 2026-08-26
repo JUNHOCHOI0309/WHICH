@@ -5,6 +5,8 @@ import type {
   InterestCardRegistry,
   InterestProfile,
   MemberPointView,
+  MemberSessionView,
+  MemberView,
   PublicIssue,
   PublicIssueFeed,
   ShareCardResponse,
@@ -72,6 +74,50 @@ export function createMobileApiClient(
         headers: { accept: "application/json", authorization: `Bearer ${sessionToken}` },
       });
       return bodyOrError<MemberPointView>(response);
+    },
+
+    async exchangeMobileSession(command: {
+      ticket: string;
+      codeVerifier: string;
+      state: string;
+      nonce: string;
+      anonymousSubjectId?: string;
+    }) {
+      const response = await request(`${baseUrl}/api/mobile/v1/mobile-auth/member-sessions`, {
+        method: "POST",
+        headers: { accept: "application/json", "content-type": "application/json" },
+        body: JSON.stringify(command),
+      });
+      return bodyOrError<MemberSessionView>(response);
+    },
+
+    async loadMemberSession(sessionToken: string) {
+      const response = await request(`${baseUrl}/api/mobile/v1/member-session`, {
+        headers: { accept: "application/json", authorization: `Bearer ${sessionToken}` },
+      });
+      return bodyOrError<{ expiresAt: string; member: MemberView }>(response);
+    },
+
+    async refreshMemberSession(sessionToken: string) {
+      const response = await request(`${baseUrl}/api/mobile/v1/member-session`, {
+        method: "POST",
+        headers: { accept: "application/json", authorization: `Bearer ${sessionToken}` },
+      });
+      return bodyOrError<MemberSessionView>(response);
+    },
+
+    async revokeMemberSession(sessionToken: string) {
+      const response = await request(`${baseUrl}/api/mobile/v1/member-session`, {
+        method: "DELETE",
+        headers: { accept: "application/json", authorization: `Bearer ${sessionToken}` },
+      });
+      if (!response.ok && response.status !== 401) {
+        throw new MobileApiError(
+          "SESSION_REVOKE_FAILED",
+          response.status,
+          "로그아웃하지 못했습니다.",
+        );
+      }
     },
 
     async loadFeed(subjectId?: string, limit = 10, excludeIssueId?: string) {

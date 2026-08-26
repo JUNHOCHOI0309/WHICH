@@ -22,6 +22,7 @@ const environmentSchema = z.object({
   INTERNAL_AUTH_SECRET: z.string().min(16).default(LOCAL_INTERNAL_AUTH_SECRET),
   MODERATION_INTERNAL_SECRET: z.string().min(16).default(LOCAL_MODERATION_INTERNAL_SECRET),
   MEMBER_SESSION_TTL_SECONDS: z.coerce.number().int().min(300).max(2_592_000).default(604_800),
+  MOBILE_AUTH_TICKET_TTL_SECONDS: z.coerce.number().int().min(60).max(600).default(300),
   AUTH_EMAIL_VERIFICATION_TTL_SECONDS: z.coerce
     .number()
     .int()
@@ -83,6 +84,7 @@ export function getConfig(environment: NodeJS.ProcessEnv = process.env) {
       internalSecret: parsed.INTERNAL_AUTH_SECRET,
       moderationInternalSecret: parsed.MODERATION_INTERNAL_SECRET,
       memberSessionTtlSeconds: parsed.MEMBER_SESSION_TTL_SECONDS,
+      mobileAuthTicketTtlSeconds: parsed.MOBILE_AUTH_TICKET_TTL_SECONDS,
       allowDevelopmentProvider: parsed.NODE_ENV !== "production",
       requireVerifiedEmail: parsed.AUTH_EMAIL_VERIFICATION_REQUIRED,
       security: {

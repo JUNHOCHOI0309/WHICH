@@ -77,6 +77,8 @@ services:
         generateValue: true
       - key: MEMBER_SESSION_TTL_SECONDS
         value: "604800"
+      - key: MOBILE_AUTH_TICKET_TTL_SECONDS
+        value: "300"
       - key: AUTH_EMAIL_VERIFICATION_TTL_SECONDS
         value: "86400"
       - key: AUTH_PASSWORD_RESET_TTL_SECONDS

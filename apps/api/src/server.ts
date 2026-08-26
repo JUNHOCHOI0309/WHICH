@@ -53,6 +53,7 @@ const app = await buildApp(config, {
   commentReader: createCommentService(database.db),
   memberIdentity: createMemberIdentityService(database.db, {
     sessionTtlSeconds: config.auth.memberSessionTtlSeconds,
+    mobileAuthTicketTtlSeconds: config.auth.mobileAuthTicketTtlSeconds,
     allowDevelopmentProvider: config.auth.allowDevelopmentProvider,
     requireVerifiedEmail: config.auth.requireVerifiedEmail,
     authSecurity: config.auth.security,

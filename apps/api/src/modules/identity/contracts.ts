@@ -59,6 +59,16 @@ export type MemberSessionResult = {
   };
 };
 
+export type MobileAuthExchangeTicketResult = {
+  ticket: string;
+  expiresAt: string;
+};
+
+export type MemberSessionView = {
+  expiresAt: string;
+  member: MemberView;
+};
+
 export type MemberIdentityLinkResult = {
   token: string;
   expiresAt: string;
@@ -184,6 +194,18 @@ export interface MemberIdentityService {
     assertion: Omit<IdentityAssertion, "anonymousSubjectId">,
   ): Promise<MemberIdentityLinkResult>;
   getSession(token: string): Promise<{ expiresAt: string; member: MemberView } | null>;
+  issueMobileAuthExchangeTicket(
+    token: string,
+    request: { codeChallenge: string; state: string; nonce: string },
+  ): Promise<MobileAuthExchangeTicketResult | null>;
+  exchangeMobileAuthTicket(request: {
+    ticket: string;
+    codeVerifier: string;
+    state: string;
+    nonce: string;
+    anonymousSubjectId?: string;
+  }): Promise<{ token: string } & MemberSessionView>;
+  refreshSession(token: string): Promise<({ token: string } & MemberSessionView) | null>;
   getPrivateProfile(
     token: string,
     query: MemberVoteHistoryQuery,

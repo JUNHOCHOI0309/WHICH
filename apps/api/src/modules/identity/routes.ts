@@ -28,6 +28,14 @@ const sessionViewSchema = Type.Object({
   expiresAt: Type.String({ format: "date-time" }),
   member: memberSchema,
 });
+const tokenSessionViewSchema = Type.Intersect([
+  sessionViewSchema,
+  Type.Object({ token: Type.String({ minLength: 32, maxLength: 128 }) }),
+]);
+const mobileAuthProofSchema = Type.Object({
+  state: Type.String({ minLength: 32, maxLength: 128, pattern: "^[A-Za-z0-9._~-]+$" }),
+  nonce: Type.String({ minLength: 32, maxLength: 128, pattern: "^[A-Za-z0-9._~-]+$" }),
+});
 const identityProviderSchema = Type.Union([
   Type.Literal("EMAIL"),
   Type.Literal("GOOGLE"),
@@ -638,6 +646,117 @@ export async function registerMemberIdentityRoutes(
           });
         }
         return reply.send(session);
+      },
+    );
+
+    identityApp.post<{
+      Headers: { authorization?: string };
+      Body: { codeChallenge: string; state: string; nonce: string };
+    }>(
+      "/v1/mobile-auth/exchange-tickets",
+      {
+        schema: {
+          tags: ["identity"],
+          summary: "Issue a one-time PKCE ticket for a Native Member session",
+          headers: Type.Object(
+            { authorization: Type.Optional(Type.String()) },
+            { additionalProperties: true },
+          ),
+          body: Type.Intersect([
+            mobileAuthProofSchema,
+            Type.Object({
+              codeChallenge: Type.String({
+                minLength: 43,
+                maxLength: 43,
+                pattern: "^[A-Za-z0-9_-]+$",
+              }),
+            }),
+          ]),
+          response: {
+            201: Type.Object({
+              ticket: Type.String({ minLength: 43, maxLength: 43 }),
+              expiresAt: Type.String({ format: "date-time" }),
+            }),
+            400: errorSchema,
+            401: errorSchema,
+          },
+        },
+      },
+      async (request, reply) => {
+        const token = bearerToken(request.headers.authorization);
+        const ticket = token
+          ? await service.issueMobileAuthExchangeTicket(token, request.body)
+          : null;
+        if (!ticket) {
+          return reply.code(401).send({
+            code: "SESSION_INVALID",
+            message: "The Member session is invalid or expired.",
+          });
+        }
+        return reply.code(201).send(ticket);
+      },
+    );
+
+    identityApp.post<{
+      Body: {
+        ticket: string;
+        codeVerifier: string;
+        state: string;
+        nonce: string;
+        anonymousSubjectId?: string;
+      };
+    }>(
+      "/v1/mobile-auth/member-sessions",
+      {
+        schema: {
+          tags: ["identity"],
+          summary: "Exchange a one-time PKCE ticket for a Native Member session",
+          body: Type.Intersect([
+            mobileAuthProofSchema,
+            Type.Object({
+              ticket: Type.String({
+                minLength: 43,
+                maxLength: 43,
+                pattern: "^[A-Za-z0-9_-]+$",
+              }),
+              codeVerifier: Type.String({
+                minLength: 43,
+                maxLength: 128,
+                pattern: "^[A-Za-z0-9._~-]+$",
+              }),
+              anonymousSubjectId: Type.Optional(Type.String({ format: "uuid" })),
+            }),
+          ]),
+          response: { 201: tokenSessionViewSchema, 400: errorSchema },
+        },
+      },
+      async (request, reply) =>
+        reply.code(201).send(await service.exchangeMobileAuthTicket(request.body)),
+    );
+
+    identityApp.post<{ Headers: { authorization?: string } }>(
+      "/v1/member-session/refresh",
+      {
+        schema: {
+          tags: ["identity"],
+          summary: "Rotate the current Member session token",
+          headers: Type.Object(
+            { authorization: Type.Optional(Type.String()) },
+            { additionalProperties: true },
+          ),
+          response: { 201: tokenSessionViewSchema, 401: errorSchema },
+        },
+      },
+      async (request, reply) => {
+        const token = bearerToken(request.headers.authorization);
+        const refreshed = token ? await service.refreshSession(token) : null;
+        if (!refreshed) {
+          return reply.code(401).send({
+            code: "SESSION_INVALID",
+            message: "The Member session is invalid or expired.",
+          });
+        }
+        return reply.code(201).send(refreshed);
       },
     );
 

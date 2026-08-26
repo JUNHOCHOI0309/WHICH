@@ -28,7 +28,7 @@ type CardVoteState =
 type HighlightState =
   { status: "LOADING" } | { status: "READY"; highlights: CommentHighlights } | { status: "ERROR" };
 
-const LAST_FIRST_ISSUE_KEY = "which:feed:last-first-issue";
+const LAST_FIRST_ISSUE_KEY = "which.mobile.feed.last-first-issue.v1";
 
 export default function FeedScreen() {
   const [issues, setIssues] = useState<PublicFeedIssue[]>([]);
@@ -372,6 +372,14 @@ export default function FeedScreen() {
         >
           <Text style={styles.bottomNavIcon}>#</Text>
           <Text style={styles.bottomNavText}>관심사</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => router.push("/me")}
+          style={styles.bottomNavItem}
+        >
+          <Text style={styles.bottomNavIcon}>◎</Text>
+          <Text style={styles.bottomNavText}>내 기록</Text>
         </Pressable>
       </View>
     </SafeAreaView>

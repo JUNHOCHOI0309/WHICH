@@ -10,6 +10,12 @@ import {
 import { GET as loadFeed } from "@/app/api/mobile/v1/issues/feed/route";
 import { GET as loadCommentHighlights } from "@/app/api/mobile/v1/issues/[issueId]/comment-highlights/route";
 import { POST as submitVote } from "@/app/api/mobile/v1/issues/[issueId]/votes/route";
+import { POST as exchangeMobileSession } from "@/app/api/mobile/v1/mobile-auth/member-sessions/route";
+import {
+  DELETE as revokeMobileSession,
+  GET as loadMobileSession,
+  POST as refreshMobileSession,
+} from "@/app/api/mobile/v1/member-session/route";
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -24,6 +30,48 @@ afterEach(() => {
 });
 
 describe("mobile BFF routes", () => {
+  it("proxies Native session exchange and lifecycle without internal secrets", async () => {
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({ token: "native-session", expiresAt: "2026-09-01T00:00:00.000Z" }, 201),
+      )
+      .mockResolvedValueOnce(jsonResponse({ expiresAt: "2026-09-01T00:00:00.000Z" }))
+      .mockResolvedValueOnce(
+        jsonResponse({ token: "rotated-session", expiresAt: "2026-09-02T00:00:00.000Z" }, 201),
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", request);
+
+    await exchangeMobileSession(
+      new NextRequest("https://whichone.site/api/mobile/v1/mobile-auth/member-sessions", {
+        method: "POST",
+        body: JSON.stringify({ ticket: "ticket" }),
+      }),
+    );
+    const sessionRequest = (method: "GET" | "POST" | "DELETE") =>
+      new NextRequest("https://whichone.site/api/mobile/v1/member-session", {
+        method,
+        headers: { authorization: "Bearer native-session" },
+      });
+    await loadMobileSession(sessionRequest("GET"));
+    await refreshMobileSession(sessionRequest("POST"));
+    await revokeMobileSession(sessionRequest("DELETE"));
+
+    expect(request).toHaveBeenNthCalledWith(
+      1,
+      new URL("http://localhost:4000/v1/mobile-auth/member-sessions"),
+      expect.not.objectContaining({
+        headers: expect.objectContaining({ "x-internal-auth-secret": expect.anything() }),
+      }),
+    );
+    expect(request).toHaveBeenNthCalledWith(
+      3,
+      new URL("http://localhost:4000/v1/member-session/refresh"),
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
   it("returns a Guest Subject to the native client without exposing an internal secret", async () => {
     const request = vi.fn(async () =>
       jsonResponse({ anonymousSubjectId: "591f2e90-996a-50c5-af46-967dd0793000" }, 201),

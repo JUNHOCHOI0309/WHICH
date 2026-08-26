@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 import { and, eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -17,6 +17,7 @@ import {
   memberCredentials,
   memberAuthTokens,
   memberIdentityLinks,
+  mobileAuthExchangeTickets,
   memberProfiles,
   memberSessions,
   members,
@@ -175,6 +176,120 @@ describe("Member identity and Guest vote linking", () => {
     });
     expect(response.statusCode).toBe(401);
     expect(response.json()).toMatchObject({ code: "UNAUTHORIZED" });
+  });
+
+  it("exchanges a hashed one-time PKCE ticket and rotates or revokes the Native session", async () => {
+    const anonymousSubjectId = await createGuest();
+    const signup = await createMemberSession({
+      providerSubject: `mobile-auth-${randomUUID()}`,
+    });
+    const webSession = signup.json<{ token: string; member: { id: string } }>();
+    const codeVerifier = "native-verifier.".repeat(4).slice(0, 64);
+    const codeChallenge = createHash("sha256").update(codeVerifier).digest("base64url");
+    const proof = { state: "s".repeat(32), nonce: "n".repeat(32) };
+
+    const issued = await app.inject({
+      method: "POST",
+      url: "/v1/mobile-auth/exchange-tickets",
+      headers: { authorization: `Bearer ${webSession.token}` },
+      payload: { ...proof, codeChallenge },
+    });
+    expect(issued.statusCode).toBe(201);
+    const exchangeTicket = issued.json<{ ticket: string; expiresAt: string }>();
+    expect(exchangeTicket.ticket).toHaveLength(43);
+    const [storedTicket] = await database.db
+      .select({ ticketHash: mobileAuthExchangeTickets.ticketHash })
+      .from(mobileAuthExchangeTickets)
+      .where(eq(mobileAuthExchangeTickets.memberId, webSession.member.id));
+    expect(storedTicket?.ticketHash).toHaveLength(64);
+    expect(storedTicket?.ticketHash).not.toBe(exchangeTicket.ticket);
+
+    const invalidProof = await app.inject({
+      method: "POST",
+      url: "/v1/mobile-auth/member-sessions",
+      payload: { ...proof, ticket: exchangeTicket.ticket, codeVerifier: "x".repeat(64) },
+    });
+    expect(invalidProof.statusCode).toBe(400);
+    expect(invalidProof.json()).toMatchObject({ code: "MOBILE_AUTH_TICKET_INVALID" });
+
+    const exchanged = await app.inject({
+      method: "POST",
+      url: "/v1/mobile-auth/member-sessions",
+      payload: { ...proof, ticket: exchangeTicket.ticket, codeVerifier, anonymousSubjectId },
+    });
+    expect(exchanged.statusCode).toBe(201);
+    const nativeSession = exchanged.json<{ token: string; member: { id: string } }>();
+    expect(nativeSession.member.id).toBe(webSession.member.id);
+    const [linkedGuest] = await database.db
+      .select({ memberId: guestMemberLinks.memberId })
+      .from(guestMemberLinks)
+      .innerJoin(voterSubjects, eq(guestMemberLinks.guestSubjectId, voterSubjects.id))
+      .where(eq(voterSubjects.anonymousSubjectId, anonymousSubjectId));
+    expect(linkedGuest?.memberId).toBe(webSession.member.id);
+
+    const reused = await app.inject({
+      method: "POST",
+      url: "/v1/mobile-auth/member-sessions",
+      payload: { ...proof, ticket: exchangeTicket.ticket, codeVerifier },
+    });
+    expect(reused.statusCode).toBe(400);
+    expect(reused.json()).toMatchObject({ code: "MOBILE_AUTH_TICKET_INVALID" });
+
+    const expiringTicketResponse = await app.inject({
+      method: "POST",
+      url: "/v1/mobile-auth/exchange-tickets",
+      headers: { authorization: `Bearer ${webSession.token}` },
+      payload: { ...proof, codeChallenge },
+    });
+    const expiringTicket = expiringTicketResponse.json<{ ticket: string }>().ticket;
+    await database.db
+      .update(mobileAuthExchangeTickets)
+      .set({
+        createdAt: new Date(Date.now() - 2_000),
+        expiresAt: new Date(Date.now() - 1_000),
+      })
+      .where(
+        eq(
+          mobileAuthExchangeTickets.ticketHash,
+          createHash("sha256").update(expiringTicket).digest("hex"),
+        ),
+      );
+    const expired = await app.inject({
+      method: "POST",
+      url: "/v1/mobile-auth/member-sessions",
+      payload: { ...proof, ticket: expiringTicket, codeVerifier },
+    });
+    expect(expired.statusCode).toBe(400);
+    expect(expired.json()).toMatchObject({ code: "MOBILE_AUTH_TICKET_INVALID" });
+
+    const refreshed = await app.inject({
+      method: "POST",
+      url: "/v1/member-session/refresh",
+      headers: { authorization: `Bearer ${nativeSession.token}` },
+    });
+    expect(refreshed.statusCode).toBe(201);
+    const refreshedSession = refreshed.json<{ token: string }>();
+    expect(refreshedSession.token).not.toBe(nativeSession.token);
+
+    const oldSession = await app.inject({
+      method: "GET",
+      url: "/v1/member-session",
+      headers: { authorization: `Bearer ${nativeSession.token}` },
+    });
+    expect(oldSession.statusCode).toBe(401);
+
+    const revoked = await app.inject({
+      method: "DELETE",
+      url: "/v1/member-session",
+      headers: { authorization: `Bearer ${refreshedSession.token}` },
+    });
+    expect(revoked.statusCode).toBe(204);
+    const afterLogout = await app.inject({
+      method: "GET",
+      url: "/v1/member-session",
+      headers: { authorization: `Bearer ${refreshedSession.token}` },
+    });
+    expect(afterLogout.statusCode).toBe(401);
   });
 
   it("requires registration instead of auto-creating an unlinked OAuth Member", async () => {

@@ -36,6 +36,48 @@ describe("mobile API client", () => {
     );
   });
 
+  it("exchanges, validates, refreshes, and revokes a Native Member session", async () => {
+    const member = {
+      id: "591f2e90-996a-50c5-af46-967dd0793000",
+      displayName: "Native Member",
+      status: "ACTIVE" as const,
+      avatar: { kind: "INITIALS" as const, initials: "NM" },
+    };
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({ token: "session", expiresAt: "2026-09-01T00:00:00.000Z", member }, 201),
+      )
+      .mockResolvedValueOnce(jsonResponse({ expiresAt: "2026-09-01T00:00:00.000Z", member }))
+      .mockResolvedValueOnce(
+        jsonResponse({ token: "rotated", expiresAt: "2026-09-02T00:00:00.000Z", member }, 201),
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    const api = createMobileApiClient({ baseUrl: "https://which.test", request });
+
+    await api.exchangeMobileSession({
+      ticket: "ticket",
+      codeVerifier: "verifier",
+      state: "state",
+      nonce: "nonce",
+      anonymousSubjectId: "591f2e90-996a-50c5-af46-967dd0793000",
+    });
+    await api.loadMemberSession("session");
+    await api.refreshMemberSession("session");
+    await api.revokeMemberSession("rotated");
+
+    expect(request).toHaveBeenNthCalledWith(
+      1,
+      "https://which.test/api/mobile/v1/mobile-auth/member-sessions",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(request).toHaveBeenNthCalledWith(
+      4,
+      "https://which.test/api/mobile/v1/member-session",
+      expect.objectContaining({ method: "DELETE" }),
+    );
+  });
+
   it("sends the stored Guest Subject when loading the feed", async () => {
     const request = vi.fn(async () => jsonResponse({ items: [], nextCursor: null }));
     const api = createMobileApiClient({ baseUrl: "https://whichone.site/", request });

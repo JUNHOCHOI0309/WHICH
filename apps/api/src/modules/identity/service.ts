@@ -1,4 +1,4 @@
-import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 
 import { hash as hashPassword, verify as verifyPassword } from "@node-rs/argon2";
 import { alias } from "drizzle-orm/pg-core";
@@ -17,6 +17,7 @@ import {
   memberCredentials,
   memberAuthTokens,
   memberIdentityLinks,
+  mobileAuthExchangeTickets,
   memberDailyAttendances,
   memberProfiles,
   memberSessions,
@@ -94,6 +95,16 @@ const RESERVED_HANDLES = new Set([
 
 function hashToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
+}
+
+function pkceChallenge(codeVerifier: string) {
+  return createHash("sha256").update(codeVerifier).digest("base64url");
+}
+
+function secretValueMatches(left: string, right: string) {
+  const leftBuffer = Buffer.from(left);
+  const rightBuffer = Buffer.from(right);
+  return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
 }
 
 function toMemberView(member: typeof members.$inferSelect): MemberView {
@@ -430,12 +441,14 @@ export function createMemberIdentityService(
   database: Database["db"],
   options: {
     sessionTtlSeconds: number;
+    mobileAuthTicketTtlSeconds?: number;
     allowDevelopmentProvider: boolean;
     requireVerifiedEmail?: boolean;
     authSecurity?: Partial<AuthSecurityOptions>;
   },
 ): MemberIdentityService {
   const authSecurity = { ...DEFAULT_AUTH_SECURITY, ...options.authSecurity };
+  const mobileAuthTicketTtlSeconds = options.mobileAuthTicketTtlSeconds ?? 300;
 
   async function consumeAuthRateLimit(action: string, bucketKey: string, limit: number) {
     const now = new Date();
@@ -1242,6 +1255,168 @@ export function createMemberIdentityService(
         expiresAt: session.session.expiresAt.toISOString(),
         member: toMemberView(session.member),
       };
+    },
+
+    async issueMobileAuthExchangeTicket(token, request) {
+      const session = await activeMemberSession(database, token);
+      if (!session) return null;
+
+      const now = new Date();
+      const expiresAt = new Date(now.getTime() + mobileAuthTicketTtlSeconds * 1_000);
+      const ticket = randomBytes(32).toString("base64url");
+      await database
+        .delete(mobileAuthExchangeTickets)
+        .where(lt(mobileAuthExchangeTickets.expiresAt, now));
+      await database.transaction(async (transaction) => {
+        await transaction.execute(
+          sql`select pg_advisory_xact_lock(hashtextextended(${`mobile-auth:${session.member.id}`}, 0))`,
+        );
+        await transaction
+          .update(mobileAuthExchangeTickets)
+          .set({ consumedAt: now })
+          .where(
+            and(
+              eq(mobileAuthExchangeTickets.memberId, session.member.id),
+              isNull(mobileAuthExchangeTickets.consumedAt),
+            ),
+          );
+        await transaction.insert(mobileAuthExchangeTickets).values({
+          memberId: session.member.id,
+          ticketHash: hashToken(ticket),
+          codeChallenge: request.codeChallenge,
+          stateHash: hashToken(request.state),
+          nonceHash: hashToken(request.nonce),
+          expiresAt,
+          createdAt: now,
+        });
+      });
+      return { ticket, expiresAt: expiresAt.toISOString() };
+    },
+
+    async exchangeMobileAuthTicket(request) {
+      const now = new Date();
+      const ticketHash = hashToken(request.ticket);
+      const stateHash = hashToken(request.state);
+      const nonceHash = hashToken(request.nonce);
+      const challenge = pkceChallenge(request.codeVerifier);
+      const invalidTicket = () =>
+        new MemberIdentityError(
+          "MOBILE_AUTH_TICKET_INVALID",
+          400,
+          "This mobile authentication ticket is invalid or expired.",
+        );
+
+      const exchangeIdentity = await database.transaction(async (transaction) => {
+        const [exchange] = await transaction
+          .select({ ticket: mobileAuthExchangeTickets, member: members })
+          .from(mobileAuthExchangeTickets)
+          .innerJoin(members, eq(mobileAuthExchangeTickets.memberId, members.id))
+          .where(
+            and(
+              eq(mobileAuthExchangeTickets.ticketHash, ticketHash),
+              isNull(mobileAuthExchangeTickets.consumedAt),
+              gt(mobileAuthExchangeTickets.expiresAt, now),
+              eq(members.status, "ACTIVE"),
+            ),
+          )
+          .limit(1);
+        if (
+          !exchange ||
+          !secretValueMatches(exchange.ticket.codeChallenge, challenge) ||
+          !secretValueMatches(exchange.ticket.stateHash, stateHash) ||
+          !secretValueMatches(exchange.ticket.nonceHash, nonceHash)
+        ) {
+          throw invalidTicket();
+        }
+
+        const [consumed] = await transaction
+          .update(mobileAuthExchangeTickets)
+          .set({ consumedAt: now })
+          .where(
+            and(
+              eq(mobileAuthExchangeTickets.id, exchange.ticket.id),
+              isNull(mobileAuthExchangeTickets.consumedAt),
+            ),
+          )
+          .returning({ id: mobileAuthExchangeTickets.id });
+        if (!consumed) throw invalidTicket();
+
+        const [identity] = await transaction
+          .select()
+          .from(memberIdentityLinks)
+          .where(eq(memberIdentityLinks.memberId, exchange.member.id))
+          .limit(1);
+        if (!identity) throw invalidTicket();
+        return {
+          member: exchange.member,
+          provider: identity.provider,
+          providerSubject: identity.providerSubject,
+        };
+      });
+
+      const assertion = {
+        provider: exchangeIdentity.provider,
+        providerSubject: exchangeIdentity.providerSubject,
+        displayName: exchangeIdentity.member.displayName,
+        createIfMissing: false,
+      } as const;
+      try {
+        return await service.createSession({
+          ...assertion,
+          anonymousSubjectId: request.anonymousSubjectId,
+        });
+      } catch (error) {
+        if (
+          request.anonymousSubjectId &&
+          error instanceof MemberIdentityError &&
+          error.code === "GUEST_ALREADY_LINKED"
+        ) {
+          return service.createSession(assertion);
+        }
+        throw error;
+      }
+    },
+
+    async refreshSession(token) {
+      const now = new Date();
+      return database.transaction(async (transaction) => {
+        const [session] = await transaction
+          .select({ session: memberSessions, member: members })
+          .from(memberSessions)
+          .innerJoin(members, eq(memberSessions.memberId, members.id))
+          .where(
+            and(
+              eq(memberSessions.tokenHash, hashToken(token)),
+              isNull(memberSessions.revokedAt),
+              gt(memberSessions.expiresAt, now),
+              eq(members.status, "ACTIVE"),
+            ),
+          )
+          .limit(1);
+        if (!session) return null;
+
+        const [revoked] = await transaction
+          .update(memberSessions)
+          .set({ revokedAt: now })
+          .where(and(eq(memberSessions.id, session.session.id), isNull(memberSessions.revokedAt)))
+          .returning({ id: memberSessions.id });
+        if (!revoked) return null;
+
+        const refreshedToken = randomBytes(32).toString("base64url");
+        const expiresAt = new Date(now.getTime() + options.sessionTtlSeconds * 1_000);
+        await transaction.insert(memberSessions).values({
+          memberId: session.member.id,
+          tokenHash: hashToken(refreshedToken),
+          expiresAt,
+          createdAt: now,
+          lastSeenAt: now,
+        });
+        return {
+          token: refreshedToken,
+          expiresAt: expiresAt.toISOString(),
+          member: toMemberView(session.member),
+        };
+      });
     },
 
     async linkIdentity(memberId, assertion) {
