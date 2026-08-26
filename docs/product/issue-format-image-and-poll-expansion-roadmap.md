@@ -5,6 +5,7 @@
 - Notion plan: [Issue 형식·이미지·질문 품질 확장 계획 v1](https://app.notion.com/p/3c828b27a55981b99e9bcd461fd62d41?pvs=204)
 - Accepted architecture decision: [`ADR-0003: Issue format and media policy`](../architecture/adr/0003-issue-format-and-media-policy.md)
 - PICK migration decision: [`ADR-0004: PICK 3~4지선다 migration boundary`](../architecture/adr/0004-pick-multichoice-migration.md)
+- Trusted uploader decision: [`ADR-0005: Trusted image uploader capability`](../architecture/adr/0005-trusted-image-uploader-capability.md)
 - Accepted editorial contract: [`Question Archetype, Editorial Rubric, and Authoring Linter Contract`](./question-archetype-editorial-rubric-authoring-linter.md)
 - Related roadmap: [`post-v0-discovery-recommendation-ai-roadmap.md`](./post-v0-discovery-recommendation-ai-roadmap.md)
 - Release boundary: this document does not expand the Public v0 launch gate.
@@ -42,6 +43,11 @@ WHICH-82에서는 여섯 질문 원형, versioned Rubric Finding, provenance·�
 WHICH-88에서는 기본 A/B를 삭제 불가로 유지하고 C/D만 추가·삭제하는 작성 UX, generic
 `tally.choices[]`, per-choice aggregate, 댓글·공유 canonical Choice, shadow verification과
 rollback 경계를 ADR-0004로 확정했다. Production PICK 노출은 후속 Vertical Slice 전까지 꺼 둔다.
+
+WHICH-89에서는 Member status와 분리된 `ISSUE_IMAGE_UPLOAD` capability, 30일 제한 grant,
+공개 전 자동 검사와 사람 승인, 자산별 신고·14일 소명·복원, 반복 위반 회수와 정량 Pilot
+Go/No-Go를 ADR-0005로 확정했다. Production Member/Guest 이미지 업로드는 후속 Vertical Slice
+전까지 계속 꺼 둔다.
 
 ## 현재 WHICH 구조와 적용 경계
 
