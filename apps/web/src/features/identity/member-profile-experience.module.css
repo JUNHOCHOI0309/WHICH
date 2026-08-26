@@ -338,11 +338,13 @@
 .voteGrid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: stretch;
   gap: 12px;
   margin-top: 20px;
 }
 
 .voteCard {
+  height: 100%;
   min-height: 230px;
   border: 1px solid var(--which-border);
   border-radius: 16px;
@@ -372,6 +374,7 @@
 
 .choice {
   min-height: 58px;
+  margin-top: auto;
   border: 1px solid currentColor;
   border-radius: 13px;
   display: grid;
@@ -404,7 +407,7 @@
 }
 
 .voteCard > a {
-  margin-top: auto;
+  margin-top: 18px;
   border-top: 1px solid var(--which-border);
   color: var(--which-text);
   display: flex;
