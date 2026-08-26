@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 
+import { toast } from "@/components/feedback/toast-provider";
 import { WhichAsideCard, WhichShell } from "@/components/layout/which-shell";
 import {
   NEW_PASSWORD_MAX_LENGTH,
@@ -93,6 +94,11 @@ export function SocialSignupExperience({
                 .then(async (response) => {
                   const body = (await response.json()) as { message?: string; returnTo?: string };
                   if (!response.ok) throw new Error(body.message || "가입을 완료하지 못했습니다.");
+                  toast.flash({
+                    message:
+                      mode === "new" ? "WHICH 계정을 만들었어요." : "로그인 수단을 연결했어요.",
+                    tone: "success",
+                  });
                   window.location.assign(body.returnTo || "/me");
                 })
                 .catch((reason: unknown) =>

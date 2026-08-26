@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { FormEvent } from "react";
 
+import { toast } from "@/components/feedback/toast-provider";
 import type {
   OpsEditorialCandidate,
   OpsEditorialDecision,
@@ -144,10 +145,7 @@ export function OpsEditorialPanel() {
           counts,
         };
       });
-      setFeedback({
-        message: `${body.status} 결정이 revision ${body.revision}로 저장됐습니다.`,
-        error: false,
-      });
+      toast.success(`${body.status} 결정을 revision ${body.revision}로 저장했어요.`);
     } catch (caught) {
       setFeedback({
         message: caught instanceof Error ? caught.message : "심사 결정을 저장하지 못했습니다.",

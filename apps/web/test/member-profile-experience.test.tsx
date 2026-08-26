@@ -1,7 +1,13 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render as testingRender, screen, waitFor } from "@testing-library/react";
+import type { ReactElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { ToastProvider } from "@/components/feedback/toast-provider";
 import { MemberProfileExperience } from "@/features/identity/member-profile-experience";
+
+function render(ui: ReactElement) {
+  return testingRender(<ToastProvider>{ui}</ToastProvider>);
+}
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -146,7 +152,7 @@ describe("Member private profile experience", () => {
       target: { files: [new File(["avatar"], "avatar.png", { type: "image/png" })] },
     });
 
-    expect(await screen.findByText("프로필 이미지를 변경했습니다.")).toBeVisible();
+    expect(await screen.findByText("프로필 이미지를 변경했어요.")).toBeVisible();
     expect(screen.getByRole("heading", { name: "이미지 변경 회원님의 선택" })).toBeVisible();
     expect(screen.getByText(/2026년 8월부터 WHICH에 참여했어요/)).toBeVisible();
     expect(screen.getByText("3")).toBeVisible();
@@ -197,7 +203,7 @@ describe("Member private profile experience", () => {
     expect(await screen.findByRole("img", { name: "이미지 삭제 회원 프로필" })).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "프로필 이미지 삭제" }));
 
-    expect(await screen.findByText("프로필 이미지를 비웠습니다.")).toBeVisible();
+    expect(await screen.findByText("프로필 이미지를 비웠어요.")).toBeVisible();
     expect(screen.queryByRole("img", { name: "이미지 삭제 회원 프로필" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "프로필 이미지 삭제" })).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "이미지 삭제 회원님의 선택" })).toBeVisible();

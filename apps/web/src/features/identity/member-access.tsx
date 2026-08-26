@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { toast } from "@/components/feedback/toast-provider";
 import { logoutMemberSession, MEMBER_LOGOUT_ERROR } from "@/lib/member-session";
 
 import styles from "./member-access.module.css";
@@ -24,7 +25,6 @@ export function MemberAccess({
   const [session, setSession] = useState<Session | null>(null);
   const [state, setState] = useState<"loading" | "guest" | "member" | "error">("loading");
   const [logoutPending, setLogoutPending] = useState(false);
-  const [logoutError, setLogoutError] = useState<string | null>(null);
   const [authOutcome] = useState(() =>
     typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("auth"),
   );
@@ -89,25 +89,19 @@ export function MemberAccess({
             disabled={logoutPending}
             onClick={() => {
               setLogoutPending(true);
-              setLogoutError(null);
               void logoutMemberSession()
                 .then(() => {
                   setSession(null);
                   setState("guest");
+                  toast.success("로그아웃했어요.");
                 })
-                .catch(() => setLogoutError(MEMBER_LOGOUT_ERROR))
+                .catch(() => toast.error(MEMBER_LOGOUT_ERROR))
                 .finally(() => setLogoutPending(false));
             }}
           >
             {logoutPending ? "로그아웃 중…" : "로그아웃"}
           </button>
         </div>
-      ) : null}
-
-      {logoutError ? (
-        <p className={styles.logoutError} role="alert">
-          {logoutError}
-        </p>
       ) : null}
 
       {authOutcome === "cancelled" ? (

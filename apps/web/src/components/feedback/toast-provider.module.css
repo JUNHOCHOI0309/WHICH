@@ -1,0 +1,114 @@
+.viewport {
+  position: fixed;
+  z-index: 1000;
+  top: calc(env(safe-area-inset-top, 0px) + 88px);
+  left: 50%;
+  display: grid;
+  width: min(420px, calc(100vw - 32px));
+  gap: 10px;
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+
+.toast {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) 28px;
+  align-items: center;
+  min-height: 56px;
+  padding: 10px 10px 10px 14px;
+  border: 1px solid var(--which-border-strong);
+  border-left: 4px solid var(--which-cyan);
+  border-radius: 16px;
+  background: rgb(255 255 255 / 96%);
+  box-shadow: 0 16px 40px rgb(17 24 28 / 16%);
+  color: var(--which-text);
+  pointer-events: auto;
+  animation: toast-enter 180ms ease-out both;
+  backdrop-filter: blur(12px);
+}
+
+.toast[data-tone="success"] {
+  border-left-color: var(--which-success);
+}
+
+.toast[data-tone="error"] {
+  border-left-color: var(--which-danger);
+}
+
+.icon {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--which-cyan-soft);
+  color: var(--which-cyan-strong);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.toast[data-tone="success"] .icon {
+  background: #e8f6f2;
+  color: var(--which-success);
+}
+
+.toast[data-tone="error"] .icon {
+  background: #fff0f1;
+  color: var(--which-danger);
+}
+
+.toast p {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.toast button {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--which-text-secondary);
+  cursor: pointer;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.toast button:hover {
+  background: var(--which-surface-subtle);
+  color: var(--which-text);
+}
+
+@keyframes toast-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (max-width: 760px) {
+  .viewport {
+    top: calc(env(safe-area-inset-top, 0px) + 68px);
+    width: min(420px, calc(100vw - 24px));
+  }
+
+  .toast {
+    min-height: 52px;
+    border-radius: 14px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast {
+    animation: none;
+  }
+}

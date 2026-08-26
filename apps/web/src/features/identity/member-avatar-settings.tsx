@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 
+import { toast } from "@/components/feedback/toast-provider";
 import type { MemberPrivateProfile } from "@/lib/contracts";
 
 import styles from "./member-profile-experience.module.css";
@@ -31,7 +32,6 @@ export function MemberAvatarSettings({
 }) {
   const fileInput = useRef<HTMLInputElement>(null);
   const [pending, setPending] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   function applyMember(next: AvatarMemberUpdate) {
@@ -45,7 +45,6 @@ export function MemberAvatarSettings({
     if (pending) return;
     setPending(true);
     setError(null);
-    setMessage(null);
     try {
       const form = new FormData();
       form.set("avatar", file);
@@ -60,9 +59,9 @@ export function MemberAvatarSettings({
         throw new Error(body.message || "프로필 이미지를 저장하지 못했습니다.");
       }
       applyMember(body.member);
-      setMessage("프로필 이미지를 변경했습니다.");
+      toast.success("프로필 이미지를 변경했어요.");
     } catch (uploadError) {
-      setError(
+      toast.error(
         uploadError instanceof Error ? uploadError.message : "프로필 이미지를 저장하지 못했습니다.",
       );
     } finally {
@@ -75,7 +74,6 @@ export function MemberAvatarSettings({
     if (pending) return;
     setPending(true);
     setError(null);
-    setMessage(null);
     try {
       const response = await fetch("/api/me/avatar", {
         method: "DELETE",
@@ -87,9 +85,9 @@ export function MemberAvatarSettings({
         throw new Error(body.message || "프로필 이미지를 삭제하지 못했습니다.");
       }
       applyMember(body.member);
-      setMessage("프로필 이미지를 비웠습니다.");
+      toast.success("프로필 이미지를 비웠어요.");
     } catch (removeError) {
-      setError(
+      toast.error(
         removeError instanceof Error ? removeError.message : "프로필 이미지를 삭제하지 못했습니다.",
       );
     } finally {
@@ -136,7 +134,6 @@ export function MemberAvatarSettings({
             disabled={pending}
             onChange={(event) => {
               const file = event.target.files?.[0];
-              setMessage(null);
               setError(null);
               if (!file) return;
               if (file.size > 5 * 1024 * 1024) {
@@ -160,11 +157,6 @@ export function MemberAvatarSettings({
           </button>
         ) : null}
       </div>
-      {message ? (
-        <p className={styles.avatarSuccess} role="status">
-          {message}
-        </p>
-      ) : null}
       {error ? (
         <p className={styles.avatarError} role="alert">
           {error}

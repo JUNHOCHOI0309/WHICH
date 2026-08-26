@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
+import { toast } from "@/components/feedback/toast-provider";
 import type { InterestCardCode, InterestCardRegistry, InterestProfile } from "@/lib/contracts";
 import { recordAnalyticsEvent } from "@/features/issues/client";
 
@@ -30,7 +31,6 @@ export function InterestSelector({
   const [mergeSelected, setMergeSelected] = useState<InterestCardCode[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const promptRecorded = useRef(false);
 
@@ -78,7 +78,6 @@ export function InterestSelector({
   }
 
   const toggle = (code: InterestCardCode) => {
-    setMessage(null);
     setError(null);
     setSelected((current) => {
       if (current.includes(code)) return current.filter((item) => item !== code);
@@ -104,7 +103,7 @@ export function InterestSelector({
       });
       setProfile(updated);
       setSelected(updated.selectedCardCodes);
-      setMessage("관심 주제를 저장했어요.");
+      toast.success("관심 주제를 저장했어요.");
       if (analyticsContext) {
         void recordAnalyticsEvent({
           eventType: "INTEREST_SELECTION_COMPLETE",
@@ -128,6 +127,7 @@ export function InterestSelector({
       });
       setProfile(updated);
       setSelected([]);
+      toast.info("관심사는 나중에 설정할 수 있어요.");
       if (analyticsContext) {
         void recordAnalyticsEvent({
           eventType: "INTEREST_PROMPT_SKIP",
@@ -148,7 +148,7 @@ export function InterestSelector({
       const updated = await resetInterestProfile();
       setProfile(updated);
       setSelected([]);
-      setMessage("추천 관심 신호를 초기화했어요. 투표와 댓글 기록은 그대로 유지됩니다.");
+      toast.success("추천 관심 신호를 초기화했어요. 투표와 댓글 기록은 그대로 유지됩니다.");
       if (analyticsContext) {
         void recordAnalyticsEvent({
           eventType: "INTEREST_PROFILE_RESET",
@@ -182,7 +182,7 @@ export function InterestSelector({
       setProfile(updated);
       setSelected(updated.selectedCardCodes);
       setMergeSelected([]);
-      setMessage("확인한 Guest 관심 주제를 계정에 추가했어요.");
+      toast.success("확인한 Guest 관심 주제를 계정에 추가했어요.");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Guest 관심사를 합치지 못했습니다.");
     } finally {
@@ -287,11 +287,6 @@ export function InterestSelector({
       {error ? (
         <p className={styles.error} role="alert">
           {error}
-        </p>
-      ) : null}
-      {message ? (
-        <p className={styles.message} role="status">
-          {message}
         </p>
       ) : null}
       {mode === "prompt" && profile.onboardingState === "COMPLETED" ? (
