@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 
+import { toast } from "@/components/feedback/toast-provider";
 import { WhichAsideCard, WhichShell } from "@/components/layout/which-shell";
 import { loginHref } from "@/lib/auth";
 import {
@@ -32,6 +33,7 @@ async function submitCredential(input: {
   });
   const body = (await response.json()) as { message?: string; returnTo?: string };
   if (!response.ok) throw new Error(body.message || "계정 처리를 완료하지 못했습니다.");
+  if (input.mode === "login") toast.flash({ message: "로그인했어요.", tone: "success" });
   window.location.assign(body.returnTo || input.returnTo);
 }
 

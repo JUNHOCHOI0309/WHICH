@@ -1,7 +1,13 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render as testingRender, screen } from "@testing-library/react";
+import type { ReactElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { ToastProvider } from "@/components/feedback/toast-provider";
 import { MemberAccess } from "@/features/identity/member-access";
+
+function render(ui: ReactElement) {
+  return testingRender(<ToastProvider>{ui}</ToastProvider>);
+}
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {

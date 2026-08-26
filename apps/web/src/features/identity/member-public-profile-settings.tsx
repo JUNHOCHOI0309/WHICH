@@ -4,6 +4,7 @@ import type { FormEvent } from "react";
 import Link from "next/link";
 import { useState } from "react";
 
+import { toast } from "@/components/feedback/toast-provider";
 import type { ApiErrorBody, MemberProfileSettings } from "@/lib/contracts";
 
 import styles from "./member-public-profile-settings.module.css";
@@ -21,12 +22,12 @@ export function MemberPublicProfileSettings({
     value?.visibility ?? "PRIVATE",
   );
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSaving(true);
-    setMessage(null);
+    setErrorMessage(null);
     try {
       const response = await fetch("/api/me/profile", {
         method: "PATCH",
@@ -48,13 +49,15 @@ export function MemberPublicProfileSettings({
       setBio(updated.bio ?? "");
       setVisibility(updated.visibility);
       onUpdated(updated);
-      setMessage(
+      toast.success(
         updated.visibility === "PUBLIC"
           ? "공개 프로필을 저장했어요."
           : "프로필을 비공개로 전환했어요.",
       );
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "공개 프로필을 저장하지 못했습니다.");
+      setErrorMessage(
+        error instanceof Error ? error.message : "공개 프로필을 저장하지 못했습니다.",
+      );
     } finally {
       setSaving(false);
     }
@@ -124,7 +127,7 @@ export function MemberPublicProfileSettings({
         </fieldset>
 
         <div className={styles.actions}>
-          <span role={message ? "status" : undefined}>{message}</span>
+          <span role={errorMessage ? "alert" : undefined}>{errorMessage}</span>
           <button disabled={saving} type="submit">
             {saving ? "저장 중…" : "프로필 저장"}
           </button>

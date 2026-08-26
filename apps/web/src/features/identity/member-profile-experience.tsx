@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
+import { toast } from "@/components/feedback/toast-provider";
 import { WhichAsideCard, WhichShell } from "@/components/layout/which-shell";
 import type { MemberPrivateProfile, MemberPrivateVote } from "@/lib/contracts";
 import { logoutMemberSession, MEMBER_LOGOUT_ERROR } from "@/lib/member-session";
@@ -62,7 +63,6 @@ export function MemberProfileExperience({
   const [screen, setScreen] = useState<Screen>("loading");
   const [profile, setProfile] = useState<MemberPrivateProfile | null>(null);
   const [logoutPending, setLogoutPending] = useState(false);
-  const [logoutError, setLogoutError] = useState<string | null>(null);
   const [accountDeletionOpen, setAccountDeletionOpen] = useState(false);
   const [accountDeletionPassword, setAccountDeletionPassword] = useState("");
   const [accountDeletionConfirmation, setAccountDeletionConfirmation] = useState("");
@@ -276,23 +276,18 @@ export function MemberProfileExperience({
                 disabled={logoutPending}
                 onClick={() => {
                   setLogoutPending(true);
-                  setLogoutError(null);
                   void logoutMemberSession()
                     .then(() => {
                       setProfile(null);
                       setScreen("guest");
+                      toast.success("로그아웃했어요.");
                     })
-                    .catch(() => setLogoutError(MEMBER_LOGOUT_ERROR))
+                    .catch(() => toast.error(MEMBER_LOGOUT_ERROR))
                     .finally(() => setLogoutPending(false));
                 }}
               >
                 {logoutPending ? "로그아웃 중…" : "로그아웃"}
               </button>
-              {logoutError ? (
-                <p className={styles.logoutError} role="alert">
-                  {logoutError}
-                </p>
-              ) : null}
             </section>
 
             <section className={styles.accountDeletion} aria-labelledby="account-deletion-title">

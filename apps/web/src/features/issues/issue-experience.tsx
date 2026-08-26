@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
+import { toast } from "@/components/feedback/toast-provider";
 import { BalanceResultBar } from "@/components/vote/balance-result-bar";
 import { VoteChoiceRow } from "@/components/vote/vote-choice-row";
 import { WhichAsideCard, WhichShell } from "@/components/layout/which-shell";
@@ -442,12 +443,10 @@ function ResultSharePanel({ issue, result }: { issue: PublicIssue; result: VoteR
   const [channel, setChannel] = useState<ResultShareChannel>("SYSTEM");
   const [expanded, setExpanded] = useState(false);
   const [pending, setPending] = useState<ResultShareChannel | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
 
   function openShare(nextChannel: ResultShareChannel) {
     setChannel(nextChannel);
     setExpanded(true);
-    setMessage(null);
     void recordAnalyticsEvent({
       eventType: "SHARE_OPEN",
       issueId: issue.id,
@@ -458,7 +457,6 @@ function ResultSharePanel({ issue, result }: { issue: PublicIssue; result: VoteR
   async function share() {
     if (pending) return;
     setPending(channel);
-    setMessage(null);
     try {
       let usedClipboardFallback = false;
       const created = await createResultShareCard({
@@ -490,7 +488,7 @@ function ResultSharePanel({ issue, result }: { issue: PublicIssue; result: VoteR
         issueVersion: issue.version,
         shareCardId: created.shareCard.id,
       }).catch(() => undefined);
-      setMessage(
+      toast.success(
         channel === "X"
           ? "X 공유 창을 열었어요."
           : usedClipboardFallback
@@ -499,7 +497,7 @@ function ResultSharePanel({ issue, result }: { issue: PublicIssue; result: VoteR
       );
     } catch (reason) {
       if (reason instanceof DOMException && reason.name === "AbortError") return;
-      setMessage("공유 링크를 만들지 못했어요. 결과는 그대로 확인할 수 있습니다.");
+      toast.error("공유 링크를 만들지 못했어요. 결과는 그대로 확인할 수 있습니다.");
     } finally {
       setPending(null);
     }
@@ -554,7 +552,6 @@ function ResultSharePanel({ issue, result }: { issue: PublicIssue; result: VoteR
               className={styles.shareClose}
               onClick={() => {
                 setExpanded(false);
-                setMessage(null);
               }}
             >
               접기
@@ -593,11 +590,6 @@ function ResultSharePanel({ issue, result }: { issue: PublicIssue; result: VoteR
             />
             {pending ? "공유 링크 만드는 중…" : channel === "X" ? "X에 공유하기" : "결과 공유하기"}
           </button>
-          {message ? (
-            <p className={styles.shareMessage} role="status">
-              {message}
-            </p>
-          ) : null}
         </div>
       ) : null}
     </section>
@@ -639,7 +631,6 @@ function CommentSection({
   const [posting, setPosting] = useState(false);
   const [postError, setPostError] = useState<string | null>(null);
   const [showLoginChoices, setShowLoginChoices] = useState(false);
-  const [reactionError, setReactionError] = useState<string | null>(null);
   const [pendingReactionIds, setPendingReactionIds] = useState<Set<string>>(() => new Set());
   const [reportDraft, setReportDraft] = useState<{
     commentId: string;
@@ -647,7 +638,6 @@ function CommentSection({
     detail: string;
   } | null>(null);
   const [reportingCommentId, setReportingCommentId] = useState<string | null>(null);
-  const [reportMessage, setReportMessage] = useState<string | null>(null);
   const [reportError, setReportError] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<{ commentId: string; body: string } | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -656,7 +646,6 @@ function CommentSection({
     commentId: string;
     message: string;
   } | null>(null);
-  const [commentMutationMessage, setCommentMutationMessage] = useState<string | null>(null);
   const [expandedCollapsedIds, setExpandedCollapsedIds] = useState<Set<string>>(() => new Set());
   const pendingCommentKey = useRef<string | null>(null);
   const pendingReportKey = useRef<{ commentId: string; key: string } | null>(null);
@@ -775,6 +764,7 @@ function CommentSection({
       draftTouched.current = false;
       setDraft("");
       pendingCommentKey.current = null;
+      toast.success("댓글을 게시했어요.");
     } catch (error) {
       if (error instanceof WebApiError) {
         if (error.status === 401) {
@@ -802,7 +792,6 @@ function CommentSection({
     const previous = comment.reactions ?? { helpfulCount: 0, viewerReacted: false };
     const optimisticActive = !previous.viewerReacted;
     const optimisticCount = Math.max(0, previous.helpfulCount + (optimisticActive ? 1 : -1));
-    setReactionError(null);
     setPendingReactionIds((current) => new Set(current).add(comment.id));
     setItems((current) =>
       current.map((item) =>
@@ -837,7 +826,7 @@ function CommentSection({
       setItems((current) =>
         current.map((item) => (item.id === comment.id ? { ...item, reactions: previous } : item)),
       );
-      setReactionError(
+      toast.error(
         error instanceof WebApiError && error.code === "VOTE_REQUIRED"
           ? "이 안건의 유효한 투표가 있어야 공감할 수 있어요."
           : "공감 상태를 바꾸지 못했어요. 잠시 후 다시 시도해 주세요.",
@@ -864,7 +853,6 @@ function CommentSection({
 
     setMutatingCommentId(editDraft.commentId);
     setCommentMutationError(null);
-    setCommentMutationMessage(null);
     try {
       const result = await updateMemberComment({
         commentId: editDraft.commentId,
@@ -878,7 +866,7 @@ function CommentSection({
         ),
       );
       setEditDraft(null);
-      setCommentMutationMessage("댓글을 수정했어요.");
+      toast.success("댓글을 수정했어요.");
     } catch (error) {
       if (error instanceof WebApiError && error.status === 401) {
         setAuthState("guest");
@@ -909,7 +897,6 @@ function CommentSection({
     if (mutatingCommentId) return;
     setMutatingCommentId(commentId);
     setCommentMutationError(null);
-    setCommentMutationMessage(null);
     try {
       await deleteMemberComment(commentId);
       setItems((current) => {
@@ -919,7 +906,7 @@ function CommentSection({
       });
       setDeleteConfirmId(null);
       setEditDraft(null);
-      setCommentMutationMessage("댓글을 삭제했어요.");
+      toast.success("댓글을 삭제했어요.");
     } catch (error) {
       if (error instanceof WebApiError && error.status === 401) {
         setAuthState("guest");
@@ -956,7 +943,6 @@ function CommentSection({
     }
     setReportingCommentId(reportDraft.commentId);
     setReportError(null);
-    setReportMessage(null);
     try {
       const result = await reportComment({
         commentId: reportDraft.commentId,
@@ -981,7 +967,7 @@ function CommentSection({
       }
       pendingReportKey.current = null;
       setReportDraft(null);
-      setReportMessage(
+      toast.success(
         result.comment.visibility === "HIDDEN"
           ? "신고가 접수되어 댓글이 검토 전까지 숨겨졌어요."
           : "신고가 접수되었어요. 검토에 반영하겠습니다.",
@@ -1244,7 +1230,6 @@ function CommentSection({
                       className={styles.reportButton}
                       disabled={reportState.viewerReported || !reportState.canReport || isReporting}
                       onClick={() => {
-                        setReportMessage(null);
                         setReportError(null);
                         setReportDraft({ commentId: comment.id, reason: "SPAM", detail: "" });
                       }}
@@ -1346,23 +1331,6 @@ function CommentSection({
         </div>
       ) : null}
 
-      {reactionError ? (
-        <p className={styles.reactionError} role="alert">
-          {reactionError}
-        </p>
-      ) : null}
-
-      {commentMutationMessage ? (
-        <p className={styles.commentMutationMessage} role="status">
-          {commentMutationMessage}
-        </p>
-      ) : null}
-
-      {reportMessage ? (
-        <p className={styles.reportMessage} role="status">
-          {reportMessage}
-        </p>
-      ) : null}
       {reportError ? (
         <p className={styles.reactionError} role="alert">
           {reportError}

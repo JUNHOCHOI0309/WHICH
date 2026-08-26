@@ -1,6 +1,8 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render as testingRender, screen, waitFor } from "@testing-library/react";
+import type { ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ToastProvider } from "@/components/feedback/toast-provider";
 import { resetGuestPreparation } from "@/features/issues/client";
 import { IssueExperience } from "@/features/issues/issue-experience";
 import type { PublicIssue, VoteResponse } from "@/lib/contracts";
@@ -12,6 +14,10 @@ vi.mock("next/navigation", () => ({
 }));
 
 const ISSUE_ID = "10000000-0000-4000-8000-000000000001";
+
+function render(ui: ReactElement) {
+  return testingRender(<ToastProvider>{ui}</ToastProvider>);
+}
 
 const issue: PublicIssue = {
   id: ISSUE_ID,

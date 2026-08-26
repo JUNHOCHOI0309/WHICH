@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
+import { toast } from "@/components/feedback/toast-provider";
 import type { CreateIssueCommand, InterestCardRegistry } from "@/lib/contracts";
 
 import { createMemberIssue, loadIssueCreationContext } from "./issue-creator-client";
@@ -115,6 +116,7 @@ export function IssueCreatorExperience({
         void createMemberIssue(draft, pendingKey.current)
           .then((result) => {
             window.sessionStorage.removeItem(DRAFT_KEY);
+            toast.success("질문을 게시했어요.");
             router.push(`/issues/${result.issue.id}`);
           })
           .catch((reason) => {
