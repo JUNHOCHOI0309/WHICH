@@ -7,6 +7,7 @@ import type { IssueReadService, IssueWriteService } from "../src/modules/issues/
 import type { MemberIdentityService } from "../src/modules/identity/contracts.js";
 import type { InterestProfileService } from "../src/modules/interests/contracts.js";
 import type { GuestVoteService } from "../src/modules/voting/contracts.js";
+import type { MemberPointService } from "../src/modules/points/member-contracts.js";
 
 const openApps: Array<Awaited<ReturnType<typeof buildApp>>> = [];
 
@@ -39,6 +40,7 @@ const commentReader: CommentService = {
   decideModeration: vi.fn(),
 };
 
+const getMemberSession = vi.fn<MemberIdentityService["getSession"]>();
 const memberIdentity: MemberIdentityService = {
   createSession: vi.fn(),
   createCredentialSession: vi.fn(),
@@ -47,7 +49,7 @@ const memberIdentity: MemberIdentityService = {
   requestPasswordReset: vi.fn(),
   resetPassword: vi.fn(),
   linkIdentity: vi.fn(),
-  getSession: vi.fn(),
+  getSession: getMemberSession,
   getPrivateProfile: vi.fn(),
   updateProfile: vi.fn(),
   setAvatar: vi.fn(),
@@ -66,6 +68,9 @@ const interestProfiles: InterestProfileService = {
   mergeGuestProfile: vi.fn(),
 };
 
+const getMemberPoints = vi.fn<MemberPointService["getMemberPoints"]>();
+const memberPoints: MemberPointService = { getMemberPoints };
+
 afterEach(async () => {
   await Promise.all(openApps.splice(0).map(async (app) => app.close()));
 });
@@ -81,6 +86,7 @@ describe("system health", () => {
       commentReader,
       memberIdentity,
       interestProfiles,
+      memberPoints,
     });
     openApps.push(app);
 
@@ -180,6 +186,7 @@ describe("OpenAPI contract", () => {
       commentReader,
       memberIdentity,
       interestProfiles,
+      memberPoints,
     });
     openApps.push(app);
 
@@ -200,11 +207,59 @@ describe("OpenAPI contract", () => {
     expect(document.paths).toHaveProperty(["/v1/member-session", "delete"]);
     expect(document.paths).toHaveProperty(["/v1/me", "get"]);
     expect(document.paths).toHaveProperty(["/v1/me/votes/{issueId}", "get"]);
+    expect(document.paths).toHaveProperty(["/v1/me/points", "get"]);
     expect(document.paths).toHaveProperty(["/v1/interests/cards", "get"]);
     expect(document.paths).toHaveProperty(["/v1/interest-profile", "get"]);
     expect(document.paths).toHaveProperty(["/v1/interest-profile", "put"]);
     expect(document.paths).toHaveProperty(["/v1/interest-profile/reset", "post"]);
     expect(document.paths).toHaveProperty(["/v1/interest-profile/merge", "post"]);
+  });
+
+  it("keeps the W Point view scoped to the authenticated Member", async () => {
+    getMemberSession.mockResolvedValueOnce({
+      expiresAt: "2026-08-27T00:00:00.000Z",
+      member: {
+        id: "591f2e90-996a-50c5-af46-967dd0793000",
+        displayName: "Member",
+        status: "ACTIVE",
+        avatar: { kind: "INITIALS", initials: "M" },
+      },
+    });
+    getMemberPoints.mockResolvedValueOnce({
+      account: {
+        balance: 20,
+        todayEarned: 10,
+        lifetimeEarned: 20,
+        lifetimeSpent: 0,
+        hasPendingRecovery: false,
+      },
+      ledger: { items: [], nextCursor: null },
+    });
+    const app = await buildApp(getConfig({ NODE_ENV: "test" }), {
+      ping: vi.fn(),
+      close: vi.fn(),
+      issueReader,
+      guestVotes,
+      commentReader,
+      memberIdentity,
+      memberPoints,
+    });
+    openApps.push(app);
+
+    const guest = await app.inject({ method: "GET", url: "/v1/me/points" });
+    expect(guest.statusCode).toBe(401);
+
+    const member = await app.inject({
+      method: "GET",
+      url: "/v1/me/points?limit=5",
+      headers: { authorization: "Bearer member-session-token" },
+    });
+    expect(member.statusCode).toBe(200);
+    expect(member.json()).toMatchObject({ account: { balance: 20 } });
+    expect(getMemberPoints).toHaveBeenCalledWith("591f2e90-996a-50c5-af46-967dd0793000", {
+      limit: 5,
+      cursor: undefined,
+    });
   });
 
   it("keeps Member issue creation authenticated and idempotent", async () => {

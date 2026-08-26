@@ -4,6 +4,7 @@ import type {
   InterestCardCode,
   InterestCardRegistry,
   InterestProfile,
+  MemberPointView,
   PublicIssue,
   PublicIssueFeed,
   ShareCardResponse,
@@ -59,6 +60,18 @@ export function createMobileApiClient(
         headers: { accept: "application/json" },
       });
       return bodyOrError<{ anonymousSubjectId: string }>(response);
+    },
+
+    async loadMemberPoints(
+      sessionToken: string,
+      options: { limit?: number; cursor?: string } = {},
+    ) {
+      const search = new URLSearchParams({ limit: String(options.limit ?? 10) });
+      if (options.cursor) search.set("cursor", options.cursor);
+      const response = await request(`${baseUrl}/api/mobile/v1/me/points?${search.toString()}`, {
+        headers: { accept: "application/json", authorization: `Bearer ${sessionToken}` },
+      });
+      return bodyOrError<MemberPointView>(response);
     },
 
     async loadFeed(subjectId?: string, limit = 10, excludeIssueId?: string) {

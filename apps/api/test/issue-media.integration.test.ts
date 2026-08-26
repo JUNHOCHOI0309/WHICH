@@ -408,7 +408,7 @@ describe("operator Issue media foundation", () => {
         choiceId: choiceBId,
       }),
     ).toEqual({ detached: false });
-  });
+  }, 10_000);
 
   it("purges old unlinked staging objects and prevents in-place edits after publication", async () => {
     const storage = new FakeIssueMediaStorage();

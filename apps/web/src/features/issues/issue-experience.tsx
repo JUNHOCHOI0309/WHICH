@@ -228,6 +228,9 @@ export function IssueExperience({
         saveResult(vote);
         setPendingAction(null);
         setScreen("result");
+        if (vote.pointFeedback) {
+          toast.success(`+${vote.pointFeedback.amount}P · ${vote.pointFeedback.reasonLabel}`);
+        }
       } catch {
         setSubmitError("선택을 전송하지 못했어요. 같은 선택으로 다시 시도할 수 있어요.");
         setScreen("submit-error");
@@ -515,7 +518,11 @@ function ResultSharePanel({ issue, result }: { issue: PublicIssue; result: VoteR
         issueVersion: issue.version,
         shareCardId: created.shareCard.id,
       }).catch(() => undefined);
-      void confirmShareReward(created.shareCard.id).catch(() => undefined);
+      void confirmShareReward(created.shareCard.id)
+        .then((claimed) => {
+          if (claimed) toast.success("+10P · 결과 공유");
+        })
+        .catch(() => undefined);
       toast.success(
         channel === "X"
           ? "X 공유 창을 열었어요."

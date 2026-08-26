@@ -454,4 +454,96 @@ describe("Member private profile experience", () => {
     expect(await screen.findByText("현재 비밀번호가 올바르지 않습니다.")).toBeVisible();
     expect(screen.getByRole("heading", { name: "유지 회원님의 선택" })).toBeVisible();
   });
+
+  it("shows the Member balance and loads more W Point history with the opaque cursor", async () => {
+    const requests: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = String(input);
+        requests.push(url);
+        if (url.startsWith("/api/me/points")) {
+          const secondPage = url.includes("cursor=next-page");
+          return jsonResponse({
+            account: {
+              balance: 30,
+              todayEarned: 20,
+              lifetimeEarned: 40,
+              lifetimeSpent: 10,
+              hasPendingRecovery: false,
+            },
+            ledger: {
+              items: [
+                {
+                  id: secondPage ? "point-2" : "point-1",
+                  entryType: "EARN",
+                  amount: 10,
+                  reasonCode: secondPage ? "VERIFIED_SHARE" : "VOTE_ACCEPTED",
+                  reasonLabel: secondPage ? "결과 공유" : "투표 참여",
+                  createdAt: secondPage ? "2026-08-25T01:00:00.000Z" : "2026-08-26T01:00:00.000Z",
+                },
+              ],
+              nextCursor: secondPage ? null : "next-page",
+            },
+          });
+        }
+        return jsonResponse({
+          member: {
+            id: "member-1",
+            displayName: "포인트 회원",
+            status: "ACTIVE",
+            avatar: { kind: "INITIALS", initials: "포" },
+            avatarSource: "INITIALS",
+            joinedAt: "2026-08-01T00:00:00.000Z",
+            participationCount: 1,
+          },
+          publicProfile: null,
+          identities: [],
+          votes: { items: [], nextCursor: null },
+        });
+      }),
+    );
+
+    render(<MemberProfileExperience />);
+
+    expect(await screen.findByText("30P")).toBeVisible();
+    expect(screen.getByText("오늘 +20P")).toBeVisible();
+    expect(screen.getByText("투표 참여")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "내역 더 보기" }));
+    expect(await screen.findByText("결과 공유")).toBeVisible();
+    expect(requests).toContain("/api/me/points?limit=5&cursor=next-page");
+  });
+
+  it("keeps the Member profile usable when only the W Point API is unavailable", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        if (String(input).startsWith("/api/me/points")) {
+          return jsonResponse({ code: "POINTS_UNAVAILABLE" }, 502);
+        }
+        return jsonResponse({
+          member: {
+            id: "member-1",
+            displayName: "정상 회원",
+            status: "ACTIVE",
+            avatar: { kind: "INITIALS", initials: "정" },
+            avatarSource: "INITIALS",
+            joinedAt: "2026-08-01T00:00:00.000Z",
+            participationCount: 0,
+          },
+          publicProfile: null,
+          identities: [],
+          votes: { items: [], nextCursor: null },
+        });
+      }),
+    );
+
+    render(<MemberProfileExperience />);
+
+    expect(await screen.findByRole("heading", { name: "정상 회원님의 선택" })).toBeVisible();
+    expect(
+      await screen.findByText(/W Point만 잠시 불러오지 못했어요. 다른 기능은 그대로/),
+    ).toBeVisible();
+    expect(screen.getByRole("link", { name: "투표 기록" })).toBeVisible();
+  });
 });

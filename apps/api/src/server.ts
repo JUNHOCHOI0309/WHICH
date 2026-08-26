@@ -21,6 +21,7 @@ import {
   issueMediaStorageConfig,
 } from "./modules/issue-media/storage.js";
 import { createPointIntegrityService } from "./modules/points/integrity.js";
+import { createMemberPointService } from "./modules/points/member-service.js";
 
 loadEnvironment({
   path: [resolve(process.cwd(), "../../.env.local"), resolve(process.cwd(), "../../.env")],
@@ -69,6 +70,7 @@ const app = await buildApp(config, {
   pointIntegrity: createPointIntegrityService(database.db, {
     targetEnvironment: config.environment,
   }),
+  memberPoints: createMemberPointService(database.db),
 });
 
 try {

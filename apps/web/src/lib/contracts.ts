@@ -142,6 +142,10 @@ export type VoteResponse = {
   issueVersion: number;
   choice: "A" | "B";
   result: IssueTally;
+  pointFeedback?: {
+    amount: number;
+    reasonLabel: string;
+  };
 };
 
 export type MemberPrivateVote = {
@@ -174,6 +178,29 @@ export type MemberPrivateProfile = {
   }>;
   votes: {
     items: MemberPrivateVote[];
+    nextCursor: string | null;
+  };
+};
+
+export type MemberPointLedgerItem = {
+  id: string;
+  entryType: "EARN" | "SPEND" | "REFUND" | "REVERSAL" | "ADJUSTMENT";
+  amount: number;
+  reasonCode: string;
+  reasonLabel: string;
+  createdAt: string;
+};
+
+export type MemberPointView = {
+  account: {
+    balance: number;
+    todayEarned: number;
+    lifetimeEarned: number;
+    lifetimeSpent: number;
+    hasPendingRecovery: boolean;
+  };
+  ledger: {
+    items: MemberPointLedgerItem[];
     nextCursor: string | null;
   };
 };
