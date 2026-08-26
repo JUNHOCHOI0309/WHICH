@@ -1,5 +1,8 @@
+"use client";
+
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { ReactNode, TouchEvent } from "react";
 
 import {
   HeaderMemberNavigation,
@@ -23,10 +26,81 @@ export function WhichShell({
   preserveAsideOnNarrow?: boolean;
   creationEnabled?: boolean;
 }) {
+  const [mobileAsideOpen, setMobileAsideOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+  const gesture = useRef<{ startX: number; startY: number; lastX: number; lastY: number } | null>(
+    null,
+  );
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return;
+    const query = window.matchMedia("(max-width: 767px)");
+    const sync = () => {
+      setIsMobile(query.matches);
+      if (!query.matches) setMobileAsideOpen(false);
+    };
+    sync();
+    query.addEventListener("change", sync);
+    return () => query.removeEventListener("change", sync);
+  }, []);
+
+  useEffect(() => {
+    if (!mobileAsideOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMobileAsideOpen(false);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [mobileAsideOpen]);
+
+  const startAsideGesture = (event: TouchEvent<HTMLElement>) => {
+    if (!preserveAsideOnNarrow || window.innerWidth > 767) return;
+    const touch = event.touches[0];
+    if (!touch) return;
+    if (!mobileAsideOpen && touch.clientX < window.innerWidth - 40) return;
+    gesture.current = {
+      startX: touch.clientX,
+      startY: touch.clientY,
+      lastX: touch.clientX,
+      lastY: touch.clientY,
+    };
+  };
+
+  const moveAsideGesture = (event: TouchEvent<HTMLElement>) => {
+    const touch = event.touches[0];
+    if (!gesture.current || !touch) return;
+    gesture.current.lastX = touch.clientX;
+    gesture.current.lastY = touch.clientY;
+  };
+
+  const finishAsideGesture = () => {
+    const current = gesture.current;
+    gesture.current = null;
+    if (!current) return;
+    const deltaX = current.lastX - current.startX;
+    const deltaY = current.lastY - current.startY;
+    if (Math.abs(deltaX) < 54 || Math.abs(deltaX) <= Math.abs(deltaY)) return;
+    if (!mobileAsideOpen && deltaX < 0) setMobileAsideOpen(true);
+    if (mobileAsideOpen && deltaX > 0) setMobileAsideOpen(false);
+  };
+
   return (
     <MemberNavigationProvider>
       <QuestionComposerProvider enabled={creationEnabled}>
-        <main className={styles.page}>
+        <main
+          className={styles.page}
+          onTouchStart={startAsideGesture}
+          onTouchMove={moveAsideGesture}
+          onTouchEnd={finishAsideGesture}
+          onTouchCancel={() => {
+            gesture.current = null;
+          }}
+        >
           <header className={styles.header}>
             <div className={styles.headerInner}>
               <Link className={styles.brand} href="/" aria-label="WHICH 홈">
@@ -64,16 +138,59 @@ export function WhichShell({
 
             <div className={styles.main}>{children}</div>
 
-            <aside className={styles.rightRail} aria-label="WHICH 안내">
-              {aside ?? (
-                <WhichAsideCard
-                  eyebrow="WHICH PRINCIPLE"
-                  title="먼저 선택하고, 그다음 결과를 봐요."
-                >
-                  어느 한쪽도 미리 추천하지 않습니다.
-                </WhichAsideCard>
-              )}
+            {preserveAsideOnNarrow ? (
+              <button
+                type="button"
+                className={styles.mobileAsideBackdrop}
+                aria-label="W Point 패널 닫기"
+                data-open={mobileAsideOpen ? "true" : undefined}
+                onClick={() => setMobileAsideOpen(false)}
+              />
+            ) : null}
+
+            <aside
+              className={styles.rightRail}
+              aria-label="WHICH 안내"
+              aria-hidden={preserveAsideOnNarrow && isMobile && !mobileAsideOpen ? true : undefined}
+              data-mobile-open={mobileAsideOpen ? "true" : undefined}
+              inert={preserveAsideOnNarrow && isMobile && !mobileAsideOpen ? true : undefined}
+            >
+              {preserveAsideOnNarrow ? (
+                <div className={styles.mobileAsideHeader}>
+                  <strong>W Point</strong>
+                  <button
+                    type="button"
+                    aria-label="W Point 패널 닫기"
+                    onClick={() => setMobileAsideOpen(false)}
+                  >
+                    ×
+                  </button>
+                </div>
+              ) : null}
+              <div className={styles.mobileAsideContent}>
+                {aside ?? (
+                  <WhichAsideCard
+                    eyebrow="WHICH PRINCIPLE"
+                    title="먼저 선택하고, 그다음 결과를 봐요."
+                  >
+                    어느 한쪽도 미리 추천하지 않습니다.
+                  </WhichAsideCard>
+                )}
+              </div>
             </aside>
+
+            {preserveAsideOnNarrow ? (
+              <button
+                type="button"
+                className={styles.mobileAsideTrigger}
+                aria-label="W Point 내역 열기"
+                aria-expanded={mobileAsideOpen}
+                onClick={() => setMobileAsideOpen(true)}
+              >
+                <strong>W</strong>
+                <span>POINT</span>
+              </button>
+            ) : null}
           </div>
 
           <footer className={styles.footer}>

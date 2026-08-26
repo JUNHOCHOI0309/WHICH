@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { WhichShell } from "@/components/layout/which-shell";
 
 const navigation = vi.hoisted(() => ({ push: vi.fn() }));
+const defaultInnerWidth = window.innerWidth;
 
 vi.mock("next/navigation", () => ({ useRouter: () => navigation }));
 
@@ -42,6 +43,7 @@ async function activeMemberResponse(input: string | URL | Request) {
 afterEach(() => {
   navigation.push.mockReset();
   vi.unstubAllGlobals();
+  Object.defineProperty(window, "innerWidth", { configurable: true, value: defaultInnerWidth });
 });
 
 describe("Member navigation", () => {
@@ -79,6 +81,46 @@ describe("Member navigation", () => {
     const links = await screen.findAllByRole("link", { name: "내 기록" });
     expect(links).toHaveLength(3);
     expect(links.every((link) => link.getAttribute("href") === "/me")).toBe(true);
+  });
+
+  it("opens and closes a preserved mobile aside from its edge control", async () => {
+    vi.stubGlobal("fetch", vi.fn(activeMemberResponse));
+
+    render(
+      <WhichShell active="me" aside={<div>포인트 원장</div>} preserveAsideOnNarrow>
+        내용
+      </WhichShell>,
+    );
+
+    const trigger = screen.getByRole("button", { name: "W Point 내역 열기" });
+    const aside = screen.getByRole("complementary", { name: "WHICH 안내" });
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+
+    fireEvent.click(trigger);
+
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+    expect(aside).toHaveAttribute("data-mobile-open", "true");
+    fireEvent.click(within(aside).getByRole("button", { name: "W Point 패널 닫기" }));
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("opens the preserved mobile aside after a right-edge swipe to the left", async () => {
+    vi.stubGlobal("fetch", vi.fn(activeMemberResponse));
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 390 });
+
+    render(
+      <WhichShell active="me" aside={<div>포인트 원장</div>} preserveAsideOnNarrow>
+        내용
+      </WhichShell>,
+    );
+
+    const page = screen.getByRole("main");
+    const trigger = screen.getByRole("button", { name: "W Point 내역 열기" });
+    fireEvent.touchStart(page, { touches: [{ clientX: 386, clientY: 260 }] });
+    fireEvent.touchMove(page, { touches: [{ clientX: 300, clientY: 264 }] });
+    fireEvent.touchEnd(page);
+
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
   });
 
   it("keeps Question in the Member mobile navigation and routes unsupported pages home", async () => {
