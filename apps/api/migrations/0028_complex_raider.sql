@@ -1,0 +1,2 @@
+ALTER TABLE "point_accounts" ADD COLUMN "restricted_debt" integer DEFAULT 0 NOT NULL;--> statement-breakpoint
+ALTER TABLE "point_accounts" ADD CONSTRAINT "point_accounts_restricted_debt_check" CHECK ("point_accounts"."restricted_debt" >= 0);

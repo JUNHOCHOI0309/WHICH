@@ -1,0 +1,2 @@
+ALTER TABLE "point_event_receipts" DROP CONSTRAINT "point_event_receipts_outcome_check";--> statement-breakpoint
+ALTER TABLE "point_event_receipts" ADD CONSTRAINT "point_event_receipts_outcome_check" CHECK ("point_event_receipts"."outcome" in ('AWARDED', 'REVERSED', 'DUPLICATE', 'CAP_REACHED', 'INELIGIBLE', 'DISABLED'));

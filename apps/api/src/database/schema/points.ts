@@ -41,6 +41,7 @@ export const pointAccounts = pgTable(
       .primaryKey()
       .references(() => members.id, { onDelete: "restrict" }),
     cachedBalance: integer("cached_balance").default(0).notNull(),
+    restrictedDebt: integer("restricted_debt").default(0).notNull(),
     lifetimeEarned: integer("lifetime_earned").default(0).notNull(),
     lifetimeSpent: integer("lifetime_spent").default(0).notNull(),
     version: integer("version").default(0).notNull(),
@@ -49,6 +50,7 @@ export const pointAccounts = pgTable(
   },
   (table) => [
     check("point_accounts_balance_nonnegative_check", sql`${table.cachedBalance} >= 0`),
+    check("point_accounts_restricted_debt_check", sql`${table.restrictedDebt} >= 0`),
     check("point_accounts_lifetime_earned_check", sql`${table.lifetimeEarned} >= 0`),
     check("point_accounts_lifetime_spent_check", sql`${table.lifetimeSpent} >= 0`),
     check("point_accounts_version_check", sql`${table.version} >= 0`),
@@ -155,7 +157,7 @@ export const pointEventReceipts = pgTable(
   (table) => [
     check(
       "point_event_receipts_outcome_check",
-      sql`${table.outcome} in ('AWARDED', 'DUPLICATE', 'CAP_REACHED', 'INELIGIBLE', 'DISABLED')`,
+      sql`${table.outcome} in ('AWARDED', 'REVERSED', 'DUPLICATE', 'CAP_REACHED', 'INELIGIBLE', 'DISABLED')`,
     ),
     index("point_event_receipts_processed_idx").on(table.processedAt),
   ],

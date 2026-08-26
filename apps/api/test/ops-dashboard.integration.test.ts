@@ -14,6 +14,7 @@ import { createMemberIdentityService } from "../src/modules/identity/service.js"
 import { createIssueReadService } from "../src/modules/issues/service.js";
 import { createOpsDashboardService } from "../src/modules/operations/service.js";
 import type { OpsDashboardService } from "../src/modules/operations/contracts.js";
+import { createPointIntegrityService } from "../src/modules/points/integrity.js";
 import { createGuestVoteService } from "../src/modules/voting/service.js";
 import { createTestDatabase } from "./helpers/test-database.js";
 
@@ -53,6 +54,7 @@ beforeAll(async () => {
     commentReader: createCommentReadService(database.db),
     memberIdentity,
     opsDashboard,
+    pointIntegrity: createPointIntegrityService(database.db, { targetEnvironment: "test" }),
   });
   const sessionResponse = await app.inject({
     method: "POST",
@@ -165,6 +167,25 @@ describe("operator dashboard", () => {
     ]);
     expect(membersResponse.statusCode).toBe(403);
     expect(editorialResponse.statusCode).toBe(403);
+  });
+
+  it("requires both the internal Access boundary and WHICH OPERATOR for Point Ops", async () => {
+    const ordinary = await opsRequest(
+      "GET",
+      "/v1/internal/ops/points/reconciliation",
+      undefined,
+      ordinaryToken,
+    );
+    expect(ordinary.statusCode).toBe(403);
+    expect(ordinary.json()).toMatchObject({ code: "OPERATOR_ROLE_REQUIRED" });
+
+    const missingBoundary = await app.inject({
+      method: "GET",
+      url: "/v1/internal/ops/points/reconciliation",
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(missingBoundary.statusCode).toBe(401);
+    expect(missingBoundary.body).not.toContain(INTERNAL_SECRET);
   });
 
   it("returns a PII-safe Member directory page", async () => {
