@@ -14,7 +14,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 import { members } from "./identity.js";
-import { issueChoices } from "./issues.js";
+import { issueChoices, issues } from "./issues.js";
 
 export const issueMediaAssets = pgTable(
   "issue_media_assets",
@@ -137,5 +137,99 @@ export const issueChoiceMedia = pgTable(
     ),
     check("issue_choice_media_crop_mode_check", sql`${table.cropMode} in ('COVER', 'CONTAIN')`),
     check("issue_choice_media_position_check", sql`${table.displayPosition} between 0 and 1`),
+  ],
+);
+
+export const issueMediaReviewDecisions = pgTable(
+  "issue_media_review_decisions",
+  {
+    id: uuid("issue_media_review_decision_id").defaultRandom().primaryKey(),
+    scope: varchar("scope", { length: 16 }).notNull(),
+    mediaAssetId: uuid("media_asset_id").references(() => issueMediaAssets.id, {
+      onDelete: "restrict",
+    }),
+    issueId: uuid("issue_id").references(() => issues.id, { onDelete: "restrict" }),
+    status: varchar("status", { length: 24 }).notNull(),
+    reasonCode: varchar("reason_code", { length: 64 }).notNull(),
+    rationale: text("rationale").notNull(),
+    policyVersion: varchar("policy_version", { length: 64 }).notNull(),
+    reviewedByMemberId: uuid("reviewed_by_member_id")
+      .notNull()
+      .references(() => members.id, { onDelete: "restrict" }),
+    requestId: varchar("request_id", { length: 128 }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("issue_media_review_asset_created_idx").on(table.mediaAssetId, table.createdAt),
+    index("issue_media_review_issue_created_idx").on(table.issueId, table.createdAt),
+    check("issue_media_review_scope_check", sql`${table.scope} in ('ASSET', 'ISSUE')`),
+    check(
+      "issue_media_review_target_check",
+      sql`(${table.scope} = 'ASSET' and ${table.mediaAssetId} is not null and ${table.issueId} is null)
+        or (${table.scope} = 'ISSUE' and ${table.issueId} is not null and ${table.mediaAssetId} is null)`,
+    ),
+    check(
+      "issue_media_review_status_check",
+      sql`${table.status} in ('APPROVED', 'REJECTED', 'HIDDEN', 'RESTORED', 'DELETED')`,
+    ),
+    check(
+      "issue_media_review_rationale_check",
+      sql`char_length(${table.rationale}) between 10 and 2000`,
+    ),
+  ],
+);
+
+export const issueMediaRightsRequests = pgTable(
+  "issue_media_rights_requests",
+  {
+    id: uuid("issue_media_rights_request_id").defaultRandom().primaryKey(),
+    requestType: varchar("request_type", { length: 24 }).notNull(),
+    mediaAssetId: uuid("media_asset_id").references(() => issueMediaAssets.id, {
+      onDelete: "restrict",
+    }),
+    issueId: uuid("issue_id").references(() => issues.id, { onDelete: "restrict" }),
+    requesterReference: varchar("requester_reference", { length: 300 }).notNull(),
+    details: text("details").notNull(),
+    status: varchar("status", { length: 24 }).default("OPEN").notNull(),
+    resolution: text("resolution"),
+    actionDecisionId: uuid("action_decision_id").references(() => issueMediaReviewDecisions.id, {
+      onDelete: "restrict",
+    }),
+    recordedByMemberId: uuid("recorded_by_member_id")
+      .notNull()
+      .references(() => members.id, { onDelete: "restrict" }),
+    resolvedByMemberId: uuid("resolved_by_member_id").references(() => members.id, {
+      onDelete: "restrict",
+    }),
+    requestId: varchar("request_id", { length: 128 }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("issue_media_rights_status_created_idx").on(table.status, table.createdAt),
+    index("issue_media_rights_asset_idx").on(table.mediaAssetId, table.createdAt),
+    index("issue_media_rights_issue_idx").on(table.issueId, table.createdAt),
+    check(
+      "issue_media_rights_type_check",
+      sql`${table.requestType} in ('PRIVACY', 'DEFAMATION', 'COPYRIGHT')`,
+    ),
+    check(
+      "issue_media_rights_target_check",
+      sql`${table.mediaAssetId} is not null or ${table.issueId} is not null`,
+    ),
+    check(
+      "issue_media_rights_status_check",
+      sql`${table.status} in ('OPEN', 'ACTIONED', 'DISMISSED')`,
+    ),
+    check(
+      "issue_media_rights_details_check",
+      sql`char_length(${table.details}) between 10 and 4000`,
+    ),
+    check(
+      "issue_media_rights_resolution_check",
+      sql`(${table.status} = 'OPEN' and ${table.resolvedAt} is null and ${table.resolvedByMemberId} is null)
+        or (${table.status} <> 'OPEN' and ${table.resolvedAt} is not null and ${table.resolvedByMemberId} is not null and char_length(${table.resolution}) between 10 and 4000)`,
+    ),
   ],
 );

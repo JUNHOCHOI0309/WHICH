@@ -10,6 +10,8 @@ import {
   issueChoiceMedia,
   issueChoices,
   issueMediaAssets,
+  issueMediaReviewDecisions,
+  issueMediaRightsRequests,
   issues,
   issueVersions,
   members,
@@ -21,6 +23,7 @@ import type { IssueMediaProcessingError } from "../src/modules/issue-media/image
 import { processIssueMedia } from "../src/modules/issue-media/image-processing.js";
 import type { IssueMediaError } from "../src/modules/issue-media/service.js";
 import { createIssueMediaService } from "../src/modules/issue-media/service.js";
+import { createIssueMediaReviewService } from "../src/modules/issue-media/review-service.js";
 import { registerIssueMediaRoutes } from "../src/modules/issue-media/routes.js";
 import { issueMediaStorageConfig } from "../src/modules/issue-media/storage.js";
 import { createTestDatabase } from "./helpers/test-database.js";
@@ -59,6 +62,22 @@ class FakeIssueMediaStorage implements IssueMediaObjectStorage {
     this.objects.delete(sourceKey);
     this.operations.push(`quarantine:${input.assetId}`);
     return Promise.resolve({ objectKey });
+  }
+
+  restorePublished(assetId: string, quarantinedObjectKey: string) {
+    const body = this.objects.get(quarantinedObjectKey);
+    if (!body) throw new Error("missing quarantined object");
+    const objectKey = `issue-media/published/${assetId}.webp`;
+    this.objects.set(objectKey, body);
+    this.objects.delete(quarantinedObjectKey);
+    this.operations.push(`restore:${assetId}`);
+    return Promise.resolve({ objectKey, url: this.publicUrl(objectKey) });
+  }
+
+  read(objectKey: string) {
+    const body = this.objects.get(objectKey);
+    if (!body) throw new Error("missing object");
+    return Promise.resolve(body);
   }
 
   purge(objectKeys: Array<string | null | undefined>) {
@@ -444,5 +463,112 @@ describe("operator Issue media foundation", () => {
       .from(issueVersions)
       .where(and(eq(issueVersions.issueId, issueId), eq(issueVersions.version, 1)));
     expect(version).toMatchObject({ formatMode: "VS", mediaMode: "TEXT_ONLY" });
+  });
+
+  it("keeps review decisions append-only and supports emergency hide, restore, and rights cases", async () => {
+    const storage = new FakeIssueMediaStorage();
+    const foundation = createIssueMediaService(database.db, storage);
+    const review = createIssueMediaReviewService(database.db, storage, foundation);
+    const staged = await foundation.stageAsset({
+      memberId: operatorId,
+      sourceType: "OPERATOR_UPLOAD",
+      rightsAttestation:
+        "The operator verified a reusable licensed source for this review fixture.",
+      declaredMimeType: "image/png",
+      bytes: await image("png", { r: 11, g: 77, b: 143 }),
+      requestId: "review-stage",
+    });
+    if (!staged) throw new Error("staging failed");
+
+    expect(
+      await review.readAssets({ memberId: regularMemberId, limit: 10, requestId: "denied" }),
+    ).toBeNull();
+    const pending = await review.readAssets({
+      memberId: operatorId,
+      status: "PENDING",
+      limit: 10,
+      requestId: "list-pending",
+    });
+    expect(pending?.items.find((item) => item.id === staged.id)?.publishedUrl).toBeNull();
+    expect(await review.readAssetContent({ memberId: operatorId, assetId: staged.id })).toEqual(
+      storage.objects.get(`issue-media/staging/${staged.id}.webp`),
+    );
+
+    const approved = await review.decideAsset({
+      memberId: operatorId,
+      assetId: staged.id,
+      status: "APPROVED",
+      reasonCode: "LICENSE_VERIFIED",
+      rationale: "Source rights and visual safety were verified by the operator.",
+      policyVersion: "issue-media-review-v1",
+      requestId: "approve-request",
+    });
+    expect(approved).toMatchObject({ effectiveStatus: "APPROVED" });
+    expect(approved?.publishedUrl).toContain(`/published/${staged.id}.webp`);
+
+    expect(
+      await review.decideAsset({
+        memberId: operatorId,
+        assetId: staged.id,
+        status: "HIDDEN",
+        reasonCode: "EMERGENCY_BLOCK",
+        rationale: "Emergency operator block while the reported context is investigated.",
+        policyVersion: "issue-media-review-v1",
+        requestId: "hide-request",
+      }),
+    ).toMatchObject({ effectiveStatus: "HIDDEN", publishedUrl: null });
+    expect(
+      await review.decideAsset({
+        memberId: operatorId,
+        assetId: staged.id,
+        status: "RESTORED",
+        reasonCode: "EMERGENCY_CLEARED",
+        rationale: "The emergency review completed and no blocking condition remains.",
+        policyVersion: "issue-media-review-v1",
+        requestId: "restore-request",
+      }),
+    ).toMatchObject({ effectiveStatus: "APPROVED" });
+
+    const rights = await review.createRightsRequest({
+      memberId: operatorId,
+      requestType: "COPYRIGHT",
+      assetId: staged.id,
+      requesterReference: "case@example.test",
+      details: "The claimant requested a copyright provenance review for this exact asset.",
+      policyVersion: "issue-media-review-v1",
+      requestId: "rights-request",
+    });
+    expect(rights).toMatchObject({ status: "OPEN", requestType: "COPYRIGHT" });
+    const [hidden] = await database.db
+      .select()
+      .from(issueMediaAssets)
+      .where(eq(issueMediaAssets.id, staged.id));
+    expect(hidden).toMatchObject({ storageState: "QUARANTINED", rightsState: "CHALLENGED" });
+    expect(
+      await review.resolveRightsRequest({
+        memberId: operatorId,
+        requestIdValue: rights!.id,
+        status: "DISMISSED",
+        resolution: "The supplied license record was validated and the request was dismissed.",
+        requestId: "rights-resolve",
+      }),
+    ).toMatchObject({ status: "DISMISSED" });
+
+    const decisions = await database.db
+      .select()
+      .from(issueMediaReviewDecisions)
+      .where(eq(issueMediaReviewDecisions.mediaAssetId, staged.id));
+    expect(decisions.map((decision) => decision.status)).toEqual([
+      "APPROVED",
+      "HIDDEN",
+      "RESTORED",
+      "HIDDEN",
+    ]);
+    expect(
+      await database.db
+        .select()
+        .from(issueMediaRightsRequests)
+        .where(eq(issueMediaRightsRequests.id, rights!.id)),
+    ).toHaveLength(1);
   });
 });

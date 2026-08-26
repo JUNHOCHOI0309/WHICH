@@ -1,6 +1,7 @@
 import {
   CopyObjectCommand,
   DeleteObjectCommand,
+  GetObjectCommand,
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
@@ -118,6 +119,20 @@ export function createR2IssueMediaStorage(
         throw new Error("The media asset has no object that can be quarantined.");
       }
       return { objectKey };
+    },
+    async restorePublished(assetId, quarantinedObjectKey) {
+      const objectKey = `issue-media/published/${assetId}.webp`;
+      await copy(config.stagingBucket, quarantinedObjectKey, config.publishedBucket, objectKey);
+      await remove(config.stagingBucket, quarantinedObjectKey);
+      return { objectKey };
+    },
+    async read(objectKey) {
+      const bucket = objectKey.startsWith("issue-media/published/")
+        ? config.publishedBucket
+        : config.stagingBucket;
+      const response = await client.send(new GetObjectCommand({ Bucket: bucket, Key: objectKey }));
+      if (!response.Body) throw new Error("The Issue media object body is unavailable.");
+      return Buffer.from(await response.Body.transformToByteArray());
     },
     async purge(objectKeys) {
       await Promise.all(

@@ -15,6 +15,7 @@ import { createAnalyticsService } from "./modules/analytics/service.js";
 import { createShareCardService } from "./modules/shares/service.js";
 import { createOpsDashboardService } from "./modules/operations/service.js";
 import { createIssueMediaService } from "./modules/issue-media/service.js";
+import { createIssueMediaReviewService } from "./modules/issue-media/review-service.js";
 import {
   createR2IssueMediaStorage,
   issueMediaStorageConfig,
@@ -29,6 +30,10 @@ loadEnvironment({
 const config = getConfig();
 const database = createDatabase(config.databaseUrl);
 const mediaStorageConfig = issueMediaStorageConfig();
+const issueMediaStorage = mediaStorageConfig ? createR2IssueMediaStorage(mediaStorageConfig) : null;
+const issueMediaService = issueMediaStorage
+  ? createIssueMediaService(database.db, issueMediaStorage)
+  : null;
 const app = await buildApp(config, {
   ...database,
   issueReader: createIssueReadService(database.db, {
@@ -51,11 +56,13 @@ const app = await buildApp(config, {
     enabled: config.featureFlags.resultSharing,
   }),
   opsDashboard: createOpsDashboardService(database.db, { releaseId: config.releaseId }),
-  ...(mediaStorageConfig
+  ...(issueMediaStorage && issueMediaService
     ? {
-        issueMedia: createIssueMediaService(
+        issueMedia: issueMediaService,
+        issueMediaReview: createIssueMediaReviewService(
           database.db,
-          createR2IssueMediaStorage(mediaStorageConfig),
+          issueMediaStorage,
+          issueMediaService,
         ),
       }
     : {}),
