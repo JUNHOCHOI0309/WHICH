@@ -223,6 +223,34 @@
   background: #eef3f5;
   object-fit: contain;
 }
+.mediaUnavailable {
+  display: grid;
+  min-height: 260px;
+  place-content: center;
+  gap: 8px;
+  margin-bottom: 18px;
+  padding: 28px;
+  border: 1px dashed #b9c8cd;
+  border-radius: 14px;
+  background: #f2f5f6;
+  color: #596970;
+  text-align: center;
+}
+.mediaUnavailable strong {
+  color: #26363d;
+  font-size: 19px;
+}
+.mediaUnavailable span,
+.terminalNotice {
+  color: #697980;
+  font-size: 13px;
+}
+.terminalNotice {
+  margin: 0;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: #f2f5f6;
+}
 .context {
   margin: 0 0 18px;
   color: #63727a;
