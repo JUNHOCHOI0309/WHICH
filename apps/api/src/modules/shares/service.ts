@@ -1,12 +1,18 @@
-import { and, desc, eq } from "drizzle-orm";
+import { createHash, randomUUID } from "node:crypto";
+
+import { and, desc, eq, gt, isNull } from "drizzle-orm";
 
 import type { Database } from "../../database/client.js";
 import {
   issueChoices,
   issues,
   issueVersions,
+  memberSessions,
+  members,
+  outboxEvents,
   resultSnapshots,
   shareCards,
+  shareRewardClaims,
 } from "../../database/schema/index.js";
 import { isGuestIssueAvailable } from "../issues/policy.js";
 import {
@@ -206,6 +212,75 @@ export function createShareCardService(
     async getShareCard(shareCardId: string) {
       assertEnabled();
       return readShareCard(shareCardId);
+    },
+
+    async confirmRewardClaim(command) {
+      assertEnabled();
+      const now = new Date();
+      const tokenHash = createHash("sha256").update(command.sessionToken).digest("hex");
+      return database.transaction(async (transaction) => {
+        const [session] = await transaction
+          .select({ memberId: memberSessions.memberId })
+          .from(memberSessions)
+          .innerJoin(members, eq(members.id, memberSessions.memberId))
+          .where(
+            and(
+              eq(memberSessions.tokenHash, tokenHash),
+              isNull(memberSessions.revokedAt),
+              gt(memberSessions.expiresAt, now),
+              eq(members.status, "ACTIVE"),
+            ),
+          )
+          .limit(1);
+        if (!session) {
+          throw new ShareCardError("SESSION_INVALID", 401, "A valid Member session is required.");
+        }
+        const [card] = await transaction
+          .select({
+            issueId: shareCards.issueId,
+            issueVersion: shareCards.issueVersion,
+            channel: shareCards.channel,
+          })
+          .from(shareCards)
+          .where(eq(shareCards.id, command.shareCardId))
+          .limit(1);
+        if (!card) {
+          throw new ShareCardError("SHARE_CARD_NOT_FOUND", 404, "The Share Card was not found.");
+        }
+        const [claim] = await transaction
+          .insert(shareRewardClaims)
+          .values({
+            memberId: session.memberId,
+            shareCardId: command.shareCardId,
+            issueId: card.issueId,
+            issueVersion: card.issueVersion,
+            channel: card.channel,
+            idempotencyKey: command.idempotencyKey,
+            occurredAt: now,
+          })
+          .onConflictDoNothing()
+          .returning({ id: shareRewardClaims.id });
+        if (!claim) return { claimed: false };
+        const eventId = randomUUID();
+        await transaction.insert(outboxEvents).values({
+          id: eventId,
+          aggregateType: "SHARE_REWARD_CLAIM",
+          aggregateId: claim.id,
+          eventType: "SHARE_REWARD_CONFIRMED",
+          schemaVersion: 1,
+          occurredAt: now,
+          payload: {
+            event_id: eventId,
+            event_type: "SHARE_REWARD_CONFIRMED",
+            schema_version: 1,
+            occurred_at: now.toISOString(),
+            aggregate_type: "SHARE_REWARD_CLAIM",
+            aggregate_id: claim.id,
+            data: { share_reward_claim_id: claim.id },
+          },
+        });
+        return { claimed: true };
+      });
     },
   };
 }

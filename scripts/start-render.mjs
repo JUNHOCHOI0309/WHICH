@@ -21,6 +21,7 @@ const services = [
   start("web", ["--filter", "@which/web", "start"], {
     API_BASE_URL: `http://127.0.0.1:${apiPort}`,
   }),
+  start("points", ["--filter", "@which/api", "points:worker:prod"], {}),
 ];
 
 let shuttingDown = false;

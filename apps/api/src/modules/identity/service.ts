@@ -17,6 +17,7 @@ import {
   memberCredentials,
   memberAuthTokens,
   memberIdentityLinks,
+  memberDailyAttendances,
   memberProfiles,
   memberSessions,
   members,
@@ -41,6 +42,7 @@ import type {
 import { encodeMemberVoteHistoryCursor } from "./cursor.js";
 import { MemberIdentityError } from "./errors.js";
 import { publicProfileInitials } from "./profile.js";
+import { operationDayAt } from "../points/policy.js";
 
 const LINK_POLICY_VERSION = "guest-member-link-v1";
 const EVENT_SCHEMA_VERSION = 1;
@@ -1524,6 +1526,47 @@ export function createMemberIdentityService(
       const session = await activeMemberSession(database, token);
       if (!session) return null;
 
+      const attendanceAt = new Date();
+      try {
+        await database.transaction(async (transaction) => {
+          const [attendance] = await transaction
+            .insert(memberDailyAttendances)
+            .values({
+              memberId: session.member.id,
+              operationDay: operationDayAt(attendanceAt),
+              occurredAt: attendanceAt,
+            })
+            .onConflictDoNothing()
+            .returning({ id: memberDailyAttendances.id });
+          if (attendance) {
+            const eventId = randomUUID();
+            await transaction.insert(outboxEvents).values({
+              id: eventId,
+              aggregateType: "MEMBER_ATTENDANCE",
+              aggregateId: attendance.id,
+              eventType: "MEMBER_DAILY_ATTENDANCE_CONFIRMED",
+              schemaVersion: 1,
+              occurredAt: attendanceAt,
+              payload: {
+                event_id: eventId,
+                event_type: "MEMBER_DAILY_ATTENDANCE_CONFIRMED",
+                schema_version: 1,
+                occurred_at: attendanceAt.toISOString(),
+                aggregate_type: "MEMBER_ATTENDANCE",
+                aggregate_id: attendance.id,
+                data: {
+                  fact_id: attendance.id,
+                  member_id: session.member.id,
+                  operation_day: operationDayAt(attendanceAt),
+                },
+              },
+            });
+          }
+        });
+      } catch {
+        // Attendance rewards are best-effort and must never break the private profile screen.
+      }
+
       const [participationCount, rows, [publicProfile], identities] = await Promise.all([
         privateVoteParticipationCount(database, session.member.id),
         privateVoteRows(database, session.member.id, {
@@ -1614,6 +1657,26 @@ export function createMemberIdentityService(
           })
           .returning();
         if (!profile) throw new Error("Member profile update did not return a row.");
+        if (profile.visibility === "PUBLIC" && Boolean(profile.bio?.trim())) {
+          const eventId = randomUUID();
+          await transaction.insert(outboxEvents).values({
+            id: eventId,
+            aggregateType: "MEMBER",
+            aggregateId: session.member.id,
+            eventType: "MEMBER_PUBLIC_PROFILE_COMPLETED",
+            schemaVersion: 1,
+            occurredAt: now,
+            payload: {
+              event_id: eventId,
+              event_type: "MEMBER_PUBLIC_PROFILE_COMPLETED",
+              schema_version: 1,
+              occurred_at: now.toISOString(),
+              aggregate_type: "MEMBER",
+              aggregate_id: session.member.id,
+              data: { fact_id: session.member.id, member_id: session.member.id },
+            },
+          });
+        }
         return profileSettings(profile);
       });
     },

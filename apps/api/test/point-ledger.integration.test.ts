@@ -144,6 +144,34 @@ describe("point ledger foundation", () => {
     expect(counter).toMatchObject({ qualifyingCount: 12, awardedPoints: 120 });
   });
 
+  it("enforces a concurrent daily award cap inside the ledger transaction", async () => {
+    const memberId = await createMember();
+    const service = createPointLedgerService(testDatabase.database.db);
+    const commands = Array.from({ length: 12 }, () => ({
+      ...earnCommand(memberId),
+      dailyQualifyingLimit: 10,
+      dailyPointLimit: 100,
+    }));
+
+    const results = await Promise.allSettled(
+      commands.map((command) => service.applyEntry(command)),
+    );
+
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(10);
+    expect(
+      results.filter(
+        (result) =>
+          result.status === "rejected" &&
+          (result.reason as { code?: string }).code === "POINT_DAILY_LIMIT_REACHED",
+      ),
+    ).toHaveLength(2);
+    const [account] = await testDatabase.database.db
+      .select()
+      .from(pointAccounts)
+      .where(eq(pointAccounts.memberId, memberId));
+    expect(account).toMatchObject({ cachedBalance: 100, lifetimeEarned: 100, version: 10 });
+  });
+
   it("rolls back a spend that would make the balance negative", async () => {
     const memberId = await createMember();
     const service = createPointLedgerService(testDatabase.database.db);

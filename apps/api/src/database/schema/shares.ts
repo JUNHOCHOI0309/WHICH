@@ -1,7 +1,17 @@
 import { sql } from "drizzle-orm";
-import { check, foreignKey, integer, pgTable, timestamp, uuid, varchar } from "drizzle-orm/pg-core";
+import {
+  check,
+  foreignKey,
+  integer,
+  pgTable,
+  timestamp,
+  unique,
+  uuid,
+  varchar,
+} from "drizzle-orm/pg-core";
 
 import { choiceCodeEnum } from "./enums.js";
+import { members } from "./identity.js";
 import { issueChoices, issueVersions } from "./issues.js";
 import { resultSnapshots } from "./results.js";
 
@@ -32,5 +42,33 @@ export const shareCards = pgTable(
     }).onDelete("restrict"),
     check("share_cards_version_check", sql`${table.version} = 'result_share_v1'`),
     check("share_cards_channel_check", sql`${table.channel} in ('COPY', 'SYSTEM', 'X')`),
+  ],
+);
+
+export const shareRewardClaims = pgTable(
+  "share_reward_claims",
+  {
+    id: uuid("share_reward_claim_id").defaultRandom().primaryKey(),
+    memberId: uuid("member_id")
+      .notNull()
+      .references(() => members.id, { onDelete: "restrict" }),
+    shareCardId: uuid("share_card_id")
+      .notNull()
+      .references(() => shareCards.id, { onDelete: "restrict" }),
+    issueId: uuid("issue_id").notNull(),
+    issueVersion: integer("issue_version").notNull(),
+    channel: varchar("share_channel", { length: 16 }).notNull(),
+    idempotencyKey: varchar("idempotency_key", { length: 128 }).notNull(),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.issueId, table.issueVersion],
+      foreignColumns: [issueVersions.issueId, issueVersions.version],
+      name: "share_reward_claims_issue_version_fk",
+    }).onDelete("restrict"),
+    unique("share_reward_claims_idempotency_unique").on(table.idempotencyKey),
+    unique("share_reward_claims_member_issue_unique").on(table.memberId, table.issueId),
+    check("share_reward_claims_channel_check", sql`${table.channel} in ('COPY', 'SYSTEM', 'X')`),
   ],
 );

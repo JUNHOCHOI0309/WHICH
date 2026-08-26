@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 import { and, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 
@@ -7,6 +7,7 @@ import {
   guestMemberLinks,
   interestProfiles,
   memberSessions,
+  outboxEvents,
   subjectInterests,
   voterSubjects,
 } from "../../database/schema/index.js";
@@ -251,10 +252,11 @@ export function createInterestProfileService(database: Database["db"]): Interest
   }
 
   async function replaceSelections(
-    subjectId: string,
+    subject: { id: string; userId: string | null },
     codes: InterestCardCode[],
     state: "COMPLETED" | "SKIPPED",
   ) {
+    const subjectId = subject.id;
     const now = new Date();
     await database.transaction(async (transaction) => {
       await transaction.execute(
@@ -293,6 +295,26 @@ export function createInterestProfileService(database: Database["db"]): Interest
           })),
         );
       }
+      if (state === "COMPLETED" && subject.userId) {
+        const eventId = randomUUID();
+        await transaction.insert(outboxEvents).values({
+          id: eventId,
+          aggregateType: "MEMBER",
+          aggregateId: subject.userId,
+          eventType: "INTEREST_PROFILE_COMPLETED",
+          schemaVersion: 1,
+          occurredAt: now,
+          payload: {
+            event_id: eventId,
+            event_type: "INTEREST_PROFILE_COMPLETED",
+            schema_version: 1,
+            occurred_at: now.toISOString(),
+            aggregate_type: "MEMBER",
+            aggregate_id: subject.userId,
+            data: { fact_id: subject.id, member_id: subject.userId },
+          },
+        });
+      }
     });
   }
 
@@ -319,10 +341,10 @@ export function createInterestProfileService(database: Database["db"]): Interest
             "Only Guests can skip, and a skipped profile cannot include selections.",
           );
         }
-        await replaceSelections(subject.id, [], "SKIPPED");
+        await replaceSelections(subject, [], "SKIPPED");
       } else {
         await replaceSelections(
-          subject.id,
+          subject,
           validateCompletedSelection(command.selectedCardCodes),
           "COMPLETED",
         );
@@ -420,7 +442,7 @@ export function createInterestProfileService(database: Database["db"]): Interest
         ...memberSelections.map((item) => item.cardCode as InterestCardCode),
         ...command.selectedCardCodes,
       ]);
-      await replaceSelections(memberSubject.id, validateCompletedSelection(merged), "COMPLETED");
+      await replaceSelections(memberSubject, validateCompletedSelection(merged), "COMPLETED");
       return readView(memberSubject, {
         sessionToken: command.sessionToken,
         anonymousSubjectId: command.anonymousSubjectId,

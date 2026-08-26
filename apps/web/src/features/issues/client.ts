@@ -84,6 +84,17 @@ export async function createResultShareCard(command: {
   return body as ShareCardResponse;
 }
 
+export async function confirmShareReward(shareCardId: string) {
+  const response = await fetch(
+    `/api/share-cards/${encodeURIComponent(shareCardId)}/reward-claims`,
+    {
+      method: "POST",
+      headers: { accept: "application/json", "idempotency-key": crypto.randomUUID() },
+    },
+  );
+  if (!response.ok) throw new Error("Share reward confirmation failed.");
+}
+
 let guestPreparation: Promise<void> | null = null;
 
 async function responseBody<T>(response: Response) {

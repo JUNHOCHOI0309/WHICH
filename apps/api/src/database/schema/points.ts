@@ -18,6 +18,22 @@ import {
 import { pointLedgerEntryTypeEnum } from "./enums.js";
 import { members } from "./identity.js";
 
+export const memberDailyAttendances = pgTable(
+  "member_daily_attendances",
+  {
+    id: uuid("member_daily_attendance_id").defaultRandom().primaryKey(),
+    memberId: uuid("member_id")
+      .notNull()
+      .references(() => members.id, { onDelete: "restrict" }),
+    operationDay: date("operation_day").notNull(),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    unique("member_daily_attendances_member_day_unique").on(table.memberId, table.operationDay),
+    index("member_daily_attendances_day_idx").on(table.operationDay, table.occurredAt),
+  ],
+);
+
 export const pointAccounts = pgTable(
   "point_accounts",
   {
@@ -119,5 +135,28 @@ export const pointDailyCounters = pgTable(
     check("point_daily_counters_count_check", sql`${table.qualifyingCount} >= 0`),
     check("point_daily_counters_points_check", sql`${table.awardedPoints} >= 0`),
     index("point_daily_counters_day_key_idx").on(table.operationDay, table.counterKey),
+  ],
+);
+
+export const pointEventReceipts = pgTable(
+  "point_event_receipts",
+  {
+    eventId: uuid("event_id").primaryKey(),
+    eventType: varchar("event_type", { length: 64 }).notNull(),
+    outcome: varchar("outcome", { length: 24 }).notNull(),
+    policyVersion: varchar("policy_version", { length: 32 }).notNull(),
+    operationDay: date("operation_day").notNull(),
+    ledgerEntryId: uuid("ledger_entry_id").references(() => pointLedgerEntries.id, {
+      onDelete: "restrict",
+    }),
+    detail: varchar("detail", { length: 160 }),
+    processedAt: timestamp("processed_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    check(
+      "point_event_receipts_outcome_check",
+      sql`${table.outcome} in ('AWARDED', 'DUPLICATE', 'CAP_REACHED', 'INELIGIBLE', 'DISABLED')`,
+    ),
+    index("point_event_receipts_processed_idx").on(table.processedAt),
   ],
 );

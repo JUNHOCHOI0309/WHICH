@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsup src/server.ts src/outbox-worker.ts src/launch-gate.ts src/issue-publisher.ts src/analytics-operator.ts src/beta-operator.ts src/ops-operator.ts --format esm --platform node --target node22 --clean --sourcemap",
+    "build": "tsup src/server.ts src/outbox-worker.ts src/point-worker.ts src/launch-gate.ts src/issue-publisher.ts src/analytics-operator.ts src/beta-operator.ts src/ops-operator.ts --format esm --platform node --target node22 --clean --sourcemap",
     "analytics:aggregate": "tsx src/analytics-operator.ts aggregate",
     "analytics:retention": "tsx src/analytics-operator.ts retention",
     "analytics:summary": "tsx src/analytics-operator.ts summary",
@@ -31,6 +31,9 @@
     "outbox:publish-once": "tsx src/outbox-worker.ts once",
     "outbox:requeue": "tsx src/outbox-worker.ts requeue",
     "outbox:worker": "tsx src/outbox-worker.ts run",
+    "points:consume-once": "tsx src/point-worker.ts once",
+    "points:worker": "tsx src/point-worker.ts run",
+    "points:worker:prod": "node dist/point-worker.js run",
     "ops:grant": "tsx src/ops-operator.ts grant",
     "ops:revoke": "tsx src/ops-operator.ts revoke",
     "ops:list": "tsx src/ops-operator.ts list",

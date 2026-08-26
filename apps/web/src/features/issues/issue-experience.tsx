@@ -23,6 +23,7 @@ import { loginHref } from "@/lib/auth";
 import styles from "./issue-experience.module.css";
 import {
   createResultShareCard,
+  confirmShareReward,
   deleteMemberComment,
   ensureGuestSubject,
   loadIssueComments,
@@ -201,7 +202,6 @@ export function IssueExperience({
         issueId: issue.id,
         issueVersion: issue.version,
       }).catch(() => undefined);
-
       try {
         const vote = await submitGuestVote({
           issueId: issue.id,
@@ -488,6 +488,7 @@ function ResultSharePanel({ issue, result }: { issue: PublicIssue; result: VoteR
         issueVersion: issue.version,
         shareCardId: created.shareCard.id,
       }).catch(() => undefined);
+      void confirmShareReward(created.shareCard.id).catch(() => undefined);
       toast.success(
         channel === "X"
           ? "X 공유 창을 열었어요."
