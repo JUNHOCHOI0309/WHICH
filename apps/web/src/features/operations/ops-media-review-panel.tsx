@@ -8,6 +8,31 @@ import type { OpsMediaReviewAsset, OpsMediaReviewPage, OpsMediaRightsRequest } f
 import styles from "./ops-management.module.css";
 
 const policyVersion = "issue-media-review-v1";
+type AssetAction = "APPROVED" | "REJECTED" | "HIDDEN" | "RESTORED" | "DELETED";
+
+const actionLabels: Record<AssetAction, string> = {
+  APPROVED: "승인",
+  REJECTED: "반려",
+  HIDDEN: "블라인드",
+  RESTORED: "복구",
+  DELETED: "삭제",
+};
+
+export function reviewActionsForStatus(
+  status: OpsMediaReviewAsset["effectiveStatus"],
+): AssetAction[] {
+  if (status === "PENDING") return ["APPROVED", "REJECTED", "DELETED"];
+  if (status === "APPROVED") return ["HIDDEN", "DELETED"];
+  if (status === "HIDDEN") return ["RESTORED", "DELETED"];
+  if (status === "REJECTED") return ["DELETED"];
+  return [];
+}
+
+function issueActionsForStatus(status: OpsMediaReviewAsset["effectiveStatus"]): AssetAction[] {
+  if (status === "APPROVED") return ["HIDDEN", "DELETED"];
+  if (status === "HIDDEN") return ["RESTORED", "DELETED"];
+  return [];
+}
 
 async function json<T>(response: Response): Promise<T> {
   const body = (await response.json()) as T & { message?: string };
@@ -53,10 +78,7 @@ export function OpsMediaReviewPanel() {
     );
   }, [load]);
 
-  async function decide(
-    targetStatus: "APPROVED" | "REJECTED" | "HIDDEN" | "RESTORED" | "DELETED",
-    scope: "ASSET" | "ISSUE" = "ASSET",
-  ) {
+  async function decide(targetStatus: AssetAction, scope: "ASSET" | "ISSUE" = "ASSET") {
     if (!selected || rationale.trim().length < 10)
       return toast.error("판단 근거를 10자 이상 입력해 주세요.");
     setBusy(true);
@@ -246,11 +268,18 @@ export function OpsMediaReviewPanel() {
         </div>
         {selected ? (
           <article className={styles.detail}>
-            <img
-              className={styles.mediaPreview}
-              src={`/api/ops/media-review/assets/${selected.id}/content`}
-              alt={selected.link?.altText ?? "운영 검수 이미지"}
-            />
+            {selected.effectiveStatus === "DELETED" ? (
+              <div className={styles.mediaUnavailable} role="img" aria-label="삭제된 이미지">
+                <strong>삭제된 이미지입니다.</strong>
+                <span>파일은 영구 제거되었으며 판단 이력만 보존됩니다.</span>
+              </div>
+            ) : (
+              <img
+                className={styles.mediaPreview}
+                src={`/api/ops/media-review/assets/${selected.id}/content`}
+                alt={selected.link?.altText ?? "운영 검수 이미지"}
+              />
+            )}
             <p className={styles.eyebrow}>
               {selected.effectiveStatus} · {selected.rightsState}
             </p>
@@ -265,52 +294,52 @@ export function OpsMediaReviewPanel() {
               <span>{policyVersion}</span>
             </div>
             <section className={styles.decision}>
-              <textarea
-                value={rationale}
-                onChange={(event) => setRationale(event.target.value)}
-                placeholder="검수 판단 또는 권리 요청 근거 (10자 이상)"
-              />
-              <div className={styles.decisionActions}>
-                <button disabled={busy} onClick={() => void decide("APPROVED")}>
-                  승인
-                </button>
-                <button disabled={busy} onClick={() => void decide("REJECTED")}>
-                  반려
-                </button>
-                <button disabled={busy} onClick={() => void decide("HIDDEN")}>
-                  블라인드
-                </button>
-                <button disabled={busy} onClick={() => void decide("RESTORED")}>
-                  복구
-                </button>
-                <button disabled={busy} onClick={() => void decide("DELETED")}>
-                  삭제
-                </button>
-              </div>
-              {selected.link ? (
+              {selected.effectiveStatus === "DELETED" ? (
+                <p className={styles.terminalNotice}>
+                  삭제가 완료된 자산에는 추가 검수·권리 조작을 실행할 수 없습니다.
+                </p>
+              ) : (
+                <>
+                  <textarea
+                    value={rationale}
+                    onChange={(event) => setRationale(event.target.value)}
+                    placeholder="검수 판단 또는 권리 요청 근거 (10자 이상)"
+                  />
+                  <div className={styles.decisionActions}>
+                    {reviewActionsForStatus(selected.effectiveStatus).map((action) => (
+                      <button key={action} disabled={busy} onClick={() => void decide(action)}>
+                        {actionLabels[action]}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+              {selected.link && issueActionsForStatus(selected.effectiveStatus).length ? (
                 <div className={styles.decisionActions}>
-                  <button disabled={busy} onClick={() => void decide("HIDDEN", "ISSUE")}>
-                    Issue 전체 블라인드
+                  {issueActionsForStatus(selected.effectiveStatus).map((action) => (
+                    <button
+                      key={action}
+                      disabled={busy}
+                      onClick={() => void decide(action, "ISSUE")}
+                    >
+                      Issue 전체 {actionLabels[action]}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+              {selected.effectiveStatus !== "DELETED" ? (
+                <div className={styles.decisionActions}>
+                  <button disabled={busy} onClick={() => void reportRights("PRIVACY")}>
+                    개인정보 요청
                   </button>
-                  <button disabled={busy} onClick={() => void decide("RESTORED", "ISSUE")}>
-                    Issue 전체 복구
+                  <button disabled={busy} onClick={() => void reportRights("DEFAMATION")}>
+                    명예훼손 요청
                   </button>
-                  <button disabled={busy} onClick={() => void decide("DELETED", "ISSUE")}>
-                    Issue 전체 삭제
+                  <button disabled={busy} onClick={() => void reportRights("COPYRIGHT")}>
+                    저작권 요청
                   </button>
                 </div>
               ) : null}
-              <div className={styles.decisionActions}>
-                <button disabled={busy} onClick={() => void reportRights("PRIVACY")}>
-                  개인정보 요청
-                </button>
-                <button disabled={busy} onClick={() => void reportRights("DEFAMATION")}>
-                  명예훼손 요청
-                </button>
-                <button disabled={busy} onClick={() => void reportRights("COPYRIGHT")}>
-                  저작권 요청
-                </button>
-              </div>
             </section>
             <h3>판단 이력</h3>
             <ul className={styles.sources}>
