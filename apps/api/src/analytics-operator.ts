@@ -471,6 +471,87 @@ export async function readAnalyticsSummary(database: Database["db"], days: numbe
   };
 }
 
+export async function readAnalyticsQualitySummary(database: Database["db"], days: number) {
+  assertWindowDays(days);
+  const result = await database.execute<{
+    exposed_sessions: number;
+    vote_sessions: number;
+    next_sessions: number;
+    comment_sessions: number;
+    share_sessions: number;
+    result_sessions: number;
+    quick_exit_sessions: number;
+    report_sessions: number;
+  }>(sql`
+    with product_events as (
+      select e.*
+      from analytics_events e
+      join analytics_sessions s on s.analytics_session_id = e.analytics_session_id
+      where e.occurred_at >= now() - (${days} * interval '1 day')
+        and s.traffic_class = 'PRODUCT'
+    ), session_flags as (
+      select analytics_session_id,
+        bool_or(event_type = 'ISSUE_VIEWABLE_IMPRESSION') as exposed,
+        bool_or(event_type = 'VOTE_SUBMIT') as voted,
+        bool_or(event_type = 'NEXT_ISSUE_OPEN') as opened_next,
+        bool_or(event_type = 'COMMENT_COMPLETE') as commented,
+        bool_or(event_type = 'SHARE_COMPLETE') as shared,
+        bool_or(event_type = 'RESULT_VIEW') as viewed_result,
+        bool_or(event_type = 'RESULT_DWELL_COMPLETE' and duration_ms <= 2000) as quick_exit,
+        bool_or(event_type = 'COMMENT_REPORT_COMPLETE') as reported
+      from product_events
+      group by analytics_session_id
+    )
+    select
+      count(*) filter (where exposed)::int as exposed_sessions,
+      count(*) filter (where voted)::int as vote_sessions,
+      count(*) filter (where voted and opened_next)::int as next_sessions,
+      count(*) filter (where voted and commented)::int as comment_sessions,
+      count(*) filter (where voted and shared)::int as share_sessions,
+      count(*) filter (where viewed_result)::int as result_sessions,
+      count(*) filter (where quick_exit)::int as quick_exit_sessions,
+      count(*) filter (where voted and reported)::int as report_sessions
+    from session_flags
+  `);
+  const totals = result.rows[0] ?? {
+    exposed_sessions: 0,
+    vote_sessions: 0,
+    next_sessions: 0,
+    comment_sessions: 0,
+    share_sessions: 0,
+    result_sessions: 0,
+    quick_exit_sessions: 0,
+    report_sessions: 0,
+  };
+  return {
+    schemaVersion: 1,
+    windowDays: days,
+    generatedAt: new Date().toISOString(),
+    definition: {
+      quickExitThresholdMs: 2000,
+      population: "trafficClass=PRODUCT distinct analytics sessions",
+    },
+    counts: {
+      exposedSessions: totals.exposed_sessions,
+      voteSessions: totals.vote_sessions,
+      nextIssueSessions: totals.next_sessions,
+      commentSessions: totals.comment_sessions,
+      shareSessions: totals.share_sessions,
+      resultSessions: totals.result_sessions,
+      quickExitSessions: totals.quick_exit_sessions,
+      reportSessions: totals.report_sessions,
+    },
+    metrics: {
+      exposureToVoteRate: ratio(totals.vote_sessions, totals.exposed_sessions),
+      voteToNextRate: ratio(totals.next_sessions, totals.vote_sessions),
+      commentAfterVoteRate: ratio(totals.comment_sessions, totals.vote_sessions),
+      shareAfterVoteRate: ratio(totals.share_sessions, totals.vote_sessions),
+      quickExitRate: ratio(totals.quick_exit_sessions, totals.result_sessions),
+      reportAfterVoteRate: ratio(totals.report_sessions, totals.vote_sessions),
+    },
+  };
+}
+
 export async function readAnalyticsReconciliation(database: Database["db"], days: number) {
   assertWindowDays(days);
   const eventLedger = await database.execute<{
@@ -558,11 +639,35 @@ export async function readAnalyticsReconciliation(database: Database["db"], days
     missing_result: 0,
   };
   const projection = aggregate.rows[0] ?? { mismatched_issues: 0, absolute_vote_delta: 0 };
+  const quality = await database.execute<{
+    vote_events_missing_choice_context: number;
+    dwell_events_missing_duration: number;
+    events_missing_session: number;
+  }>(sql`
+    select
+      count(*) filter (
+        where e.event_type = 'VOTE_SUBMIT'
+          and (e.canonical_choice_id is null or e.shown_position is null)
+      )::int as vote_events_missing_choice_context,
+      count(*) filter (
+        where e.event_type = 'RESULT_DWELL_COMPLETE' and e.duration_ms is null
+      )::int as dwell_events_missing_duration,
+      count(*) filter (where s.analytics_session_id is null)::int as events_missing_session
+    from analytics_events e
+    left join analytics_sessions s on s.analytics_session_id = e.analytics_session_id
+    where e.occurred_at >= now() - (${days} * interval '1 day')
+  `);
+  const dataQuality = quality.rows[0] ?? {
+    vote_events_missing_choice_context: 0,
+    dwell_events_missing_duration: 0,
+    events_missing_session: 0,
+  };
   return {
     windowDays: days,
     voteEventLedger: {
       acceptedVotes: ledger.accepted_votes,
       analyticsLinkedVotes: ledger.linked_votes,
+      acceptedVotesMissingAnalyticsSession: ledger.accepted_votes - ledger.linked_votes,
       analyticsLinkRate: ratio(ledger.linked_votes, ledger.accepted_votes),
       acceptedVotesMissingSubmitEvent: ledger.missing_submit,
       acceptedVotesMissingResultEvent: ledger.missing_result,
@@ -571,6 +676,11 @@ export async function readAnalyticsReconciliation(database: Database["db"], days
     voteAggregateProjection: {
       mismatchedIssues: projection.mismatched_issues,
       absoluteVoteDelta: projection.absolute_vote_delta,
+    },
+    dataQuality: {
+      voteEventsMissingChoiceContext: dataQuality.vote_events_missing_choice_context,
+      dwellEventsMissingDuration: dataQuality.dwell_events_missing_duration,
+      eventsMissingSession: dataQuality.events_missing_session,
     },
   };
 }
@@ -726,13 +836,18 @@ async function main() {
       console.log(JSON.stringify(await readAnalyticsReconciliation(database.db, days), null, 2));
       return;
     }
+    if (command === "quality") {
+      const days = Number.parseInt(process.argv[3] ?? "30", 10);
+      console.log(JSON.stringify(await readAnalyticsQualitySummary(database.db, days), null, 2));
+      return;
+    }
     if (command === "baseline") {
       const days = Number.parseInt(process.argv[3] ?? "30", 10);
       console.log(JSON.stringify(await readMeasurementBaseline(database.db, days), null, 2));
       return;
     }
     throw new Error(
-      "Usage: analytics-operator <summary [days]|reconcile [days]|baseline [days]|aggregate|retention>",
+      "Usage: analytics-operator <summary [days]|quality [days]|reconcile [days]|baseline [days]|aggregate|retention>",
     );
   } finally {
     await database.close();

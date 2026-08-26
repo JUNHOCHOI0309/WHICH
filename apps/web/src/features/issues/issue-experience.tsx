@@ -107,6 +107,11 @@ export function IssueExperience({
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const submissionLocked = useRef(false);
   const issueCardRef = useRef<HTMLElement | null>(null);
+  const decisionStartedAt = useRef(0);
+
+  useEffect(() => {
+    if (issue && screen === "ready") decisionStartedAt.current = Date.now();
+  }, [issue, screen]);
 
   useEffect(() => {
     const element = issueCardRef.current;
@@ -121,6 +126,7 @@ export function IssueExperience({
         if (visible && timer === null && !recorded) {
           timer = window.setTimeout(() => {
             recorded = true;
+            decisionStartedAt.current = Date.now();
             void recordAnalyticsEvent({
               eventType: "ISSUE_VIEWABLE_IMPRESSION",
               issueId: issue.id,
@@ -201,7 +207,16 @@ export function IssueExperience({
         eventType: "VOTE_SUBMIT",
         issueId: issue.id,
         issueVersion: issue.version,
-      }).catch(() => undefined);
+        quality: {
+          durationMs: Math.min(
+            1_800_000,
+            Math.max(0, Date.now() - (decisionStartedAt.current || Date.now())),
+          ),
+          canonicalChoiceId: action.choice.id,
+          shownPosition: issue.choices.findIndex((choice) => choice.id === action.choice.id),
+          mediaMode: "TEXT_ONLY",
+        },
+      });
       try {
         const vote = await submitGuestVote({
           issueId: issue.id,
@@ -376,11 +391,22 @@ function ResultScreen({
   const choiceB = issue.choices.find((choice) => choice.code === "B")?.label ?? "B";
 
   useEffect(() => {
+    const resultOpenedAt = Date.now();
     void recordAnalyticsEvent({
       eventType: "RESULT_VIEW",
       issueId: issue.id,
       issueVersion: issue.version,
-    }).catch(() => undefined);
+    });
+    return () => {
+      void recordAnalyticsEvent({
+        eventType: "RESULT_DWELL_COMPLETE",
+        issueId: issue.id,
+        issueVersion: issue.version,
+        quality: {
+          durationMs: Math.min(1_800_000, Math.max(0, Date.now() - resultOpenedAt)),
+        },
+      });
+    };
   }, [issue.id, issue.version]);
 
   return (
@@ -427,6 +453,7 @@ function ResultScreen({
         <ResultSharePanel issue={issue} result={result} />
         <CommentSection
           issueId={issue.id}
+          issueVersion={issue.version}
           kakaoLoginEnabled={kakaoLoginEnabled}
           naverLoginEnabled={naverLoginEnabled}
         />
@@ -615,10 +642,12 @@ const COMMENT_REPORT_REASONS: Array<{ value: CommentReportReason; label: string 
 
 function CommentSection({
   issueId,
+  issueVersion,
   kakaoLoginEnabled,
   naverLoginEnabled,
 }: {
   issueId: string;
+  issueVersion: number;
   kakaoLoginEnabled: boolean;
   naverLoginEnabled: boolean;
 }) {
@@ -766,6 +795,11 @@ function CommentSection({
       setDraft("");
       pendingCommentKey.current = null;
       toast.success("댓글을 게시했어요.");
+      void recordAnalyticsEvent({
+        eventType: "COMMENT_COMPLETE",
+        issueId,
+        issueVersion,
+      });
     } catch (error) {
       if (error instanceof WebApiError) {
         if (error.status === 401) {
@@ -968,6 +1002,11 @@ function CommentSection({
       }
       pendingReportKey.current = null;
       setReportDraft(null);
+      void recordAnalyticsEvent({
+        eventType: "COMMENT_REPORT_COMPLETE",
+        issueId,
+        issueVersion,
+      });
       toast.success(
         result.comment.visibility === "HIDDEN"
           ? "신고가 접수되어 댓글이 검토 전까지 숨겨졌어요."

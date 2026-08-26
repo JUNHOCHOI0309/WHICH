@@ -13,9 +13,26 @@ export const ANALYTICS_EVENT_TYPES = [
   "SHARE_OPEN",
   "SHARE_CHOICE_TOGGLE",
   "SHARE_COMPLETE",
+  "RESULT_DWELL_COMPLETE",
+  "COMMENT_COMPLETE",
+  "ISSUE_SKIP",
+  "ISSUE_HIDE",
+  "COMMENT_REPORT_COMPLETE",
+  "ISSUE_MEDIA_LOAD",
 ] as const;
 
 export type AnalyticsEventType = (typeof ANALYTICS_EVENT_TYPES)[number];
+
+export const ANALYTICS_MEDIA_MODES = ["TEXT_ONLY", "OPTION_IMAGES"] as const;
+export const ANALYTICS_MEDIA_LOAD_OUTCOMES = ["SUCCESS", "FAILURE"] as const;
+
+export type AnalyticsQualityPayload = {
+  durationMs?: number;
+  canonicalChoiceId?: string;
+  shownPosition?: number;
+  mediaMode?: (typeof ANALYTICS_MEDIA_MODES)[number];
+  mediaLoadOutcome?: (typeof ANALYTICS_MEDIA_LOAD_OUTCOMES)[number];
+};
 
 export const ANALYTICS_ENTRY_SURFACES = [
   "HOME",
@@ -66,6 +83,7 @@ export type AnalyticsEventCommand = {
   recommendationRequestId?: string;
   shareCardId?: string;
   occurredAt: string;
+  quality?: AnalyticsQualityPayload;
   attribution?: AcquisitionAttribution;
   context?: AnalyticsSessionContext;
 };

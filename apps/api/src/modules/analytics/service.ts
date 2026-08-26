@@ -3,13 +3,14 @@ import { eq, sql } from "drizzle-orm";
 import type { Database } from "../../database/client.js";
 import { analyticsEvents, analyticsSessions, issueVersions } from "../../database/schema/index.js";
 import type { AnalyticsService } from "./contracts.js";
+import type { AnalyticsEventCommand } from "./contracts.js";
 
 const SESSION_IDLE_MILLISECONDS = 30 * 60 * 1_000;
 
 export class AnalyticsEventError extends Error {
   constructor(
-    public readonly code: "ISSUE_NOT_FOUND",
-    public readonly statusCode: 404,
+    public readonly code: "ISSUE_NOT_FOUND" | "INVALID_QUALITY_PAYLOAD" | "EVENT_ID_CONFLICT",
+    public readonly statusCode: 400 | 404 | 409,
     message: string,
   ) {
     super(message);
@@ -17,9 +18,98 @@ export class AnalyticsEventError extends Error {
   }
 }
 
+const CHOICE_POSITION_EVENTS = new Set(["VOTE_SUBMIT", "ISSUE_MEDIA_LOAD"]);
+
+function validateQuality(command: AnalyticsEventCommand) {
+  const quality = command.quality;
+  if (command.eventType === "RESULT_DWELL_COMPLETE" && quality?.durationMs === undefined) {
+    throw new AnalyticsEventError(
+      "INVALID_QUALITY_PAYLOAD",
+      400,
+      "Result dwell events require durationMs.",
+    );
+  }
+  if (
+    quality?.durationMs !== undefined &&
+    command.eventType !== "VOTE_SUBMIT" &&
+    command.eventType !== "RESULT_DWELL_COMPLETE"
+  ) {
+    throw new AnalyticsEventError(
+      "INVALID_QUALITY_PAYLOAD",
+      400,
+      "durationMs is not allowed for this event type.",
+    );
+  }
+  const hasChoice = quality?.canonicalChoiceId !== undefined;
+  const hasPosition = quality?.shownPosition !== undefined;
+  if (hasChoice !== hasPosition || (hasChoice && !CHOICE_POSITION_EVENTS.has(command.eventType))) {
+    throw new AnalyticsEventError(
+      "INVALID_QUALITY_PAYLOAD",
+      400,
+      "canonicalChoiceId and shownPosition must be supplied together for a choice event.",
+    );
+  }
+  if (command.eventType === "ISSUE_MEDIA_LOAD") {
+    if (!quality?.mediaMode || !quality.mediaLoadOutcome) {
+      throw new AnalyticsEventError(
+        "INVALID_QUALITY_PAYLOAD",
+        400,
+        "Media load events require mediaMode and mediaLoadOutcome.",
+      );
+    }
+  } else if (quality?.mediaLoadOutcome !== undefined) {
+    throw new AnalyticsEventError(
+      "INVALID_QUALITY_PAYLOAD",
+      400,
+      "mediaLoadOutcome is only allowed for media load events.",
+    );
+  }
+}
+
+type StoredEventIdentity = {
+  sessionId: string;
+  eventType: string;
+  issueId: string;
+  issueVersion: number;
+  recommendationRequestId: string | null;
+  shareCardId: string | null;
+  durationMs: number | null;
+  canonicalChoiceId: string | null;
+  shownPosition: number | null;
+  mediaMode: string | null;
+  mediaLoadOutcome: string | null;
+};
+
+function matchesStoredEvent(stored: StoredEventIdentity, command: AnalyticsEventCommand) {
+  return (
+    stored.sessionId === command.sessionId &&
+    stored.eventType === command.eventType &&
+    stored.issueId === command.issueId &&
+    stored.issueVersion === command.issueVersion &&
+    stored.recommendationRequestId === (command.recommendationRequestId ?? null) &&
+    stored.shareCardId === (command.shareCardId ?? null) &&
+    stored.durationMs === (command.quality?.durationMs ?? null) &&
+    stored.canonicalChoiceId === (command.quality?.canonicalChoiceId ?? null) &&
+    stored.shownPosition === (command.quality?.shownPosition ?? null) &&
+    stored.mediaMode === (command.quality?.mediaMode ?? null) &&
+    stored.mediaLoadOutcome === (command.quality?.mediaLoadOutcome ?? null)
+  );
+}
+
+function assertMatchingDuplicate(stored: StoredEventIdentity, command: AnalyticsEventCommand) {
+  if (!matchesStoredEvent(stored, command)) {
+    throw new AnalyticsEventError(
+      "EVENT_ID_CONFLICT",
+      409,
+      "The event ID is already used by a different analytics event.",
+    );
+  }
+}
+
 export function createAnalyticsService(database: Database["db"]): AnalyticsService {
   return {
     async recordEvent(command) {
+      validateQuality(command);
       const occurredAt = new Date(command.occurredAt);
       const activityAt = new Date();
       const startedAt = occurredAt > activityAt ? activityAt : occurredAt;
@@ -41,6 +131,28 @@ export function createAnalyticsService(database: Database["db"]): AnalyticsServi
           .limit(1);
         if (!issueVersion) {
           throw new AnalyticsEventError("ISSUE_NOT_FOUND", 404, "The issue version was not found.");
+        }
+
+        const [existingEvent] = await transaction
+          .select({
+            sessionId: analyticsEvents.sessionId,
+            eventType: analyticsEvents.eventType,
+            issueId: analyticsEvents.issueId,
+            issueVersion: analyticsEvents.issueVersion,
+            recommendationRequestId: analyticsEvents.recommendationRequestId,
+            shareCardId: analyticsEvents.shareCardId,
+            durationMs: analyticsEvents.durationMs,
+            canonicalChoiceId: analyticsEvents.canonicalChoiceId,
+            shownPosition: analyticsEvents.shownPosition,
+            mediaMode: analyticsEvents.mediaMode,
+            mediaLoadOutcome: analyticsEvents.mediaLoadOutcome,
+          })
+          .from(analyticsEvents)
+          .where(eq(analyticsEvents.id, command.eventId))
+          .limit(1);
+        if (existingEvent) {
+          assertMatchingDuplicate(existingEvent, command);
+          return { accepted: true, duplicate: true };
         }
 
         const attribution = command.attribution;
@@ -97,11 +209,39 @@ export function createAnalyticsService(database: Database["db"]): AnalyticsServi
             issueVersion: command.issueVersion,
             recommendationRequestId: command.recommendationRequestId,
             shareCardId: command.shareCardId,
+            durationMs: command.quality?.durationMs,
+            canonicalChoiceId: command.quality?.canonicalChoiceId,
+            shownPosition: command.quality?.shownPosition,
+            mediaMode: command.quality?.mediaMode,
+            mediaLoadOutcome: command.quality?.mediaLoadOutcome,
             occurredAt,
           })
           .onConflictDoNothing({ target: analyticsEvents.id })
           .returning({ id: analyticsEvents.id });
 
+        if (inserted.length === 0) {
+          const [racedEvent] = await transaction
+            .select({
+              sessionId: analyticsEvents.sessionId,
+              eventType: analyticsEvents.eventType,
+              issueId: analyticsEvents.issueId,
+              issueVersion: analyticsEvents.issueVersion,
+              recommendationRequestId: analyticsEvents.recommendationRequestId,
+              shareCardId: analyticsEvents.shareCardId,
+              durationMs: analyticsEvents.durationMs,
+              canonicalChoiceId: analyticsEvents.canonicalChoiceId,
+              shownPosition: analyticsEvents.shownPosition,
+              mediaMode: analyticsEvents.mediaMode,
+              mediaLoadOutcome: analyticsEvents.mediaLoadOutcome,
+            })
+            .from(analyticsEvents)
+            .where(eq(analyticsEvents.id, command.eventId))
+            .limit(1);
+          if (!racedEvent) {
+            throw new Error("The analytics event insert was not observable after a conflict.");
+          }
+          assertMatchingDuplicate(racedEvent, command);
+        }
         return { accepted: true, duplicate: inserted.length === 0 };
       });
     },
