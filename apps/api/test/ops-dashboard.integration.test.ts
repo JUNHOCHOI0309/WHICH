@@ -155,6 +155,21 @@ describe("operator dashboard", () => {
     expect(logs).toContainEqual({ outcome: "ALLOWED" });
   });
 
+  it("exposes an operator-only explainable ranking preview", async () => {
+    const [allowed, denied] = await Promise.all([
+      opsRequest("GET", "/v1/internal/ops/ranking-preview?limit=10"),
+      opsRequest("GET", "/v1/internal/ops/ranking-preview?limit=10", undefined, ordinaryToken),
+    ]);
+    expect(allowed.statusCode, allowed.body).toBe(200);
+    expect(allowed.json()).toMatchObject({
+      schemaVersion: 1,
+      configuredMode: "OFF",
+      policyVersion: "quality-feed-v1.0",
+      items: [],
+    });
+    expect(denied.statusCode).toBe(403);
+  });
+
   it("rejects windows outside 1, 7, and 30 days", async () => {
     const response = await readDashboard(90);
     expect(response.statusCode).toBe(400);

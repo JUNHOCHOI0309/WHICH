@@ -100,6 +100,31 @@ export type OpsMemberPage = {
   nextCursor: string | null;
 };
 
+export type OpsRankingPreview = {
+  schemaVersion: 1;
+  generatedAt: string;
+  configuredMode: "OFF" | "SHADOW" | "LIVE";
+  policyVersion: string;
+  items: Array<{
+    requestId: string;
+    servedPosition: number;
+    shadowPosition: number | null;
+    issueId: string;
+    question: string;
+    categoryCode: string;
+    servedScore: number;
+    qualityScore: number;
+    candidateSources: string[];
+    scoreComponents: Record<string, number>;
+    qualityEligible: boolean;
+    eligibilityReasons: string[];
+    controversyEligible: boolean;
+    rankingReason: string;
+    fallbackReason: string | null;
+    createdAt: string;
+  }>;
+};
+
 export type OpsEditorialStatus = "PENDING" | "APPROVED" | "NEEDS_CHANGES" | "REJECTED";
 export type OpsEditorialScope = "ACTIVE" | "RESERVE" | "LONG_TERM";
 

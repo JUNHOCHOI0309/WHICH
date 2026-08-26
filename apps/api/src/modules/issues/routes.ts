@@ -104,7 +104,7 @@ const feedResponseSchema = Type.Object({
   nextCursor: Type.Union([Type.String(), Type.Null()]),
   ranking: Type.Object({
     requestId: uuidSchema,
-    version: Type.Literal("interest_content_v2_refresh"),
+    version: Type.Literal("quality_feed_v1"),
     mode: Type.Union([Type.Literal("PERSONALIZED"), Type.Literal("RECENCY")]),
     reasonCode: Type.Union([
       Type.Literal("INTEREST_PROFILE_MATCH"),
@@ -114,6 +114,9 @@ const feedResponseSchema = Type.Object({
       Type.Literal("RANKER_FALLBACK"),
     ]),
     profileVersion: Type.Union([Type.Integer({ minimum: 1 }), Type.Null()]),
+    policyVersion: Type.Literal("quality-feed-v1.0"),
+    qualityMode: Type.Union([Type.Literal("OFF"), Type.Literal("SHADOW"), Type.Literal("LIVE")]),
+    fallbackReason: Type.Union([Type.String(), Type.Null()]),
   }),
 });
 

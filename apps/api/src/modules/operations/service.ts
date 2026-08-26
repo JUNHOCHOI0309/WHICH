@@ -24,6 +24,7 @@ import {
   type OpsEditorialDecision,
   type OpsEditorialPage,
   type OpsMemberPage,
+  type OpsRankingPreview,
 } from "./contracts.js";
 
 const inventoryCandidatesSchema = z.object({
@@ -527,7 +528,7 @@ function createOpsManagementMethods(
 
 export function createOpsDashboardService(
   database: Database["db"],
-  options: { releaseId: string },
+  options: { releaseId: string; qualityRankerMode?: "OFF" | "SHADOW" | "LIVE" },
 ): OpsDashboardService {
   async function audit(input: {
     memberId: string;
@@ -566,6 +567,83 @@ export function createOpsDashboardService(
 
   return {
     ...createOpsManagementMethods(database, operator, audit),
+    async readRankingPreview(input): Promise<OpsRankingPreview | null> {
+      const actor = await operator(input.memberId);
+      if (!actor) {
+        await audit({
+          memberId: input.memberId,
+          eventType: "OPS_RANKING_PREVIEW_READ",
+          outcome: "DENIED",
+          requestId: input.requestId,
+          metadata: { reason: "OPERATOR_ROLE_REQUIRED" },
+        });
+        return null;
+      }
+      const result = await database.execute<{
+        recommendation_request_id: string;
+        served_position: number;
+        shadow_position: number | null;
+        issue_id: string;
+        question: string;
+        category_code: string;
+        served_score: number;
+        quality_score: number;
+        candidate_sources: string[];
+        score_components: Record<string, number>;
+        quality_eligible: boolean;
+        eligibility_reasons: string[];
+        controversy_eligible: boolean;
+        ranking_reason: string;
+        fallback_reason: string | null;
+        created_at: Date | string;
+      }>(sql`
+        select ri.recommendation_request_id, ri.position as served_position,
+          ri.shadow_position, ri.issue_id, iv.question,
+          iv.primary_category_code as category_code, ri.score as served_score,
+          ri.quality_score, ri.candidate_sources, ri.score_components,
+          ri.quality_eligible, ri.eligibility_reasons, ri.controversy_eligible,
+          rr.reason_code as ranking_reason, rr.fallback_reason, ri.created_at
+        from recommendation_items ri
+        join recommendation_requests rr
+          on rr.recommendation_request_id = ri.recommendation_request_id
+        join issue_versions iv
+          on iv.issue_id = ri.issue_id and iv.issue_version = ri.issue_version
+        where rr.policy_version = 'quality-feed-v1.0'
+        order by ri.created_at desc, ri.recommendation_request_id desc, ri.position asc
+        limit ${input.limit}
+      `);
+      await audit({
+        memberId: input.memberId,
+        eventType: "OPS_RANKING_PREVIEW_READ",
+        outcome: "ALLOWED",
+        requestId: input.requestId,
+        metadata: { itemCount: result.rows.length },
+      });
+      return {
+        schemaVersion: 1,
+        generatedAt: new Date().toISOString(),
+        configuredMode: options.qualityRankerMode ?? "OFF",
+        policyVersion: "quality-feed-v1.0",
+        items: result.rows.map((row) => ({
+          requestId: row.recommendation_request_id,
+          servedPosition: Number(row.served_position),
+          shadowPosition: row.shadow_position === null ? null : Number(row.shadow_position),
+          issueId: row.issue_id,
+          question: row.question,
+          categoryCode: row.category_code,
+          servedScore: Number(row.served_score),
+          qualityScore: Number(row.quality_score),
+          candidateSources: row.candidate_sources,
+          scoreComponents: row.score_components,
+          qualityEligible: row.quality_eligible,
+          eligibilityReasons: row.eligibility_reasons,
+          controversyEligible: row.controversy_eligible,
+          rankingReason: row.ranking_reason,
+          fallbackReason: row.fallback_reason,
+          createdAt: new Date(row.created_at).toISOString(),
+        })),
+      };
+    },
     async readDashboard(input) {
       const grant = await database
         .select({ id: operatorAccessGrants.id })

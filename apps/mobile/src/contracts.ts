@@ -49,7 +49,7 @@ export type PublicIssueFeed = {
   nextCursor: string | null;
   ranking: {
     requestId: string;
-    version: "interest_content_v2_refresh";
+    version: "interest_content_v2_refresh" | "quality_feed_v1";
     mode: "PERSONALIZED" | "RECENCY";
     reasonCode:
       | "INTEREST_PROFILE_MATCH"
@@ -58,6 +58,9 @@ export type PublicIssueFeed = {
       | "IDENTITY_UNAVAILABLE"
       | "RANKER_FALLBACK";
     profileVersion: number | null;
+    policyVersion?: "quality-feed-v1.0";
+    qualityMode?: "OFF" | "SHADOW" | "LIVE";
+    fallbackReason?: string | null;
   };
 };
 

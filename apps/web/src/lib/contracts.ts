@@ -88,10 +88,13 @@ export type PublicIssueFeed = {
   nextCursor: string | null;
   ranking: {
     requestId: string;
-    version: "interest_content_v2_refresh";
+    version: "interest_content_v2_refresh" | "quality_feed_v1";
     mode: RankingMode;
     reasonCode: RankingReasonCode;
     profileVersion: number | null;
+    policyVersion?: "quality-feed-v1.0";
+    qualityMode?: "OFF" | "SHADOW" | "LIVE";
+    fallbackReason?: string | null;
   };
 };
 

@@ -5,6 +5,7 @@ import {
   index,
   integer,
   jsonb,
+  boolean,
   pgTable,
   primaryKey,
   timestamp,
@@ -50,6 +51,11 @@ export const recommendationRequests = pgTable(
     rankingMode: varchar("ranking_mode", { length: 24 }).notNull(),
     reasonCode: varchar("reason_code", { length: 32 }).notNull(),
     profileVersion: integer("profile_version"),
+    policyVersion: varchar("policy_version", { length: 32 })
+      .default("interest-content-v2")
+      .notNull(),
+    qualityMode: varchar("quality_mode", { length: 16 }).default("OFF").notNull(),
+    fallbackReason: varchar("fallback_reason", { length: 64 }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
@@ -61,6 +67,10 @@ export const recommendationRequests = pgTable(
     check(
       "recommendation_requests_profile_version_check",
       sql`${table.profileVersion} is null or ${table.profileVersion} > 0`,
+    ),
+    check(
+      "recommendation_requests_quality_mode_check",
+      sql`${table.qualityMode} in ('OFF', 'SHADOW', 'LIVE')`,
     ),
   ],
 );
@@ -77,6 +87,16 @@ export const recommendationItems = pgTable(
     score: integer("score").notNull(),
     reasonCodes: jsonb("reason_codes").$type<string[]>().notNull(),
     matchedCardCodes: jsonb("matched_card_codes").$type<string[]>().notNull(),
+    candidateSources: jsonb("candidate_sources").$type<string[]>().default([]).notNull(),
+    scoreComponents: jsonb("score_components")
+      .$type<Record<string, number>>()
+      .default({})
+      .notNull(),
+    qualityScore: integer("quality_score").default(0).notNull(),
+    shadowPosition: integer("shadow_position"),
+    controversyEligible: boolean("controversy_eligible").default(false).notNull(),
+    qualityEligible: boolean("quality_eligible").default(true).notNull(),
+    eligibilityReasons: jsonb("eligibility_reasons").$type<string[]>().default([]).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
@@ -92,5 +112,10 @@ export const recommendationItems = pgTable(
     }).onDelete("restrict"),
     check("recommendation_items_position_check", sql`${table.position} > 0`),
     check("recommendation_items_score_check", sql`${table.score} >= 0`),
+    check("recommendation_items_quality_score_check", sql`${table.qualityScore} >= 0`),
+    check(
+      "recommendation_items_shadow_position_check",
+      sql`${table.shadowPosition} is null or ${table.shadowPosition} > 0`,
+    ),
   ],
 );

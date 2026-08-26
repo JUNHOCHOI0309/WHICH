@@ -134,6 +134,9 @@ export async function recordRecommendation(
       rankingMode: ranking.mode,
       reasonCode: ranking.reasonCode,
       profileVersion: ranking.profileVersion,
+      policyVersion: ranking.policyVersion,
+      qualityMode: ranking.qualityMode,
+      fallbackReason: ranking.fallbackReason,
     });
     if (items.length > 0) {
       await transaction.insert(recommendationItems).values(
@@ -145,6 +148,13 @@ export async function recordRecommendation(
           score: item.score,
           reasonCodes: item.reasonCodes,
           matchedCardCodes: item.matchedCardCodes,
+          candidateSources: item.candidateSources,
+          scoreComponents: item.scoreComponents,
+          qualityScore: item.qualityScore,
+          shadowPosition: item.shadowPosition,
+          controversyEligible: item.controversyEligible,
+          qualityEligible: item.qualityEligible,
+          eligibilityReasons: item.eligibilityReasons,
         })),
       );
     }

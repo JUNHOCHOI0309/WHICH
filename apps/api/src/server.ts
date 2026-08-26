@@ -39,6 +39,7 @@ const app = await buildApp(config, {
   ...database,
   issueReader: createIssueReadService(database.db, {
     personalizationEnabled: config.featureFlags.mlRanker,
+    qualityRankerMode: config.featureFlags.qualityRankerMode,
     mediaExperiment: {
       enabled: config.featureFlags.issueMedia,
       exposurePercent: config.featureFlags.issueMediaExperimentPercent,
@@ -61,7 +62,10 @@ const app = await buildApp(config, {
   shareCards: createShareCardService(database.db, {
     enabled: config.featureFlags.resultSharing,
   }),
-  opsDashboard: createOpsDashboardService(database.db, { releaseId: config.releaseId }),
+  opsDashboard: createOpsDashboardService(database.db, {
+    releaseId: config.releaseId,
+    qualityRankerMode: config.featureFlags.qualityRankerMode,
+  }),
   ...(issueMediaStorage && issueMediaService
     ? {
         issueMedia: issueMediaService,
