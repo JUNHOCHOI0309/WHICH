@@ -126,3 +126,10 @@ export const commentModerationSourceEnum = pgEnum("comment_moderation_source", [
   "SYSTEM_AUTOMATION",
   "INTERNAL_MODERATOR",
 ]);
+export const pointLedgerEntryTypeEnum = pgEnum("point_ledger_entry_type", [
+  "EARN",
+  "SPEND",
+  "REFUND",
+  "REVERSAL",
+  "ADJUSTMENT",
+]);

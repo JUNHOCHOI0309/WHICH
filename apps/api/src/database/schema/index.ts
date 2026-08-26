@@ -6,6 +6,7 @@ export * from "./interests.js";
 export * from "./issues.js";
 export * from "./outbox.js";
 export * from "./operations.js";
+export * from "./points.js";
 export * from "./profiles.js";
 export * from "./recommendations.js";
 export * from "./reactions.js";

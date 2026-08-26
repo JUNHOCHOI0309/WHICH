@@ -183,6 +183,13 @@
       "when": 1787650213320,
       "tag": "0025_thin_starfox",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1787733478493,
+      "tag": "0026_point_ledger_foundation",
+      "breakpoints": true
     }
   ]
 }

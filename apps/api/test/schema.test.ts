@@ -27,6 +27,10 @@ import {
   operatorAuditLogs,
   operatorEditorialDecisions,
   operatorBackupConfirmations,
+  pointAccounts,
+  pointDailyCounters,
+  pointLedgerEntries,
+  pointLedgerEntryTypeEnum,
   resultSnapshots,
   subjectInterests,
   voteAggregates,
@@ -129,6 +133,40 @@ describe("data architecture v1 schema", () => {
       "REJECTED_ABUSE",
       "INVALIDATED",
     ]);
+  });
+
+  it("keeps the point ledger source of truth constrained and auditable", () => {
+    expect(pointLedgerEntryTypeEnum.enumValues).toEqual([
+      "EARN",
+      "SPEND",
+      "REFUND",
+      "REVERSAL",
+      "ADJUSTMENT",
+    ]);
+
+    const accountConfig = getTableConfig(pointAccounts);
+    const ledgerConfig = getTableConfig(pointLedgerEntries);
+    const counterConfig = getTableConfig(pointDailyCounters);
+
+    expect(accountConfig.checks.map((check) => check.name)).toEqual(
+      expect.arrayContaining([
+        "point_accounts_balance_nonnegative_check",
+        "point_accounts_lifetime_earned_check",
+        "point_accounts_lifetime_spent_check",
+      ]),
+    );
+    expect(ledgerConfig.uniqueConstraints.map((constraint) => constraint.name)).toEqual(
+      expect.arrayContaining([
+        "point_ledger_entries_idempotency_key_unique",
+        "point_ledger_entries_source_reason_unique",
+      ]),
+    );
+    expect(ledgerConfig.indexes.map((index) => index.config.name)).toContain(
+      "point_ledger_entries_reversal_unique",
+    );
+    expect(counterConfig.primaryKeys.map((primaryKey) => primaryKey.getName())).toContain(
+      "point_daily_counters_pk",
+    );
   });
 
   it("enforces accepted-vote uniqueness with a partial unique index", () => {
