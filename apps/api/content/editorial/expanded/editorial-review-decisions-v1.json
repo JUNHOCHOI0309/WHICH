@@ -1,6 +1,943 @@
 {
   "schemaVersion": 1,
   "catalogId": "which-expanded-500-catalog-v2",
-  "updatedAt": null,
-  "decisions": []
+  "updatedAt": "2026-08-24T20:17:59.115Z",
+  "decisions": [
+    {
+      "status": "APPROVED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": true,
+        "choiceParity": true,
+        "duplicateReview": true,
+        "sourceReview": true
+      },
+      "candidateId": "WEXP-0001",
+      "reviewedAt": "2026-08-24T20:08:52.859Z"
+    },
+    {
+      "status": "APPROVED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": true,
+        "choiceParity": true,
+        "duplicateReview": true,
+        "sourceReview": true
+      },
+      "candidateId": "WEXP-0006",
+      "reviewedAt": "2026-08-24T20:09:00.432Z"
+    },
+    {
+      "status": "NEEDS_CHANGES",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": false,
+        "choiceParity": false,
+        "duplicateReview": false,
+        "sourceReview": false
+      },
+      "candidateId": "WEXP-0016",
+      "reviewedAt": "2026-08-24T20:12:08.208Z"
+    },
+    {
+      "status": "REJECTED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": false,
+        "choiceParity": false,
+        "duplicateReview": false,
+        "sourceReview": false
+      },
+      "candidateId": "WEXP-0036",
+      "reviewedAt": "2026-08-24T20:12:22.261Z"
+    },
+    {
+      "status": "REJECTED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": false,
+        "choiceParity": false,
+        "duplicateReview": false,
+        "sourceReview": false
+      },
+      "candidateId": "WEXP-0046",
+      "reviewedAt": "2026-08-24T20:12:16.450Z"
+    },
+    {
+      "status": "REJECTED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": false,
+        "choiceParity": false,
+        "duplicateReview": false,
+        "sourceReview": false
+      },
+      "candidateId": "WEXP-0056",
+      "reviewedAt": "2026-08-24T20:12:20.959Z"
+    },
+    {
+      "status": "REJECTED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": false,
+        "choiceParity": false,
+        "duplicateReview": false,
+        "sourceReview": false
+      },
+      "candidateId": "WEXP-0071",
+      "reviewedAt": "2026-08-24T20:12:19.427Z"
+    },
+    {
+      "status": "APPROVED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": true,
+        "choiceParity": true,
+        "duplicateReview": true,
+        "sourceReview": true
+      },
+      "candidateId": "WEXP-0076",
+      "reviewedAt": "2026-08-24T20:09:41.421Z"
+    },
+    {
+      "status": "APPROVED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": true,
+        "choiceParity": true,
+        "duplicateReview": true,
+        "sourceReview": true
+      },
+      "candidateId": "WEXP-0081",
+      "reviewedAt": "2026-08-24T20:09:46.776Z"
+    },
+    {
+      "status": "APPROVED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": true,
+        "choiceParity": true,
+        "duplicateReview": true,
+        "sourceReview": true
+      },
+      "candidateId": "WEXP-0086",
+      "reviewedAt": "2026-08-24T20:09:58.956Z"
+    },
+    {
+      "status": "APPROVED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": true,
+        "choiceParity": true,
+        "duplicateReview": true,
+        "sourceReview": true
+      },
+      "candidateId": "WEXP-0091",
+      "reviewedAt": "2026-08-24T20:10:04.542Z"
+    },
+    {
+      "status": "APPROVED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": true,
+        "choiceParity": true,
+        "duplicateReview": true,
+        "sourceReview": true
+      },
+      "candidateId": "WEXP-0096",
+      "reviewedAt": "2026-08-24T20:10:09.200Z"
+    },
+    {
+      "status": "APPROVED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": true,
+        "choiceParity": true,
+        "duplicateReview": true,
+        "sourceReview": true
+      },
+      "candidateId": "WEXP-0101",
+      "reviewedAt": "2026-08-24T20:10:15.502Z"
+    },
+    {
+      "status": "APPROVED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": true,
+        "choiceParity": true,
+        "duplicateReview": true,
+        "sourceReview": true
+      },
+      "candidateId": "WEXP-0106",
+      "reviewedAt": "2026-08-24T20:10:19.757Z"
+    },
+    {
+      "status": "APPROVED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": true,
+        "choiceParity": true,
+        "duplicateReview": true,
+        "sourceReview": true
+      },
+      "candidateId": "WEXP-0111",
+      "reviewedAt": "2026-08-24T20:10:30.132Z"
+    },
+    {
+      "status": "NEEDS_CHANGES",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": false,
+        "choiceParity": false,
+        "duplicateReview": false,
+        "sourceReview": false
+      },
+      "candidateId": "WEXP-0116",
+      "reviewedAt": "2026-08-24T20:12:27.038Z"
+    },
+    {
+      "status": "REJECTED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": false,
+        "choiceParity": false,
+        "duplicateReview": false,
+        "sourceReview": false
+      },
+      "candidateId": "WEXP-0121",
+      "reviewedAt": "2026-08-24T20:12:28.463Z"
+    },
+    {
+      "status": "REJECTED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": false,
+        "choiceParity": false,
+        "duplicateReview": false,
+        "sourceReview": false
+      },
+      "candidateId": "WEXP-0122",
+      "reviewedAt": "2026-08-24T20:12:29.689Z"
+    },
+    {
+      "status": "REJECTED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": false,
+        "choiceParity": false,
+        "duplicateReview": false,
+        "sourceReview": false
+      },
+      "candidateId": "WEXP-0126",
+      "reviewedAt": "2026-08-24T20:12:31.087Z"
+    },
+    {
+      "status": "REJECTED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": false,
+        "choiceParity": false,
+        "duplicateReview": false,
+        "sourceReview": false
+      },
+      "candidateId": "WEXP-0131",
+      "reviewedAt": "2026-08-24T20:12:32.860Z"
+    },
+    {
+      "status": "APPROVED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": true,
+        "choiceParity": true,
+        "duplicateReview": true,
+        "sourceReview": true
+      },
+      "candidateId": "WEXP-0136",
+      "reviewedAt": "2026-08-24T20:10:46.065Z"
+    },
+    {
+      "status": "APPROVED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": true,
+        "choiceParity": true,
+        "duplicateReview": true,
+        "sourceReview": true
+      },
+      "candidateId": "WEXP-0137",
+      "reviewedAt": "2026-08-24T20:10:52.190Z"
+    },
+    {
+      "status": "APPROVED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": true,
+        "choiceParity": true,
+        "duplicateReview": true,
+        "sourceReview": true
+      },
+      "candidateId": "WEXP-0141",
+      "reviewedAt": "2026-08-24T20:10:55.646Z"
+    },
+    {
+      "status": "APPROVED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": true,
+        "choiceParity": true,
+        "duplicateReview": true,
+        "sourceReview": true
+      },
+      "candidateId": "WEXP-0146",
+      "reviewedAt": "2026-08-24T20:10:59.243Z"
+    },
+    {
+      "status": "APPROVED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": true,
+        "choiceParity": true,
+        "duplicateReview": true,
+        "sourceReview": true
+      },
+      "candidateId": "WEXP-0147",
+      "reviewedAt": "2026-08-24T20:11:03.746Z"
+    },
+    {
+      "status": "APPROVED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": true,
+        "choiceParity": true,
+        "duplicateReview": true,
+        "sourceReview": true
+      },
+      "candidateId": "WEXP-0151",
+      "reviewedAt": "2026-08-24T20:11:07.136Z"
+    },
+    {
+      "status": "APPROVED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": true,
+        "choiceParity": true,
+        "duplicateReview": true,
+        "sourceReview": true
+      },
+      "candidateId": "WEXP-0156",
+      "reviewedAt": "2026-08-24T20:11:11.975Z"
+    },
+    {
+      "status": "APPROVED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": true,
+        "choiceParity": true,
+        "duplicateReview": true,
+        "sourceReview": true
+      },
+      "candidateId": "WEXP-0161",
+      "reviewedAt": "2026-08-24T20:11:19.577Z"
+    },
+    {
+      "status": "APPROVED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": true,
+        "choiceParity": true,
+        "duplicateReview": true,
+        "sourceReview": true
+      },
+      "candidateId": "WEXP-0166",
+      "reviewedAt": "2026-08-24T20:11:23.394Z"
+    },
+    {
+      "status": "REJECTED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": false,
+        "choiceParity": false,
+        "duplicateReview": false,
+        "sourceReview": false
+      },
+      "candidateId": "WEXP-0171",
+      "reviewedAt": "2026-08-24T20:12:36.328Z"
+    },
+    {
+      "status": "APPROVED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": true,
+        "choiceParity": true,
+        "duplicateReview": true,
+        "sourceReview": true
+      },
+      "candidateId": "WEXP-0176",
+      "reviewedAt": "2026-08-24T20:11:35.930Z"
+    },
+    {
+      "status": "APPROVED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": true,
+        "choiceParity": true,
+        "duplicateReview": true,
+        "sourceReview": true
+      },
+      "candidateId": "WEXP-0181",
+      "reviewedAt": "2026-08-24T20:11:39.539Z"
+    },
+    {
+      "status": "APPROVED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": true,
+        "choiceParity": true,
+        "duplicateReview": true,
+        "sourceReview": true
+      },
+      "candidateId": "WEXP-0186",
+      "reviewedAt": "2026-08-24T20:11:44.187Z"
+    },
+    {
+      "status": "REJECTED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": false,
+        "choiceParity": false,
+        "duplicateReview": false,
+        "sourceReview": false
+      },
+      "candidateId": "WEXP-0191",
+      "reviewedAt": "2026-08-24T20:12:39.087Z"
+    },
+    {
+      "status": "APPROVED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": true,
+        "choiceParity": true,
+        "duplicateReview": true,
+        "sourceReview": true
+      },
+      "candidateId": "WEXP-0196",
+      "reviewedAt": "2026-08-24T20:11:52.731Z"
+    },
+    {
+      "status": "APPROVED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": true,
+        "choiceParity": true,
+        "duplicateReview": true,
+        "sourceReview": true
+      },
+      "candidateId": "WEXP-0197",
+      "reviewedAt": "2026-08-24T20:11:57.709Z"
+    },
+    {
+      "status": "APPROVED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": true,
+        "choiceParity": true,
+        "duplicateReview": true,
+        "sourceReview": true
+      },
+      "candidateId": "WEXP-0201",
+      "reviewedAt": "2026-08-24T20:12:01.600Z"
+    },
+    {
+      "status": "REJECTED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": false,
+        "choiceParity": false,
+        "duplicateReview": false,
+        "sourceReview": false
+      },
+      "candidateId": "WEXP-0216",
+      "reviewedAt": "2026-08-24T20:12:44.231Z"
+    },
+    {
+      "status": "APPROVED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": true,
+        "choiceParity": true,
+        "duplicateReview": true,
+        "sourceReview": true
+      },
+      "candidateId": "WEXP-0221",
+      "reviewedAt": "2026-08-24T20:17:59.115Z"
+    },
+    {
+      "status": "REJECTED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": true,
+        "choiceParity": false,
+        "duplicateReview": true,
+        "sourceReview": false
+      },
+      "candidateId": "WEXP-0226",
+      "reviewedAt": "2026-08-24T20:12:52.897Z"
+    },
+    {
+      "status": "APPROVED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": true,
+        "choiceParity": true,
+        "duplicateReview": true,
+        "sourceReview": true
+      },
+      "candidateId": "WEXP-0231",
+      "reviewedAt": "2026-08-24T20:13:00.342Z"
+    },
+    {
+      "status": "APPROVED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": true,
+        "choiceParity": true,
+        "duplicateReview": true,
+        "sourceReview": true
+      },
+      "candidateId": "WEXP-0246",
+      "reviewedAt": "2026-08-24T20:13:06.654Z"
+    },
+    {
+      "status": "APPROVED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": true,
+        "choiceParity": true,
+        "duplicateReview": true,
+        "sourceReview": true
+      },
+      "candidateId": "WEXP-0251",
+      "reviewedAt": "2026-08-24T20:13:11.422Z"
+    },
+    {
+      "status": "REJECTED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": false,
+        "choiceParity": false,
+        "duplicateReview": false,
+        "sourceReview": false
+      },
+      "candidateId": "WEXP-0256",
+      "reviewedAt": "2026-08-24T20:17:53.613Z"
+    },
+    {
+      "status": "APPROVED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": true,
+        "choiceParity": true,
+        "duplicateReview": true,
+        "sourceReview": true
+      },
+      "candidateId": "WEXP-0261",
+      "reviewedAt": "2026-08-24T20:13:21.263Z"
+    },
+    {
+      "status": "APPROVED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": true,
+        "choiceParity": true,
+        "duplicateReview": true,
+        "sourceReview": true
+      },
+      "candidateId": "WEXP-0266",
+      "reviewedAt": "2026-08-24T20:13:32.587Z"
+    },
+    {
+      "status": "APPROVED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": true,
+        "choiceParity": true,
+        "duplicateReview": true,
+        "sourceReview": true
+      },
+      "candidateId": "WEXP-0271",
+      "reviewedAt": "2026-08-24T20:13:37.631Z"
+    },
+    {
+      "status": "APPROVED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": true,
+        "choiceParity": true,
+        "duplicateReview": true,
+        "sourceReview": true
+      },
+      "candidateId": "WEXP-0281",
+      "reviewedAt": "2026-08-24T20:13:42.258Z"
+    },
+    {
+      "status": "APPROVED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": true,
+        "choiceParity": true,
+        "duplicateReview": true,
+        "sourceReview": true
+      },
+      "candidateId": "WEXP-0286",
+      "reviewedAt": "2026-08-24T20:13:55.873Z"
+    },
+    {
+      "status": "APPROVED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": true,
+        "choiceParity": true,
+        "duplicateReview": true,
+        "sourceReview": true
+      },
+      "candidateId": "WEXP-0291",
+      "reviewedAt": "2026-08-24T20:13:59.286Z"
+    },
+    {
+      "status": "APPROVED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": true,
+        "choiceParity": true,
+        "duplicateReview": true,
+        "sourceReview": true
+      },
+      "candidateId": "WEXP-0296",
+      "reviewedAt": "2026-08-24T20:14:02.213Z"
+    },
+    {
+      "status": "REJECTED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": false,
+        "choiceParity": false,
+        "duplicateReview": false,
+        "sourceReview": false
+      },
+      "candidateId": "WEXP-0301",
+      "reviewedAt": "2026-08-24T20:14:07.997Z"
+    },
+    {
+      "status": "APPROVED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": true,
+        "choiceParity": true,
+        "duplicateReview": true,
+        "sourceReview": true
+      },
+      "candidateId": "WEXP-0311",
+      "reviewedAt": "2026-08-24T20:14:12.530Z"
+    },
+    {
+      "status": "APPROVED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": true,
+        "choiceParity": true,
+        "duplicateReview": true,
+        "sourceReview": true
+      },
+      "candidateId": "WEXP-0316",
+      "reviewedAt": "2026-08-24T20:14:17.949Z"
+    },
+    {
+      "status": "APPROVED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": true,
+        "choiceParity": true,
+        "duplicateReview": true,
+        "sourceReview": true
+      },
+      "candidateId": "WEXP-0321",
+      "reviewedAt": "2026-08-24T20:17:49.419Z"
+    },
+    {
+      "status": "REJECTED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": false,
+        "choiceParity": false,
+        "duplicateReview": false,
+        "sourceReview": false
+      },
+      "candidateId": "WEXP-0326",
+      "reviewedAt": "2026-08-24T20:14:28.454Z"
+    },
+    {
+      "status": "REJECTED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": false,
+        "choiceParity": false,
+        "duplicateReview": false,
+        "sourceReview": false
+      },
+      "candidateId": "WEXP-0351",
+      "reviewedAt": "2026-08-24T20:14:35.257Z"
+    },
+    {
+      "status": "REJECTED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": false,
+        "choiceParity": false,
+        "duplicateReview": false,
+        "sourceReview": false
+      },
+      "candidateId": "WEXP-0361",
+      "reviewedAt": "2026-08-24T20:17:43.996Z"
+    },
+    {
+      "status": "APPROVED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": true,
+        "choiceParity": true,
+        "duplicateReview": true,
+        "sourceReview": true
+      },
+      "candidateId": "WEXP-0366",
+      "reviewedAt": "2026-08-24T20:14:47.472Z"
+    },
+    {
+      "status": "REJECTED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": false,
+        "choiceParity": false,
+        "duplicateReview": false,
+        "sourceReview": false
+      },
+      "candidateId": "WEXP-0371",
+      "reviewedAt": "2026-08-24T20:17:41.753Z"
+    },
+    {
+      "status": "APPROVED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": true,
+        "choiceParity": true,
+        "duplicateReview": true,
+        "sourceReview": true
+      },
+      "candidateId": "WEXP-0386",
+      "reviewedAt": "2026-08-24T20:17:33.854Z"
+    },
+    {
+      "status": "REJECTED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": true,
+        "choiceParity": true,
+        "duplicateReview": true,
+        "sourceReview": true
+      },
+      "candidateId": "WEXP-0391",
+      "reviewedAt": "2026-08-24T20:17:28.871Z"
+    },
+    {
+      "status": "REJECTED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": false,
+        "choiceParity": false,
+        "duplicateReview": false,
+        "sourceReview": false
+      },
+      "candidateId": "WEXP-0396",
+      "reviewedAt": "2026-08-24T20:17:21.334Z"
+    },
+    {
+      "status": "APPROVED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": true,
+        "choiceParity": true,
+        "duplicateReview": true,
+        "sourceReview": true
+      },
+      "candidateId": "WEXP-0406",
+      "reviewedAt": "2026-08-24T20:17:18.024Z"
+    },
+    {
+      "status": "APPROVED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": true,
+        "choiceParity": true,
+        "duplicateReview": true,
+        "sourceReview": true
+      },
+      "candidateId": "WEXP-0416",
+      "reviewedAt": "2026-08-24T20:17:14.264Z"
+    },
+    {
+      "status": "REJECTED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": false,
+        "choiceParity": false,
+        "duplicateReview": false,
+        "sourceReview": false
+      },
+      "candidateId": "WEXP-0426",
+      "reviewedAt": "2026-08-24T20:17:06.941Z"
+    },
+    {
+      "status": "REJECTED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": false,
+        "choiceParity": false,
+        "duplicateReview": false,
+        "sourceReview": false
+      },
+      "candidateId": "WEXP-0436",
+      "reviewedAt": "2026-08-24T20:17:02.982Z"
+    },
+    {
+      "status": "REJECTED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": false,
+        "choiceParity": false,
+        "duplicateReview": false,
+        "sourceReview": false
+      },
+      "candidateId": "WEXP-0446",
+      "reviewedAt": "2026-08-24T20:17:04.115Z"
+    },
+    {
+      "status": "NEEDS_CHANGES",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": false,
+        "choiceParity": false,
+        "duplicateReview": false,
+        "sourceReview": false
+      },
+      "candidateId": "WEXP-0451",
+      "reviewedAt": "2026-08-24T20:16:53.625Z"
+    },
+    {
+      "status": "APPROVED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": true,
+        "choiceParity": true,
+        "duplicateReview": true,
+        "sourceReview": true
+      },
+      "candidateId": "WEXP-0461",
+      "reviewedAt": "2026-08-24T20:15:06.281Z"
+    },
+    {
+      "status": "APPROVED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": true,
+        "choiceParity": true,
+        "duplicateReview": true,
+        "sourceReview": true
+      },
+      "candidateId": "WEXP-0481",
+      "reviewedAt": "2026-08-24T20:15:01.896Z"
+    },
+    {
+      "status": "APPROVED",
+      "note": "",
+      "reviewedBy": "WHICH_PRODUCT_OWNER",
+      "checks": {
+        "binaryFit": true,
+        "choiceParity": true,
+        "duplicateReview": true,
+        "sourceReview": true
+      },
+      "candidateId": "WEXP-0486",
+      "reviewedAt": "2026-08-24T20:14:58.720Z"
+    }
+  ]
 }

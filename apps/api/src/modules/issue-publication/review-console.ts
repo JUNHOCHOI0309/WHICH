@@ -64,12 +64,12 @@ export const decisionInputSchema = z
     }
   });
 
-const storedDecisionSchema = decisionInputSchema.extend({
+export const storedDecisionSchema = decisionInputSchema.extend({
   candidateId: z.string().regex(/^WEXP-[0-9]{4}$/),
   reviewedAt: z.string().datetime({ offset: true }),
 });
 
-const decisionStoreSchema = z
+export const decisionStoreSchema = z
   .object({
     schemaVersion: z.literal(1),
     catalogId: z.string(),
@@ -89,7 +89,8 @@ export const exportInputSchema = z
   .strict();
 
 export type ReviewDecisionInput = z.infer<typeof decisionInputSchema>;
-type StoredDecision = z.infer<typeof storedDecisionSchema>;
+export type StoredDecision = z.infer<typeof storedDecisionSchema>;
+export type DecisionStore = z.infer<typeof decisionStoreSchema>;
 type Inventory = z.infer<typeof inventorySchema>;
 
 export type ReviewConsolePaths = {

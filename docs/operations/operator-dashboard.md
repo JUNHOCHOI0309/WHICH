@@ -99,8 +99,30 @@ choice parity, duplicate review, and source review.
 
 Decisions are stored in `operator_editorial_decisions`. Each update increments `revision`; a stale
 browser receives `409 REVISION_CONFLICT` and must reload before retrying. This prevents one operator
-from silently overwriting a newer decision. Existing local JSON decisions are not automatically
-imported into PostgreSQL.
+from silently overwriting a newer decision.
+
+### Importing the reviewed local baseline
+
+Use the bounded importer once when a reviewed local decision ledger must become the production
+baseline. The first command is always a dry run and prints an exact confirmation token:
+
+```bash
+node apps/api/dist/ops-operator.js import-editorial owner@example.com \
+  apps/api/content/editorial/expanded/editorial-review-decisions-v1.json
+```
+
+Review `create`, `noOp`, and `conflict`. Apply only when `conflict` is zero:
+
+```bash
+node apps/api/dist/ops-operator.js import-editorial owner@example.com \
+  apps/api/content/editorial/expanded/editorial-review-decisions-v1.json \
+  --confirm production:which-expanded-500-catalog-v2:<sha256-from-dry-run>
+```
+
+The importer validates the ledger and Catalog, requires an active OPERATOR, runs in one database
+transaction, preserves the original review timestamps, and writes one audit record. Re-running the
+same file produces only `noOp` entries. If production already contains a different decision for any
+candidate, the whole import stops without overwriting it.
 
 ## Refresh and incidents
 
