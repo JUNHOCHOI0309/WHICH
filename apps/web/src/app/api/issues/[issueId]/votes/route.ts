@@ -85,7 +85,15 @@ export async function POST(request: NextRequest, context: RouteContext) {
       vote = await forwardVote(issueId, { subjectId }, analyticsSession.id, body);
     }
 
-    const response = NextResponse.json(vote.responseBody, { status: vote.upstream.status });
+    const responseBody =
+      token &&
+      process.env.FEATURE_POINTS_ENABLED === "true" &&
+      vote.upstream.ok &&
+      "outcome" in vote.responseBody &&
+      vote.responseBody.outcome === "ACCEPTED"
+        ? { ...vote.responseBody, pointFeedback: { amount: 10, reasonLabel: "투표 참여" } }
+        : vote.responseBody;
+    const response = NextResponse.json(responseBody, { status: vote.upstream.status });
     if (!token && subjectId && (!cookieSubject || subjectId !== cookieSubject)) {
       setGuestSubjectCookie(response, subjectId);
     }

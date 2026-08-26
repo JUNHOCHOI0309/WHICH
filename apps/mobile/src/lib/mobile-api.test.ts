@@ -10,6 +10,32 @@ function jsonResponse(body: unknown, status = 200) {
 }
 
 describe("mobile API client", () => {
+  it("uses the same authenticated W Point contract as the web Member view", async () => {
+    const request = vi.fn(async () =>
+      jsonResponse({
+        account: {
+          balance: 20,
+          todayEarned: 10,
+          lifetimeEarned: 20,
+          lifetimeSpent: 0,
+          hasPendingRecovery: false,
+        },
+        ledger: { items: [], nextCursor: null },
+      }),
+    );
+    const api = createMobileApiClient({ baseUrl: "https://whichone.site", request });
+
+    await expect(api.loadMemberPoints("member-session", { limit: 5 })).resolves.toMatchObject({
+      account: { balance: 20, todayEarned: 10 },
+    });
+    expect(request).toHaveBeenCalledWith(
+      "https://whichone.site/api/mobile/v1/me/points?limit=5",
+      expect.objectContaining({
+        headers: expect.objectContaining({ authorization: "Bearer member-session" }),
+      }),
+    );
+  });
+
   it("sends the stored Guest Subject when loading the feed", async () => {
     const request = vi.fn(async () => jsonResponse({ items: [], nextCursor: null }));
     const api = createMobileApiClient({ baseUrl: "https://whichone.site/", request });
