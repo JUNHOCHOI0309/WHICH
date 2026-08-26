@@ -2,6 +2,13 @@ export type IssueChoice = {
   id: string;
   code: "A" | "B";
   label: string;
+  media: {
+    url: string;
+    altText: string;
+    cropMode: "COVER" | "CONTAIN";
+    width: number;
+    height: number;
+  } | null;
 };
 
 export type IssueTally = {
@@ -18,6 +25,7 @@ export type PublicFeedIssue = {
   question: string;
   publishedAt: string;
   categoryCode: string;
+  mediaMode: "TEXT_ONLY" | "OPTION_IMAGES";
   choices: IssueChoice[];
   recommendation: {
     requestId: string;

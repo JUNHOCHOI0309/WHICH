@@ -39,6 +39,8 @@ const environmentSchema = z.object({
   FEATURE_CREATOR_SUBMISSIONS_ENABLED: booleanString,
   FEATURE_ML_RANKER_ENABLED: booleanString,
   FEATURE_RESULT_SHARING_ENABLED: booleanString,
+  FEATURE_ISSUE_MEDIA_ENABLED: booleanString,
+  ISSUE_MEDIA_EXPERIMENT_PERCENT: z.coerce.number().int().min(0).max(100).default(0),
   FEATURE_POINTS_ENABLED: booleanString,
   FEATURE_RISK_CHALLENGE_ENABLED: booleanString,
 });
@@ -97,6 +99,8 @@ export function getConfig(environment: NodeJS.ProcessEnv = process.env) {
       creatorSubmissions: parsed.FEATURE_CREATOR_SUBMISSIONS_ENABLED,
       mlRanker: parsed.FEATURE_ML_RANKER_ENABLED,
       resultSharing: parsed.FEATURE_RESULT_SHARING_ENABLED,
+      issueMedia: parsed.FEATURE_ISSUE_MEDIA_ENABLED,
+      issueMediaExperimentPercent: parsed.ISSUE_MEDIA_EXPERIMENT_PERCENT,
       points: parsed.FEATURE_POINTS_ENABLED,
       riskChallenge: parsed.FEATURE_RISK_CHALLENGE_ENABLED,
       politicalVoting: false,

@@ -13,7 +13,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { BalanceResultBar } from "@/components/vote/balance-result-bar";
-import { VoteChoiceRow } from "@/components/vote/vote-choice-row";
+import { ChoiceMediaPair, VoteChoiceRow } from "@/components/vote/vote-choice-row";
 import type { IssueChoice, PublicIssue, VoteResponse } from "@/contracts";
 import { InterestSelector } from "@/features/interests/interest-selector";
 import { MobileApiError } from "@/lib/mobile-api";
@@ -34,10 +34,13 @@ export default function IssueScreen() {
   );
   const attemptKey = useRef(randomUUID());
   const analyticsSessionId = useRef(randomUUID());
+  const decisionStartedAt = useRef(0);
+  const recordedMediaLoads = useRef(new Set<string>());
 
   const fetchIssue = useCallback(async () => {
     if (!issueId) throw new Error("질문 ID가 필요합니다.");
-    return mobileApi.loadIssue(issueId);
+    const subjectId = await guestSubjects.getOrCreate();
+    return mobileApi.loadIssue(issueId, subjectId);
   }, [issueId]);
 
   const load = useCallback(async () => {
@@ -51,6 +54,48 @@ export default function IssueScreen() {
       setLoading(false);
     }
   }, [fetchIssue]);
+
+  useEffect(() => {
+    if (!issue) return;
+    decisionStartedAt.current = Date.now();
+    void mobileApi
+      .recordAnalyticsEvent({
+        sessionId: analyticsSessionId.current,
+        eventId: randomUUID(),
+        eventType: "ISSUE_VIEWABLE_IMPRESSION",
+        issueId: issue.id,
+        issueVersion: issue.version,
+        quality: { mediaMode: issue.mediaMode },
+        occurredAt: new Date().toISOString(),
+      })
+      .catch(() => undefined);
+  }, [issue]);
+
+  const recordMediaLoad = useCallback(
+    (choice: IssueChoice, outcome: "SUCCESS" | "FAILURE") => {
+      if (!issue) return;
+      const key = `${choice.id}:${outcome}`;
+      if (recordedMediaLoads.current.has(key)) return;
+      recordedMediaLoads.current.add(key);
+      void mobileApi
+        .recordAnalyticsEvent({
+          sessionId: analyticsSessionId.current,
+          eventId: randomUUID(),
+          eventType: "ISSUE_MEDIA_LOAD",
+          issueId: issue.id,
+          issueVersion: issue.version,
+          quality: {
+            canonicalChoiceId: choice.id,
+            shownPosition: issue.choices.findIndex((item) => item.id === choice.id),
+            mediaMode: issue.mediaMode,
+            mediaLoadOutcome: outcome,
+          },
+          occurredAt: new Date().toISOString(),
+        })
+        .catch(() => undefined);
+    },
+    [issue],
+  );
 
   useEffect(() => {
     let active = true;
@@ -89,6 +134,22 @@ export default function IssueScreen() {
     if (!issue || submittingChoice || vote) return;
     setSubmittingChoice(choice.id);
     setError(null);
+    void mobileApi
+      .recordAnalyticsEvent({
+        sessionId: analyticsSessionId.current,
+        eventId: randomUUID(),
+        eventType: "VOTE_SUBMIT",
+        issueId: issue.id,
+        issueVersion: issue.version,
+        quality: {
+          durationMs: Math.min(1_800_000, Math.max(0, Date.now() - decisionStartedAt.current)),
+          canonicalChoiceId: choice.id,
+          shownPosition: issue.choices.findIndex((item) => item.id === choice.id),
+          mediaMode: issue.mediaMode,
+        },
+        occurredAt: new Date().toISOString(),
+      })
+      .catch(() => undefined);
     try {
       let subjectId = await guestSubjects.getOrCreate();
       const command = {
@@ -219,6 +280,7 @@ export default function IssueScreen() {
               disabled={Boolean(submittingChoice || vote)}
               pending={submittingChoice === choice.id}
               selected={vote?.choice === choice.code}
+              onMediaLoad={(outcome) => recordMediaLoad(choice, outcome)}
               onPress={(selected) => void submit(selected)}
             />
           ))}
@@ -240,6 +302,7 @@ export default function IssueScreen() {
                   ”에 투표했어요.
                 </Text>
               ) : null}
+              <ChoiceMediaPair choices={issue.choices} onMediaLoad={recordMediaLoad} />
               <BalanceResultBar
                 aLabel={issue.choices.find((choice) => choice.code === "A")?.label ?? "A"}
                 bLabel={issue.choices.find((choice) => choice.code === "B")?.label ?? "B"}

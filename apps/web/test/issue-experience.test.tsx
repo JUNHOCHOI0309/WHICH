@@ -26,9 +26,10 @@ const issue: PublicIssue = {
   question: "평생 하나만 고른다면?",
   context: "당신의 일상에 더 가까운 쪽을 골라보세요.",
   publishedAt: "2026-08-18T00:00:00.000Z",
+  mediaMode: "TEXT_ONLY",
   choices: [
-    { id: "choice-a", code: "A", label: "아침형 인간" },
-    { id: "choice-b", code: "B", label: "저녁형 인간" },
+    { id: "choice-a", code: "A", label: "아침형 인간", media: null },
+    { id: "choice-b", code: "B", label: "저녁형 인간", media: null },
   ],
   author: null,
   experienceModeCode: "CORE_VOTE",

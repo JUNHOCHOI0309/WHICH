@@ -2,11 +2,12 @@ import { router } from "expo-router";
 import { randomUUID } from "expo-crypto";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
+import type { ViewToken } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { BalanceResultBar } from "@/components/vote/balance-result-bar";
 import { RotatingCommentHighlights } from "@/components/comments/rotating-comment-highlights";
-import { VoteChoiceRow } from "@/components/vote/vote-choice-row";
+import { ChoiceMediaPair, VoteChoiceRow } from "@/components/vote/vote-choice-row";
 import type {
   CommentHighlights,
   IssueChoice,
@@ -39,6 +40,32 @@ export default function FeedScreen() {
   const [highlightStates, setHighlightStates] = useState<Record<string, HighlightState>>({});
   const analyticsSessionId = useRef(randomUUID());
   const viewedRecommendationRequests = useRef(new Set<string>());
+  const viewedIssues = useRef(new Set<string>());
+  const recordedMediaLoads = useRef(new Set<string>());
+  const decisionStartedAt = useRef(new Map<string, number>());
+
+  const onViewableItemsChanged = useCallback(
+    ({ viewableItems }: { viewableItems: ViewToken<PublicFeedIssue>[] }) => {
+      for (const viewable of viewableItems) {
+        const issue = viewable.item;
+        if (!issue || viewedIssues.current.has(issue.id)) continue;
+        viewedIssues.current.add(issue.id);
+        decisionStartedAt.current.set(issue.id, Date.now());
+        void mobileApi
+          .recordAnalyticsEvent({
+            sessionId: analyticsSessionId.current,
+            eventId: randomUUID(),
+            eventType: "ISSUE_VIEWABLE_IMPRESSION",
+            issueId: issue.id,
+            issueVersion: issue.version,
+            quality: { mediaMode: issue.mediaMode },
+            occurredAt: new Date().toISOString(),
+          })
+          .catch(() => undefined);
+      }
+    },
+    [],
+  );
 
   const fetchFeed = useCallback(async () => {
     const subjectId = await guestSubjects.getOrCreate();
@@ -137,6 +164,15 @@ export default function FeedScreen() {
           eventType: "VOTE_SUBMIT",
           issueId: issue.id,
           issueVersion: issue.version,
+          quality: {
+            durationMs: Math.min(
+              1_800_000,
+              Math.max(0, Date.now() - (decisionStartedAt.current.get(issue.id) ?? Date.now())),
+            ),
+            canonicalChoiceId: choice.id,
+            shownPosition: issue.choices.findIndex((item) => item.id === choice.id),
+            mediaMode: issue.mediaMode,
+          },
           occurredAt: new Date().toISOString(),
         })
         .catch(() => undefined);
@@ -213,6 +249,8 @@ export default function FeedScreen() {
         keyExtractor={(item) => item.id}
         style={styles.list}
         contentContainerStyle={styles.content}
+        onViewableItemsChanged={onViewableItemsChanged}
+        viewabilityConfig={{ itemVisiblePercentThreshold: 50, minimumViewTime: 500 }}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -295,6 +333,29 @@ export default function FeedScreen() {
                 .getOrCreate()
                 .then((subjectId) => loadHighlights(subjectId, item.id));
             }}
+            onMediaLoad={(choice, outcome) => {
+              const key = `${item.id}:${choice.id}:${outcome}`;
+              if (recordedMediaLoads.current.has(key)) return;
+              recordedMediaLoads.current.add(key);
+              void mobileApi
+                .recordAnalyticsEvent({
+                  sessionId: analyticsSessionId.current,
+                  eventId: randomUUID(),
+                  eventType: "ISSUE_MEDIA_LOAD",
+                  issueId: item.id,
+                  issueVersion: item.version,
+                  quality: {
+                    canonicalChoiceId: choice.id,
+                    shownPosition: item.choices.findIndex(
+                      (candidate) => candidate.id === choice.id,
+                    ),
+                    mediaMode: item.mediaMode,
+                    mediaLoadOutcome: outcome,
+                  },
+                  occurredAt: new Date().toISOString(),
+                })
+                .catch(() => undefined);
+            }}
           />
         )}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
@@ -326,6 +387,7 @@ function VoteFeedCard({
   onReset,
   onOpen,
   onRetryHighlights,
+  onMediaLoad,
 }: {
   issue: PublicFeedIssue;
   state: CardVoteState;
@@ -335,6 +397,7 @@ function VoteFeedCard({
   onReset: () => void;
   onOpen: () => void;
   onRetryHighlights: () => void;
+  onMediaLoad: (choice: IssueChoice, outcome: "SUCCESS" | "FAILURE") => void;
 }) {
   const choiceA = issue.choices.find((choice) => choice.code === "A");
   const choiceB = issue.choices.find((choice) => choice.code === "B");
@@ -362,6 +425,7 @@ function VoteFeedCard({
               selected={pending?.id === choiceA.id}
               pending={state.status === "SUBMITTING" && pending?.id === choiceA.id}
               disabled={state.status === "SUBMITTING"}
+              onMediaLoad={(outcome) => onMediaLoad(choiceA, outcome)}
               onPress={onChoose}
             />
           ) : null}
@@ -371,6 +435,7 @@ function VoteFeedCard({
               selected={pending?.id === choiceB.id}
               pending={state.status === "SUBMITTING" && pending?.id === choiceB.id}
               disabled={state.status === "SUBMITTING"}
+              onMediaLoad={(outcome) => onMediaLoad(choiceB, outcome)}
               onPress={onChoose}
             />
           ) : null}
@@ -408,6 +473,7 @@ function VoteFeedCard({
               ? `처음 선택한 ${state.vote.choice}가 유지되고 있어요.`
               : `${state.vote.choice} 선택이 반영됐어요.`}
           </Text>
+          <ChoiceMediaPair choices={[choiceA, choiceB]} onMediaLoad={onMediaLoad} />
           <BalanceResultBar
             aLabel={choiceA.label}
             bLabel={choiceB.label}
