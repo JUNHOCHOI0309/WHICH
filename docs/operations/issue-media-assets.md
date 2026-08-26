@@ -89,7 +89,7 @@ do not expose it to public clients.
 
 ## Rollback and compatibility
 
-- Migration `0029_aromatic_omega_flight.sql` is additive and backfills every existing Issue version
+- Migration `0030_flimsy_hobgoblin.sql` is additive and backfills every existing Issue version
   as `format_mode = 'VS'` and `media_mode = 'TEXT_ONLY'`.
 - Removing the R2 Issue media variables disables new media operations without affecting voting,
   comments, or text-only Issue rendering.
