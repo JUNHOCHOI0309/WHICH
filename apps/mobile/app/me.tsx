@@ -21,6 +21,7 @@ import type {
   MemberPrivateVote,
   MemberSessionView,
 } from "@/contracts";
+import { clearRememberedMemberVotes, rememberMemberVote } from "@/lib/member-vote-cache";
 import { MobileApiError } from "@/lib/mobile-api";
 import { memberSessions, mobileApi } from "@/lib/runtime";
 import { colors } from "@/theme";
@@ -72,6 +73,7 @@ export default function MeScreen() {
   const [history, setHistory] = useState<MemberPrivateVote[]>([]);
   const [historyCursor, setHistoryCursor] = useState<string | null>(null);
   const [historyPending, setHistoryPending] = useState(false);
+  const [avatarPending, setAvatarPending] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
 
   useFocusEffect(
@@ -84,6 +86,7 @@ export default function MeScreen() {
         .then(async (restored) => {
           if (!active) return;
           if (!restored) {
+            clearRememberedMemberVotes();
             setSession(null);
             setProfile(null);
             setPoints(null);
@@ -128,6 +131,58 @@ export default function MeScreen() {
     }
   }
 
+  async function chooseAvatar() {
+    if (!session || !profile || avatarPending) return;
+    setAvatarPending(true);
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert("사진 접근 권한", "프로필 이미지를 선택하려면 사진 접근을 허용해 주세요.");
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.9,
+      });
+      const asset = result.assets?.[0];
+      if (result.canceled || !asset) return;
+      if (asset.fileSize && asset.fileSize > 5 * 1024 * 1024) {
+        Alert.alert("이미지가 너무 커요", "5MB 이하 JPG 또는 PNG 이미지를 선택해 주세요.");
+        return;
+      }
+      const response = await mobileApi.uploadMemberAvatar(session.token, {
+        uri: asset.uri,
+        name: asset.fileName ?? `which-avatar.${asset.mimeType === "image/png" ? "png" : "jpg"}`,
+        type: asset.mimeType === "image/png" ? "image/png" : "image/jpeg",
+      });
+      setProfile((current) =>
+        current ? { ...current, member: { ...current.member, ...response.member } } : current,
+      );
+      Alert.alert("프로필 이미지", "프로필 이미지를 변경했어요.");
+    } catch (error) {
+      Alert.alert("프로필 이미지", apiMessage(error, "이미지를 선택하거나 저장하지 못했습니다."));
+    } finally {
+      setAvatarPending(false);
+    }
+  }
+
+  async function removeAvatar() {
+    if (!session || avatarPending) return;
+    setAvatarPending(true);
+    try {
+      const response = await mobileApi.removeMemberAvatar(session.token);
+      setProfile((current) =>
+        current ? { ...current, member: { ...current.member, ...response.member } } : current,
+      );
+    } catch (error) {
+      Alert.alert("프로필 이미지", apiMessage(error, "이미지를 삭제하지 못했습니다."));
+    } finally {
+      setAvatarPending(false);
+    }
+  }
+
   if (screen === "loading") return <LoadingState />;
   if (screen === "guest") return <GuestState />;
   if (screen === "error" || !session || !profile || !points) {
@@ -145,7 +200,11 @@ export default function MeScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <ProfileSummary profile={profile} />
+        <ProfileSummary
+          avatarPending={avatarPending}
+          onAvatarPress={() => void chooseAvatar()}
+          profile={profile}
+        />
         <View accessibilityRole="tablist" style={styles.tabs}>
           <TabButton active={tab === "profile"} label="프로필" onPress={() => setTab("profile")} />
           <TabButton active={tab === "votes"} label="투표 기록" onPress={() => setTab("votes")} />
@@ -153,13 +212,10 @@ export default function MeScreen() {
         {tab === "profile" ? (
           <>
             <AvatarSettings
+              onChoose={() => void chooseAvatar()}
+              onRemove={() => void removeAvatar()}
+              pending={avatarPending}
               profile={profile}
-              session={session}
-              onUpdated={(member) =>
-                setProfile((current) =>
-                  current ? { ...current, member: { ...current.member, ...member } } : current,
-                )
-              }
             />
             <ProfileSettings
               profile={profile}
@@ -275,16 +331,37 @@ function TabButton({
   );
 }
 
-function ProfileSummary({ profile }: { profile: MemberPrivateProfile }) {
+function ProfileSummary({
+  avatarPending,
+  onAvatarPress,
+  profile,
+}: {
+  avatarPending: boolean;
+  onAvatarPress: () => void;
+  profile: MemberPrivateProfile;
+}) {
   return (
     <View style={styles.profileCard}>
-      {profile.member.avatar.kind === "IMAGE" ? (
-        <Image source={{ uri: profile.member.avatar.url }} style={styles.avatarImage} />
-      ) : (
-        <View style={styles.avatarInitials}>
-          <Text style={styles.avatarText}>{profile.member.avatar.initials}</Text>
+      <Pressable
+        accessibilityHint="사진 보관함에서 새 프로필 이미지를 선택합니다."
+        accessibilityLabel="프로필 이미지 변경"
+        accessibilityRole="button"
+        disabled={avatarPending}
+        hitSlop={10}
+        onPress={onAvatarPress}
+        style={({ pressed }) => [styles.avatarButton, pressed && styles.avatarButtonPressed]}
+      >
+        {profile.member.avatar.kind === "IMAGE" ? (
+          <Image source={{ uri: profile.member.avatar.url }} style={styles.avatarImage} />
+        ) : (
+          <View style={styles.avatarInitials}>
+            <Text style={styles.avatarText}>{profile.member.avatar.initials}</Text>
+          </View>
+        )}
+        <View style={styles.avatarEditBadge}>
+          <Text style={styles.avatarEditBadgeText}>{avatarPending ? "…" : "변경"}</Text>
         </View>
-      )}
+      </Pressable>
       <Text style={styles.eyebrow}>PRIVATE MEMBER PROFILE</Text>
       <Text accessibilityRole="header" style={styles.title}>
         {profile.member.displayName}님의 선택
@@ -299,63 +376,16 @@ function ProfileSummary({ profile }: { profile: MemberPrivateProfile }) {
 }
 
 function AvatarSettings({
+  onChoose,
+  onRemove,
+  pending,
   profile,
-  session,
-  onUpdated,
 }: {
+  onChoose: () => void;
+  onRemove: () => void;
+  pending: boolean;
   profile: MemberPrivateProfile;
-  session: MemberSessionView;
-  onUpdated: (member: MemberPrivateProfile["member"]) => void;
 }) {
-  const [pending, setPending] = useState(false);
-
-  async function choose() {
-    if (pending) return;
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert("사진 접근 권한", "프로필 이미지를 선택하려면 사진 접근을 허용해 주세요.");
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.9,
-    });
-    const asset = result.assets?.[0];
-    if (result.canceled || !asset) return;
-    if (asset.fileSize && asset.fileSize > 5 * 1024 * 1024) {
-      Alert.alert("이미지가 너무 커요", "5MB 이하 JPG 또는 PNG 이미지를 선택해 주세요.");
-      return;
-    }
-    setPending(true);
-    try {
-      const response = await mobileApi.uploadMemberAvatar(session.token, {
-        uri: asset.uri,
-        name: asset.fileName ?? `which-avatar.${asset.mimeType === "image/png" ? "png" : "jpg"}`,
-        type: asset.mimeType === "image/png" ? "image/png" : "image/jpeg",
-      });
-      onUpdated({ ...profile.member, ...response.member });
-      Alert.alert("프로필 이미지", "프로필 이미지를 변경했어요.");
-    } catch (error) {
-      Alert.alert("프로필 이미지", apiMessage(error, "이미지를 저장하지 못했습니다."));
-    } finally {
-      setPending(false);
-    }
-  }
-
-  async function remove() {
-    setPending(true);
-    try {
-      const response = await mobileApi.removeMemberAvatar(session.token);
-      onUpdated({ ...profile.member, ...response.member });
-    } catch (error) {
-      Alert.alert("프로필 이미지", apiMessage(error, "이미지를 삭제하지 못했습니다."));
-    } finally {
-      setPending(false);
-    }
-  }
-
   return (
     <View style={styles.sectionCard}>
       <Text style={styles.eyebrow}>PROFILE IMAGE</Text>
@@ -364,15 +394,11 @@ function AvatarSettings({
         JPG·PNG를 선택하면 512px WebP로 변환해 안전하게 저장해요.
       </Text>
       <View style={styles.rowActions}>
-        <Pressable disabled={pending} onPress={() => void choose()} style={styles.secondaryButton}>
+        <Pressable disabled={pending} onPress={onChoose} style={styles.secondaryButton}>
           <Text style={styles.secondaryButtonText}>{pending ? "처리 중…" : "이미지 변경"}</Text>
         </Pressable>
         {profile.member.avatarSource === "CUSTOM" ? (
-          <Pressable
-            disabled={pending}
-            onPress={() => void remove()}
-            style={styles.secondaryButton}
-          >
+          <Pressable disabled={pending} onPress={onRemove} style={styles.secondaryButton}>
             <Text style={styles.dangerText}>이미지 삭제</Text>
           </Pressable>
         ) : null}
@@ -541,7 +567,13 @@ function VoteHistory({
         items.map((vote) => (
           <Pressable
             key={vote.voteId}
-            onPress={() => router.push(`/issues/${vote.issueId}`)}
+            onPress={() => {
+              rememberMemberVote(vote);
+              router.push({
+                pathname: "/issues/[issueId]",
+                params: { issueId: vote.issueId },
+              });
+            }}
             style={styles.voteItem}
           >
             <View style={styles.voteChoice}>
@@ -583,6 +615,7 @@ function AccountActions({ session }: { session: MemberSessionView }) {
     try {
       await mobileApi.deleteMemberAccount(session.token, password);
       await memberSessions.logout();
+      clearRememberedMemberVotes();
       Alert.alert("회원 탈퇴", "모든 세션과 개인정보를 삭제하고 활동 기록을 익명화했습니다.");
       router.replace("/");
     } catch (error) {
@@ -601,7 +634,12 @@ function AccountActions({ session }: { session: MemberSessionView }) {
         삭제하고 기존 활동은 탈퇴한 사용자로 익명화합니다.
       </Text>
       <Pressable
-        onPress={() => void memberSessions.logout().then(() => router.replace("/login"))}
+        onPress={() =>
+          void memberSessions.logout().then(() => {
+            clearRememberedMemberVotes();
+            router.replace("/login");
+          })
+        }
         style={styles.secondaryButton}
       >
         <Text style={styles.secondaryButtonText}>로그아웃</Text>
@@ -716,6 +754,21 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   avatarImage: { borderRadius: 42, height: 84, width: 84 },
+  avatarButton: { borderRadius: 42, position: "relative" },
+  avatarButtonPressed: { opacity: 0.78, transform: [{ scale: 0.98 }] },
+  avatarEditBadge: {
+    alignItems: "center",
+    backgroundColor: colors.text,
+    borderBottomLeftRadius: 42,
+    borderBottomRightRadius: 42,
+    bottom: 0,
+    height: 25,
+    justifyContent: "center",
+    left: 0,
+    position: "absolute",
+    right: 0,
+  },
+  avatarEditBadgeText: { color: colors.surface, fontSize: 10, fontWeight: "900" },
   avatarInitials: {
     alignItems: "center",
     backgroundColor: colors.cyanSoft,

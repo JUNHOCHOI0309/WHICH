@@ -1,6 +1,6 @@
 import { randomUUID } from "expo-crypto";
 import { router, useLocalSearchParams } from "expo-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -16,14 +16,16 @@ import { BalanceResultBar } from "@/components/vote/balance-result-bar";
 import { ChoiceMediaPair, VoteChoiceRow } from "@/components/vote/vote-choice-row";
 import type { IssueChoice, PublicIssue, VoteResponse } from "@/contracts";
 import { InterestSelector } from "@/features/interests/interest-selector";
+import { readRememberedMemberVote } from "@/lib/member-vote-cache";
 import { MobileApiError } from "@/lib/mobile-api";
 import { guestSubjects, memberSessions, mobileApi } from "@/lib/runtime";
 import { colors } from "@/theme";
 
 export default function IssueScreen() {
   const { issueId } = useLocalSearchParams<{ issueId: string }>();
+  const rememberedVote = useMemo(() => readRememberedMemberVote(issueId), [issueId]);
   const [issue, setIssue] = useState<PublicIssue | null>(null);
-  const [vote, setVote] = useState<VoteResponse | null>(null);
+  const [vote, setVote] = useState<VoteResponse | null>(rememberedVote);
   const [memberSessionToken, setMemberSessionToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [submittingChoice, setSubmittingChoice] = useState<string | null>(null);
@@ -33,6 +35,7 @@ export default function IssueScreen() {
   const [nextIssueState, setNextIssueState] = useState<"idle" | "loading" | "empty" | "error">(
     "idle",
   );
+  const completedVote = vote?.issueId === issueId ? vote : rememberedVote;
   const attemptKey = useRef(randomUUID());
   const analyticsSessionId = useRef(randomUUID());
   const decisionStartedAt = useRef(0);
@@ -56,13 +59,13 @@ export default function IssueScreen() {
       const loaded = await fetchIssue();
       setIssue(loaded.issue);
       setMemberSessionToken(loaded.memberSessionToken);
-      setVote(loaded.vote);
+      setVote(loaded.vote ?? rememberedVote);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "질문을 불러오지 못했습니다.");
     } finally {
       setLoading(false);
     }
-  }, [fetchIssue]);
+  }, [fetchIssue, rememberedVote]);
 
   useEffect(() => {
     if (!issue) return;
@@ -113,7 +116,7 @@ export default function IssueScreen() {
         if (active) {
           setIssue(loaded.issue);
           setMemberSessionToken(loaded.memberSessionToken);
-          setVote(loaded.vote);
+          setVote(loaded.vote ?? rememberedVote);
         }
       })
       .catch((reason: unknown) => {
@@ -127,10 +130,10 @@ export default function IssueScreen() {
     return () => {
       active = false;
     };
-  }, [fetchIssue]);
+  }, [fetchIssue, rememberedVote]);
 
   useEffect(() => {
-    if (!issue || !vote) return;
+    if (!issue || !completedVote) return;
     void mobileApi
       .recordAnalyticsEvent({
         sessionId: analyticsSessionId.current,
@@ -141,10 +144,10 @@ export default function IssueScreen() {
         occurredAt: new Date().toISOString(),
       })
       .catch(() => undefined);
-  }, [issue, vote]);
+  }, [completedVote, issue]);
 
   async function submit(choice: IssueChoice) {
-    if (!issue || submittingChoice || vote) return;
+    if (!issue || submittingChoice || completedVote) return;
     setSubmittingChoice(choice.id);
     setError(null);
     void mobileApi
@@ -234,16 +237,16 @@ export default function IssueScreen() {
   }
 
   async function shareResult() {
-    if (!issue || !vote || sharing) return;
+    if (!issue || !completedVote || sharing) return;
     setSharing(true);
     setError(null);
     try {
       const created = await mobileApi.createResultShareCard({
         issueId: issue.id,
         issueVersion: issue.version,
-        resultVersion: vote.result.resultVersion,
+        resultVersion: completedVote.result.resultVersion,
         channel: "SYSTEM",
-        ...(includeChoice ? { sharedChoiceCode: vote.choice } : {}),
+        ...(includeChoice ? { sharedChoiceCode: completedVote.choice } : {}),
       });
       const outcome = await Share.share({
         title: issue.question,
@@ -289,7 +292,7 @@ export default function IssueScreen() {
     );
   }
 
-  const result = vote?.result ?? issue.result.tally;
+  const result = completedVote?.result ?? issue.result.tally;
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["left", "right", "bottom"]}>
@@ -305,9 +308,9 @@ export default function IssueScreen() {
             <VoteChoiceRow
               key={choice.id}
               choice={choice}
-              disabled={Boolean(submittingChoice || vote)}
+              disabled={Boolean(submittingChoice || completedVote)}
               pending={submittingChoice === choice.id}
-              selected={vote?.choice === choice.code}
+              selected={completedVote?.choice === choice.code}
               onMediaLoad={(outcome) => recordMediaLoad(choice, outcome)}
               onPress={(selected) => void submit(selected)}
             />
@@ -320,13 +323,15 @@ export default function IssueScreen() {
           <>
             <View style={styles.resultCard}>
               <Text style={styles.resultEyebrow}>
-                {vote?.outcome === "REJECTED_DUPLICATE" ? "이미 반영된 선택" : "실시간 결과"}
+                {completedVote?.outcome === "REJECTED_DUPLICATE"
+                  ? "이미 반영된 선택"
+                  : "실시간 결과"}
               </Text>
-              {vote ? (
+              {completedVote ? (
                 <Text style={styles.myVoteNotice}>
                   ✓ 당신은 “
-                  {issue.choices.find((choice) => choice.code === vote.choice)?.label ??
-                    vote.choice}
+                  {issue.choices.find((choice) => choice.code === completedVote.choice)?.label ??
+                    completedVote.choice}
                   ”에 투표했어요.
                 </Text>
               ) : null}
@@ -336,10 +341,10 @@ export default function IssueScreen() {
                 bLabel={issue.choices.find((choice) => choice.code === "B")?.label ?? "B"}
                 acceptedA={result.acceptedA}
                 acceptedB={result.acceptedB}
-                selectedChoice={vote?.choice ?? "A"}
+                selectedChoice={completedVote?.choice ?? "A"}
               />
             </View>
-            {vote && !memberSessionToken ? (
+            {completedVote && !memberSessionToken ? (
               <View style={styles.memberLinkCard}>
                 <Text style={styles.memberLinkEyebrow}>MEMBER LINK</Text>
                 <Text style={styles.memberLinkTitle}>이 선택을 계정에 이어 두세요.</Text>
@@ -363,7 +368,7 @@ export default function IssueScreen() {
                 </Pressable>
               </View>
             ) : null}
-            {vote ? (
+            {completedVote ? (
               <View style={styles.shareCard}>
                 <Text style={styles.shareTitle}>결과 공유</Text>
                 <Pressable
@@ -385,7 +390,9 @@ export default function IssueScreen() {
                   style={styles.shareToggle}
                 >
                   <Text style={styles.shareToggleMark}>{includeChoice ? "✓" : "○"}</Text>
-                  <Text style={styles.shareToggleText}>내가 고른 {vote.choice}도 함께 공개</Text>
+                  <Text style={styles.shareToggleText}>
+                    내가 고른 {completedVote.choice}도 함께 공개
+                  </Text>
                 </Pressable>
                 <Text style={styles.sharePrivacy}>
                   기본값은 비공개이며 계정 정보는 링크에 포함되지 않아요.
