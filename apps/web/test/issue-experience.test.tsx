@@ -363,6 +363,10 @@ describe("IssueExperience", () => {
     const nextButton = await screen.findByRole("button", {
       name: `다음 질문으로 이동: ${issue.question}`,
     });
+    expect(screen.getByTestId("next-issue-preview-dock")).toHaveAttribute(
+      "data-placement",
+      "bottom-right",
+    );
     expect(feedRequests).toBe(1);
     expect(navigation.push).not.toHaveBeenCalled();
     expect(analyticsEvents).not.toContain("NEXT_ISSUE_OPEN");
@@ -429,6 +433,10 @@ describe("IssueExperience", () => {
     expect(
       await screen.findByText("지금 참여할 수 있는 질문을 모두 골랐어요."),
     ).toBeInTheDocument();
+    expect(screen.getByTestId("next-issue-preview-dock")).toHaveAttribute(
+      "data-placement",
+      "bottom-right",
+    );
     expect(screen.queryByRole("button", { name: /다음 질문으로 이동/ })).not.toBeInTheDocument();
     expect(navigation.push).not.toHaveBeenCalled();
   });

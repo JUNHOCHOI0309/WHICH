@@ -1958,38 +1958,61 @@ function NextIssuePreview({
 
   if (state.kind === "loading") {
     return (
-      <section className={styles.nextIssuePreview} aria-busy="true" aria-live="polite">
-        <span className={styles.nextIssueEyebrow}>NEXT ISSUE</span>
-        <strong className={styles.nextIssueLoading}>다음 질문을 준비하고 있어요.</strong>
-      </section>
+      <aside
+        className={styles.nextIssuePreviewDock}
+        data-placement="bottom-right"
+        data-testid="next-issue-preview-dock"
+        aria-label="다음 질문 미리보기"
+      >
+        <section className={styles.nextIssuePreview} aria-busy="true" aria-live="polite">
+          <span className={styles.nextIssueEyebrow}>NEXT ISSUE</span>
+          <strong className={styles.nextIssueLoading}>다음 질문을 준비하고 있어요.</strong>
+        </section>
+      </aside>
     );
   }
 
   if (state.kind === "empty") {
     return (
-      <section className={styles.nextIssuePreview} aria-live="polite">
-        <span className={styles.nextIssueEyebrow}>NEXT ISSUE</span>
-        <strong className={styles.nextIssueEmpty}>지금 참여할 수 있는 질문을 모두 골랐어요.</strong>
-      </section>
+      <aside
+        className={styles.nextIssuePreviewDock}
+        data-placement="bottom-right"
+        data-testid="next-issue-preview-dock"
+        aria-label="다음 질문 미리보기"
+      >
+        <section className={styles.nextIssuePreview} aria-live="polite">
+          <span className={styles.nextIssueEyebrow}>NEXT ISSUE</span>
+          <strong className={styles.nextIssueEmpty}>
+            지금 참여할 수 있는 질문을 모두 골랐어요.
+          </strong>
+        </section>
+      </aside>
     );
   }
 
   if (state.kind === "error") {
     return (
-      <section className={styles.nextIssuePreview} aria-live="polite">
-        <span className={styles.nextIssueEyebrow}>NEXT ISSUE</span>
-        <strong className={styles.nextIssueEmpty}>다음 질문을 불러오지 못했어요.</strong>
-        <button
-          type="button"
-          className={styles.nextIssueRetry}
-          onClick={() => {
-            setState({ kind: "loading" });
-            setRetryKey((current) => current + 1);
-          }}
-        >
-          다시 시도
-        </button>
-      </section>
+      <aside
+        className={styles.nextIssuePreviewDock}
+        data-placement="bottom-right"
+        data-testid="next-issue-preview-dock"
+        aria-label="다음 질문 미리보기"
+      >
+        <section className={styles.nextIssuePreview} aria-live="polite">
+          <span className={styles.nextIssueEyebrow}>NEXT ISSUE</span>
+          <strong className={styles.nextIssueEmpty}>다음 질문을 불러오지 못했어요.</strong>
+          <button
+            type="button"
+            className={styles.nextIssueRetry}
+            onClick={() => {
+              setState({ kind: "loading" });
+              setRetryKey((current) => current + 1);
+            }}
+          >
+            다시 시도
+          </button>
+        </section>
+      </aside>
     );
   }
 
@@ -1999,30 +2022,37 @@ function NextIssuePreview({
   const choiceB = nextIssue.choices[1];
 
   return (
-    <button
-      type="button"
-      className={styles.nextIssuePreview}
-      aria-label={`다음 질문으로 이동: ${nextIssue.question}`}
-      aria-busy={navigating}
-      disabled={navigating}
-      onClick={moveNext}
+    <aside
+      className={styles.nextIssuePreviewDock}
+      data-placement="bottom-right"
+      data-testid="next-issue-preview-dock"
+      aria-label="다음 질문 미리보기"
     >
-      <span className={styles.nextIssueEyebrow}>NEXT ISSUE</span>
-      <span className={styles.nextIssueHeadline}>
-        <strong>{nextIssue.question}</strong>
-        <span className={styles.nextIssueAction}>{navigating ? "이동 중…" : "다음 →"}</span>
-      </span>
-      <span className={styles.nextIssueChoices} aria-hidden="true">
-        <span>
-          <b>{choiceA?.code ?? "A"}</b>
-          {choiceA?.label ?? "첫 번째 선택"}
+      <button
+        type="button"
+        className={styles.nextIssuePreview}
+        aria-label={`다음 질문으로 이동: ${nextIssue.question}`}
+        aria-busy={navigating}
+        disabled={navigating}
+        onClick={moveNext}
+      >
+        <span className={styles.nextIssueEyebrow}>NEXT ISSUE</span>
+        <span className={styles.nextIssueHeadline}>
+          <strong>{nextIssue.question}</strong>
+          <span className={styles.nextIssueAction}>{navigating ? "이동 중…" : "다음 →"}</span>
         </span>
-        <span>
-          <b>{choiceB?.code ?? "B"}</b>
-          {choiceB?.label ?? "두 번째 선택"}
+        <span className={styles.nextIssueChoices} aria-hidden="true">
+          <span>
+            <b>{choiceA?.code ?? "A"}</b>
+            <em>{choiceA?.label ?? "첫 번째 선택"}</em>
+          </span>
+          <span>
+            <b>{choiceB?.code ?? "B"}</b>
+            <em>{choiceB?.label ?? "두 번째 선택"}</em>
+          </span>
         </span>
-      </span>
-    </button>
+      </button>
+    </aside>
   );
 }
 
