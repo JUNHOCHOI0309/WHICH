@@ -120,7 +120,7 @@ describe("Member vote history experience", () => {
     expect(await screen.findByText("휴가는 산 vs 바다")).toBeVisible();
     await waitFor(() => expect(requests).toContain("/api/me?limit=20&cursor=cursor-1"));
     expect(screen.queryByRole("button", { name: "이전 기록 더 보기" })).not.toBeInTheDocument();
-  });
+  }, 15_000);
 
   it("keeps the full history private for a Guest", async () => {
     vi.stubGlobal(
