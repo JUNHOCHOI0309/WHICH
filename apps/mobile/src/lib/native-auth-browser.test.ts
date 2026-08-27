@@ -12,10 +12,10 @@ describe("Native system-browser authentication", () => {
       type: "success",
       url: "which://auth/callback?ticket=t",
     });
-    const session = { token: "token" };
+    const completion = { session: { token: "token" }, returnTo: "/me" };
     const manager = {
       begin: vi.fn(async () => "https://whichone.site/api/mobile-auth/start"),
-      complete: vi.fn(async () => session),
+      complete: vi.fn(async () => completion),
       cancel: vi.fn(async () => undefined),
     };
 
@@ -25,8 +25,12 @@ describe("Native system-browser authentication", () => {
         "google",
         "591f2e90-996a-50c5-af46-967dd0793000",
       ),
-    ).resolves.toBe(session);
-    expect(manager.begin).toHaveBeenCalledWith("google", "591f2e90-996a-50c5-af46-967dd0793000");
+    ).resolves.toBe(completion);
+    expect(manager.begin).toHaveBeenCalledWith(
+      "google",
+      "591f2e90-996a-50c5-af46-967dd0793000",
+      undefined,
+    );
     expect(openAuthSessionAsync).toHaveBeenCalledWith(
       "https://whichone.site/api/mobile-auth/start",
       "which://auth/callback",

@@ -17,13 +17,14 @@ import { ChoiceMediaPair, VoteChoiceRow } from "@/components/vote/vote-choice-ro
 import type { IssueChoice, PublicIssue, VoteResponse } from "@/contracts";
 import { InterestSelector } from "@/features/interests/interest-selector";
 import { MobileApiError } from "@/lib/mobile-api";
-import { guestSubjects, mobileApi } from "@/lib/runtime";
+import { guestSubjects, memberSessions, mobileApi } from "@/lib/runtime";
 import { colors } from "@/theme";
 
 export default function IssueScreen() {
   const { issueId } = useLocalSearchParams<{ issueId: string }>();
   const [issue, setIssue] = useState<PublicIssue | null>(null);
   const [vote, setVote] = useState<VoteResponse | null>(null);
+  const [memberSessionToken, setMemberSessionToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [submittingChoice, setSubmittingChoice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -40,14 +41,22 @@ export default function IssueScreen() {
   const fetchIssue = useCallback(async () => {
     if (!issueId) throw new Error("질문 ID가 필요합니다.");
     const subjectId = await guestSubjects.getOrCreate();
-    return mobileApi.loadIssue(issueId, subjectId);
+    const session = await memberSessions.restore().catch(() => null);
+    const [loadedIssue, restoredVote] = await Promise.all([
+      mobileApi.loadIssue(issueId, subjectId, session?.token),
+      session ? mobileApi.loadMemberVote(session.token, issueId) : Promise.resolve(null),
+    ]);
+    return { issue: loadedIssue, memberSessionToken: session?.token ?? null, vote: restoredVote };
   }, [issueId]);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      setIssue(await fetchIssue());
+      const loaded = await fetchIssue();
+      setIssue(loaded.issue);
+      setMemberSessionToken(loaded.memberSessionToken);
+      setVote(loaded.vote);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "질문을 불러오지 못했습니다.");
     } finally {
@@ -101,7 +110,11 @@ export default function IssueScreen() {
     let active = true;
     void fetchIssue()
       .then((loaded) => {
-        if (active) setIssue(loaded);
+        if (active) {
+          setIssue(loaded.issue);
+          setMemberSessionToken(loaded.memberSessionToken);
+          setVote(loaded.vote);
+        }
       })
       .catch((reason: unknown) => {
         if (active) {
@@ -159,9 +172,19 @@ export default function IssueScreen() {
         idempotencyKey: attemptKey.current,
       };
       try {
-        setVote(await mobileApi.submitGuestVote({ ...command, subjectId }));
+        setVote(
+          await mobileApi.submitGuestVote({
+            ...command,
+            subjectId,
+            sessionToken: memberSessionToken ?? undefined,
+          }),
+        );
       } catch (reason) {
-        if (!(reason instanceof MobileApiError) || reason.code !== "GUEST_SUBJECT_NOT_FOUND") {
+        if (
+          memberSessionToken ||
+          !(reason instanceof MobileApiError) ||
+          reason.code !== "GUEST_SUBJECT_NOT_FOUND"
+        ) {
           throw reason;
         }
         subjectId = await guestSubjects.rotate();
@@ -179,7 +202,12 @@ export default function IssueScreen() {
     setNextIssueState("loading");
     try {
       const subjectId = await guestSubjects.getOrCreate();
-      const feed = await mobileApi.loadFeed(subjectId, 1, issue.id);
+      const feed = await mobileApi.loadFeed(
+        subjectId,
+        1,
+        issue.id,
+        memberSessionToken ?? undefined,
+      );
       const nextIssue = feed.items[0];
       if (!nextIssue) {
         setNextIssueState("empty");
@@ -311,6 +339,30 @@ export default function IssueScreen() {
                 selectedChoice={vote?.choice ?? "A"}
               />
             </View>
+            {vote && !memberSessionToken ? (
+              <View style={styles.memberLinkCard}>
+                <Text style={styles.memberLinkEyebrow}>MEMBER LINK</Text>
+                <Text style={styles.memberLinkTitle}>이 선택을 계정에 이어 두세요.</Text>
+                <Text style={styles.memberLinkBody}>
+                  로그인 뒤 같은 결과 화면으로 돌아오며, 이 선택은 중복 집계 없이 계정에 연결됩니다.
+                </Text>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() =>
+                    router.push({
+                      pathname: "/login",
+                      params: { returnTo: `/issues/${issue.id}` },
+                    })
+                  }
+                  style={({ pressed }) => [
+                    styles.memberLinkButton,
+                    pressed && styles.choicePressed,
+                  ]}
+                >
+                  <Text style={styles.memberLinkButtonText}>로그인하고 결과로 돌아오기 →</Text>
+                </Pressable>
+              </View>
+            ) : null}
             {vote ? (
               <View style={styles.shareCard}>
                 <Text style={styles.shareTitle}>결과 공유</Text>
@@ -453,6 +505,31 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     padding: 11,
   },
+  memberLinkCard: {
+    backgroundColor: colors.cyanSoft,
+    borderColor: colors.cyan,
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 10,
+    padding: 18,
+  },
+  memberLinkEyebrow: {
+    color: colors.cyanStrong,
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 1.2,
+  },
+  memberLinkTitle: { color: colors.text, fontSize: 19, fontWeight: "900" },
+  memberLinkBody: { color: colors.textSecondary, fontSize: 13, lineHeight: 20 },
+  memberLinkButton: {
+    alignItems: "center",
+    backgroundColor: colors.cyan,
+    borderRadius: 999,
+    justifyContent: "center",
+    minHeight: 48,
+    paddingHorizontal: 16,
+  },
+  memberLinkButtonText: { color: "#062A31", fontSize: 13, fontWeight: "900" },
   resultRow: { flexDirection: "row", justifyContent: "space-between" },
   resultA: { color: colors.cyan, fontSize: 26, fontWeight: "900" },
   resultB: { color: colors.accent, fontSize: 26, fontWeight: "900" },

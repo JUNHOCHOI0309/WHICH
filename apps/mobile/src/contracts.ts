@@ -207,5 +207,9 @@ export type InterestProfile = {
   selectedCardCodes: InterestCardCode[];
   canSkip: boolean;
   profileVersion: number;
-  mergeCandidate: null;
+  mergeCandidate: {
+    anonymousSubjectId: string;
+    guestCardCodes: InterestCardCode[];
+    suggestedCardCodes: InterestCardCode[];
+  } | null;
 };

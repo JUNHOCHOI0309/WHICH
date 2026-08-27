@@ -16,7 +16,7 @@ import type {
   VoteResponse,
 } from "@/contracts";
 import { MobileApiError } from "@/lib/mobile-api";
-import { guestSubjects, mobileApi } from "@/lib/runtime";
+import { guestSubjects, memberSessions, mobileApi } from "@/lib/runtime";
 import { subjectStorage } from "@/lib/secure-subject-storage";
 import { colors } from "@/theme";
 
@@ -43,6 +43,7 @@ export default function FeedScreen() {
   const viewedIssues = useRef(new Set<string>());
   const recordedMediaLoads = useRef(new Set<string>());
   const decisionStartedAt = useRef(new Map<string, number>());
+  const memberSessionToken = useRef<string | null>(null);
 
   const onViewableItemsChanged = useCallback(
     ({ viewableItems }: { viewableItems: ViewToken<PublicFeedIssue>[] }) => {
@@ -69,10 +70,17 @@ export default function FeedScreen() {
 
   const fetchFeed = useCallback(async () => {
     const subjectId = await guestSubjects.getOrCreate();
+    const session = await memberSessions.restore().catch(() => null);
+    memberSessionToken.current = session?.token ?? null;
     const previousFirstIssueId = await subjectStorage.getItem(LAST_FIRST_ISSUE_KEY);
-    let feed = await mobileApi.loadFeed(subjectId, 12, previousFirstIssueId ?? undefined);
+    let feed = await mobileApi.loadFeed(
+      subjectId,
+      12,
+      previousFirstIssueId ?? undefined,
+      session?.token,
+    );
     if (feed.items.length === 0 && previousFirstIssueId) {
-      feed = await mobileApi.loadFeed(subjectId, 12);
+      feed = await mobileApi.loadFeed(subjectId, 12, undefined, session?.token);
     }
     const firstIssue = feed.items[0];
     if (firstIssue) await subjectStorage.setItem(LAST_FIRST_ISSUE_KEY, firstIssue.id);
@@ -187,9 +195,17 @@ export default function FeedScreen() {
         };
         let vote: VoteResponse;
         try {
-          vote = await mobileApi.submitGuestVote({ ...command, subjectId });
+          vote = await mobileApi.submitGuestVote({
+            ...command,
+            subjectId,
+            sessionToken: memberSessionToken.current ?? undefined,
+          });
         } catch (reason) {
-          if (!(reason instanceof MobileApiError) || reason.code !== "GUEST_SUBJECT_NOT_FOUND") {
+          if (
+            memberSessionToken.current ||
+            !(reason instanceof MobileApiError) ||
+            reason.code !== "GUEST_SUBJECT_NOT_FOUND"
+          ) {
             throw reason;
           }
           subjectId = await guestSubjects.rotate();

@@ -1,6 +1,7 @@
 import type { MemberSessionView } from "@/contracts";
 
 import type { SubjectStorage } from "./guest-subject";
+import { createGuestMemberContinuityManager } from "./guest-member-continuity";
 import { MobileApiError, type MobileApiClient } from "./mobile-api";
 
 export const MEMBER_SESSION_STORAGE_KEY = "which.mobile.member-session.v1";
@@ -29,6 +30,7 @@ function parseStoredSession(value: string | null): StoredMemberSession | null {
 }
 
 export function createMemberSessionManager(storage: SubjectStorage, api: MobileApiClient) {
+  const continuity = createGuestMemberContinuityManager(storage, api);
   async function save(session: MemberSessionView) {
     await storage.setItem(
       MEMBER_SESSION_STORAGE_KEY,
@@ -48,7 +50,9 @@ export function createMemberSessionManager(storage: SubjectStorage, api: MobileA
       }
       try {
         const current = await api.loadMemberSession(stored.token);
-        return save({ token: stored.token, ...current });
+        const session = await save({ token: stored.token, ...current });
+        await continuity.retry(session).catch(() => undefined);
+        return session;
       } catch (error) {
         if (error instanceof MobileApiError && error.status === 401) {
           await storage.removeItem(MEMBER_SESSION_STORAGE_KEY);

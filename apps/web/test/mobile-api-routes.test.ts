@@ -7,9 +7,11 @@ import {
   GET as loadInterestProfile,
   PUT as saveInterestProfile,
 } from "@/app/api/mobile/v1/interest-profile/route";
+import { POST as mergeInterestProfile } from "@/app/api/mobile/v1/interest-profile/merge/route";
 import { GET as loadFeed } from "@/app/api/mobile/v1/issues/feed/route";
 import { GET as loadCommentHighlights } from "@/app/api/mobile/v1/issues/[issueId]/comment-highlights/route";
 import { POST as submitVote } from "@/app/api/mobile/v1/issues/[issueId]/votes/route";
+import { GET as loadMemberVote } from "@/app/api/mobile/v1/me/votes/[issueId]/route";
 import { POST as exchangeMobileSession } from "@/app/api/mobile/v1/mobile-auth/member-sessions/route";
 import {
   DELETE as revokeMobileSession,
@@ -112,7 +114,7 @@ describe("mobile BFF routes", () => {
     );
   });
 
-  it("rejects a native Vote without a valid Guest Subject", async () => {
+  it("rejects a native Vote without a Guest or Member subject", async () => {
     const response = await submitVote(
       new NextRequest(
         "https://whichone.site/api/mobile/v1/issues/591f2e90-996a-50c5-af46-967dd0793000/votes",
@@ -122,7 +124,7 @@ describe("mobile BFF routes", () => {
     );
 
     expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toMatchObject({ code: "INVALID_GUEST_SUBJECT" });
+    await expect(response.json()).resolves.toMatchObject({ code: "VOTE_SUBJECT_REQUIRED" });
   });
 
   it("forwards one native highlight request after Vote completion", async () => {
@@ -201,6 +203,55 @@ describe("mobile BFF routes", () => {
     );
   });
 
+  it("forwards the Native Member session for Vote submission and restoration", async () => {
+    const issueId = "591f2e90-996a-50c5-af46-967dd0793000";
+    const request = vi.fn(async () =>
+      jsonResponse({
+        outcome: "ACCEPTED",
+        voteAttemptId: "93831fba-b70f-598a-88f6-92eb4f70df9c",
+        voteId: "d52dace5-486c-5e34-bb73-5a0b5a779c98",
+        issueId,
+        issueVersion: 1,
+        choice: "A",
+        result: { resultVersion: 2, acceptedA: 1, acceptedB: 0, displayedTotal: 1 },
+      }),
+    );
+    vi.stubGlobal("fetch", request);
+    const authorization = "Bearer native-member-session";
+
+    const voteResponse = await submitVote(
+      new NextRequest(`https://whichone.site/api/mobile/v1/issues/${issueId}/votes`, {
+        method: "POST",
+        headers: { authorization, "content-type": "application/json" },
+        body: JSON.stringify({
+          issueVersion: 1,
+          choiceId: "93831fba-b70f-598a-88f6-92eb4f70df9c",
+          idempotencyKey: "ce976502-9409-56a2-b975-94c913a20fcf",
+        }),
+      }),
+      { params: Promise.resolve({ issueId }) },
+    );
+    const restoreResponse = await loadMemberVote(
+      new NextRequest(`https://whichone.site/api/mobile/v1/me/votes/${issueId}`, {
+        headers: { authorization },
+      }),
+      { params: Promise.resolve({ issueId }) },
+    );
+
+    expect(voteResponse.status).toBe(200);
+    expect(restoreResponse.status).toBe(200);
+    expect(request).toHaveBeenNthCalledWith(
+      1,
+      new URL(`http://localhost:4000/v1/issues/${issueId}/votes`),
+      expect.objectContaining({ headers: expect.objectContaining({ authorization }) }),
+    );
+    expect(request).toHaveBeenNthCalledWith(
+      2,
+      new URL(`http://localhost:4000/v1/me/votes/${issueId}`),
+      expect.objectContaining({ headers: expect.objectContaining({ authorization }) }),
+    );
+  });
+
   it("forwards the native Guest Subject to the shared Interest Profile API", async () => {
     const request = vi.fn(async () =>
       jsonResponse({
@@ -243,6 +294,43 @@ describe("mobile BFF routes", () => {
           "x-anonymous-subject-id": headers["x-anonymous-subject-id"],
         }),
       }),
+    );
+  });
+
+  it("forwards Native Member interest reads and an idempotent Guest merge", async () => {
+    const request = vi.fn(async () =>
+      jsonResponse({
+        taxonomyVersion: "interest_cards_v1",
+        onboardingState: "COMPLETED",
+        selectedCardCodes: ["FOOD", "GAME", "TECH"],
+        canSkip: false,
+        profileVersion: 2,
+        mergeCandidate: null,
+      }),
+    );
+    vi.stubGlobal("fetch", request);
+    const authorization = "Bearer native-member-session";
+    const anonymousSubjectId = "591f2e90-996a-50c5-af46-967dd0793000";
+
+    const profileResponse = await loadInterestProfile(
+      new NextRequest("https://whichone.site/api/mobile/v1/interest-profile", {
+        headers: { authorization, "x-anonymous-subject-id": anonymousSubjectId },
+      }),
+    );
+    const mergeResponse = await mergeInterestProfile(
+      new NextRequest("https://whichone.site/api/mobile/v1/interest-profile/merge", {
+        method: "POST",
+        headers: { authorization, "content-type": "application/json" },
+        body: JSON.stringify({ anonymousSubjectId, selectedCardCodes: ["FOOD"] }),
+      }),
+    );
+
+    expect(profileResponse.status).toBe(200);
+    expect(mergeResponse.status).toBe(200);
+    expect(request).toHaveBeenNthCalledWith(
+      2,
+      new URL("http://localhost:4000/v1/interest-profile/merge"),
+      expect.objectContaining({ headers: expect.objectContaining({ authorization }) }),
     );
   });
 

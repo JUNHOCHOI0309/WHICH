@@ -157,6 +157,50 @@ describe("mobile API client", () => {
     });
   });
 
+  it("submits and restores a Vote with the Native Member session", async () => {
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          outcome: "ACCEPTED",
+          voteAttemptId: "1",
+          voteId: "2",
+          issueId: "93831fba-b70f-598a-88f6-92eb4f70df9c",
+          issueVersion: 1,
+          choice: "A",
+          result: { acceptedA: 1, acceptedB: 0, displayedTotal: 1, resultVersion: 2 },
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          outcome: "ACCEPTED",
+          voteAttemptId: "1",
+          voteId: "2",
+          issueId: "93831fba-b70f-598a-88f6-92eb4f70df9c",
+          issueVersion: 1,
+          choice: "A",
+          result: { acceptedA: 1, acceptedB: 0, displayedTotal: 1, resultVersion: 2 },
+        }),
+      );
+    const api = createMobileApiClient({ baseUrl: "https://whichone.site", request });
+
+    await api.submitGuestVote({
+      sessionToken: "member-session",
+      issueId: "93831fba-b70f-598a-88f6-92eb4f70df9c",
+      issueVersion: 1,
+      choiceId: "8c092a45-c446-50f3-b1ac-ac9a018b9105",
+      idempotencyKey: "ce976502-9409-56a2-b975-94c913a20fcf",
+    });
+    await api.loadMemberVote("member-session", "93831fba-b70f-598a-88f6-92eb4f70df9c");
+
+    expect(new Headers(request.mock.calls[0]?.[1]?.headers).get("authorization")).toBe(
+      "Bearer member-session",
+    );
+    expect(new Headers(request.mock.calls[1]?.[1]?.headers).get("authorization")).toBe(
+      "Bearer member-session",
+    );
+  });
+
   it("loads both A/B comment highlights with the accepted Guest Subject", async () => {
     const request = vi.fn(async () => jsonResponse({ A: [], B: [] }));
     const api = createMobileApiClient({ baseUrl: "https://whichone.site", request });

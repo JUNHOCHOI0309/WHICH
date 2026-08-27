@@ -35,7 +35,7 @@ export default function NativeAuthCallbackScreen() {
     }
     void nativeAuth
       .complete(callback.toString())
-      .then(() => router.replace("/me"))
+      .then((completion) => router.replace(completion.returnTo ?? "/me"))
       .catch(() => setError("로그인을 완료하지 못했습니다. 다시 시도해 주세요."));
   }, [callbackError, nonce, router, state, ticket]);
 

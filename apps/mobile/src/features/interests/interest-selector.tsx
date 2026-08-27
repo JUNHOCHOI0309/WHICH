@@ -4,7 +4,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-nati
 
 import type { InterestCardCode, InterestCardRegistry, InterestProfile } from "@/contracts";
 import { MobileApiError } from "@/lib/mobile-api";
-import { guestSubjects, mobileApi } from "@/lib/runtime";
+import { guestSubjects, memberSessions, mobileApi } from "@/lib/runtime";
 import { colors } from "@/theme";
 
 type AnalyticsContext = { issueId: string; issueVersion: number };
@@ -17,6 +17,7 @@ export function InterestSelector({
   analyticsContext?: AnalyticsContext;
 }) {
   const [subjectId, setSubjectId] = useState<string | null>(null);
+  const [memberSessionToken, setMemberSessionToken] = useState<string | null>(null);
   const [registry, setRegistry] = useState<InterestCardRegistry | null>(null);
   const [profile, setProfile] = useState<InterestProfile | null>(null);
   const [selected, setSelected] = useState<InterestCardCode[]>([]);
@@ -31,11 +32,16 @@ export function InterestSelector({
     let active = true;
     void (async () => {
       let currentSubject = await guestSubjects.getOrCreate();
+      const session = await memberSessions.restore().catch(() => null);
       let loadedProfile: InterestProfile;
       try {
-        loadedProfile = await mobileApi.loadInterestProfile(currentSubject);
+        loadedProfile = await mobileApi.loadInterestProfile(currentSubject, session?.token);
       } catch (reason) {
-        if (!(reason instanceof MobileApiError) || reason.code !== "GUEST_SUBJECT_NOT_FOUND") {
+        if (
+          session ||
+          !(reason instanceof MobileApiError) ||
+          reason.code !== "GUEST_SUBJECT_NOT_FOUND"
+        ) {
           throw reason;
         }
         currentSubject = await guestSubjects.rotate();
@@ -44,6 +50,7 @@ export function InterestSelector({
       const loadedRegistry = await mobileApi.loadInterestCards();
       if (!active) return;
       setSubjectId(currentSubject);
+      setMemberSessionToken(session?.token ?? null);
       setRegistry(loadedRegistry);
       setProfile(loadedProfile);
       setSelected(loadedProfile.selectedCardCodes);
@@ -108,6 +115,7 @@ export function InterestSelector({
     try {
       const updated = await mobileApi.saveInterestProfile({
         subjectId: subjectId!,
+        sessionToken: memberSessionToken ?? undefined,
         selectedCardCodes: selected,
         onboardingState: "COMPLETED",
       });
@@ -139,6 +147,7 @@ export function InterestSelector({
       setProfile(
         await mobileApi.saveInterestProfile({
           subjectId: subjectId!,
+          sessionToken: memberSessionToken ?? undefined,
           selectedCardCodes: [],
           onboardingState: "SKIPPED",
         }),
@@ -166,7 +175,10 @@ export function InterestSelector({
     setSaving(true);
     setError(null);
     try {
-      const updated = await mobileApi.resetInterestProfile(subjectId!);
+      const updated = await mobileApi.resetInterestProfile(
+        subjectId!,
+        memberSessionToken ?? undefined,
+      );
       setProfile(updated);
       setSelected([]);
       setMessage("추천 관심 신호만 초기화했어요. 투표 기록은 유지됩니다.");

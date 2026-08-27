@@ -24,10 +24,18 @@ function completeVoteRequest(body: VoteRequestBody): body is Required<VoteReques
 
 export async function POST(request: NextRequest, context: RouteContext) {
   const { issueId } = await context.params;
-  const subjectId = validGuestSubject(request.headers.get("x-anonymous-subject-id") ?? undefined);
-  if (!subjectId) {
+  const providedSubject = request.headers.get("x-anonymous-subject-id");
+  const authorization = request.headers.get("authorization");
+  const subjectId = validGuestSubject(providedSubject ?? undefined);
+  if (providedSubject && !subjectId) {
     return NextResponse.json(
-      { code: "INVALID_GUEST_SUBJECT", message: "Guest Subject가 필요합니다." },
+      { code: "INVALID_GUEST_SUBJECT", message: "Guest Subject 형식이 올바르지 않습니다." },
+      { status: 400 },
+    );
+  }
+  if (!subjectId && !authorization?.startsWith("Bearer ")) {
+    return NextResponse.json(
+      { code: "VOTE_SUBJECT_REQUIRED", message: "투표 주체가 필요합니다." },
       { status: 400 },
     );
   }
@@ -47,7 +55,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
         accept: "application/json",
         "content-type": "application/json",
         "idempotency-key": body.idempotencyKey,
-        "x-anonymous-subject-id": subjectId,
+        ...(subjectId ? { "x-anonymous-subject-id": subjectId } : {}),
+        ...(authorization ? { authorization } : {}),
       },
       body: JSON.stringify({ issueVersion: body.issueVersion, choiceId: body.choiceId }),
     });

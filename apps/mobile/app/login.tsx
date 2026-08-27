@@ -1,5 +1,5 @@
 import * as WebBrowser from "expo-web-browser";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -26,6 +26,7 @@ const providerLabels: Record<NativeAuthProvider, string> = {
 };
 
 export default function LoginScreen() {
+  const params = useLocalSearchParams<{ returnTo?: string | string[] }>();
   const [lastProvider, setLastProvider] = useState<NativeAuthProvider | null>(null);
   const [pending, setPending] = useState<NativeAuthProvider | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -39,13 +40,21 @@ export default function LoginScreen() {
     setMessage(null);
     try {
       const anonymousSubjectId = await guestSubjects.getOrCreate();
-      const session = await authenticateInSystemBrowser(nativeAuth, provider, anonymousSubjectId);
-      if (!session) {
+      const requestedReturnTo = Array.isArray(params.returnTo)
+        ? params.returnTo[0]
+        : params.returnTo;
+      const completion = await authenticateInSystemBrowser(
+        nativeAuth,
+        provider,
+        anonymousSubjectId,
+        requestedReturnTo,
+      );
+      if (!completion) {
         setMessage("로그인을 취소했어요. 현재 화면에서 다시 시도할 수 있어요.");
         return;
       }
       setLastProvider(provider);
-      router.replace("/me");
+      router.replace(completion.returnTo ?? "/me");
     } catch {
       setMessage("로그인을 완료하지 못했어요. Feed는 그대로 유지되니 다시 시도해 주세요.");
     } finally {

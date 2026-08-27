@@ -1,6 +1,7 @@
 import * as Crypto from "expo-crypto";
 
 import type { SubjectStorage } from "./guest-subject";
+import { createGuestMemberContinuityManager } from "./guest-member-continuity";
 import { createMemberSessionManager } from "./member-session";
 import type { MobileApiClient } from "./mobile-api";
 
@@ -8,6 +9,7 @@ export const PENDING_NATIVE_AUTH_STORAGE_KEY = "which.mobile.pending-auth.v1";
 export const LAST_NATIVE_AUTH_PROVIDER_STORAGE_KEY = "which.mobile.last-auth-provider.v1";
 
 export type NativeAuthProvider = "email" | "google" | "x" | "naver" | "kakao";
+export type NativeAuthReturnTo = "/" | "/me" | `/issues/${string}`;
 
 type PendingNativeAuth = {
   version: 1;
@@ -16,11 +18,20 @@ type PendingNativeAuth = {
   codeVerifier: string;
   provider: NativeAuthProvider;
   anonymousSubjectId?: string;
+  returnTo?: NativeAuthReturnTo;
   createdAt: number;
 };
 
 const providers: NativeAuthProvider[] = ["email", "google", "x", "naver", "kakao"];
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export function validNativeAuthReturnTo(value: string | undefined): NativeAuthReturnTo | undefined {
+  if (value === "/" || value === "/me") return value;
+  if (value?.startsWith("/issues/") && uuidPattern.test(value.slice("/issues/".length))) {
+    return value as NativeAuthReturnTo;
+  }
+  return undefined;
+}
 
 type NativeAuthCrypto = {
   randomBytes(count: number): Promise<Uint8Array>;
@@ -63,6 +74,8 @@ function parsePending(value: string | null, now: number) {
       (pending.anonymousSubjectId !== undefined &&
         (typeof pending.anonymousSubjectId !== "string" ||
           !uuidPattern.test(pending.anonymousSubjectId))) ||
+      (pending.returnTo !== undefined &&
+        (typeof pending.returnTo !== "string" || !validNativeAuthReturnTo(pending.returnTo))) ||
       typeof pending.createdAt !== "number" ||
       pending.createdAt > now + 30_000 ||
       now - pending.createdAt > 10 * 60 * 1_000
@@ -84,9 +97,14 @@ export function createNativeAuthManager(
   const now = options.now ?? Date.now;
   const webBaseUrl = options.webBaseUrl ?? "https://whichone.site";
   const sessions = createMemberSessionManager(storage, api);
+  const continuity = createGuestMemberContinuityManager(storage, api);
 
   return {
-    async begin(provider: NativeAuthProvider = "email", anonymousSubjectId?: string) {
+    async begin(
+      provider: NativeAuthProvider = "email",
+      anonymousSubjectId?: string,
+      returnTo?: string,
+    ) {
       const [stateBytes, nonceBytes, verifierBytes] = await Promise.all([
         crypto.randomBytes(32),
         crypto.randomBytes(32),
@@ -99,6 +117,9 @@ export function createNativeAuthManager(
         codeVerifier: randomProof(verifierBytes),
         provider,
         ...(anonymousSubjectId ? { anonymousSubjectId } : {}),
+        ...(validNativeAuthReturnTo(returnTo)
+          ? { returnTo: validNativeAuthReturnTo(returnTo) }
+          : {}),
         createdAt: now(),
       };
       const codeChallenge = base64Url(await crypto.sha256Base64(pending.codeVerifier));
@@ -157,8 +178,11 @@ export function createNativeAuthManager(
           anonymousSubjectId: pending.anonymousSubjectId,
         });
         await sessions.save(session);
+        if (pending.anonymousSubjectId) {
+          await continuity.schedule(session, pending.anonymousSubjectId).catch(() => undefined);
+        }
         await storage.setItem(LAST_NATIVE_AUTH_PROVIDER_STORAGE_KEY, pending.provider);
-        return session;
+        return { session, returnTo: pending.returnTo };
       } finally {
         await storage.removeItem(PENDING_NATIVE_AUTH_STORAGE_KEY);
       }

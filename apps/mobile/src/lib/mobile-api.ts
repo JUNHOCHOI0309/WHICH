@@ -133,25 +133,27 @@ export function createMobileApiClient(
       }
     },
 
-    async loadFeed(subjectId?: string, limit = 10, excludeIssueId?: string) {
+    async loadFeed(subjectId?: string, limit = 10, excludeIssueId?: string, sessionToken?: string) {
       const search = new URLSearchParams({ limit: String(limit) });
       if (excludeIssueId) search.set("excludeIssueId", excludeIssueId);
       const response = await request(`${baseUrl}/api/mobile/v1/issues/feed?${search.toString()}`, {
         headers: {
           accept: "application/json",
           ...(subjectId ? { "x-anonymous-subject-id": subjectId } : {}),
+          ...(sessionToken ? { authorization: `Bearer ${sessionToken}` } : {}),
         },
       });
       return bodyOrError<PublicIssueFeed>(response);
     },
 
-    async loadIssue(issueId: string, subjectId?: string) {
+    async loadIssue(issueId: string, subjectId?: string, sessionToken?: string) {
       const response = await request(
         `${baseUrl}/api/mobile/v1/issues/${encodeURIComponent(issueId)}`,
         {
           headers: {
             accept: "application/json",
             ...(subjectId ? { "x-anonymous-subject-id": subjectId } : {}),
+            ...(sessionToken ? { authorization: `Bearer ${sessionToken}` } : {}),
           },
         },
       );
@@ -178,15 +180,20 @@ export function createMobileApiClient(
       return bodyOrError<InterestCardRegistry>(response);
     },
 
-    async loadInterestProfile(subjectId: string) {
+    async loadInterestProfile(subjectId?: string, sessionToken?: string) {
       const response = await request(`${baseUrl}/api/mobile/v1/interest-profile`, {
-        headers: { accept: "application/json", "x-anonymous-subject-id": subjectId },
+        headers: {
+          accept: "application/json",
+          ...(subjectId ? { "x-anonymous-subject-id": subjectId } : {}),
+          ...(sessionToken ? { authorization: `Bearer ${sessionToken}` } : {}),
+        },
       });
       return bodyOrError<InterestProfile>(response);
     },
 
     async saveInterestProfile(command: {
-      subjectId: string;
+      subjectId?: string;
+      sessionToken?: string;
       selectedCardCodes: InterestCardCode[];
       onboardingState: "COMPLETED" | "SKIPPED";
     }) {
@@ -195,7 +202,8 @@ export function createMobileApiClient(
         headers: {
           accept: "application/json",
           "content-type": "application/json",
-          "x-anonymous-subject-id": command.subjectId,
+          ...(command.subjectId ? { "x-anonymous-subject-id": command.subjectId } : {}),
+          ...(command.sessionToken ? { authorization: `Bearer ${command.sessionToken}` } : {}),
         },
         body: JSON.stringify({
           selectedCardCodes: command.selectedCardCodes,
@@ -205,12 +213,45 @@ export function createMobileApiClient(
       return bodyOrError<InterestProfile>(response);
     },
 
-    async resetInterestProfile(subjectId: string) {
+    async resetInterestProfile(subjectId?: string, sessionToken?: string) {
       const response = await request(`${baseUrl}/api/mobile/v1/interest-profile/reset`, {
         method: "POST",
-        headers: { accept: "application/json", "x-anonymous-subject-id": subjectId },
+        headers: {
+          accept: "application/json",
+          ...(subjectId ? { "x-anonymous-subject-id": subjectId } : {}),
+          ...(sessionToken ? { authorization: `Bearer ${sessionToken}` } : {}),
+        },
       });
       return bodyOrError<InterestProfile>(response);
+    },
+
+    async mergeGuestInterestProfile(command: {
+      sessionToken: string;
+      anonymousSubjectId: string;
+      selectedCardCodes: InterestCardCode[];
+    }) {
+      const response = await request(`${baseUrl}/api/mobile/v1/interest-profile/merge`, {
+        method: "POST",
+        headers: {
+          accept: "application/json",
+          authorization: `Bearer ${command.sessionToken}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          anonymousSubjectId: command.anonymousSubjectId,
+          selectedCardCodes: command.selectedCardCodes,
+        }),
+      });
+      return bodyOrError<InterestProfile>(response);
+    },
+
+    async loadMemberVote(sessionToken: string, issueId: string) {
+      const response = await request(
+        `${baseUrl}/api/mobile/v1/me/votes/${encodeURIComponent(issueId)}`,
+        { headers: { accept: "application/json", authorization: `Bearer ${sessionToken}` } },
+      );
+      if (response.status === 404) return null;
+      return bodyOrError<VoteResponse>(response);
     },
 
     async recordAnalyticsEvent(command: {
@@ -282,7 +323,8 @@ export function createMobileApiClient(
     },
 
     async submitGuestVote(command: {
-      subjectId: string;
+      subjectId?: string;
+      sessionToken?: string;
       issueId: string;
       issueVersion: number;
       choiceId: string;
@@ -295,7 +337,8 @@ export function createMobileApiClient(
           headers: {
             accept: "application/json",
             "content-type": "application/json",
-            "x-anonymous-subject-id": command.subjectId,
+            ...(command.subjectId ? { "x-anonymous-subject-id": command.subjectId } : {}),
+            ...(command.sessionToken ? { authorization: `Bearer ${command.sessionToken}` } : {}),
           },
           body: JSON.stringify({
             issueVersion: command.issueVersion,

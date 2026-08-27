@@ -4,10 +4,18 @@ import { NextResponse } from "next/server";
 import { fetchWhichApi, validGuestSubject } from "@/lib/server/which-api";
 
 async function proxy(request: NextRequest, method: "GET" | "PUT") {
-  const subjectId = validGuestSubject(request.headers.get("x-anonymous-subject-id") ?? undefined);
-  if (!subjectId) {
+  const providedSubject = request.headers.get("x-anonymous-subject-id");
+  const authorization = request.headers.get("authorization");
+  const subjectId = validGuestSubject(providedSubject ?? undefined);
+  if (providedSubject && !subjectId) {
     return NextResponse.json(
-      { code: "INVALID_GUEST_SUBJECT", message: "Guest Subject가 필요합니다." },
+      { code: "INVALID_GUEST_SUBJECT", message: "Guest Subject 형식이 올바르지 않습니다." },
+      { status: 400 },
+    );
+  }
+  if (!subjectId && !authorization?.startsWith("Bearer ")) {
+    return NextResponse.json(
+      { code: "INTEREST_SUBJECT_REQUIRED", message: "관심사 설정 주체가 필요합니다." },
       { status: 400 },
     );
   }
@@ -16,7 +24,8 @@ async function proxy(request: NextRequest, method: "GET" | "PUT") {
       method,
       headers: {
         accept: "application/json",
-        "x-anonymous-subject-id": subjectId,
+        ...(subjectId ? { "x-anonymous-subject-id": subjectId } : {}),
+        ...(authorization ? { authorization } : {}),
         ...(method === "PUT" ? { "content-type": "application/json" } : {}),
       },
       ...(method === "PUT" ? { body: await request.text() } : {}),

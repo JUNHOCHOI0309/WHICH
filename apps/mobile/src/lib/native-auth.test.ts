@@ -46,6 +46,14 @@ describe("Native authentication request", () => {
     };
     const api = {
       exchangeMobileSession: vi.fn(async () => session),
+      loadInterestProfile: vi.fn(async () => ({
+        taxonomyVersion: "interest_cards_v1",
+        onboardingState: "NOT_STARTED",
+        selectedCardCodes: [],
+        canSkip: true,
+        profileVersion: 1,
+        mergeCandidate: null,
+      })),
     } as unknown as MobileApiClient;
     const manager = createNativeAuthManager(storage, api, {
       crypto,
@@ -54,7 +62,8 @@ describe("Native authentication request", () => {
     });
 
     const anonymousSubjectId = "591f2e90-996a-50c5-af46-967dd0793000";
-    const startUrl = new URL(await manager.begin("kakao", anonymousSubjectId));
+    const returnTo = "/issues/93831fba-b70f-598a-88f6-92eb4f70df9c";
+    const startUrl = new URL(await manager.begin("kakao", anonymousSubjectId, returnTo));
     expect(startUrl.pathname).toBe("/api/mobile-auth/start");
     expect(startUrl.searchParams.get("code_challenge")).toBe("A".repeat(43));
     expect(startUrl.searchParams.get("provider")).toBe("kakao");
@@ -74,7 +83,7 @@ describe("Native authentication request", () => {
       manager.complete(
         `which://auth/callback?state=${pending.state}&nonce=${pending.nonce}&ticket=${"t".repeat(43)}`,
       ),
-    ).resolves.toEqual(session);
+    ).resolves.toEqual({ session, returnTo });
     expect(api.exchangeMobileSession).toHaveBeenCalledWith(
       expect.objectContaining({
         ticket: "t".repeat(43),
@@ -87,6 +96,22 @@ describe("Native authentication request", () => {
     expect(values.has(MEMBER_SESSION_STORAGE_KEY)).toBe(true);
     expect(values.get(LAST_NATIVE_AUTH_PROVIDER_STORAGE_KEY)).toBe("kakao");
     await expect(manager.lastProvider()).resolves.toBe("kakao");
+  });
+
+  it("ignores an external return target instead of creating an open redirect", async () => {
+    const { storage, values } = memoryStorage();
+    const manager = createNativeAuthManager(storage, {} as MobileApiClient, {
+      crypto,
+      now: () => 1_000,
+      webBaseUrl: "https://whichone.site",
+    });
+
+    await manager.begin("google", undefined, "https://evil.example/steal");
+
+    const pending = JSON.parse(values.get(PENDING_NATIVE_AUTH_STORAGE_KEY)!) as {
+      returnTo?: string;
+    };
+    expect(pending.returnTo).toBeUndefined();
   });
 
   it("clears a matching Provider cancellation so the user can retry", async () => {
