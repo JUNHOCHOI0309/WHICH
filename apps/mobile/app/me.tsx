@@ -955,6 +955,7 @@ const styles = StyleSheet.create({
     borderTopColor: colors.border,
     borderTopWidth: 1,
     flexDirection: "row",
+    marginTop: "auto",
   },
   bottomNavItem: { alignItems: "center", flex: 1, gap: 2, justifyContent: "center", minHeight: 62 },
   bottomNavItemActive: { backgroundColor: colors.cyanSoft },
