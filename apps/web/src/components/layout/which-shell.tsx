@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode, TouchEvent } from "react";
 
+import type { PublicIssueFeed } from "@/lib/contracts";
+
 import {
   HeaderMemberNavigation,
   MemberNavigationLink,
@@ -235,6 +237,45 @@ export function WhichAsideCard({
       <strong>{title}</strong>
       <p>{children}</p>
     </div>
+  );
+}
+
+export function WhichParticipationAside({
+  rail,
+}: {
+  rail: NonNullable<PublicIssueFeed["rightRail"]>;
+}) {
+  return (
+    <section className={styles.participationCard} aria-labelledby="participation-rail-title">
+      <header>
+        <span>NOW ON WHICH</span>
+        <strong id="participation-rail-title">지금 많이 참여하는 질문</strong>
+        <p>최근 24시간의 정상 참여를 기준으로 보여드려요.</p>
+      </header>
+      <ol>
+        {rail.items.map((item, index) => (
+          <li key={item.issueId}>
+            <Link href={`/issues/${item.issueId}`}>
+              <span className={styles.participationRank}>{index + 1}</span>
+              <span className={styles.participationContent}>
+                <span className={styles.participationMeta}>
+                  {item.categoryCode.replaceAll("_", " ")}
+                  <span aria-hidden="true">·</span>
+                  {item.reasonCode === "RECENT_PARTICIPATION"
+                    ? `${item.participationCount.toLocaleString("ko-KR")}명 참여`
+                    : "새 질문"}
+                </span>
+                <strong>{item.question}</strong>
+              </span>
+              <span className={styles.participationArrow} aria-hidden="true">
+                ↗
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ol>
+      <footer>결과는 선택 후 공개됩니다.</footer>
+    </section>
   );
 }
 

@@ -166,7 +166,8 @@ button.navLink {
 }
 
 .railNote,
-.principleCard {
+.principleCard,
+.participationCard {
   border: 1px solid var(--which-border);
   border-radius: 16px;
   background: var(--which-surface);
@@ -245,6 +246,112 @@ button.navLink {
   color: var(--which-text-secondary);
   font-size: 0.84rem;
   line-height: 1.6;
+}
+
+.participationCard {
+  overflow: hidden;
+}
+
+.participationCard > header {
+  padding: 22px 22px 16px;
+}
+
+.participationCard > header > span {
+  color: var(--which-orange-strong);
+  font-size: 0.65rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+}
+
+.participationCard > header > strong {
+  display: block;
+  margin-top: 10px;
+  font-size: 1.15rem;
+  line-height: 1.4;
+}
+
+.participationCard > header > p {
+  margin: 7px 0 0;
+  color: var(--which-text-secondary);
+  font-size: 0.76rem;
+  line-height: 1.55;
+  word-break: keep-all;
+}
+
+.participationCard ol {
+  margin: 0;
+  padding: 0 14px;
+  list-style: none;
+}
+
+.participationCard li {
+  border-top: 1px solid var(--which-border);
+}
+
+.participationCard li a {
+  min-height: 92px;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) 18px;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 8px;
+  color: var(--which-text);
+  text-decoration: none;
+}
+
+.participationCard li a:hover,
+.participationCard li a:focus-visible {
+  background: var(--which-cyan-soft);
+  outline: none;
+}
+
+.participationRank {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--which-cyan-soft);
+  color: var(--which-cyan-strong);
+  display: grid;
+  place-items: center;
+  font-size: 0.72rem;
+  font-weight: 950;
+}
+
+.participationContent {
+  min-width: 0;
+}
+
+.participationMeta {
+  color: var(--which-text-tertiary);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+}
+
+.participationContent > strong {
+  display: -webkit-box;
+  margin-top: 6px;
+  overflow: hidden;
+  font-size: 0.84rem;
+  line-height: 1.42;
+  word-break: keep-all;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.participationArrow {
+  color: var(--which-cyan-strong);
+  font-weight: 900;
+}
+
+.participationCard > footer {
+  border-top: 1px solid var(--which-border);
+  padding: 13px 22px 15px;
+  color: var(--which-text-tertiary);
+  font-size: 0.7rem;
 }
 
 .bottomNav {

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { WhichShell } from "@/components/layout/which-shell";
+import { WhichParticipationAside, WhichShell } from "@/components/layout/which-shell";
 import { RotatingCommentHighlights } from "@/components/comments/rotating-comment-highlights";
 import { FloatingTopButton } from "@/components/navigation/floating-top-button";
 import { BalanceResultBar } from "@/components/vote/balance-result-bar";
@@ -69,6 +69,7 @@ export function FeedExperience({ creationEnabled = false }: { creationEnabled?: 
   const [items, setItems] = useState<PublicFeedIssue[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [ranking, setRanking] = useState<PublicIssueFeed["ranking"] | null>(null);
+  const [rightRail, setRightRail] = useState<PublicIssueFeed["rightRail"]>(undefined);
   const [loadingMore, setLoadingMore] = useState(false);
   const [cardStates, setCardStates] = useState<Record<string, CardVoteState>>({});
   const [highlightStates, setHighlightStates] = useState<Record<string, HighlightState>>({});
@@ -81,6 +82,7 @@ export function FeedExperience({ creationEnabled = false }: { creationEnabled?: 
     setItems(feed.items);
     setNextCursor(feed.nextCursor);
     setRanking(feed.ranking);
+    setRightRail(feed.rightRail);
     setScreen(feed.items.length ? "ready" : "empty");
   }, []);
 
@@ -286,7 +288,11 @@ export function FeedExperience({ creationEnabled = false }: { creationEnabled?: 
   );
 
   return (
-    <WhichShell active="home" creationEnabled={creationEnabled}>
+    <WhichShell
+      active="home"
+      creationEnabled={creationEnabled}
+      aside={rightRail?.items.length ? <WhichParticipationAside rail={rightRail} /> : undefined}
+    >
       <PullRefreshIndicator distance={pullToRefresh.distance} state={pullToRefresh.state} />
       <section className={styles.feed} aria-labelledby="feed-title">
         <header className={styles.feedHeader}>
