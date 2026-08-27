@@ -106,7 +106,9 @@ describe("Comment mutation BFF Origin handling", () => {
   it("uses the same public Origin rule for helpful reactions", async () => {
     vi.stubEnv("AUTH_BASE_URL", "https://whichone.site");
     const upstream = vi.fn(async () =>
-      jsonResponse({ reaction: { code: "HELPFUL", active: true, helpfulCount: 1 } }),
+      jsonResponse({
+        reaction: { code: "HELPFUL", active: true, helpfulCount: 1, dislikeCount: 0 },
+      }),
     );
     vi.stubGlobal("fetch", upstream);
 

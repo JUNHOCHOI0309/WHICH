@@ -7,7 +7,7 @@ import { CommentError } from "./errors.js";
 const uuidSchema = Type.String({ format: "uuid" });
 const errorResponseSchema = Type.Object({ code: Type.String(), message: Type.String() });
 
-const publicCommentSchema = Type.Object({
+const commentSchemaFields = {
   id: uuidSchema,
   choice: Type.Union([Type.Literal("A"), Type.Literal("B")]),
   author: Type.Object({ displayName: Type.String() }),
@@ -20,9 +20,11 @@ const publicCommentSchema = Type.Object({
   threadState: Type.Union([Type.Literal("OPEN"), Type.Literal("LOCKED")]),
   createdAt: Type.String({ format: "date-time" }),
   editedAt: Type.Union([Type.String({ format: "date-time" }), Type.Null()]),
+  parentCommentId: Type.Union([uuidSchema, Type.Null()]),
   reactions: Type.Object({
     helpfulCount: Type.Integer({ minimum: 0 }),
-    viewerReacted: Type.Boolean(),
+    dislikeCount: Type.Integer({ minimum: 0 }),
+    viewerReaction: Type.Union([Type.Literal("HELPFUL"), Type.Literal("DISLIKE"), Type.Null()]),
   }),
   reports: Type.Object({
     viewerReported: Type.Boolean(),
@@ -32,6 +34,16 @@ const publicCommentSchema = Type.Object({
     canEdit: Type.Boolean(),
     canDelete: Type.Boolean(),
   }),
+} as const;
+
+const replyCommentSchema = Type.Object({
+  ...commentSchemaFields,
+  replies: Type.Array(Type.Unknown(), { maxItems: 0 }),
+});
+
+const publicCommentSchema = Type.Object({
+  ...commentSchemaFields,
+  replies: Type.Array(replyCommentSchema),
 });
 
 const commentPageSchema = Type.Object({
@@ -57,7 +69,7 @@ type CommentWriteRoute = {
     "x-anonymous-subject-id"?: string;
     "idempotency-key": string;
   };
-  Body: { body: string };
+  Body: { body: string; parentCommentId?: string };
 };
 
 type CommentHighlightsRoute = {
@@ -66,7 +78,7 @@ type CommentHighlightsRoute = {
   Headers: { authorization?: string; "x-anonymous-subject-id"?: string };
 };
 
-type HelpfulReactionRoute = {
+type CommentReactionRoute = {
   Params: { commentId: string };
   Headers: {
     authorization?: string;
@@ -261,7 +273,10 @@ export async function registerCommentRoutes(
             },
             { additionalProperties: true },
           ),
-          body: Type.Object({ body: Type.String({ minLength: 1, maxLength: 2_000 }) }),
+          body: Type.Object({
+            body: Type.String({ minLength: 1, maxLength: 2_000 }),
+            parentCommentId: Type.Optional(uuidSchema),
+          }),
           response: {
             201: Type.Object({ comment: publicCommentSchema }),
             400: errorResponseSchema,
@@ -284,12 +299,13 @@ export async function registerCommentRoutes(
           anonymousSubjectId: request.headers["x-anonymous-subject-id"],
           idempotencyKey: request.headers["idempotency-key"],
           body: request.body.body,
+          parentCommentId: request.body.parentCommentId,
         });
         return reply.code(result.httpStatus).send(result.body);
       },
     );
 
-    commentApp.post<HelpfulReactionRoute>(
+    commentApp.post<CommentReactionRoute>(
       "/v1/comments/:commentId/reactions/helpful",
       {
         schema: {
@@ -310,6 +326,7 @@ export async function registerCommentRoutes(
                 code: Type.Literal("HELPFUL"),
                 active: Type.Boolean(),
                 helpfulCount: Type.Integer({ minimum: 0 }),
+                dislikeCount: Type.Integer({ minimum: 0 }),
               }),
             }),
             400: errorResponseSchema,
@@ -325,11 +342,60 @@ export async function registerCommentRoutes(
         if (request.headers.authorization && !sessionToken) {
           throw new CommentError("SESSION_REQUIRED", 401, "The Member session is invalid.");
         }
-        const result = await service.toggleHelpfulReaction({
+        const result = await service.toggleCommentReaction({
           commentId: request.params.commentId,
           sessionToken: sessionToken ?? undefined,
           anonymousSubjectId: request.headers["x-anonymous-subject-id"],
           idempotencyKey: request.headers["idempotency-key"],
+          code: "HELPFUL",
+        });
+        return reply.code(result.httpStatus).send(result.body);
+      },
+    );
+
+    commentApp.post<CommentReactionRoute>(
+      "/v1/comments/:commentId/reactions/dislike",
+      {
+        schema: {
+          tags: ["comments"],
+          summary: "Toggle a DISLIKE reaction on a public Comment",
+          params: Type.Object({ commentId: uuidSchema }),
+          headers: Type.Object(
+            {
+              authorization: Type.Optional(Type.String()),
+              "x-anonymous-subject-id": Type.Optional(uuidSchema),
+              "idempotency-key": uuidSchema,
+            },
+            { additionalProperties: true },
+          ),
+          response: {
+            200: Type.Object({
+              reaction: Type.Object({
+                code: Type.Literal("DISLIKE"),
+                active: Type.Boolean(),
+                helpfulCount: Type.Integer({ minimum: 0 }),
+                dislikeCount: Type.Integer({ minimum: 0 }),
+              }),
+            }),
+            400: errorResponseSchema,
+            401: errorResponseSchema,
+            403: errorResponseSchema,
+            409: errorResponseSchema,
+            500: errorResponseSchema,
+          },
+        },
+      },
+      async (request, reply) => {
+        const sessionToken = bearerToken(request.headers.authorization);
+        if (request.headers.authorization && !sessionToken) {
+          throw new CommentError("SESSION_REQUIRED", 401, "The Member session is invalid.");
+        }
+        const result = await service.toggleCommentReaction({
+          commentId: request.params.commentId,
+          sessionToken: sessionToken ?? undefined,
+          anonymousSubjectId: request.headers["x-anonymous-subject-id"],
+          idempotencyKey: request.headers["idempotency-key"],
+          code: "DISLIKE",
         });
         return reply.code(result.httpStatus).send(result.body);
       },

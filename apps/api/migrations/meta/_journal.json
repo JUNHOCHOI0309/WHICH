@@ -239,6 +239,20 @@
       "when": 1787767590243,
       "tag": "0033_glamorous_microbe",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1787835654915,
+      "tag": "0034_daffy_sersi",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1787835677662,
+      "tag": "0035_orange_jetstream",
+      "breakpoints": true
     }
   ]
 }

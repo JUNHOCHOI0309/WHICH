@@ -6,7 +6,7 @@ import type {
   CommentDeleteResponse,
   CommentUpdateResponse,
   CommentWriteResponse,
-  HelpfulReactionResponse,
+  CommentReactionResponse,
   PublicCommentPage,
   CommentHighlights,
   PublicIssue,
@@ -269,6 +269,7 @@ export async function submitMemberComment(command: {
   issueId: string;
   body: string;
   idempotencyKey: string;
+  parentCommentId?: string;
 }) {
   const response = await fetch(`/api/issues/${encodeURIComponent(command.issueId)}/comments`, {
     method: "POST",
@@ -277,7 +278,7 @@ export async function submitMemberComment(command: {
       "content-type": "application/json",
       "idempotency-key": command.idempotencyKey,
     },
-    body: JSON.stringify({ body: command.body }),
+    body: JSON.stringify({ body: command.body, parentCommentId: command.parentCommentId }),
   });
   const body = await responseBody<CommentWriteResponse>(response);
   if (!response.ok) throwApiError(response, body as ApiErrorBody);
@@ -305,20 +306,21 @@ export async function deleteMemberComment(commentId: string) {
   return body as CommentDeleteResponse;
 }
 
-export async function toggleHelpfulReaction(command: {
+export async function toggleCommentReaction(command: {
   commentId: string;
   idempotencyKey: string;
+  code: "HELPFUL" | "DISLIKE";
 }) {
   const response = await fetch(
-    `/api/comments/${encodeURIComponent(command.commentId)}/reactions/helpful`,
+    `/api/comments/${encodeURIComponent(command.commentId)}/reactions/${command.code.toLowerCase()}`,
     {
       method: "POST",
       headers: { accept: "application/json", "idempotency-key": command.idempotencyKey },
     },
   );
-  const body = await responseBody<HelpfulReactionResponse>(response);
+  const body = await responseBody<CommentReactionResponse>(response);
   if (!response.ok) throwApiError(response, body as ApiErrorBody);
-  return body as HelpfulReactionResponse;
+  return body as CommentReactionResponse;
 }
 
 export async function reportComment(command: {

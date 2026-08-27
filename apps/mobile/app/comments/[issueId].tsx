@@ -19,6 +19,16 @@ import { colors } from "@/theme";
 
 type Side = "ALL" | "A" | "B";
 
+function mapCommentTree(
+  comments: PublicComment[],
+  update: (comment: PublicComment) => PublicComment,
+): PublicComment[] {
+  return comments.map((comment) => {
+    const next = update(comment);
+    return { ...next, replies: mapCommentTree(next.replies ?? [], update) };
+  });
+}
+
 export default function CommentsScreen() {
   const { issueId } = useLocalSearchParams<{ issueId: string }>();
   const [issue, setIssue] = useState<PublicIssue | null>(null);
@@ -29,6 +39,9 @@ export default function CommentsScreen() {
   const [subjectId, setSubjectId] = useState<string | null>(null);
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
+  const [replyDraft, setReplyDraft] = useState<{ parentCommentId: string; body: string } | null>(
+    null,
+  );
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -36,6 +49,7 @@ export default function CommentsScreen() {
   const [error, setError] = useState<string | null>(null);
   const analyticsSessionId = useRef(randomUUID());
   const submissionKey = useRef(randomUUID());
+  const replySubmissionKey = useRef(randomUUID());
 
   const load = useCallback(
     async (selectedSide: Side = side) => {
@@ -136,32 +150,64 @@ export default function CommentsScreen() {
     }
   }
 
-  async function toggleHelpful(comment: PublicComment) {
+  async function submitReply() {
+    const body = replyDraft?.body.trim();
+    if (!issueId || !sessionToken || !replyDraft || !body || submitting) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      const result = await mobileApi.submitComment({
+        issueId,
+        subjectId: subjectId ?? undefined,
+        sessionToken,
+        idempotencyKey: replySubmissionKey.current,
+        parentCommentId: replyDraft.parentCommentId,
+        body,
+      });
+      replySubmissionKey.current = randomUUID();
+      setComments((current) =>
+        mapCommentTree(current, (comment) =>
+          comment.id === replyDraft.parentCommentId
+            ? { ...comment, replies: [...(comment.replies ?? []), result.comment] }
+            : comment,
+        ),
+      );
+      setReplyDraft(null);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "답글을 작성하지 못했습니다.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function toggleReaction(comment: PublicComment, code: "HELPFUL" | "DISLIKE") {
     if (busyCommentId) return;
     setBusyCommentId(comment.id);
     setError(null);
     try {
-      const result = await mobileApi.toggleHelpfulReaction({
+      const result = await mobileApi.toggleCommentReaction({
         commentId: comment.id,
         subjectId: subjectId ?? undefined,
         sessionToken: sessionToken ?? undefined,
         idempotencyKey: randomUUID(),
+        code,
       });
       setComments((current) =>
-        current.map((item) =>
+        mapCommentTree(current, (item) =>
           item.id === comment.id
             ? {
                 ...item,
                 reactions: {
                   helpfulCount: result.reaction.helpfulCount,
-                  viewerReacted: result.reaction.active,
+                  dislikeCount: result.reaction.dislikeCount,
+                  viewerReaction: result.reaction.active ? result.reaction.code : null,
                 },
               }
             : item,
         ),
       );
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "공감 상태를 변경하지 못했습니다.");
+      setError(reason instanceof Error ? reason.message : "반응 상태를 변경하지 못했습니다.");
     } finally {
       setBusyCommentId(null);
     }
@@ -182,8 +228,13 @@ export default function CommentsScreen() {
       const visibility = result.comment.visibility;
       setComments((current) =>
         visibility === "HIDDEN"
-          ? current.filter((item) => item.id !== comment.id)
-          : current.map((item) =>
+          ? current
+              .filter((item) => item.id !== comment.id)
+              .map((item) => ({
+                ...item,
+                replies: item.replies.filter((reply) => reply.id !== comment.id),
+              }))
+          : mapCommentTree(current, (item) =>
               item.id === comment.id
                 ? {
                     ...item,
@@ -262,7 +313,7 @@ export default function CommentsScreen() {
             <Text style={styles.composerTitle}>내 선택 이유</Text>
             <TextInput
               accessibilityLabel="내 선택 이유"
-              maxLength={2000}
+              maxLength={500}
               multiline
               onChangeText={setDraft}
               placeholder="왜 이 선택을 했는지 짧게 남겨보세요."
@@ -271,14 +322,14 @@ export default function CommentsScreen() {
               value={draft}
             />
             <View style={styles.composerFooter}>
-              <Text style={styles.count}>{Array.from(draft).length}/2000</Text>
+              <Text style={styles.count}>{Array.from(draft).length}/500</Text>
               <Pressable
                 accessibilityRole="button"
                 disabled={!draft.trim() || submitting}
                 onPress={() => void submitComment()}
                 style={[styles.submit, (!draft.trim() || submitting) && styles.disabled]}
               >
-                <Text style={styles.submitText}>{submitting ? "게시 중…" : "게시하기"}</Text>
+                <Text style={styles.submitText}>{submitting ? "작성 중…" : "작성"}</Text>
               </Pressable>
             </View>
           </View>
@@ -327,16 +378,41 @@ export default function CommentsScreen() {
                 <View style={styles.actions}>
                   <Pressable
                     accessibilityRole="button"
-                    accessibilityState={{ selected: comment.reactions.viewerReacted }}
+                    accessibilityState={{
+                      selected: comment.reactions.viewerReaction === "HELPFUL",
+                    }}
                     disabled={busyCommentId === comment.id}
-                    onPress={() => void toggleHelpful(comment)}
-                    style={[styles.action, comment.reactions.viewerReacted && styles.actionActive]}
+                    onPress={() => void toggleReaction(comment, "HELPFUL")}
+                    style={[
+                      styles.action,
+                      comment.reactions.viewerReaction === "HELPFUL" && styles.actionActive,
+                    ]}
                   >
-                    <Text style={styles.actionText}>
-                      {comment.reactions.viewerReacted ? "♥" : "♡"} 공감{" "}
-                      {comment.reactions.helpfulCount}
-                    </Text>
+                    <Text style={styles.actionText}>♡ 공감 {comment.reactions.helpfulCount}</Text>
                   </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityState={{
+                      selected: comment.reactions.viewerReaction === "DISLIKE",
+                    }}
+                    disabled={busyCommentId === comment.id}
+                    onPress={() => void toggleReaction(comment, "DISLIKE")}
+                    style={[
+                      styles.action,
+                      comment.reactions.viewerReaction === "DISLIKE" && styles.actionDislike,
+                    ]}
+                  >
+                    <Text style={styles.actionText}>싫어요 {comment.reactions.dislikeCount}</Text>
+                  </Pressable>
+                  {comment.threadState === "OPEN" ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() => setReplyDraft({ parentCommentId: comment.id, body: "" })}
+                      style={styles.action}
+                    >
+                      <Text style={styles.actionText}>답글</Text>
+                    </Pressable>
+                  ) : null}
                   {comment.reports.canReport || comment.reports.viewerReported ? (
                     <Pressable
                       accessibilityRole="button"
@@ -350,6 +426,101 @@ export default function CommentsScreen() {
                     </Pressable>
                   ) : null}
                 </View>
+                {replyDraft?.parentCommentId === comment.id ? (
+                  <View style={styles.replyComposer}>
+                    <TextInput
+                      accessibilityLabel="답글 작성"
+                      maxLength={500}
+                      multiline
+                      onChangeText={(body) => setReplyDraft({ parentCommentId: comment.id, body })}
+                      placeholder={`${comment.author.displayName}님에게 답글을 남겨보세요.`}
+                      placeholderTextColor={colors.textTertiary}
+                      style={styles.replyInput}
+                      value={replyDraft.body}
+                    />
+                    <View style={styles.replyComposerActions}>
+                      <Pressable
+                        accessibilityRole="button"
+                        disabled={!replyDraft.body.trim() || submitting}
+                        onPress={() => void submitReply()}
+                        style={styles.replySubmit}
+                      >
+                        <Text style={styles.submitText}>{submitting ? "작성 중…" : "작성"}</Text>
+                      </Pressable>
+                      <Pressable
+                        accessibilityRole="button"
+                        disabled={submitting}
+                        onPress={() => setReplyDraft(null)}
+                        style={styles.action}
+                      >
+                        <Text style={styles.actionText}>취소</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                ) : null}
+                {comment.replies.length > 0 ? (
+                  <View accessibilityLabel="답글 목록" style={styles.replies}>
+                    {comment.replies.map((reply) => (
+                      <View key={reply.id} style={styles.reply}>
+                        <View style={styles.commentHeader}>
+                          <Text
+                            style={[
+                              styles.choice,
+                              reply.choice === "A" ? styles.choiceA : styles.choiceB,
+                            ]}
+                          >
+                            {reply.choice}
+                          </Text>
+                          <View style={styles.authorBlock}>
+                            <Text style={styles.author}>{reply.author.displayName}</Text>
+                            <Text style={styles.meta}>{dateLabel(reply.createdAt)}</Text>
+                          </View>
+                        </View>
+                        <Text style={styles.body}>{reply.body}</Text>
+                        <View style={styles.actions}>
+                          <Pressable
+                            accessibilityRole="button"
+                            disabled={busyCommentId === reply.id}
+                            onPress={() => void toggleReaction(reply, "HELPFUL")}
+                            style={[
+                              styles.action,
+                              reply.reactions.viewerReaction === "HELPFUL" && styles.actionActive,
+                            ]}
+                          >
+                            <Text style={styles.actionText}>
+                              ♡ 공감 {reply.reactions.helpfulCount}
+                            </Text>
+                          </Pressable>
+                          <Pressable
+                            accessibilityRole="button"
+                            disabled={busyCommentId === reply.id}
+                            onPress={() => void toggleReaction(reply, "DISLIKE")}
+                            style={[
+                              styles.action,
+                              reply.reactions.viewerReaction === "DISLIKE" && styles.actionDislike,
+                            ]}
+                          >
+                            <Text style={styles.actionText}>
+                              싫어요 {reply.reactions.dislikeCount}
+                            </Text>
+                          </Pressable>
+                          {reply.reports.canReport || reply.reports.viewerReported ? (
+                            <Pressable
+                              accessibilityRole="button"
+                              disabled={reply.reports.viewerReported || busyCommentId === reply.id}
+                              onPress={() => openReport(reply)}
+                              style={styles.action}
+                            >
+                              <Text style={styles.actionText}>
+                                {reply.reports.viewerReported ? "신고 완료" : "신고"}
+                              </Text>
+                            </Pressable>
+                          ) : null}
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
               </View>
             ))
           )}
@@ -495,7 +666,7 @@ const styles = StyleSheet.create({
   author: { color: colors.text, fontSize: 13, fontWeight: "800" },
   meta: { color: colors.textTertiary, fontSize: 10, marginTop: 2 },
   body: { color: colors.text, fontSize: 14, lineHeight: 22 },
-  actions: { flexDirection: "row", gap: 8 },
+  actions: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   action: {
     borderColor: colors.border,
     borderRadius: 999,
@@ -504,7 +675,35 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   actionActive: { backgroundColor: colors.cyanSoft, borderColor: colors.cyan },
+  actionDislike: { backgroundColor: colors.orangeSoft, borderColor: colors.orange },
   actionText: { color: colors.textSecondary, fontSize: 11, fontWeight: "800" },
+  replyComposer: { borderTopColor: colors.border, borderTopWidth: 1, gap: 8, paddingTop: 12 },
+  replyInput: {
+    borderColor: colors.borderStrong,
+    borderRadius: 10,
+    borderWidth: 1,
+    color: colors.text,
+    fontSize: 13,
+    minHeight: 76,
+    padding: 11,
+    textAlignVertical: "top",
+  },
+  replyComposerActions: { flexDirection: "row", gap: 8, justifyContent: "flex-end" },
+  replySubmit: {
+    backgroundColor: colors.cyan,
+    borderRadius: 999,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+  },
+  replies: { borderLeftColor: colors.borderStrong, borderLeftWidth: 2, gap: 8, paddingLeft: 10 },
+  reply: {
+    backgroundColor: colors.surfaceSubtle,
+    borderColor: colors.border,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 10,
+    padding: 12,
+  },
   loadMore: {
     alignItems: "center",
     borderColor: colors.borderStrong,
