@@ -96,6 +96,7 @@ describe("Member private profile experience", () => {
     render(<MemberProfileExperience />);
 
     expect(await screen.findByRole("heading", { name: "테스트 회원님의 선택" })).toBeVisible();
+    expect(screen.getByLabelText("연결된 로그인 수단")).toHaveTextContent("Google");
     expect(screen.getByText("아침형 인간 vs 저녁형 인간")).toBeVisible();
     expect(screen.getByText("저녁형 인간")).toBeVisible();
     expect(screen.getByText("60%")).toBeVisible();

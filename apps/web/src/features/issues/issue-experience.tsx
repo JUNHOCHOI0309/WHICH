@@ -505,6 +505,10 @@ function ResultSharePanel({ issue, result }: { issue: PublicIssue; result: VoteR
   const [pending, setPending] = useState<ResultShareChannel | null>(null);
 
   function openShare(nextChannel: ResultShareChannel) {
+    if (expanded && channel === nextChannel) {
+      setExpanded(false);
+      return;
+    }
     setChannel(nextChannel);
     setExpanded(true);
     void recordAnalyticsEvent({
@@ -612,15 +616,6 @@ function ResultSharePanel({ issue, result }: { issue: PublicIssue; result: VoteR
               <p className={styles.commentEyebrow}>RESULT SHARE</p>
               <h2>이 결과를 같이 이야기해 보세요.</h2>
             </div>
-            <button
-              type="button"
-              className={styles.shareClose}
-              onClick={() => {
-                setExpanded(false);
-              }}
-            >
-              접기
-            </button>
           </div>
           <label className={styles.shareChoiceToggle}>
             <input

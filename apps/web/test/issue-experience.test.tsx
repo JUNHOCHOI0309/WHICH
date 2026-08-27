@@ -268,6 +268,10 @@ describe("IssueExperience", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "공유하기" }));
     expect(screen.getByText("RESULT SHARE")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "접기" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "공유하기" }));
+    expect(screen.queryByText("RESULT SHARE")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "공유하기" }));
     expect(screen.getByRole("button", { name: "결과 공유하기" })).toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: "내가 고른 A도 함께 공개" })).not.toBeChecked();
     fireEvent.click(screen.getByRole("button", { name: "결과 공유하기" }));
