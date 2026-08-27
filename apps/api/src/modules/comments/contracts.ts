@@ -1,5 +1,6 @@
 export type CommentSide = "ALL" | "A" | "B";
 export type CommentListView = "NEWEST" | "HIGHLIGHT";
+export type CommentListSort = "NEWEST" | "HELPFUL";
 export type CommentReportReason =
   "SPAM" | "HARASSMENT" | "HATE_OR_ABUSE" | "PERSONAL_INFORMATION" | "OTHER";
 export type CommentModerationAction = "COLLAPSE" | "HIDE" | "REMOVE_POLICY" | "RESTORE";
@@ -8,7 +9,7 @@ export type CommentReactionCode = "HELPFUL" | "DISLIKE";
 export type PublicComment = {
   id: string;
   choice: "A" | "B";
-  author: { displayName: string };
+  author: { displayName: string; avatarUrl: string | null };
   body: string;
   visibility: "VISIBLE" | "DEPRIORITIZED" | "COLLAPSED";
   threadState: "OPEN" | "LOCKED";
@@ -28,6 +29,7 @@ export type PublicComment = {
 export type PublicCommentPage = {
   items: PublicComment[];
   nextCursor: string | null;
+  totalCount: number;
 };
 
 export type CommentHighlights = {
@@ -40,6 +42,7 @@ export type GuestCommentQuery = {
   sessionToken?: string;
   anonymousSubjectId?: string;
   side: CommentSide;
+  sort?: CommentListSort;
   view?: CommentListView;
   cursor?: string;
   limit: number;

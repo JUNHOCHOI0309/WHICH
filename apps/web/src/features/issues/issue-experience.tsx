@@ -13,6 +13,7 @@ import { WhichAsideCard, WhichShell } from "@/components/layout/which-shell";
 import type {
   CommentReportReason,
   CommentSide,
+  CommentSort,
   IssueChoice,
   PublicComment,
   PublicIssue,
@@ -490,7 +491,7 @@ function ResultScreen({
           kakaoLoginEnabled={kakaoLoginEnabled}
           naverLoginEnabled={naverLoginEnabled}
         />
-        <NextIssueAction currentIssueId={issue.id} currentIssueVersion={issue.version} />
+        <NextIssueAutoAdvance currentIssueId={issue.id} currentIssueVersion={issue.version} />
       </article>
     </ExperienceShell>
   );
@@ -677,6 +678,56 @@ function removeFromCommentTree(comments: PublicComment[], commentId: string): Pu
     }));
 }
 
+function countCommentTree(comment: PublicComment): number {
+  return 1 + (comment.replies ?? []).reduce((total, reply) => total + countCommentTree(reply), 0);
+}
+
+function removedCommentCount(comments: PublicComment[], commentId: string): number {
+  for (const comment of comments) {
+    if (comment.id === commentId) return countCommentTree(comment);
+    const nested = removedCommentCount(comment.replies ?? [], commentId);
+    if (nested > 0) return nested;
+  }
+  return 0;
+}
+
+function relativeCommentTime(value: string) {
+  const timestamp = new Date(value).getTime();
+  const elapsedSeconds = Math.max(0, Math.floor((Date.now() - timestamp) / 1_000));
+  if (elapsedSeconds < 60) return "방금 전";
+  const minutes = Math.floor(elapsedSeconds / 60);
+  if (minutes < 60) return `${minutes}분 전`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}시간 전`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}일 전`;
+  return new Intl.DateTimeFormat("ko-KR", {
+    year: new Date(value).getFullYear() === new Date().getFullYear() ? undefined : "numeric",
+    month: "short",
+    day: "numeric",
+  }).format(new Date(value));
+}
+
+function CommentAuthorHeader({ comment }: { comment: PublicComment }) {
+  const initial = Array.from(comment.author.displayName.trim())[0] ?? "?";
+  return (
+    <header className={styles.commentAuthorHeader}>
+      <span className={styles.commentAvatar} aria-hidden="true">
+        {comment.author.avatarUrl ? (
+          <Image src={comment.author.avatarUrl} alt="" width={38} height={38} unoptimized />
+        ) : (
+          initial
+        )}
+      </span>
+      <strong>{comment.author.displayName}</strong>
+      <time dateTime={comment.createdAt}>{relativeCommentTime(comment.createdAt)}</time>
+      <span className={styles.commentChoice} aria-label={`${comment.choice} 선택`}>
+        {comment.choice}
+      </span>
+    </header>
+  );
+}
+
 const COMMENT_FILTERS: Array<{ side: CommentSide; label: string }> = [
   { side: "ALL", label: "전체" },
   { side: "A", label: "A 선택" },
@@ -703,7 +754,9 @@ function CommentSection({
   naverLoginEnabled: boolean;
 }) {
   const [side, setSide] = useState<CommentSide>("ALL");
+  const [sort, setSort] = useState<CommentSort>("NEWEST");
   const [items, setItems] = useState<PublicComment[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [state, setState] = useState<CommentState>("loading");
   const [draft, setDraft] = useState("");
@@ -773,28 +826,37 @@ function CommentSection({
         const page = await loadIssueComments({
           issueId,
           side: selectedSide,
+          sort,
           cursor,
           limit: 10,
         });
         setItems((current) => (cursor ? [...current, ...page.items] : page.items));
         setNextCursor(page.nextCursor);
+        setTotalCount(
+          page.totalCount ??
+            page.items.reduce((total, comment) => total + countCommentTree(comment), 0),
+        );
         setState(page.items.length === 0 && !cursor ? "empty" : "ready");
       } catch {
         setState("error");
       }
     },
-    [issueId],
+    [issueId, sort],
   );
 
   useEffect(() => {
     let active = true;
     const controller = new AbortController();
 
-    void loadIssueComments({ issueId, side, limit: 10, signal: controller.signal })
+    void loadIssueComments({ issueId, side, sort, limit: 10, signal: controller.signal })
       .then((page) => {
         if (!active) return;
         setItems(page.items);
         setNextCursor(page.nextCursor);
+        setTotalCount(
+          page.totalCount ??
+            page.items.reduce((total, comment) => total + countCommentTree(comment), 0),
+        );
         setState(page.items.length === 0 ? "empty" : "ready");
       })
       .catch((error: unknown) => {
@@ -806,7 +868,7 @@ function CommentSection({
       active = false;
       controller.abort();
     };
-  }, [issueId, side]);
+  }, [issueId, side, sort]);
 
   const selectSide = (selectedSide: CommentSide) => {
     if (selectedSide === side) return;
@@ -814,6 +876,14 @@ function CommentSection({
     setNextCursor(null);
     setState("loading");
     setSide(selectedSide);
+  };
+
+  const selectSort = (selectedSort: CommentSort) => {
+    if (selectedSort === sort) return;
+    setItems([]);
+    setNextCursor(null);
+    setState("loading");
+    setSort(selectedSort);
   };
 
   const publishComment = async () => {
@@ -845,6 +915,7 @@ function CommentSection({
           ...current.filter((item) => item.id !== result.comment.id),
         ]);
       }
+      setTotalCount((current) => current + 1);
       setState("ready");
       sessionStorage.removeItem(draftKey);
       draftTouched.current = false;
@@ -915,6 +986,7 @@ function CommentSection({
             : comment,
         ),
       );
+      setTotalCount((current) => current + 1);
       pendingReplyKey.current = null;
       setReplyDraft(null);
       toast.success("답글을 작성했어요.");
@@ -1069,11 +1141,13 @@ function CommentSection({
     setCommentMutationError(null);
     try {
       await deleteMemberComment(commentId);
+      const removedCount = removedCommentCount(items, commentId);
       setItems((current) => {
         const next = removeFromCommentTree(current, commentId);
         if (next.length === 0) setState("empty");
         return next;
       });
+      setTotalCount((current) => Math.max(0, current - removedCount));
       setDeleteConfirmId(null);
       setEditDraft(null);
       toast.success("댓글을 삭제했어요.");
@@ -1121,7 +1195,9 @@ function CommentSection({
         detail: reportDraft.reason === "OTHER" ? detail : undefined,
       });
       if (result.comment.visibility === "HIDDEN") {
+        const removedCount = removedCommentCount(items, reportDraft.commentId);
         setItems((current) => removeFromCommentTree(current, reportDraft.commentId));
+        setTotalCount((current) => Math.max(0, current - removedCount));
       } else {
         setItems((current) =>
           mapCommentTree(current, (item) =>
@@ -1179,15 +1255,7 @@ function CommentSection({
         key={reply.id}
         className={`${styles.commentReply} ${styles[`comment${reply.choice}`]}`}
       >
-        <header>
-          <span className={styles.commentChoice}>{reply.choice}</span>
-          <strong>{reply.author.displayName}</strong>
-          <time dateTime={reply.createdAt}>
-            {new Intl.DateTimeFormat("ko-KR", { month: "short", day: "numeric" }).format(
-              new Date(reply.createdAt),
-            )}
-          </time>
-        </header>
+        <CommentAuthorHeader comment={reply} />
         {isEditing ? (
           <form
             className={styles.commentEditForm}
@@ -1219,57 +1287,63 @@ function CommentSection({
           <p>{reply.body}</p>
         )}
         <footer>
-          {reply.editedAt ? <span>수정됨</span> : null}
-          <button
-            type="button"
-            className={`${styles.reactionButton} ${
-              reply.reactions.viewerReaction === "HELPFUL" ? styles.reactionActive : ""
-            }`}
-            aria-pressed={reply.reactions.viewerReaction === "HELPFUL"}
-            disabled={pendingReactionIds.has(reply.id)}
-            onClick={() => void toggleReaction(reply, "HELPFUL")}
-          >
-            <span aria-hidden="true">♡</span> 공감 {reply.reactions.helpfulCount}
-          </button>
-          <button
-            type="button"
-            className={`${styles.reactionButtonSecondary} ${
-              reply.reactions.viewerReaction === "DISLIKE" ? styles.reactionDislikeActive : ""
-            }`}
-            aria-pressed={reply.reactions.viewerReaction === "DISLIKE"}
-            disabled={pendingReactionIds.has(reply.id)}
-            onClick={() => void toggleReaction(reply, "DISLIKE")}
-          >
-            싫어요 {reply.reactions.dislikeCount}
-          </button>
-          {permissions.canEdit ? (
+          <div className={styles.commentReactionActions}>
             <button
               type="button"
-              className={styles.commentOwnerButton}
-              onClick={() => setEditDraft({ commentId: reply.id, body: reply.body })}
+              className={`${styles.reactionButton} ${
+                reply.reactions.viewerReaction === "HELPFUL" ? styles.reactionActive : ""
+              }`}
+              aria-pressed={reply.reactions.viewerReaction === "HELPFUL"}
+              disabled={pendingReactionIds.has(reply.id)}
+              onClick={() => void toggleReaction(reply, "HELPFUL")}
             >
-              수정
+              <span aria-hidden="true">♡</span> 공감 {reply.reactions.helpfulCount}
             </button>
-          ) : null}
-          {permissions.canDelete ? (
             <button
               type="button"
-              className={styles.commentOwnerButton}
-              onClick={() => setDeleteConfirmId(reply.id)}
+              className={`${styles.reactionButtonSecondary} ${
+                reply.reactions.viewerReaction === "DISLIKE" ? styles.reactionDislikeActive : ""
+              }`}
+              aria-label={`싫어요 ${reply.reactions.dislikeCount}`}
+              aria-pressed={reply.reactions.viewerReaction === "DISLIKE"}
+              disabled={pendingReactionIds.has(reply.id)}
+              onClick={() => void toggleReaction(reply, "DISLIKE")}
             >
-              삭제
+              <Image src="/icons/dislike.png" alt="" width={16} height={16} />
+              <span>{reply.reactions.dislikeCount}</span>
             </button>
-          ) : null}
-          {!permissions.canEdit && !permissions.canDelete ? (
-            <button
-              type="button"
-              className={styles.reportButton}
-              disabled={reportState.viewerReported || !reportState.canReport || isReporting}
-              onClick={() => setReportDraft({ commentId: reply.id, reason: "SPAM", detail: "" })}
-            >
-              {reportState.viewerReported ? "신고 완료" : isReporting ? "접수 중…" : "신고"}
-            </button>
-          ) : null}
+          </div>
+          <div className={styles.commentSecondaryActions}>
+            {reply.editedAt ? <span>수정됨</span> : null}
+            {permissions.canEdit ? (
+              <button
+                type="button"
+                className={styles.commentOwnerButton}
+                onClick={() => setEditDraft({ commentId: reply.id, body: reply.body })}
+              >
+                수정
+              </button>
+            ) : null}
+            {permissions.canDelete ? (
+              <button
+                type="button"
+                className={styles.commentOwnerButton}
+                onClick={() => setDeleteConfirmId(reply.id)}
+              >
+                삭제
+              </button>
+            ) : null}
+            {!permissions.canEdit && !permissions.canDelete ? (
+              <button
+                type="button"
+                className={styles.reportButton}
+                disabled={reportState.viewerReported || !reportState.canReport || isReporting}
+                onClick={() => setReportDraft({ commentId: reply.id, reason: "SPAM", detail: "" })}
+              >
+                {reportState.viewerReported ? "신고 완료" : isReporting ? "접수 중…" : "신고"}
+              </button>
+            ) : null}
+          </div>
         </footer>
         {deleteConfirmId === reply.id ? (
           <div className={styles.commentDeleteConfirm} role="alert">
@@ -1355,8 +1429,45 @@ function CommentSection({
           <p className={styles.commentEyebrow}>CHOICE REASONS</p>
           <h2 id="comment-title">사람들은 이렇게 골랐어요</h2>
         </div>
-        <span>최신순</span>
       </div>
+
+      <div className={styles.commentFilters} aria-label="댓글 필터와 정렬">
+        <div className={styles.commentSideFilters} aria-label="선택 이유 필터">
+          {COMMENT_FILTERS.map((filter) => (
+            <button
+              type="button"
+              key={filter.side}
+              className={side === filter.side ? styles.commentFilterActive : undefined}
+              aria-pressed={side === filter.side}
+              onClick={() => selectSide(filter.side)}
+            >
+              {filter.label}
+            </button>
+          ))}
+        </div>
+        <div className={styles.commentSortFilters} aria-label="댓글 정렬">
+          <button
+            type="button"
+            className={sort === "NEWEST" ? styles.commentSortActive : undefined}
+            aria-pressed={sort === "NEWEST"}
+            onClick={() => selectSort("NEWEST")}
+          >
+            최신순
+          </button>
+          <button
+            type="button"
+            className={sort === "HELPFUL" ? styles.commentSortActive : undefined}
+            aria-pressed={sort === "HELPFUL"}
+            onClick={() => selectSort("HELPFUL")}
+          >
+            공감순
+          </button>
+        </div>
+      </div>
+
+      <p className={styles.commentTotal} aria-live="polite">
+        전체 댓글 <strong>{totalCount.toLocaleString("ko-KR")}</strong>개
+      </p>
 
       <form
         id="comment-compose"
@@ -1411,20 +1522,6 @@ function CommentSection({
         ) : null}
       </form>
 
-      <div className={styles.commentFilters} aria-label="선택 이유 필터">
-        {COMMENT_FILTERS.map((filter) => (
-          <button
-            type="button"
-            key={filter.side}
-            className={side === filter.side ? styles.commentFilterActive : undefined}
-            aria-pressed={side === filter.side}
-            onClick={() => selectSide(filter.side)}
-          >
-            {filter.label}
-          </button>
-        ))}
-      </div>
-
       {state === "loading" ? (
         <div className={styles.commentMessage} role="status">
           선택 이유를 불러오는 중…
@@ -1478,16 +1575,7 @@ function CommentSection({
                   isCollapsed ? styles.commentCollapsed : ""
                 }`}
               >
-                <header>
-                  <span className={styles.commentChoice}>{comment.choice}</span>
-                  <strong>{comment.author.displayName}</strong>
-                  <time dateTime={comment.createdAt}>
-                    {new Intl.DateTimeFormat("ko-KR", {
-                      month: "short",
-                      day: "numeric",
-                    }).format(new Date(comment.createdAt))}
-                  </time>
-                </header>
+                <CommentAuthorHeader comment={comment} />
                 {isEditing ? (
                   <form
                     className={styles.commentEditForm}
@@ -1541,10 +1629,8 @@ function CommentSection({
                   <p>{comment.body}</p>
                 )}
                 <footer>
-                  {comment.editedAt ? <span>수정됨</span> : null}
-                  {comment.threadState === "LOCKED" ? <span>대화 잠김</span> : null}
                   {!isCollapsed ? (
-                    <>
+                    <div className={styles.commentReactionActions}>
                       <button
                         type="button"
                         className={`${styles.reactionButton} ${
@@ -1561,67 +1647,79 @@ function CommentSection({
                         className={`${styles.reactionButtonSecondary} ${
                           reactions.viewerReaction === "DISLIKE" ? styles.reactionDislikeActive : ""
                         }`}
+                        aria-label={`싫어요 ${reactions.dislikeCount}`}
                         aria-pressed={reactions.viewerReaction === "DISLIKE"}
                         disabled={pendingReactionIds.has(comment.id)}
                         onClick={() => void toggleReaction(comment, "DISLIKE")}
                       >
-                        싫어요 {reactions.dislikeCount}
+                        <Image src="/icons/dislike.png" alt="" width={16} height={16} />
+                        <span>{reactions.dislikeCount}</span>
                       </button>
-                      {comment.threadState === "OPEN" ? (
-                        <button
-                          type="button"
-                          className={styles.replyButton}
-                          onClick={() => {
-                            setCommentMutationError(null);
-                            setReplyDraft({ parentCommentId: comment.id, body: "" });
-                          }}
-                        >
-                          답글
-                        </button>
-                      ) : null}
-                    </>
+                    </div>
                   ) : null}
-                  {permissions.canEdit ? (
-                    <button
-                      type="button"
-                      className={styles.commentOwnerButton}
-                      disabled={isMutating}
-                      onClick={() => {
-                        setDeleteConfirmId(null);
-                        setCommentMutationError(null);
-                        setEditDraft({ commentId: comment.id, body: comment.body });
-                      }}
-                    >
-                      수정
-                    </button>
-                  ) : null}
-                  {permissions.canDelete ? (
-                    <button
-                      type="button"
-                      className={styles.commentOwnerButton}
-                      disabled={isMutating}
-                      onClick={() => {
-                        setEditDraft(null);
-                        setCommentMutationError(null);
-                        setDeleteConfirmId(comment.id);
-                      }}
-                    >
-                      삭제
-                    </button>
-                  ) : null}
-                  {!permissions.canEdit && !permissions.canDelete ? (
-                    <button
-                      type="button"
-                      className={styles.reportButton}
-                      disabled={reportState.viewerReported || !reportState.canReport || isReporting}
-                      onClick={() => {
-                        setReportError(null);
-                        setReportDraft({ commentId: comment.id, reason: "SPAM", detail: "" });
-                      }}
-                    >
-                      {reportState.viewerReported ? "신고 완료" : isReporting ? "접수 중…" : "신고"}
-                    </button>
-                  ) : null}
+                  <div className={styles.commentSecondaryActions}>
+                    {comment.editedAt ? <span>수정됨</span> : null}
+                    {comment.threadState === "LOCKED" ? <span>대화 잠김</span> : null}
+                    {!isCollapsed && comment.threadState === "OPEN" ? (
+                      <button
+                        type="button"
+                        className={styles.replyButton}
+                        onClick={() => {
+                          setCommentMutationError(null);
+                          setReplyDraft({ parentCommentId: comment.id, body: "" });
+                        }}
+                      >
+                        답글
+                      </button>
+                    ) : null}
+                    {permissions.canEdit ? (
+                      <button
+                        type="button"
+                        className={styles.commentOwnerButton}
+                        disabled={isMutating}
+                        onClick={() => {
+                          setDeleteConfirmId(null);
+                          setCommentMutationError(null);
+                          setEditDraft({ commentId: comment.id, body: comment.body });
+                        }}
+                      >
+                        수정
+                      </button>
+                    ) : null}
+                    {permissions.canDelete ? (
+                      <button
+                        type="button"
+                        className={styles.commentOwnerButton}
+                        disabled={isMutating}
+                        onClick={() => {
+                          setEditDraft(null);
+                          setCommentMutationError(null);
+                          setDeleteConfirmId(comment.id);
+                        }}
+                      >
+                        삭제
+                      </button>
+                    ) : null}
+                    {!permissions.canEdit && !permissions.canDelete ? (
+                      <button
+                        type="button"
+                        className={styles.reportButton}
+                        disabled={
+                          reportState.viewerReported || !reportState.canReport || isReporting
+                        }
+                        onClick={() => {
+                          setReportError(null);
+                          setReportDraft({ commentId: comment.id, reason: "SPAM", detail: "" });
+                        }}
+                      >
+                        {reportState.viewerReported
+                          ? "신고 완료"
+                          : isReporting
+                            ? "접수 중…"
+                            : "신고"}
+                      </button>
+                    ) : null}
+                  </div>
                 </footer>
                 {deleteConfirmId === comment.id ? (
                   <div className={styles.commentDeleteConfirm} role="alert">
@@ -1778,7 +1876,7 @@ function CommentSection({
   );
 }
 
-function NextIssueAction({
+function NextIssueAutoAdvance({
   currentIssueId,
   currentIssueVersion,
 }: {
@@ -1787,9 +1885,12 @@ function NextIssueAction({
 }) {
   const router = useRouter();
   const [state, setState] = useState<"idle" | "loading" | "empty" | "error">("idle");
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const triggeredRef = useRef(false);
 
   const moveNext = useCallback(async () => {
-    if (state === "loading") return;
+    if (triggeredRef.current) return;
+    triggeredRef.current = true;
     setState("loading");
 
     try {
@@ -1821,17 +1922,33 @@ function NextIssueAction({
     } catch {
       setState("error");
     }
-  }, [currentIssueId, currentIssueVersion, router, state]);
+  }, [currentIssueId, currentIssueVersion, router]);
+
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel || typeof IntersectionObserver === "undefined") return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting && entry.intersectionRatio >= 0.5)) {
+          void moveNext();
+        }
+      },
+      { threshold: 0.5 },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [moveNext]);
 
   return (
-    <div className={styles.nextIssue}>
-      <button type="button" disabled={state === "loading"} onClick={() => void moveNext()}>
-        {state === "loading" ? "다음 질문을 찾는 중…" : "다음 질문 보기"}
-        <span aria-hidden="true">→</span>
-      </button>
+    <div ref={sentinelRef} className={styles.nextIssue} aria-live="polite">
+      <p className={styles.nextIssuePrompt}>
+        {state === "idle" ? "조금 더 내려 다음 투표로 이어가세요." : null}
+        {state === "loading" ? "다음 질문을 찾는 중…" : null}
+      </p>
       {state === "empty" ? <p role="status">지금 참여할 수 있는 질문을 모두 골랐어요.</p> : null}
       {state === "error" ? (
-        <p role="alert">다음 질문을 찾지 못했어요. 버튼을 눌러 다시 시도해 주세요.</p>
+        <p role="alert">다음 질문을 찾지 못했어요. 새로고침 후 다시 시도해 주세요.</p>
       ) : null}
     </div>
   );

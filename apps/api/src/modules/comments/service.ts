@@ -150,11 +150,12 @@ function toPublicComment(
   reports: PublicComment["reports"] = { viewerReported: false, canReport: false },
   permissions: PublicComment["permissions"] = { canEdit: false, canDelete: false },
   replies: PublicComment[] = [],
+  authorAvatarUrl: string | null = null,
 ): PublicComment {
   return {
     id: row.id,
     choice: row.choice,
-    author: { displayName: row.authorDisplayName },
+    author: { displayName: row.authorDisplayName, avatarUrl: authorAvatarUrl },
     body: row.body,
     visibility: row.visibility as PublicComment["visibility"],
     threadState: row.threadState,
@@ -260,6 +261,7 @@ export function createCommentService(database: Database["db"]): CommentService {
   return {
     async listGuestComments(query) {
       const view = query.view ?? "NEWEST";
+      const sort = view === "HIGHLIGHT" ? "HELPFUL" : (query.sort ?? "NEWEST");
       if (view === "HIGHLIGHT" && query.cursor) {
         throw new CommentError(
           "INVALID_CURSOR",
@@ -268,6 +270,13 @@ export function createCommentService(database: Database["db"]): CommentService {
         );
       }
       const cursor = query.cursor ? decodeCommentCursor(query.cursor) : null;
+      if (cursor && cursor.sort !== sort) {
+        throw new CommentError(
+          "INVALID_CURSOR",
+          400,
+          "The Comment cursor does not match the requested sort.",
+        );
+      }
 
       return database.transaction(async (transaction) => {
         let viewerSubjectId: string;
@@ -438,10 +447,9 @@ export function createCommentService(database: Database["db"]): CommentService {
           );
         }
 
-        const filters: SQL[] = [
+        const publicCommentFilters: SQL[] = [
           eq(comments.issueId, query.issueId),
           eq(comments.issueVersion, acceptedVote.issueVersion),
-          isNull(comments.parentCommentId),
           eq(comments.publicationState, "PUBLISHED"),
           view === "HIGHLIGHT"
             ? eq(comments.visibility, "VISIBLE")
@@ -449,17 +457,14 @@ export function createCommentService(database: Database["db"]): CommentService {
           eq(comments.integrityState, "NORMAL"),
           isNull(comments.deletedAt),
         ];
+        const filters: SQL[] = [...publicCommentFilters, isNull(comments.parentCommentId)];
+
+        const [commentTotal] = await transaction
+          .select({ total: count() })
+          .from(comments)
+          .where(and(...publicCommentFilters));
 
         if (query.side !== "ALL") filters.push(eq(comments.choice, query.side));
-        if (cursor) {
-          filters.push(
-            or(
-              lt(comments.createdAt, cursor.createdAt),
-              and(eq(comments.createdAt, cursor.createdAt), lt(comments.id, cursor.commentId)),
-            )!,
-          );
-        }
-
         const helpfulCountOrder = sql<number>`(
           select count(*)::int
           from ${commentReactions}
@@ -467,18 +472,41 @@ export function createCommentService(database: Database["db"]): CommentService {
             and ${commentReactions.code} = 'HELPFUL'
             and ${commentReactions.active} = true
         )`;
+        if (cursor && sort === "NEWEST") {
+          filters.push(
+            or(
+              lt(comments.createdAt, cursor.createdAt),
+              and(eq(comments.createdAt, cursor.createdAt), lt(comments.id, cursor.commentId)),
+            )!,
+          );
+        }
+        if (cursor && sort === "HELPFUL") {
+          const helpfulCount = cursor.helpfulCount ?? 0;
+          filters.push(
+            or(
+              lt(helpfulCountOrder, helpfulCount),
+              and(
+                eq(helpfulCountOrder, helpfulCount),
+                or(
+                  lt(comments.createdAt, cursor.createdAt),
+                  and(eq(comments.createdAt, cursor.createdAt), lt(comments.id, cursor.commentId)),
+                ),
+              ),
+            )!,
+          );
+        }
         const rows = await transaction
           .select()
           .from(comments)
           .where(and(...filters))
           .orderBy(
-            ...(view === "HIGHLIGHT"
+            ...(sort === "HELPFUL"
               ? [desc(helpfulCountOrder), desc(comments.createdAt), desc(comments.id)]
               : [desc(comments.createdAt), desc(comments.id)]),
           )
           .limit(view === "HIGHLIGHT" ? query.limit : query.limit + 1);
 
-        const hasMore = view === "NEWEST" && rows.length > query.limit;
+        const hasMore = view !== "HIGHLIGHT" && rows.length > query.limit;
         const pageRows = rows.slice(0, query.limit);
         const lastItem = pageRows.at(-1);
         const rootCommentIds = pageRows.map((row) => row.id);
@@ -499,6 +527,17 @@ export function createCommentService(database: Database["db"]): CommentService {
                 )
                 .orderBy(asc(comments.createdAt), asc(comments.id));
         const commentIds = [...rootCommentIds, ...replyRows.map((row) => row.id)];
+        const authorSubjectIds = Array.from(
+          new Set([...pageRows, ...replyRows].map((row) => row.authorSubjectId)),
+        );
+        const authorProfiles =
+          authorSubjectIds.length === 0
+            ? []
+            : await transaction
+                .select({ subjectId: voterSubjects.id, avatarUrl: members.avatarUrl })
+                .from(voterSubjects)
+                .leftJoin(members, eq(voterSubjects.userId, members.id))
+                .where(inArray(voterSubjects.id, authorSubjectIds));
         const reactionCounts =
           commentIds.length === 0
             ? []
@@ -552,6 +591,9 @@ export function createCommentService(database: Database["db"]): CommentService {
           viewerReactions.map((reaction) => [reaction.commentId, reaction.code]),
         );
         const reportedCommentIds = new Set(viewerReports.map((report) => report.commentId));
+        const avatarBySubject = new Map(
+          authorProfiles.map((profile) => [profile.subjectId, profile.avatarUrl]),
+        );
 
         const materialize = (row: typeof comments.$inferSelect, replies: PublicComment[] = []) => {
           const viewerReported = reportedCommentIds.has(row.id);
@@ -571,6 +613,7 @@ export function createCommentService(database: Database["db"]): CommentService {
               canDelete: viewerCanMutate && row.authorSubjectId === viewerSubjectId,
             },
             replies,
+            avatarBySubject.get(row.authorSubjectId) ?? null,
           );
         };
         const repliesByParent = new Map<string, PublicComment[]>();
@@ -583,9 +626,18 @@ export function createCommentService(database: Database["db"]): CommentService {
 
         return {
           items: pageRows.map((row) => materialize(row, repliesByParent.get(row.id) ?? [])),
+          totalCount: commentTotal?.total ?? 0,
           nextCursor:
-            view === "NEWEST" && hasMore && lastItem
-              ? encodeCommentCursor({ createdAt: lastItem.createdAt, commentId: lastItem.id })
+            view !== "HIGHLIGHT" && hasMore && lastItem
+              ? encodeCommentCursor({
+                  sort,
+                  createdAt: lastItem.createdAt,
+                  commentId: lastItem.id,
+                  helpfulCount:
+                    sort === "HELPFUL"
+                      ? (countByComment.get(`${lastItem.id}:HELPFUL`) ?? 0)
+                      : undefined,
+                })
               : null,
         };
       });
@@ -597,7 +649,11 @@ export function createCommentService(database: Database["db"]): CommentService {
 
       return database.transaction(async (transaction) => {
         const [session] = await transaction
-          .select({ memberId: members.id, displayName: members.displayName })
+          .select({
+            memberId: members.id,
+            displayName: members.displayName,
+            avatarUrl: members.avatarUrl,
+          })
           .from(memberSessions)
           .innerJoin(members, eq(memberSessions.memberId, members.id))
           .where(
@@ -852,10 +908,14 @@ export function createCommentService(database: Database["db"]): CommentService {
         const response: MemberCommentSubmissionResult = {
           httpStatus: 201,
           body: {
-            comment: toPublicComment(comment, undefined, undefined, {
-              canEdit: true,
-              canDelete: true,
-            }),
+            comment: toPublicComment(
+              comment,
+              undefined,
+              undefined,
+              { canEdit: true, canDelete: true },
+              [],
+              session.avatarUrl,
+            ),
           },
         };
         await transaction

@@ -229,11 +229,13 @@ export async function loadExistingVote(issueId: string, signal?: AbortSignal) {
 export async function loadIssueComments(options: {
   issueId: string;
   side: CommentSide;
+  sort?: "NEWEST" | "HELPFUL";
   cursor?: string;
   limit?: number;
   signal?: AbortSignal;
 }) {
   const search = new URLSearchParams({ side: options.side });
+  if (options.sort) search.set("sort", options.sort);
   if (options.cursor) search.set("cursor", options.cursor);
   if (options.limit) search.set("limit", String(options.limit));
 
