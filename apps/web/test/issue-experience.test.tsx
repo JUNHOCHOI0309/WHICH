@@ -527,7 +527,7 @@ describe("IssueExperience", () => {
     render(<IssueExperience issueId={ISSUE_ID} kakaoLoginEnabled naverLoginEnabled />);
     const editor = await screen.findByRole("textbox", { name: "내 선택 이유" });
     fireEvent.change(editor, { target: { value: "로그인 뒤에도 남을 초안" } });
-    fireEvent.click(await screen.findByRole("button", { name: "로그인하고 게시" }));
+    fireEvent.click(await screen.findByRole("button", { name: "로그인하고 작성" }));
 
     expect(sessionStorage.getItem(`which:comment-draft:${ISSUE_ID}`)).toBe(
       "로그인 뒤에도 남을 초안",
@@ -595,7 +595,7 @@ describe("IssueExperience", () => {
     fireEvent.change(await screen.findByRole("textbox", { name: "내 선택 이유" }), {
       target: { value: "숨김 확인" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "로그인하고 게시" }));
+    fireEvent.click(screen.getByRole("button", { name: "로그인하고 작성" }));
     expect(screen.queryByRole("link", { name: "네이버로 로그인" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "카카오로 로그인" })).not.toBeInTheDocument();
   });
@@ -658,7 +658,7 @@ describe("IssueExperience", () => {
     render(<IssueExperience issueId={ISSUE_ID} />);
     const editor = await screen.findByRole("textbox", { name: "내 선택 이유" });
     fireEvent.change(editor, { target: { value: "저녁에 집중이 잘돼요." } });
-    fireEvent.click(await screen.findByRole("button", { name: "이유 게시" }));
+    fireEvent.click(await screen.findByRole("button", { name: "작성" }));
 
     expect(await screen.findByText("저녁에 집중이 잘돼요.")).toBeInTheDocument();
     expect(requests).toHaveLength(1);
@@ -709,7 +709,7 @@ describe("IssueExperience", () => {
                 threadState: "OPEN",
                 createdAt: "2026-08-24T08:00:00.000Z",
                 editedAt: null,
-                reactions: { helpfulCount: 0, viewerReacted: false },
+                reactions: { helpfulCount: 0, dislikeCount: 0, viewerReaction: null },
                 reports: { viewerReported: false, canReport: false },
                 permissions: { canEdit: true, canDelete: true },
               },
@@ -797,7 +797,7 @@ describe("IssueExperience", () => {
                 threadState: "OPEN",
                 createdAt: "2026-08-18T02:00:00.000Z",
                 editedAt: null,
-                reactions: { helpfulCount: 2, viewerReacted: false },
+                reactions: { helpfulCount: 2, dislikeCount: 0, viewerReaction: null },
               },
             ],
             nextCursor: null,
@@ -806,7 +806,7 @@ describe("IssueExperience", () => {
         if (url === "/api/comments/reaction-comment/reactions/helpful") {
           reactionRequests.push(init ?? {});
           return jsonResponse({
-            reaction: { code: "HELPFUL", active: true, helpfulCount: 3 },
+            reaction: { code: "HELPFUL", active: true, helpfulCount: 3, dislikeCount: 0 },
           });
         }
         throw new Error(`Unexpected request: ${url}`);
@@ -865,7 +865,7 @@ describe("IssueExperience", () => {
                 threadState: "OPEN",
                 createdAt: "2026-08-18T02:00:00.000Z",
                 editedAt: null,
-                reactions: { helpfulCount: 0, viewerReacted: false },
+                reactions: { helpfulCount: 0, dislikeCount: 0, viewerReaction: null },
                 reports: { viewerReported: false, canReport: true },
               },
             ],

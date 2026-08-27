@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "comment_reactions_one_active_per_subject_unique" ON "comment_reactions" USING btree ("comment_id","subject_id") WHERE "comment_reactions"."active" = true;

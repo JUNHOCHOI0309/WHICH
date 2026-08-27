@@ -173,9 +173,15 @@ export type PublicComment = {
   threadState: "OPEN" | "LOCKED";
   createdAt: string;
   editedAt: string | null;
-  reactions: { helpfulCount: number; viewerReacted: boolean };
+  parentCommentId: string | null;
+  reactions: {
+    helpfulCount: number;
+    dislikeCount: number;
+    viewerReaction: "HELPFUL" | "DISLIKE" | null;
+  };
   reports: { viewerReported: boolean; canReport: boolean };
   permissions: { canEdit: boolean; canDelete: boolean };
+  replies: PublicComment[];
 };
 
 export type CommentHighlight = PublicComment;

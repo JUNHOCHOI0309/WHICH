@@ -105,8 +105,8 @@ describe("data architecture v1 schema", () => {
     ]);
   });
 
-  it("keeps HELPFUL as the single v1 Comment reaction code", () => {
-    expect(commentReactionCodeEnum.enumValues).toEqual(["HELPFUL"]);
+  it("keeps the supported Comment reaction codes explicit", () => {
+    expect(commentReactionCodeEnum.enumValues).toEqual(["HELPFUL", "DISLIKE"]);
   });
 
   it("keeps the fixed v1 Comment report and moderation codes", () => {

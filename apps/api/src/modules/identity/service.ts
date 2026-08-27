@@ -921,6 +921,17 @@ export function createMemberIdentityService(
                 ),
               );
             for (const guestReaction of guestReactions) {
+              const [activeMemberReaction] = await transaction
+                .select()
+                .from(commentReactions)
+                .where(
+                  and(
+                    eq(commentReactions.commentId, guestReaction.commentId),
+                    eq(commentReactions.subjectId, memberSubject.id),
+                    eq(commentReactions.active, true),
+                  ),
+                )
+                .limit(1);
               const [memberReaction] = await transaction
                 .select()
                 .from(commentReactions)
@@ -933,7 +944,18 @@ export function createMemberIdentityService(
                 )
                 .limit(1);
 
-              if (memberReaction) {
+              if (activeMemberReaction && activeMemberReaction.code !== guestReaction.code) {
+                await transaction
+                  .update(commentReactions)
+                  .set({
+                    active: false,
+                    deactivatedAt: now,
+                    mergedIntoReactionId: activeMemberReaction.id,
+                    updatedAt: now,
+                  })
+                  .where(eq(commentReactions.id, guestReaction.id));
+                mergedDuplicateReactions += 1;
+              } else if (memberReaction) {
                 await transaction
                   .update(commentReactions)
                   .set({

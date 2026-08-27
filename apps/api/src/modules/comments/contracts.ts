@@ -3,6 +3,7 @@ export type CommentListView = "NEWEST" | "HIGHLIGHT";
 export type CommentReportReason =
   "SPAM" | "HARASSMENT" | "HATE_OR_ABUSE" | "PERSONAL_INFORMATION" | "OTHER";
 export type CommentModerationAction = "COLLAPSE" | "HIDE" | "REMOVE_POLICY" | "RESTORE";
+export type CommentReactionCode = "HELPFUL" | "DISLIKE";
 
 export type PublicComment = {
   id: string;
@@ -13,9 +14,15 @@ export type PublicComment = {
   threadState: "OPEN" | "LOCKED";
   createdAt: string;
   editedAt: string | null;
-  reactions: { helpfulCount: number; viewerReacted: boolean };
+  parentCommentId: string | null;
+  reactions: {
+    helpfulCount: number;
+    dislikeCount: number;
+    viewerReaction: CommentReactionCode | null;
+  };
   reports: { viewerReported: boolean; canReport: boolean };
   permissions: { canEdit: boolean; canDelete: boolean };
+  replies: PublicComment[];
 };
 
 export type PublicCommentPage = {
@@ -44,6 +51,7 @@ export type MemberCommentSubmission = {
   anonymousSubjectId?: string;
   idempotencyKey: string;
   body: string;
+  parentCommentId?: string;
 };
 
 export type MemberCommentSubmissionResult = {
@@ -72,17 +80,23 @@ export type MemberCommentDeleteResult = {
   body: { comment: { id: string; deleted: true } };
 };
 
-export type HelpfulReactionCommand = {
+export type CommentReactionCommand = {
   commentId: string;
   sessionToken?: string;
   anonymousSubjectId?: string;
   idempotencyKey: string;
+  code: CommentReactionCode;
 };
 
-export type HelpfulReactionResult = {
+export type CommentReactionResult = {
   httpStatus: 200;
   body: {
-    reaction: { code: "HELPFUL"; active: boolean; helpfulCount: number };
+    reaction: {
+      code: CommentReactionCode;
+      active: boolean;
+      helpfulCount: number;
+      dislikeCount: number;
+    };
   };
 };
 
@@ -129,7 +143,7 @@ export interface CommentService {
   submitMemberComment(command: MemberCommentSubmission): Promise<MemberCommentSubmissionResult>;
   updateMemberComment(command: MemberCommentUpdateCommand): Promise<MemberCommentUpdateResult>;
   deleteMemberComment(command: MemberCommentDeleteCommand): Promise<MemberCommentDeleteResult>;
-  toggleHelpfulReaction(command: HelpfulReactionCommand): Promise<HelpfulReactionResult>;
+  toggleCommentReaction(command: CommentReactionCommand): Promise<CommentReactionResult>;
   reportComment(command: CommentReportCommand): Promise<CommentReportResult>;
   listModerationCases(limit: number): Promise<{ items: CommentModerationCase[] }>;
   decideModeration(command: CommentModerationDecisionCommand): Promise<{

@@ -292,9 +292,11 @@ describe("Guest Comment read API", () => {
         threadState: "LOCKED",
         createdAt: "2026-08-18T03:00:00.000Z",
         editedAt: null,
-        reactions: { helpfulCount: 0, viewerReacted: false },
+        parentCommentId: null,
+        reactions: { helpfulCount: 0, dislikeCount: 0, viewerReaction: null },
         reports: { viewerReported: false, canReport: true },
         permissions: { canEdit: false, canDelete: false },
+        replies: [],
       },
     ]);
   });

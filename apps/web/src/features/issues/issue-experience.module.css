@@ -231,14 +231,16 @@
   --comment-side: var(--b);
 }
 
-.commentCard header {
+.commentCard header,
+.commentReply header {
   display: flex;
   align-items: center;
   gap: 9px;
   font-size: 0.76rem;
 }
 
-.commentCard time {
+.commentCard time,
+.commentReply time {
   margin-left: auto;
   color: var(--muted);
 }
@@ -254,13 +256,15 @@
   font-weight: 950;
 }
 
-.commentCard > p {
+.commentCard > p,
+.commentReply > p {
   margin: 14px 0 0;
   line-height: 1.7;
   word-break: keep-all;
 }
 
-.commentCard footer {
+.commentCard footer,
+.commentReply footer {
   display: flex;
   gap: 8px;
   margin-top: 12px;
@@ -269,7 +273,8 @@
   font-weight: 750;
 }
 
-.commentCard footer button {
+.commentCard footer button,
+.commentReply footer button {
   min-height: 34px;
   margin-left: auto;
   border: 1px solid var(--line);
@@ -283,36 +288,132 @@
   padding: 5px 11px;
 }
 
-.commentCard footer button.reactionButton {
+.commentCard footer button.reactionButton,
+.commentReply footer button.reactionButton {
   margin-left: auto;
 }
 
-.commentCard footer button.reportButton {
+.commentCard footer button.reactionButtonSecondary,
+.commentReply footer button.reactionButtonSecondary,
+.commentCard footer button.replyButton,
+.commentReply footer button.replyButton,
+.commentCard footer button.reportButton,
+.commentReply footer button.reportButton {
   margin-left: 0;
   color: var(--muted);
 }
 
-.commentCard footer button.commentOwnerButton {
+.commentCard footer button.commentOwnerButton,
+.commentReply footer button.commentOwnerButton {
   margin-left: 0;
 }
 
-.commentCard footer button.reportButton:first-of-type {
+.commentCard footer button.reportButton:first-of-type,
+.commentReply footer button.reportButton:first-of-type {
   margin-left: auto;
 }
 
-.commentCard footer button.reactionActive {
+.commentCard footer button.reactionActive,
+.commentReply footer button.reactionActive {
   border-color: var(--a);
   background: color-mix(in srgb, var(--a) 16%, var(--surface));
 }
 
-.commentCard footer button:focus-visible {
+.commentCard footer button.reactionDislikeActive,
+.commentReply footer button.reactionDislikeActive {
+  border-color: var(--b);
+  background: color-mix(in srgb, var(--b) 14%, var(--surface));
+}
+
+.commentCard footer button:focus-visible,
+.commentReply footer button:focus-visible {
   outline: 3px solid var(--a);
   outline-offset: 2px;
 }
 
-.commentCard footer button:disabled {
+.commentCard footer button:disabled,
+.commentReply footer button:disabled {
   cursor: wait;
   opacity: 0.65;
+}
+
+.replyComposer {
+  display: grid;
+  gap: 9px;
+  margin-top: 14px;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+.replyComposer label {
+  font-size: 0.76rem;
+  font-weight: 850;
+}
+
+.replyComposer textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  line-height: 1.6;
+  padding: 11px;
+  resize: vertical;
+}
+
+.replyComposer > div {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.replyComposer > div > span {
+  margin-right: auto;
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+.replyComposer button {
+  min-height: 34px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 850;
+  padding: 5px 12px;
+}
+
+.commentReplies {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+  margin-left: 28px;
+  border-left: 2px solid var(--line);
+  padding-left: 14px;
+}
+
+.commentReply {
+  --comment-side: var(--line);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--comment-side);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface) 94%, var(--canvas));
+  padding: 13px 14px;
+}
+
+@media (max-width: 640px) {
+  .commentReplies {
+    margin-left: 8px;
+    padding-left: 9px;
+  }
+
+  .commentCard footer,
+  .commentReply footer {
+    flex-wrap: wrap;
+  }
 }
 
 .reactionError {

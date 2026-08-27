@@ -14,9 +14,11 @@ function comment(id: string, choice: "A" | "B", body: string): PublicComment {
     threadState: "OPEN",
     createdAt: "2026-08-24T00:00:00.000Z",
     editedAt: null,
-    reactions: { helpfulCount: 1, viewerReacted: false },
+    parentCommentId: null,
+    reactions: { helpfulCount: 1, dislikeCount: 0, viewerReaction: null },
     reports: { viewerReported: false, canReport: true },
     permissions: { canEdit: false, canDelete: false },
+    replies: [],
   };
 }
 
