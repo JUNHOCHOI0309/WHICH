@@ -17,6 +17,22 @@ type Screen = "loading" | "guest" | "ready" | "error";
 
 type AccountDeletionError = { code?: string; message?: string };
 
+const IDENTITY_LABELS = {
+  EMAIL: "이메일",
+  GOOGLE: "Google",
+  X: "X",
+  NAVER: "Naver",
+  KAKAO: "Kakao",
+} as const;
+
+function isVisibleIdentity(
+  identity: MemberPrivateProfile["identities"][number],
+): identity is MemberPrivateProfile["identities"][number] & {
+  provider: keyof typeof IDENTITY_LABELS;
+} {
+  return identity.provider !== "DEVELOPMENT";
+}
+
 function accountDeletionMessage(error: AccountDeletionError, status: number) {
   if (error.code === "CREDENTIAL_INVALID") return "현재 비밀번호가 올바르지 않습니다.";
   if (error.code === "CREDENTIAL_REQUIRED") {
@@ -170,7 +186,14 @@ export function MemberProfileExperience({
                   }
                 />
                 <div className={styles.profileIdentityCopy}>
-                  <p>PRIVATE MEMBER PROFILE</p>
+                  <div className={styles.profileIdentityHeading}>
+                    <p>PRIVATE MEMBER PROFILE</p>
+                    <div className={styles.identityChips} aria-label="연결된 로그인 수단">
+                      {profile.identities.filter(isVisibleIdentity).map((identity) => (
+                        <span key={identity.provider}>{IDENTITY_LABELS[identity.provider]}</span>
+                      ))}
+                    </div>
+                  </div>
                   <h1 id="profile-title">{profile.member.displayName}님의 선택</h1>
                   <span>{joinedLabel(profile.member.joinedAt)}부터 WHICH에 참여했어요.</span>
                 </div>

@@ -932,8 +932,7 @@
 }
 
 .shareLaunchers button,
-.sharePrimaryAction,
-.shareClose {
+.sharePrimaryAction {
   border: 1px solid var(--ink);
   background: var(--surface);
   color: var(--ink);
@@ -986,12 +985,6 @@
   gap: 20px;
 }
 
-.shareClose {
-  min-height: 38px;
-  padding: 7px 12px;
-  white-space: nowrap;
-}
-
 .shareChoiceToggle {
   display: flex;
   align-items: center;
@@ -1037,8 +1030,7 @@
 }
 
 .shareLaunchers button:focus-visible,
-.sharePrimaryAction:focus-visible,
-.shareClose:focus-visible {
+.sharePrimaryAction:focus-visible {
   outline: 3px solid var(--a);
   outline-offset: 2px;
 }
