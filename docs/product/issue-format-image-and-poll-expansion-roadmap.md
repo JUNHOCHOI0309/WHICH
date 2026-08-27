@@ -6,6 +6,7 @@
 - Accepted architecture decision: [`ADR-0003: Issue format and media policy`](../architecture/adr/0003-issue-format-and-media-policy.md)
 - PICK migration decision: [`ADR-0004: PICK 3~4지선다 migration boundary`](../architecture/adr/0004-pick-multichoice-migration.md)
 - Trusted uploader decision: [`ADR-0005: Trusted image uploader capability`](../architecture/adr/0005-trusted-image-uploader-capability.md)
+- Image moderation operations: [`Image Moderation Operating Strategy v2`](../operations/image-moderation-operating-strategy-v2.md)
 - Future format decision: [`ADR-0006: Series, Tournament, and Prediction boundary`](../architecture/adr/0006-series-tournament-prediction-boundary.md)
 - Accepted editorial contract: [`Question Archetype, Editorial Rubric, and Authoring Linter Contract`](./question-archetype-editorial-rubric-authoring-linter.md)
 - Related roadmap: [`post-v0-discovery-recommendation-ai-roadmap.md`](./post-v0-discovery-recommendation-ai-roadmap.md)
@@ -32,6 +33,7 @@
 6. YouTube 사례는 질문 문장이 아니라 질문 원형과 참여 구조를 학습하는 참고 자료로만 사용한다.
 7. 추천과 논쟁 후보는 50:50 또는 절대 참여 수만으로 결정하지 않는다.
 8. 이미지와 형식 확장은 feature flag, 관찰 가능성, fallback, rollback 없이 공개하지 않는다.
+9. 사용자 이미지 운영 부담은 Text-only·승인 Library·직접 업로드 경로를 분리해 줄인다.
 
 WHICH-81에서 위 결정의 데이터 소유권, 상태축, A/B 호환과 Migration boundary를 ADR-0003으로
 확정했다. 이 로드맵의 후속 Task는 ADR을 바꾸지 않으며, 경계를 변경해야 할 경우 새 ADR로
@@ -299,18 +301,19 @@ Retrieval은 명시 관심사, 신선한 Editorial 콘텐츠, 품질 후보와 �
 
 ## Notion Backlog
 
-| Task                                                                          | Priority | Phase             | 목적                                               |
-| ----------------------------------------------------------------------------- | -------- | ----------------- | -------------------------------------------------- |
-| [WHICH-81](https://app.notion.com/p/3c828b27a55980ebbefaed277d7a266f?pvs=204) | P1       | Data Architecture | Issue 형식·미디어 정책 ADR 및 상태 모델 확정       |
-| [WHICH-82](https://app.notion.com/p/3c828b27a559815a9795dc8ed8849765?pvs=204) | P1       | Editorial         | 질문 원형·편집 품질 Rubric와 Authoring Linter 설계 |
-| [WHICH-83](https://app.notion.com/p/3c828b27a55981ecbb91c6d5b47d321a?pvs=204) | P1       | Personalization   | Issue 품질 분석 이벤트와 데이터 계약 확장          |
-| [WHICH-84](https://app.notion.com/p/3c828b27a55981458752e9418d7d39d3?pvs=204) | P1       | Data Architecture | 운영자 전용 이미지 A/B 미디어 자산 기반 구축       |
-| [WHICH-85](https://app.notion.com/p/3c828b27a559817cb501e46561aed7c3?pvs=204) | P1       | Integrity         | Ops 이미지 권리·검수·블라인드 워크플로 구축        |
-| [WHICH-86](https://app.notion.com/p/3c828b27a559816992f4e4b049ccb8c2?pvs=204) | P2       | Core Vote         | Web·Mobile 이미지 A/B 카드와 제한 노출 실험        |
-| [WHICH-87](https://app.notion.com/p/3c828b27a55981758337dfdf9bd9b103?pvs=204) | P1       | Personalization   | 품질 기반 Feed 추천과 논쟁 후보 선정 v1            |
-| [WHICH-88](https://app.notion.com/p/3c828b27a55981258ed8c6ca277e7925?pvs=204) | P2       | Data Architecture | PICK 3~4지선다 데이터·API Migration Spike          |
-| [WHICH-89](https://app.notion.com/p/3c828b27a55981dfad36c9126672a919?pvs=204) | P3       | Community         | 신뢰 사용자 이미지 업로드 Capability Pilot 설계    |
-| [WHICH-90](https://app.notion.com/p/3c828b27a559816389a5d4fc4e36f1d4?pvs=204) | P3       | Core Vote         | Series·Tournament·Prediction 도메인 경계 연구      |
+| Task                                                                           | Priority | Phase             | 목적                                               |
+| ------------------------------------------------------------------------------ | -------- | ----------------- | -------------------------------------------------- |
+| [WHICH-81](https://app.notion.com/p/3c828b27a55980ebbefaed277d7a266f?pvs=204)  | P1       | Data Architecture | Issue 형식·미디어 정책 ADR 및 상태 모델 확정       |
+| [WHICH-82](https://app.notion.com/p/3c828b27a559815a9795dc8ed8849765?pvs=204)  | P1       | Editorial         | 질문 원형·편집 품질 Rubric와 Authoring Linter 설계 |
+| [WHICH-83](https://app.notion.com/p/3c828b27a55981ecbb91c6d5b47d321a?pvs=204)  | P1       | Personalization   | Issue 품질 분석 이벤트와 데이터 계약 확장          |
+| [WHICH-84](https://app.notion.com/p/3c828b27a55981458752e9418d7d39d3?pvs=204)  | P1       | Data Architecture | 운영자 전용 이미지 A/B 미디어 자산 기반 구축       |
+| [WHICH-85](https://app.notion.com/p/3c828b27a559817cb501e46561aed7c3?pvs=204)  | P1       | Integrity         | Ops 이미지 권리·검수·블라인드 워크플로 구축        |
+| [WHICH-86](https://app.notion.com/p/3c828b27a559816992f4e4b049ccb8c2?pvs=204)  | P2       | Core Vote         | Web·Mobile 이미지 A/B 카드와 제한 노출 실험        |
+| [WHICH-87](https://app.notion.com/p/3c828b27a55981758337dfdf9bd9b103?pvs=204)  | P1       | Personalization   | 품질 기반 Feed 추천과 논쟁 후보 선정 v1            |
+| [WHICH-88](https://app.notion.com/p/3c828b27a55981258ed8c6ca277e7925?pvs=204)  | P2       | Data Architecture | PICK 3~4지선다 데이터·API Migration Spike          |
+| [WHICH-89](https://app.notion.com/p/3c828b27a55981dfad36c9126672a919?pvs=204)  | P3       | Community         | 신뢰 사용자 이미지 업로드 Capability Pilot 설계    |
+| [WHICH-90](https://app.notion.com/p/3c828b27a559816389a5d4fc4e36f1d4?pvs=204)  | P3       | Core Vote         | Series·Tournament·Prediction 도메인 경계 연구      |
+| [WHICH-141](https://app.notion.com/p/3c928b27a55981ab94abc6322a125bf8?pvs=204) | P1       | Editorial         | 승인 이미지 Library·라이선스 원장·작성기 경로      |
 
 권장 Critical Path:
 

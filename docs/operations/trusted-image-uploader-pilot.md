@@ -4,6 +4,12 @@ WHICH-89는 신뢰 사용자 이미지 업로드 Pilot의 운영 계약을 정�
 Pilot을 시작하기 전 확인할 체크리스트이며, 현재 Production Member/Guest 업로드를 활성화하지
 않는다.
 
+이 Pilot의 `14일·10명·30개` 최소 표본은 UX, Queue, R2 수명주기와 운영 시간을 확인하는 Smoke
+Gate다. 심각한 누락이 없더라도 자동 공개 안전성을 입증하지 않으며, `GO`는 같은 전수 사람 검수
+경계에서 다음 제한 Cohort를 검토할 수 있다는 뜻으로만 사용한다. 자동 임시 공개는
+[`Image Moderation Operating Strategy v2`](./image-moderation-operating-strategy-v2.md)의 별도
+통계·Audit Release Gate를 통과해야 한다.
+
 ## 선행 조건
 
 - 운영자 이미지 등록·승인·반려·블라인드·삭제·복원 QA가 통과했다.
@@ -12,6 +18,10 @@ Pilot을 시작하기 전 확인할 체크리스트이며, 현재 Production Mem
 - 검수 Queue의 oldest age, p95 처리 시간, 자산당 처리 시간과 주간 운영 시간을 측정할 수 있다.
 - Member capability grant/event migration과 operator grant 도구가 준비되어 있다.
 - 사용자 업로드 mode 기본값과 배포 환경값이 `OFF`다.
+- mode, active capability, consent version, 하루 3개, open asset 10개와 Issue 소유권이 모든
+  Member 업로드 Route에서 서버 측으로 강제된다.
+- 자산 신고, 사용자 통지·소명, legal hold와 삭제 차단이 준비되어 있다.
+- 질문·A/B 선택지·두 이미지·alt text·권리 근거를 함께 볼 수 있는 검수 문맥이 준비되어 있다.
 
 하나라도 충족하지 못하면 Pilot을 시작하지 않는다.
 
@@ -35,6 +45,8 @@ Pilot을 시작하기 전 확인할 체크리스트이며, 현재 Production Mem
   `REVIEW_READY`로 기록한다.
 - rule/model version, OCR·QR·유해성 finding, hashes와 처리 시간을 저장한다.
 - 자동 판정만으로 공개 승인하거나 binary를 영구 삭제하지 않는다.
+- Provider, OCR 또는 일부 검사가 실패하면 비공개 `REVIEW_REQUIRED`로 보내고 자동 허용하지 않는다.
+- Text-only 또는 승인 Library 경로는 이미지 검사 장애와 무관하게 계속 사용할 수 있어야 한다.
 
 ## 사람 검수
 
@@ -87,6 +99,10 @@ oldest pending 48시간 또는 review p95 24시간을 넘으면 신규 제출을
 - `NO_GO`: mode를 `OFF`로 전환하고 active grant를 정지한다.
 
 심각한 안전·개인정보 공개 누락은 표본이나 비율과 관계없이 즉시 `NO_GO`다.
+
+`GO`는 Fast Lane이나 일반 Member 공개를 승인하지 않는다. 저위험 임시 공개를 평가하려면
+Action·Slice별 Golden Set과 Shadow 결과, 충분한 표본, 최초 500건 20% Random Audit, Targeted
+Audit, 즉시 Category Kill Switch와 Rollback Drill을 별도로 통과해야 한다.
 
 ## Rollback
 
