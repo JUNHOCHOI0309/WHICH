@@ -118,6 +118,22 @@ const feedResponseSchema = Type.Object({
     qualityMode: Type.Union([Type.Literal("OFF"), Type.Literal("SHADOW"), Type.Literal("LIVE")]),
     fallbackReason: Type.Union([Type.String(), Type.Null()]),
   }),
+  rightRail: Type.Object({
+    version: Type.Literal("participation_v1"),
+    items: Type.Array(
+      Type.Object({
+        issueId: uuidSchema,
+        question: Type.String(),
+        categoryCode: Type.String(),
+        participationCount: Type.Integer({ minimum: 0 }),
+        reasonCode: Type.Union([
+          Type.Literal("RECENT_PARTICIPATION"),
+          Type.Literal("RECENT_FALLBACK"),
+        ]),
+      }),
+      { maxItems: 3 },
+    ),
+  }),
 });
 
 type IssueRoute = {

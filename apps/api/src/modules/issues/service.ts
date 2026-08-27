@@ -354,7 +354,6 @@ export function createIssueReadService(
         profile.mode === "RECENCY" &&
         !legacyRecencyCursor &&
         (Boolean(cursor?.rankingSeed) || profile.reasonCode === "PROFILE_NOT_READY");
-      const seededRanking = profile.mode === "PERSONALIZED" || discoveryRanking;
       const result = await database.transaction(async (transaction) => {
         const now = new Date();
         const latestPublishedVersions = transaction
@@ -507,7 +506,10 @@ export function createIssueReadService(
           );
         }
 
-        const candidateLimit = seededRanking ? 200 : query.limit + 1;
+        // The same safe candidate pool powers both the feed and the participation rail.
+        // Keeping a bounded pool avoids an unbounded aggregate while giving the rail
+        // enough inventory even when the feed itself only requests a handful of rows.
+        const candidateLimit = Math.max(200, query.limit + 1);
         const candidateRows = await transaction
           .select({
             id: issues.id,
@@ -526,6 +528,66 @@ export function createIssueReadService(
           .where(and(...filters))
           .orderBy(desc(latestPublishedVersions.publishedAt), desc(issues.id))
           .limit(candidateLimit);
+
+        const recentParticipationSince = new Date(now.valueOf() - 24 * 60 * 60 * 1_000);
+        const recentParticipationRows = candidateRows.length
+          ? await transaction
+              .select({
+                issueId: votes.issueId,
+                issueVersion: votes.issueVersion,
+                participationCount: sql<number>`count(*)::int`,
+              })
+              .from(votes)
+              .where(
+                and(
+                  or(
+                    ...candidateRows.map((row) =>
+                      and(eq(votes.issueId, row.id), eq(votes.issueVersion, row.version)),
+                    ),
+                  ),
+                  eq(votes.integrityState, "ACCEPTED"),
+                  eq(votes.isTestSubject, false),
+                  isNull(votes.invalidatedAt),
+                  gte(votes.acceptedAt, recentParticipationSince),
+                ),
+              )
+              .groupBy(votes.issueId, votes.issueVersion)
+          : [];
+        const recentParticipationByIssue = new Map(
+          recentParticipationRows.map((row) => [
+            `${row.issueId}:${row.issueVersion}`,
+            Number(row.participationCount),
+          ]),
+        );
+        const rightRail = {
+          version: "participation_v1" as const,
+          items: [...candidateRows]
+            .sort((left, right) => {
+              const participationDelta =
+                (recentParticipationByIssue.get(`${right.id}:${right.version}`) ?? 0) -
+                (recentParticipationByIssue.get(`${left.id}:${left.version}`) ?? 0);
+              if (participationDelta !== 0) return participationDelta;
+              const publishedDelta =
+                (right.publishedAt?.valueOf() ?? 0) - (left.publishedAt?.valueOf() ?? 0);
+              if (publishedDelta !== 0) return publishedDelta;
+              return right.id.localeCompare(left.id);
+            })
+            .slice(0, 3)
+            .map((row) => {
+              const participationCount =
+                recentParticipationByIssue.get(`${row.id}:${row.version}`) ?? 0;
+              return {
+                issueId: row.id,
+                question: row.question,
+                categoryCode: row.categoryCode,
+                participationCount,
+                reasonCode:
+                  participationCount > 0
+                    ? ("RECENT_PARTICIPATION" as const)
+                    : ("RECENT_FALLBACK" as const),
+              };
+            }),
+        };
 
         const mappingFilters = candidateRows.map((row) =>
           and(
@@ -807,6 +869,7 @@ export function createIssueReadService(
                   )
               : null,
           ranking,
+          rightRail,
           auditItems: pageRankedRows,
           subjectId,
         };
@@ -828,6 +891,7 @@ export function createIssueReadService(
         items,
         nextCursor: result.nextCursor,
         ranking: result.ranking,
+        rightRail: result.rightRail,
       };
     },
   };

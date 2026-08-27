@@ -96,6 +96,16 @@ export type PublicIssueFeed = {
     qualityMode?: "OFF" | "SHADOW" | "LIVE";
     fallbackReason?: string | null;
   };
+  rightRail?: {
+    version: "participation_v1";
+    items: Array<{
+      issueId: string;
+      question: string;
+      categoryCode: string;
+      participationCount: number;
+      reasonCode: "RECENT_PARTICIPATION" | "RECENT_FALLBACK";
+    }>;
+  };
 };
 
 export type CommentSide = "ALL" | "A" | "B";

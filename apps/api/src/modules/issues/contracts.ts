@@ -60,6 +60,16 @@ export type PublicIssueFeed = {
   items: PublicFeedIssue[];
   nextCursor: string | null;
   ranking: FeedRankingContext;
+  rightRail: {
+    version: "participation_v1";
+    items: Array<{
+      issueId: string;
+      question: string;
+      categoryCode: string;
+      participationCount: number;
+      reasonCode: "RECENT_PARTICIPATION" | "RECENT_FALLBACK";
+    }>;
+  };
 };
 
 export type GuestIssueFeedQuery = {

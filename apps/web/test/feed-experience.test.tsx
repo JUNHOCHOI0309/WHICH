@@ -375,6 +375,54 @@ describe("FeedExperience", () => {
     );
   });
 
+  it("replaces the static principle with result-free participation links", async () => {
+    const participationFeed: PublicIssueFeed = {
+      ...feed,
+      rightRail: {
+        version: "participation_v1",
+        items: [
+          {
+            issueId: feed.items[0]!.id,
+            question: feed.items[0]!.question,
+            categoryCode: feed.items[0]!.categoryCode,
+            participationCount: 18,
+            reasonCode: "RECENT_PARTICIPATION",
+          },
+          {
+            issueId: feed.items[1]!.id,
+            question: feed.items[1]!.question,
+            categoryCode: feed.items[1]!.categoryCode,
+            participationCount: 0,
+            reasonCode: "RECENT_FALLBACK",
+          },
+        ],
+      },
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = String(input);
+        if (url === "/api/member-session") return jsonResponse({ code: "SESSION_INVALID" }, 401);
+        if (url === "/api/guest-subjects") return jsonResponse({ status: "ready" });
+        if (url.startsWith("/api/issues/feed?")) return jsonResponse(participationFeed);
+        throw new Error(`Unexpected request: ${url}`);
+      }),
+    );
+
+    render(<FeedExperience />);
+
+    expect(await screen.findByText("지금 많이 참여하는 질문")).toBeInTheDocument();
+    expect(screen.getByText(/18명 참여/)).toBeInTheDocument();
+    expect(screen.getByText(/새 질문/)).toBeInTheDocument();
+    expect(screen.queryByText("WHICH PRINCIPLE")).not.toBeInTheDocument();
+    expect(screen.queryByText(/\d+%/)).not.toBeInTheDocument();
+    expect(
+      screen
+        .getAllByRole("link")
+        .filter((link) => link.getAttribute("href") === `/issues/${feed.items[0]!.id}`),
+    ).toHaveLength(3);
+  });
+
   it("shows an empty completion state and can retry a failed load", async () => {
     let feedAttempts = 0;
     vi.stubGlobal(
