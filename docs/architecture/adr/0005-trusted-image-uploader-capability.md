@@ -6,6 +6,7 @@
 - Supersedes: none
 - Extends: [`ADR-0003`](./0003-issue-format-and-media-policy.md)
 - Operations: [`Trusted image uploader Pilot runbook`](../../operations/trusted-image-uploader-pilot.md)
+- Automation boundary: [`Image Moderation Operating Strategy v2`](../../operations/image-moderation-operating-strategy-v2.md)
 
 ## Context
 
@@ -134,6 +135,10 @@ member_capability_events
 
 실행 가능한 판정은 `evaluateTrustedImagePilot`에 둔다. `GO`도 일반 Member 공개를 의미하지 않고
 다음 제한 cohort 또는 후속 Task로 이동할 수 있다는 뜻이다.
+
+이 표본은 운영 Smoke Gate다. `30개에서 심각한 누락 0건`은 자동 공개의 안전성을 입증하지
+않으므로 Fast Lane 또는 임시 자동 공개는 별도 Shadow 표본·Action별 통계·Random Audit와
+Category Kill Switch를 요구한다.
 
 ### 6. Feature flag와 Rollback
 
