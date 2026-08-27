@@ -15,12 +15,12 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import type {
-  MemberPointLedgerItem,
   MemberPointView,
   MemberPrivateProfile,
   MemberPrivateVote,
   MemberSessionView,
 } from "@/contracts";
+import { MemberPointDrawer } from "@/features/points/member-point-drawer";
 import { clearRememberedMemberVotes, rememberMemberVote } from "@/lib/member-vote-cache";
 import { MobileApiError } from "@/lib/mobile-api";
 import { memberSessions, mobileApi } from "@/lib/runtime";
@@ -48,10 +48,6 @@ function dateLabel(value: string, includeTime = false) {
   }).format(new Date(value));
 }
 
-function pointAmountLabel(item: MemberPointLedgerItem) {
-  return `${item.amount > 0 ? "+" : ""}${item.amount.toLocaleString("ko-KR")}P`;
-}
-
 function apiMessage(error: unknown, fallback: string) {
   if (!(error instanceof MobileApiError)) return fallback;
   if (error.code === "HANDLE_TAKEN") return "이미 사용 중인 Handle이에요.";
@@ -70,6 +66,10 @@ export default function MeScreen() {
   const [session, setSession] = useState<MemberSessionView | null>(null);
   const [profile, setProfile] = useState<MemberPrivateProfile | null>(null);
   const [points, setPoints] = useState<MemberPointView | null>(null);
+  const [pointDrawerOpen, setPointDrawerOpen] = useState(false);
+  const [pointsLoading, setPointsLoading] = useState(false);
+  const [pointsLoadingMore, setPointsLoadingMore] = useState(false);
+  const [pointsError, setPointsError] = useState<string | null>(null);
   const [history, setHistory] = useState<MemberPrivateVote[]>([]);
   const [historyCursor, setHistoryCursor] = useState<string | null>(null);
   const [historyPending, setHistoryPending] = useState(false);
@@ -90,20 +90,33 @@ export default function MeScreen() {
             setSession(null);
             setProfile(null);
             setPoints(null);
+            setPointsError(null);
             setScreen("guest");
             return;
           }
-          const [nextProfile, nextPoints] = await Promise.all([
-            mobileApi.loadMemberProfile(restored.token, { limit: 10 }),
-            mobileApi.loadMemberPoints(restored.token, { limit: 5 }),
-          ]);
+          const nextProfile = await mobileApi.loadMemberProfile(restored.token, { limit: 10 });
           if (!active) return;
           setSession(restored);
           setProfile(nextProfile);
-          setPoints(nextPoints);
           setHistory(nextProfile.votes.items);
           setHistoryCursor(nextProfile.votes.nextCursor);
           setScreen("ready");
+          setPointsLoading(true);
+          setPointsError(null);
+          void mobileApi
+            .loadMemberPoints(restored.token, { limit: 10 })
+            .then((nextPoints) => {
+              if (active) setPoints(nextPoints);
+            })
+            .catch(() => {
+              if (active)
+                setPointsError(
+                  "포인트 내역만 불러오지 못했어요. 다른 기능은 계속 사용할 수 있어요.",
+                );
+            })
+            .finally(() => {
+              if (active) setPointsLoading(false);
+            });
         })
         .catch(() => {
           if (active) setScreen("error");
@@ -131,15 +144,50 @@ export default function MeScreen() {
     }
   }
 
+  async function reloadPoints() {
+    if (!session || pointsLoading) return;
+    setPointsLoading(true);
+    setPointsError(null);
+    try {
+      setPoints(await mobileApi.loadMemberPoints(session.token, { limit: 10 }));
+    } catch {
+      setPointsError("포인트 내역을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.");
+    } finally {
+      setPointsLoading(false);
+    }
+  }
+
+  async function loadMorePoints() {
+    const cursor = points?.ledger.nextCursor;
+    if (!session || !points || !cursor || pointsLoadingMore) return;
+    setPointsLoadingMore(true);
+    try {
+      const next = await mobileApi.loadMemberPoints(session.token, { limit: 20, cursor });
+      setPoints({
+        account: next.account,
+        ledger: {
+          items: [...points.ledger.items, ...next.ledger.items],
+          nextCursor: next.ledger.nextCursor,
+        },
+      });
+    } catch {
+      setPointsError("이전 포인트 내역을 불러오지 못했어요.");
+    } finally {
+      setPointsLoadingMore(false);
+    }
+  }
+
   async function chooseAvatar() {
     if (!session || !profile || avatarPending) return;
     setAvatarPending(true);
+    let phase: "permission" | "picker" | "upload" = "permission";
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
         Alert.alert("사진 접근 권한", "프로필 이미지를 선택하려면 사진 접근을 허용해 주세요.");
         return;
       }
+      phase = "picker";
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ["images"],
         allowsEditing: true,
@@ -152,6 +200,7 @@ export default function MeScreen() {
         Alert.alert("이미지가 너무 커요", "5MB 이하 JPG 또는 PNG 이미지를 선택해 주세요.");
         return;
       }
+      phase = "upload";
       const response = await mobileApi.uploadMemberAvatar(session.token, {
         uri: asset.uri,
         name: asset.fileName ?? `which-avatar.${asset.mimeType === "image/png" ? "png" : "jpg"}`,
@@ -162,7 +211,12 @@ export default function MeScreen() {
       );
       Alert.alert("프로필 이미지", "프로필 이미지를 변경했어요.");
     } catch (error) {
-      Alert.alert("프로필 이미지", apiMessage(error, "이미지를 선택하거나 저장하지 못했습니다."));
+      if (__DEV__) console.error("Profile avatar update failed", { error, phase });
+      const fallback =
+        phase === "upload"
+          ? "이미지는 선택했지만 서버에 저장하지 못했습니다. 잠시 후 다시 시도해 주세요."
+          : "사진 보관함에서 이미지를 선택하지 못했습니다.";
+      Alert.alert("프로필 이미지", apiMessage(error, fallback));
     } finally {
       setAvatarPending(false);
     }
@@ -185,7 +239,7 @@ export default function MeScreen() {
 
   if (screen === "loading") return <LoadingState />;
   if (screen === "guest") return <GuestState />;
-  if (screen === "error" || !session || !profile || !points) {
+  if (screen === "error" || !session || !profile) {
     return <ErrorState onRetry={() => setReloadKey((value) => value + 1)} />;
   }
 
@@ -237,7 +291,6 @@ export default function MeScreen() {
                 )
               }
             />
-            <PointCard points={points} />
             <ConnectedLogins profile={profile} />
             <AccountActions session={session} />
           </>
@@ -250,6 +303,27 @@ export default function MeScreen() {
           />
         )}
       </ScrollView>
+      <Pressable
+        accessibilityHint="오른쪽에서 W Point 적립 내역을 엽니다."
+        accessibilityLabel="W Point 열기"
+        accessibilityRole="button"
+        onPress={() => setPointDrawerOpen(true)}
+        style={styles.pointDrawerHandle}
+      >
+        <Text style={styles.pointDrawerHandleText}>
+          W{points ? ` ${points.account.balance}P` : " POINT"}
+        </Text>
+      </Pressable>
+      <MemberPointDrawer
+        error={pointsError}
+        loading={pointsLoading}
+        loadingMore={pointsLoadingMore}
+        onClose={() => setPointDrawerOpen(false)}
+        onLoadMore={() => void loadMorePoints()}
+        onRetry={() => void reloadPoints()}
+        points={points}
+        visible={pointDrawerOpen}
+      />
       <BottomNav />
     </SafeAreaView>
   );
@@ -284,7 +358,7 @@ function GuestState() {
         <Text style={styles.guestTitle}>로그인하면 내 선택이 이어져요.</Text>
         <Text style={styles.description}>
           Guest 투표는 로그인 뒤 계정에 안전하게 연결됩니다. 전체 기록과 프로필은 로그인한 본인만
-          확인할 수 있어요.
+          확인할 수 있어요. 로그인하면 투표·공유로 모은 W Point와 누적 배지도 확인할 수 있어요.
         </Text>
         <Pressable
           onPress={() => router.push("/login?returnTo=%2Fme")}
@@ -500,34 +574,6 @@ function ProfileSettings({
       >
         <Text style={styles.primaryButtonText}>{saving ? "저장 중…" : "프로필 저장"}</Text>
       </Pressable>
-    </View>
-  );
-}
-
-function PointCard({ points }: { points: MemberPointView }) {
-  return (
-    <View style={[styles.sectionCard, styles.pointCard]}>
-      <View style={styles.sectionHeading}>
-        <View>
-          <Text style={styles.eyebrow}>W POINT</Text>
-          <Text style={styles.sectionTitle}>나의 W Point</Text>
-        </View>
-        <View style={styles.pointBalance}>
-          <Text style={styles.pointBalanceValue}>{points.account.balance}P</Text>
-          <Text style={styles.pointToday}>오늘 +{points.account.todayEarned}P</Text>
-        </View>
-      </View>
-      {points.ledger.items.map((item) => (
-        <View key={item.id} style={styles.ledgerItem}>
-          <View style={styles.ledgerCopy}>
-            <Text style={styles.ledgerReason}>{item.reasonLabel}</Text>
-            <Text style={styles.ledgerDate}>{dateLabel(item.createdAt, true)}</Text>
-          </View>
-          <Text style={[styles.ledgerAmount, item.amount < 0 && styles.dangerText]}>
-            {pointAmountLabel(item)}
-          </Text>
-        </View>
-      ))}
     </View>
   );
 }
@@ -819,7 +865,6 @@ const styles = StyleSheet.create({
     gap: 13,
     padding: 20,
   },
-  pointCard: { backgroundColor: colors.cyanSoft, borderColor: colors.cyan },
   sectionHeading: {
     alignItems: "flex-start",
     flexDirection: "row",
@@ -903,21 +948,23 @@ const styles = StyleSheet.create({
   dangerCopy: { color: colors.danger, fontSize: 12, fontWeight: "700", lineHeight: 18 },
   rowActions: { flexDirection: "row", gap: 8 },
   deleteForm: { gap: 10 },
-  pointBalance: { alignItems: "flex-end" },
-  pointBalanceValue: { color: colors.text, fontSize: 24, fontWeight: "900" },
-  pointToday: { color: colors.cyanStrong, fontSize: 12, fontWeight: "900" },
-  ledgerItem: {
+  pointDrawerHandle: {
     alignItems: "center",
-    borderTopColor: colors.borderStrong,
-    borderTopWidth: 1,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingTop: 12,
+    backgroundColor: colors.surface,
+    borderColor: colors.cyan,
+    borderBottomLeftRadius: 16,
+    borderTopLeftRadius: 16,
+    borderWidth: 1,
+    elevation: 6,
+    justifyContent: "center",
+    minHeight: 58,
+    paddingHorizontal: 10,
+    position: "absolute",
+    right: 0,
+    top: 128,
+    zIndex: 12,
   },
-  ledgerCopy: { flex: 1, gap: 3 },
-  ledgerReason: { color: colors.text, fontSize: 14, fontWeight: "800" },
-  ledgerDate: { color: colors.textTertiary, fontSize: 11, fontWeight: "600" },
-  ledgerAmount: { color: colors.cyanStrong, fontSize: 15, fontWeight: "900" },
+  pointDrawerHandleText: { color: colors.cyanStrong, fontSize: 11, fontWeight: "900" },
   identityList: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   identityChip: {
     backgroundColor: colors.surfaceSubtle,

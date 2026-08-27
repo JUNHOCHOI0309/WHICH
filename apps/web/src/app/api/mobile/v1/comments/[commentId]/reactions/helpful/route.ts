@@ -3,33 +3,36 @@ import { NextResponse } from "next/server";
 
 import { fetchWhichApi, validGuestSubject } from "@/lib/server/which-api";
 
-type RouteContext = { params: Promise<{ issueId: string }> };
+type RouteContext = { params: Promise<{ commentId: string }> };
 
-export async function GET(request: NextRequest, context: RouteContext) {
-  const { issueId } = await context.params;
+export async function POST(request: NextRequest, context: RouteContext) {
   const providedSubject = request.headers.get("x-anonymous-subject-id");
-  const subjectId = validGuestSubject(providedSubject ?? undefined);
+  const anonymousSubjectId = validGuestSubject(providedSubject ?? undefined);
   const authorization = request.headers.get("authorization");
-  if (providedSubject && !subjectId) {
+  const idempotencyKey = request.headers.get("idempotency-key");
+  if (providedSubject && !anonymousSubjectId) {
     return NextResponse.json(
       { code: "INVALID_GUEST_SUBJECT", message: "Guest Subject 형식이 올바르지 않습니다." },
       { status: 400 },
     );
   }
-  if (!subjectId && !authorization?.startsWith("Bearer ")) {
+  if (!idempotencyKey || (!anonymousSubjectId && !authorization?.startsWith("Bearer "))) {
     return NextResponse.json(
-      { code: "VOTE_SUBJECT_REQUIRED", message: "댓글을 볼 수 있는 투표 주체가 필요합니다." },
+      { code: "INVALID_REQUEST", message: "반응 주체와 멱등성 키가 필요합니다." },
       { status: 400 },
     );
   }
 
+  const { commentId } = await context.params;
   try {
     const upstream = await fetchWhichApi(
-      `/v1/issues/${encodeURIComponent(issueId)}/comment-highlights?limitPerSide=5`,
+      `/v1/comments/${encodeURIComponent(commentId)}/reactions/helpful`,
       {
+        method: "POST",
         headers: {
           accept: "application/json",
-          ...(subjectId ? { "x-anonymous-subject-id": subjectId } : {}),
+          "idempotency-key": idempotencyKey,
+          ...(anonymousSubjectId ? { "x-anonymous-subject-id": anonymousSubjectId } : {}),
           ...(authorization?.startsWith("Bearer ") ? { authorization } : {}),
         },
       },
@@ -41,7 +44,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     });
   } catch {
     return NextResponse.json(
-      { code: "API_UNAVAILABLE", message: "대표 댓글을 불러오지 못했습니다." },
+      { code: "API_UNAVAILABLE", message: "공감 상태를 변경하지 못했습니다." },
       { status: 502 },
     );
   }

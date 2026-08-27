@@ -4,11 +4,11 @@
   "private": true,
   "main": "expo-router/entry",
   "scripts": {
-    "android": "expo start --android",
+    "android": "expo run:android",
     "build": "expo export --platform web --output-dir dist",
     "dev": "expo start",
     "dev:client": "expo start --dev-client --tunnel",
-    "ios": "expo start --ios",
+    "ios": "expo run:ios",
     "lint": "expo lint",
     "start": "expo start",
     "test": "vitest run",

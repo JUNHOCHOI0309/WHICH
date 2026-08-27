@@ -13,8 +13,10 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { BalanceResultBar } from "@/components/vote/balance-result-bar";
+import { PointFeedbackToast, type PointFeedback } from "@/components/points/point-feedback-toast";
+import { RotatingCommentHighlights } from "@/components/comments/rotating-comment-highlights";
 import { ChoiceMediaPair, VoteChoiceRow } from "@/components/vote/vote-choice-row";
-import type { IssueChoice, PublicIssue, VoteResponse } from "@/contracts";
+import type { CommentHighlights, IssueChoice, PublicIssue, VoteResponse } from "@/contracts";
 import { InterestSelector } from "@/features/interests/interest-selector";
 import { readRememberedMemberVote } from "@/lib/member-vote-cache";
 import { MobileApiError } from "@/lib/mobile-api";
@@ -35,11 +37,34 @@ export default function IssueScreen() {
   const [nextIssueState, setNextIssueState] = useState<"idle" | "loading" | "empty" | "error">(
     "idle",
   );
+  const [pointFeedback, setPointFeedback] = useState<PointFeedback | null>(null);
+  const [commentHighlights, setCommentHighlights] = useState<CommentHighlights | null>(null);
+  const [commentHighlightsLoading, setCommentHighlightsLoading] = useState(false);
+  const [commentHighlightsError, setCommentHighlightsError] = useState(false);
+  const dismissPointFeedback = useCallback(() => setPointFeedback(null), []);
   const completedVote = vote?.issueId === issueId ? vote : rememberedVote;
   const attemptKey = useRef(randomUUID());
   const analyticsSessionId = useRef(randomUUID());
   const decisionStartedAt = useRef(0);
   const recordedMediaLoads = useRef(new Set<string>());
+  const recordedResultViews = useRef(new Set<string>());
+  const recordedNextEvents = useRef(new Set<string>());
+
+  const loadCommentHighlights = useCallback(async () => {
+    if (!issueId || !completedVote) return;
+    setCommentHighlightsLoading(true);
+    setCommentHighlightsError(false);
+    try {
+      const subjectId = await guestSubjects.getOrCreate();
+      setCommentHighlights(
+        await mobileApi.loadCommentHighlights(subjectId, issueId, memberSessionToken ?? undefined),
+      );
+    } catch {
+      setCommentHighlightsError(true);
+    } finally {
+      setCommentHighlightsLoading(false);
+    }
+  }, [completedVote, issueId, memberSessionToken]);
 
   const fetchIssue = useCallback(async () => {
     if (!issueId) throw new Error("질문 ID가 필요합니다.");
@@ -134,17 +159,25 @@ export default function IssueScreen() {
 
   useEffect(() => {
     if (!issue || !completedVote) return;
+    const key = `${issue.id}:${completedVote.result.resultVersion}`;
+    if (recordedResultViews.current.has(key)) return;
+    recordedResultViews.current.add(key);
     void mobileApi
       .recordAnalyticsEvent({
         sessionId: analyticsSessionId.current,
         eventId: randomUUID(),
-        eventType: "SHARE_OPEN",
+        eventType: "RESULT_VIEW",
         issueId: issue.id,
         issueVersion: issue.version,
         occurredAt: new Date().toISOString(),
       })
       .catch(() => undefined);
   }, [completedVote, issue]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => void loadCommentHighlights(), 0);
+    return () => clearTimeout(timer);
+  }, [loadCommentHighlights]);
 
   async function submit(choice: IssueChoice) {
     if (!issue || submittingChoice || completedVote) return;
@@ -175,13 +208,13 @@ export default function IssueScreen() {
         idempotencyKey: attemptKey.current,
       };
       try {
-        setVote(
-          await mobileApi.submitGuestVote({
-            ...command,
-            subjectId,
-            sessionToken: memberSessionToken ?? undefined,
-          }),
-        );
+        const acceptedVote = await mobileApi.submitGuestVote({
+          ...command,
+          subjectId,
+          sessionToken: memberSessionToken ?? undefined,
+        });
+        setVote(acceptedVote);
+        if (acceptedVote.pointFeedback) setPointFeedback(acceptedVote.pointFeedback);
       } catch (reason) {
         if (
           memberSessionToken ||
@@ -214,7 +247,35 @@ export default function IssueScreen() {
       const nextIssue = feed.items[0];
       if (!nextIssue) {
         setNextIssueState("empty");
+        const eventKey = `NEXT_ISSUE_EXHAUSTED:${issue.id}`;
+        if (!recordedNextEvents.current.has(eventKey)) {
+          recordedNextEvents.current.add(eventKey);
+          void mobileApi
+            .recordAnalyticsEvent({
+              sessionId: analyticsSessionId.current,
+              eventId: randomUUID(),
+              eventType: "NEXT_ISSUE_EXHAUSTED",
+              issueId: issue.id,
+              issueVersion: issue.version,
+              occurredAt: new Date().toISOString(),
+            })
+            .catch(() => undefined);
+        }
         return;
+      }
+      const eventKey = `NEXT_ISSUE_OPEN:${issue.id}`;
+      if (!recordedNextEvents.current.has(eventKey)) {
+        recordedNextEvents.current.add(eventKey);
+        void mobileApi
+          .recordAnalyticsEvent({
+            sessionId: analyticsSessionId.current,
+            eventId: randomUUID(),
+            eventType: "NEXT_ISSUE_OPEN",
+            issueId: issue.id,
+            issueVersion: issue.version,
+            occurredAt: new Date().toISOString(),
+          })
+          .catch(() => undefined);
       }
       if (feed.ranking.mode === "PERSONALIZED") {
         void mobileApi
@@ -240,6 +301,16 @@ export default function IssueScreen() {
     if (!issue || !completedVote || sharing) return;
     setSharing(true);
     setError(null);
+    void mobileApi
+      .recordAnalyticsEvent({
+        sessionId: analyticsSessionId.current,
+        eventId: randomUUID(),
+        eventType: "SHARE_OPEN",
+        issueId: issue.id,
+        issueVersion: issue.version,
+        occurredAt: new Date().toISOString(),
+      })
+      .catch(() => undefined);
     try {
       const created = await mobileApi.createResultShareCard({
         issueId: issue.id,
@@ -265,6 +336,18 @@ export default function IssueScreen() {
             occurredAt: new Date().toISOString(),
           })
           .catch(() => undefined);
+        if (memberSessionToken) {
+          void mobileApi
+            .confirmShareReward({
+              sessionToken: memberSessionToken,
+              shareCardId: created.shareCard.id,
+              idempotencyKey: randomUUID(),
+            })
+            .then((reward) => {
+              if (reward.claimed) setPointFeedback({ amount: 10, reasonLabel: "결과 공유" });
+            })
+            .catch(() => undefined);
+        }
       }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "공유 링크를 만들지 못했습니다.");
@@ -409,6 +492,17 @@ export default function IssueScreen() {
                 </Pressable>
               </View>
             ) : null}
+            {completedVote ? (
+              <RotatingCommentHighlights
+                error={commentHighlightsError}
+                highlights={commentHighlights}
+                loading={commentHighlightsLoading}
+                onOpenAll={() =>
+                  router.push({ pathname: "/comments/[issueId]", params: { issueId: issue.id } })
+                }
+                onRetry={() => void loadCommentHighlights()}
+              />
+            ) : null}
             <InterestSelector
               mode="prompt"
               analyticsContext={{ issueId: issue.id, issueVersion: issue.version }}
@@ -434,6 +528,7 @@ export default function IssueScreen() {
           <Text style={styles.locked}>결과는 투표 후 공개됩니다.</Text>
         )}
       </ScrollView>
+      <PointFeedbackToast feedback={pointFeedback} onDismiss={dismissPointFeedback} />
     </SafeAreaView>
   );
 }

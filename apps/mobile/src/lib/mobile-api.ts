@@ -1,10 +1,12 @@
 import type {
   ApiErrorBody,
   CommentHighlights,
+  CommentReportReason,
   InterestCardCode,
   InterestCardRegistry,
   InterestProfile,
   MemberPointView,
+  PointRewardClaimResponse,
   MemberAccountDeletionResult,
   MemberAvatarUpdate,
   MemberPrivateProfile,
@@ -13,6 +15,8 @@ import type {
   MemberView,
   PublicIssue,
   PublicIssueFeed,
+  PublicComment,
+  PublicCommentPage,
   ShareCardResponse,
   ShareChannel,
   VoteResponse,
@@ -36,7 +40,24 @@ function normalizedBaseUrl(value: string) {
 }
 
 async function bodyOrError<T>(response: Response) {
-  const body = (await response.json()) as T | ApiErrorBody;
+  const rawBody = await response.text();
+  let body: T | ApiErrorBody;
+  try {
+    body = JSON.parse(rawBody) as T | ApiErrorBody;
+  } catch {
+    if (typeof __DEV__ !== "undefined" && __DEV__) {
+      console.error("Mobile API returned a non-JSON response", {
+        contentType: response.headers.get("content-type"),
+        preview: rawBody.slice(0, 160),
+        status: response.status,
+      });
+    }
+    throw new MobileApiError(
+      "INVALID_RESPONSE",
+      response.status,
+      `서버 응답을 처리하지 못했습니다. (${response.status})`,
+    );
+  }
   if (!response.ok) {
     const error = body as ApiErrorBody;
     throw new MobileApiError(
@@ -117,8 +138,18 @@ export function createMobileApiClient(
       sessionToken: string,
       avatar: { uri: string; name: string; type: string },
     ) {
+      const assetResponse = await request(avatar.uri);
+      if (!assetResponse.ok) {
+        throw new MobileApiError(
+          "AVATAR_FILE_UNREADABLE",
+          assetResponse.status,
+          "선택한 이미지를 읽지 못했습니다.",
+        );
+      }
+      const source = await assetResponse.blob();
+      const file = source.type === avatar.type ? source : source.slice(0, source.size, avatar.type);
       const form = new FormData();
-      form.append("avatar", avatar as unknown as Blob);
+      form.append("avatar", file, avatar.name);
       const response = await request(`${baseUrl}/api/mobile/v1/me/avatar`, {
         method: "PUT",
         headers: { accept: "application/json", authorization: `Bearer ${sessionToken}` },
@@ -219,17 +250,123 @@ export function createMobileApiClient(
       return bodyOrError<PublicIssue>(response);
     },
 
-    async loadCommentHighlights(subjectId: string, issueId: string) {
+    async loadCommentHighlights(
+      subjectId: string | undefined,
+      issueId: string,
+      sessionToken?: string,
+    ) {
       const response = await request(
         `${baseUrl}/api/mobile/v1/issues/${encodeURIComponent(issueId)}/comment-highlights`,
         {
           headers: {
             accept: "application/json",
-            "x-anonymous-subject-id": subjectId,
+            ...(subjectId ? { "x-anonymous-subject-id": subjectId } : {}),
+            ...(sessionToken ? { authorization: `Bearer ${sessionToken}` } : {}),
           },
         },
       );
       return bodyOrError<CommentHighlights>(response);
+    },
+
+    async loadComments(command: {
+      issueId: string;
+      subjectId?: string;
+      sessionToken?: string;
+      side?: "ALL" | "A" | "B";
+      cursor?: string;
+      limit?: number;
+    }) {
+      const search = new URLSearchParams({
+        side: command.side ?? "ALL",
+        limit: String(command.limit ?? 10),
+      });
+      if (command.cursor) search.set("cursor", command.cursor);
+      const response = await request(
+        `${baseUrl}/api/mobile/v1/issues/${encodeURIComponent(command.issueId)}/comments?${search.toString()}`,
+        {
+          headers: {
+            accept: "application/json",
+            ...(command.subjectId ? { "x-anonymous-subject-id": command.subjectId } : {}),
+            ...(command.sessionToken ? { authorization: `Bearer ${command.sessionToken}` } : {}),
+          },
+        },
+      );
+      return bodyOrError<PublicCommentPage>(response);
+    },
+
+    async submitComment(command: {
+      issueId: string;
+      subjectId?: string;
+      sessionToken: string;
+      idempotencyKey: string;
+      body: string;
+    }) {
+      const response = await request(
+        `${baseUrl}/api/mobile/v1/issues/${encodeURIComponent(command.issueId)}/comments`,
+        {
+          method: "POST",
+          headers: {
+            accept: "application/json",
+            authorization: `Bearer ${command.sessionToken}`,
+            "content-type": "application/json",
+            "idempotency-key": command.idempotencyKey,
+            ...(command.subjectId ? { "x-anonymous-subject-id": command.subjectId } : {}),
+          },
+          body: JSON.stringify({ body: command.body }),
+        },
+      );
+      return bodyOrError<{ comment: PublicComment }>(response);
+    },
+
+    async toggleHelpfulReaction(command: {
+      commentId: string;
+      subjectId?: string;
+      sessionToken?: string;
+      idempotencyKey: string;
+    }) {
+      const response = await request(
+        `${baseUrl}/api/mobile/v1/comments/${encodeURIComponent(command.commentId)}/reactions/helpful`,
+        {
+          method: "POST",
+          headers: {
+            accept: "application/json",
+            "idempotency-key": command.idempotencyKey,
+            ...(command.subjectId ? { "x-anonymous-subject-id": command.subjectId } : {}),
+            ...(command.sessionToken ? { authorization: `Bearer ${command.sessionToken}` } : {}),
+          },
+        },
+      );
+      return bodyOrError<{
+        reaction: { code: "HELPFUL"; active: boolean; helpfulCount: number };
+      }>(response);
+    },
+
+    async reportComment(command: {
+      commentId: string;
+      subjectId?: string;
+      sessionToken?: string;
+      idempotencyKey: string;
+      reason: CommentReportReason;
+      detail?: string;
+    }) {
+      const response = await request(
+        `${baseUrl}/api/mobile/v1/comments/${encodeURIComponent(command.commentId)}/reports`,
+        {
+          method: "POST",
+          headers: {
+            accept: "application/json",
+            "content-type": "application/json",
+            "idempotency-key": command.idempotencyKey,
+            ...(command.subjectId ? { "x-anonymous-subject-id": command.subjectId } : {}),
+            ...(command.sessionToken ? { authorization: `Bearer ${command.sessionToken}` } : {}),
+          },
+          body: JSON.stringify({ reason: command.reason, detail: command.detail }),
+        },
+      );
+      return bodyOrError<{
+        report: { accepted: true; viewerReported: true };
+        comment: { visibility: "VISIBLE" | "DEPRIORITIZED" | "COLLAPSED" | "HIDDEN" };
+      }>(response);
     },
 
     async loadInterestCards() {
@@ -320,6 +457,8 @@ export function createMobileApiClient(
         | "ISSUE_VIEWABLE_IMPRESSION"
         | "VOTE_SUBMIT"
         | "RESULT_VIEW"
+        | "NEXT_ISSUE_OPEN"
+        | "NEXT_ISSUE_EXHAUSTED"
         | "INTEREST_PROMPT_VIEW"
         | "INTEREST_SELECTION_COMPLETE"
         | "INTEREST_PROMPT_SKIP"
@@ -328,7 +467,9 @@ export function createMobileApiClient(
         | "ISSUE_MEDIA_LOAD"
         | "SHARE_OPEN"
         | "SHARE_CHOICE_TOGGLE"
-        | "SHARE_COMPLETE";
+        | "SHARE_COMPLETE"
+        | "COMMENT_COMPLETE"
+        | "COMMENT_REPORT_COMPLETE";
       issueId: string;
       issueVersion: number;
       recommendationRequestId?: string;
@@ -379,6 +520,25 @@ export function createMobileApiClient(
         },
       );
       return bodyOrError<ShareCardResponse>(response);
+    },
+
+    async confirmShareReward(command: {
+      sessionToken: string;
+      shareCardId: string;
+      idempotencyKey: string;
+    }) {
+      const response = await request(
+        `${baseUrl}/api/mobile/v1/share-cards/${encodeURIComponent(command.shareCardId)}/reward-claims`,
+        {
+          method: "POST",
+          headers: {
+            accept: "application/json",
+            authorization: `Bearer ${command.sessionToken}`,
+            "idempotency-key": command.idempotencyKey,
+          },
+        },
+      );
+      return bodyOrError<PointRewardClaimResponse>(response);
     },
 
     async submitGuestVote(command: {

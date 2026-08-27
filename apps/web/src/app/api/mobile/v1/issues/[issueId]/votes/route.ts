@@ -61,7 +61,15 @@ export async function POST(request: NextRequest, context: RouteContext) {
       body: JSON.stringify({ issueVersion: body.issueVersion, choiceId: body.choiceId }),
     });
     const responseBody = (await upstream.json()) as VoteResponse | ApiErrorBody;
-    return NextResponse.json(responseBody, {
+    const mobileResponseBody =
+      authorization?.startsWith("Bearer ") &&
+      process.env.FEATURE_POINTS_ENABLED === "true" &&
+      upstream.ok &&
+      "outcome" in responseBody &&
+      responseBody.outcome === "ACCEPTED"
+        ? { ...responseBody, pointFeedback: { amount: 10, reasonLabel: "투표 참여" } }
+        : responseBody;
+    return NextResponse.json(mobileResponseBody, {
       status: upstream.status,
       headers: { "cache-control": "no-store" },
     });

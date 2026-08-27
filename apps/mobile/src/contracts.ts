@@ -72,7 +72,13 @@ export type VoteResponse = {
   issueVersion: number;
   choice: "A" | "B";
   result: IssueTally;
+  pointFeedback?: {
+    amount: number;
+    reasonLabel: string;
+  };
 };
+
+export type PointRewardClaimResponse = { claimed: boolean };
 
 export type MemberPointLedgerItem = {
   id: string;
@@ -158,18 +164,34 @@ export type MemberAccountDeletionResult = {
   deleted: true;
 };
 
-export type CommentHighlight = {
+export type PublicComment = {
   id: string;
   choice: "A" | "B";
   author: { displayName: string };
   body: string;
+  visibility: "VISIBLE" | "DEPRIORITIZED" | "COLLAPSED";
+  threadState: "OPEN" | "LOCKED";
+  createdAt: string;
+  editedAt: string | null;
   reactions: { helpfulCount: number; viewerReacted: boolean };
+  reports: { viewerReported: boolean; canReport: boolean };
+  permissions: { canEdit: boolean; canDelete: boolean };
 };
+
+export type CommentHighlight = PublicComment;
 
 export type CommentHighlights = {
   A: CommentHighlight[];
   B: CommentHighlight[];
 };
+
+export type PublicCommentPage = {
+  items: PublicComment[];
+  nextCursor: string | null;
+};
+
+export type CommentReportReason =
+  "SPAM" | "HARASSMENT" | "HATE_OR_ABUSE" | "PERSONAL_INFORMATION" | "OTHER";
 
 export type ShareChannel = "COPY" | "SYSTEM" | "X";
 

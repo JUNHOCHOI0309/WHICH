@@ -66,6 +66,42 @@ describe("mobile API client", () => {
     );
   });
 
+  it("uploads a native avatar URI as a real multipart Blob", async () => {
+    const requests: { input: string; init?: RequestInit }[] = [];
+    const request: RequestFunction = vi.fn(async (input, init) => {
+      requests.push({ input, init });
+      if (input === "file:///avatar.jpg") {
+        return new Response(new Blob(["avatar-bytes"], { type: "image/jpeg" }));
+      }
+      return jsonResponse({
+        member: {
+          id: "591f2e90-996a-50c5-af46-967dd0793000",
+          displayName: "Native Member",
+          status: "ACTIVE",
+          avatar: { kind: "IMAGE", url: "https://cdn.which.test/avatar.webp" },
+          avatarSource: "CUSTOM",
+        },
+      });
+    });
+    const api = createMobileApiClient({ baseUrl: "https://whichone.site", request });
+
+    await api.uploadMemberAvatar("member-session", {
+      uri: "file:///avatar.jpg",
+      name: "avatar.jpg",
+      type: "image/jpeg",
+    });
+
+    expect(requests.map(({ input }) => input)).toEqual([
+      "file:///avatar.jpg",
+      "https://whichone.site/api/mobile/v1/me/avatar",
+    ]);
+    const form = requests[1]?.init?.body as FormData;
+    const uploaded = form.get("avatar") as File;
+    expect(uploaded).toBeInstanceOf(Blob);
+    expect(uploaded.type).toBe("image/jpeg");
+    expect(uploaded.name).toBe("avatar.jpg");
+  });
+
   it("updates profile settings and deletes the authenticated Member through mobile BFF routes", async () => {
     const request = vi
       .fn()
@@ -254,6 +290,78 @@ describe("mobile API client", () => {
     );
   });
 
+  it("uses the Native Comment BFF for list, publish, helpful, and report flows", async () => {
+    const comment = {
+      id: "d52dace5-486c-5e34-bb73-5a0b5a779c98",
+      choice: "A" as const,
+      author: { displayName: "선택한 사람" },
+      body: "이 선택이 더 편해요.",
+      visibility: "VISIBLE" as const,
+      threadState: "OPEN" as const,
+      createdAt: "2026-08-27T00:00:00.000Z",
+      editedAt: null,
+      reactions: { helpfulCount: 0, viewerReacted: false },
+      reports: { viewerReported: false, canReport: true },
+      permissions: { canEdit: false, canDelete: false },
+    };
+    const responses = [
+      { items: [comment], nextCursor: null },
+      { comment },
+      { reaction: { code: "HELPFUL", active: true, helpfulCount: 1 } },
+      {
+        report: { accepted: true, viewerReported: true },
+        comment: { visibility: "VISIBLE" },
+      },
+    ];
+    const request: RequestFunction = vi.fn(async () => jsonResponse(responses.shift()));
+    const api = createMobileApiClient({ baseUrl: "https://whichone.site", request });
+    const issueId = "93831fba-b70f-598a-88f6-92eb4f70df9c";
+    const subjectId = "591f2e90-996a-50c5-af46-967dd0793000";
+    const idempotencyKey = "ce976502-9409-56a2-b975-94c913a20fcf";
+
+    await api.loadComments({ issueId, subjectId, sessionToken: "member-session" });
+    await api.submitComment({
+      issueId,
+      subjectId,
+      sessionToken: "member-session",
+      idempotencyKey,
+      body: "이 선택이 더 편해요.",
+    });
+    await api.toggleHelpfulReaction({ commentId: comment.id, subjectId, idempotencyKey });
+    await api.reportComment({
+      commentId: comment.id,
+      subjectId,
+      idempotencyKey,
+      reason: "SPAM",
+    });
+
+    expect(request).toHaveBeenNthCalledWith(
+      1,
+      `https://whichone.site/api/mobile/v1/issues/${issueId}/comments?side=ALL&limit=10`,
+      expect.objectContaining({
+        headers: expect.objectContaining({ authorization: "Bearer member-session" }),
+      }),
+    );
+    expect(request).toHaveBeenNthCalledWith(
+      2,
+      `https://whichone.site/api/mobile/v1/issues/${issueId}/comments`,
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({ "idempotency-key": idempotencyKey }),
+      }),
+    );
+    expect(request).toHaveBeenNthCalledWith(
+      3,
+      `https://whichone.site/api/mobile/v1/comments/${comment.id}/reactions/helpful`,
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(request).toHaveBeenNthCalledWith(
+      4,
+      `https://whichone.site/api/mobile/v1/comments/${comment.id}/reports`,
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
   it("surfaces the server error code", async () => {
     const api = createMobileApiClient({
       request: async () =>
@@ -354,6 +462,30 @@ describe("mobile API client", () => {
       expect.objectContaining({
         headers: expect.objectContaining({
           "x-analytics-session-id": "591f2e90-996a-50c5-af46-967dd0793000",
+        }),
+      }),
+    );
+  });
+
+  it("confirms a completed share with the Member session and a stable idempotency key", async () => {
+    const request = vi.fn(async () => jsonResponse({ claimed: true }));
+    const api = createMobileApiClient({ baseUrl: "https://whichone.site", request });
+
+    await expect(
+      api.confirmShareReward({
+        sessionToken: "member-session",
+        shareCardId: "93831fba-b70f-598a-88f6-92eb4f70df9c",
+        idempotencyKey: "ce976502-9409-56a2-b975-94c913a20fcf",
+      }),
+    ).resolves.toEqual({ claimed: true });
+
+    expect(request).toHaveBeenCalledWith(
+      "https://whichone.site/api/mobile/v1/share-cards/93831fba-b70f-598a-88f6-92eb4f70df9c/reward-claims",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          authorization: "Bearer member-session",
+          "idempotency-key": "ce976502-9409-56a2-b975-94c913a20fcf",
         }),
       }),
     );

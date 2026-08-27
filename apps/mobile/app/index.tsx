@@ -2,10 +2,11 @@ import { router } from "expo-router";
 import { randomUUID } from "expo-crypto";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
-import type { ViewToken } from "react-native";
+import type { NativeScrollEvent, NativeSyntheticEvent, ViewToken } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { BalanceResultBar } from "@/components/vote/balance-result-bar";
+import { PointFeedbackToast, type PointFeedback } from "@/components/points/point-feedback-toast";
 import { RotatingCommentHighlights } from "@/components/comments/rotating-comment-highlights";
 import { ChoiceMediaPair, VoteChoiceRow } from "@/components/vote/vote-choice-row";
 import type {
@@ -38,6 +39,10 @@ export default function FeedScreen() {
   const [ranking, setRanking] = useState<PublicIssueFeed["ranking"] | null>(null);
   const [cardStates, setCardStates] = useState<Record<string, CardVoteState>>({});
   const [highlightStates, setHighlightStates] = useState<Record<string, HighlightState>>({});
+  const [pointFeedback, setPointFeedback] = useState<PointFeedback | null>(null);
+  const [showTopAction, setShowTopAction] = useState(false);
+  const dismissPointFeedback = useCallback(() => setPointFeedback(null), []);
+  const feedListRef = useRef<FlatList<PublicFeedIssue>>(null);
   const analyticsSessionId = useRef(randomUUID());
   const viewedRecommendationRequests = useRef(new Set<string>());
   const viewedIssues = useRef(new Set<string>());
@@ -212,6 +217,7 @@ export default function FeedScreen() {
           vote = await mobileApi.submitGuestVote({ ...command, subjectId });
         }
         setCardStates((current) => ({ ...current, [issue.id]: { status: "RESULT", vote } }));
+        if (vote.pointFeedback) setPointFeedback(vote.pointFeedback);
         void loadHighlights(subjectId, issue.id);
         void mobileApi
           .recordAnalyticsEvent({
@@ -258,14 +264,25 @@ export default function FeedScreen() {
     [ranking?.mode],
   );
 
+  const handleFeedScroll = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const shouldShow = event.nativeEvent.contentOffset.y > 640;
+      setShowTopAction((current) => (current === shouldShow ? current : shouldShow));
+    },
+    [],
+  );
+
   return (
     <SafeAreaView style={styles.safeArea} edges={["top", "left", "right", "bottom"]}>
       <FlatList
+        ref={feedListRef}
         data={issues}
         keyExtractor={(item) => item.id}
         style={styles.list}
         contentContainerStyle={styles.content}
         onViewableItemsChanged={onViewableItemsChanged}
+        onScroll={handleFeedScroll}
+        scrollEventThrottle={100}
         viewabilityConfig={{ itemVisiblePercentThreshold: 50, minimumViewTime: 500 }}
         refreshControl={
           <RefreshControl
@@ -376,6 +393,22 @@ export default function FeedScreen() {
         )}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
       />
+      <PointFeedbackToast feedback={pointFeedback} onDismiss={dismissPointFeedback} />
+      {showTopAction ? (
+        <Pressable
+          accessibilityHint="질문 목록의 맨 위로 이동합니다."
+          accessibilityLabel="맨 위로"
+          accessibilityRole="button"
+          onPress={() => {
+            feedListRef.current?.scrollToOffset({ animated: true, offset: 0 });
+            setShowTopAction(false);
+          }}
+          style={({ pressed }) => [styles.topAction, pressed && styles.pressed]}
+        >
+          <Text style={styles.topActionArrow}>↑</Text>
+          <Text style={styles.topActionText}>TOP</Text>
+        </Pressable>
+      ) : null}
       <View style={styles.bottomNav}>
         <View style={styles.bottomNavItemActive}>
           <Text style={styles.bottomNavIconActive}>⌂</Text>
@@ -687,4 +720,24 @@ const styles = StyleSheet.create({
   bottomNavIconActive: { color: colors.cyanStrong, fontSize: 19 },
   bottomNavText: { color: colors.textSecondary, fontSize: 10, fontWeight: "700" },
   bottomNavTextActive: { color: colors.text, fontSize: 10, fontWeight: "900" },
+  topAction: {
+    alignItems: "center",
+    backgroundColor: colors.text,
+    borderColor: colors.surface,
+    borderRadius: 999,
+    borderWidth: 2,
+    bottom: 76,
+    elevation: 6,
+    height: 54,
+    justifyContent: "center",
+    position: "absolute",
+    right: 16,
+    shadowColor: "#000000",
+    shadowOffset: { height: 3, width: 0 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    width: 54,
+  },
+  topActionArrow: { color: colors.surface, fontSize: 18, fontWeight: "900", lineHeight: 18 },
+  topActionText: { color: colors.surface, fontSize: 9, fontWeight: "900", letterSpacing: 0.4 },
 });
