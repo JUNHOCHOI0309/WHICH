@@ -3,7 +3,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -14,10 +14,18 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import type { CommentReportReason, PublicComment, PublicIssue, VoteResponse } from "@/contracts";
+import { relativeTimeLabel } from "@/lib/relative-time";
 import { guestSubjects, memberSessions, mobileApi } from "@/lib/runtime";
 import { colors } from "@/theme";
 
 type Side = "ALL" | "A" | "B";
+
+const reportReasons: { value: CommentReportReason; label: string }[] = [
+  { value: "SPAM", label: "스팸·도배" },
+  { value: "HARASSMENT", label: "괴롭힘" },
+  { value: "HATE_OR_ABUSE", label: "혐오·욕설" },
+  { value: "PERSONAL_INFORMATION", label: "개인정보 노출" },
+];
 
 export default function CommentsScreen() {
   const { issueId } = useLocalSearchParams<{ issueId: string }>();
@@ -33,6 +41,9 @@ export default function CommentsScreen() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [busyCommentId, setBusyCommentId] = useState<string | null>(null);
+  const [reportTarget, setReportTarget] = useState<PublicComment | null>(null);
+  const [reportReason, setReportReason] = useState<CommentReportReason>("SPAM");
+  const [reportOptionsOpen, setReportOptionsOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const analyticsSessionId = useRef(randomUUID());
   const submissionKey = useRef(randomUUID());
@@ -213,13 +224,9 @@ export default function CommentsScreen() {
   }
 
   function openReport(comment: PublicComment) {
-    Alert.alert("댓글 신고", "가장 가까운 신고 사유를 선택해 주세요.", [
-      { text: "스팸", onPress: () => void report(comment, "SPAM") },
-      { text: "괴롭힘", onPress: () => void report(comment, "HARASSMENT") },
-      { text: "혐오·욕설", onPress: () => void report(comment, "HATE_OR_ABUSE") },
-      { text: "개인정보", onPress: () => void report(comment, "PERSONAL_INFORMATION") },
-      { text: "취소", style: "cancel" },
-    ]);
+    setReportTarget(comment);
+    setReportReason("SPAM");
+    setReportOptionsOpen(false);
   }
 
   if (loading) {
@@ -320,7 +327,7 @@ export default function CommentsScreen() {
                   </Text>
                   <View style={styles.authorBlock}>
                     <Text style={styles.author}>{comment.author.displayName}</Text>
-                    <Text style={styles.meta}>{dateLabel(comment.createdAt)}</Text>
+                    <Text style={styles.meta}>{relativeTimeLabel(comment.createdAt)}</Text>
                   </View>
                 </View>
                 <Text style={styles.body}>{comment.body}</Text>
@@ -376,17 +383,81 @@ export default function CommentsScreen() {
           </Pressable>
         ) : null}
       </ScrollView>
+      <Modal
+        animationType="fade"
+        onRequestClose={() => setReportTarget(null)}
+        transparent
+        visible={Boolean(reportTarget)}
+      >
+        <View style={styles.reportOverlay}>
+          <Pressable
+            accessibilityLabel="댓글 신고 닫기"
+            accessibilityRole="button"
+            onPress={() => setReportTarget(null)}
+            style={styles.reportBackdrop}
+          />
+          <View accessibilityViewIsModal style={styles.reportSheet}>
+            <Text style={styles.reportTitle}>댓글 신고</Text>
+            <Text style={styles.reportDescription}>가장 가까운 신고 사유를 선택해 주세요.</Text>
+            <Text style={styles.reportLabel}>신고 사유</Text>
+            <Pressable
+              accessibilityLabel="신고 사유 선택"
+              accessibilityRole="button"
+              accessibilityState={{ expanded: reportOptionsOpen }}
+              onPress={() => setReportOptionsOpen((current) => !current)}
+              style={styles.reportSelect}
+            >
+              <Text style={styles.reportSelectText}>
+                {reportReasons.find((item) => item.value === reportReason)?.label}
+              </Text>
+              <Text style={styles.reportSelectArrow}>{reportOptionsOpen ? "▲" : "▼"}</Text>
+            </Pressable>
+            {reportOptionsOpen ? (
+              <View style={styles.reportOptions}>
+                {reportReasons.map((item) => (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: reportReason === item.value }}
+                    key={item.value}
+                    onPress={() => {
+                      setReportReason(item.value);
+                      setReportOptionsOpen(false);
+                    }}
+                    style={[
+                      styles.reportOption,
+                      reportReason === item.value && styles.reportOptionActive,
+                    ]}
+                  >
+                    <Text style={styles.reportOptionText}>{item.label}</Text>
+                    {reportReason === item.value ? (
+                      <Text style={styles.reportOptionCheck}>✓</Text>
+                    ) : null}
+                  </Pressable>
+                ))}
+              </View>
+            ) : null}
+            <View style={styles.reportActions}>
+              <Pressable onPress={() => setReportTarget(null)} style={styles.reportCancel}>
+                <Text style={styles.reportCancelText}>취소</Text>
+              </Pressable>
+              <Pressable
+                disabled={!reportTarget || Boolean(busyCommentId)}
+                onPress={() => {
+                  const target = reportTarget;
+                  if (!target) return;
+                  setReportTarget(null);
+                  void report(target, reportReason);
+                }}
+                style={styles.reportSubmit}
+              >
+                <Text style={styles.reportSubmitText}>신고 접수</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
-}
-
-function dateLabel(value: string) {
-  return new Intl.DateTimeFormat("ko-KR", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(value));
 }
 
 const styles = StyleSheet.create({
@@ -505,6 +576,75 @@ const styles = StyleSheet.create({
   },
   actionActive: { backgroundColor: colors.cyanSoft, borderColor: colors.cyan },
   actionText: { color: colors.textSecondary, fontSize: 11, fontWeight: "800" },
+  reportOverlay: { flex: 1, justifyContent: "center", padding: 24 },
+  reportBackdrop: {
+    backgroundColor: "rgba(0, 24, 31, 0.58)",
+    bottom: 0,
+    left: 0,
+    position: "absolute",
+    right: 0,
+    top: 0,
+  },
+  reportSheet: {
+    backgroundColor: colors.surface,
+    borderRadius: 20,
+    elevation: 12,
+    gap: 12,
+    padding: 20,
+  },
+  reportTitle: { color: colors.text, fontSize: 21, fontWeight: "900" },
+  reportDescription: { color: colors.textSecondary, fontSize: 13, lineHeight: 20 },
+  reportLabel: { color: colors.text, fontSize: 12, fontWeight: "900", marginTop: 4 },
+  reportSelect: {
+    alignItems: "center",
+    borderColor: colors.borderStrong,
+    borderRadius: 12,
+    borderWidth: 1,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    minHeight: 50,
+    paddingHorizontal: 14,
+  },
+  reportSelectText: { color: colors.text, fontSize: 14, fontWeight: "800" },
+  reportSelectArrow: { color: colors.textSecondary, fontSize: 11 },
+  reportOptions: {
+    borderColor: colors.border,
+    borderRadius: 12,
+    borderWidth: 1,
+    overflow: "hidden",
+  },
+  reportOption: {
+    alignItems: "center",
+    borderBottomColor: colors.border,
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    minHeight: 46,
+    paddingHorizontal: 14,
+  },
+  reportOptionActive: { backgroundColor: colors.cyanSoft },
+  reportOptionText: { color: colors.text, fontSize: 13, fontWeight: "700" },
+  reportOptionCheck: { color: colors.cyanStrong, fontSize: 15, fontWeight: "900" },
+  reportActions: { flexDirection: "row", gap: 8, marginTop: 4 },
+  reportCancel: {
+    alignItems: "center",
+    borderColor: colors.borderStrong,
+    borderRadius: 999,
+    borderWidth: 1,
+    flex: 1,
+    justifyContent: "center",
+    minHeight: 48,
+  },
+  reportCancelText: { color: colors.textSecondary, fontSize: 13, fontWeight: "800" },
+  reportSubmit: {
+    alignItems: "center",
+    backgroundColor: colors.orange,
+    borderRadius: 999,
+    flex: 1,
+    justifyContent: "center",
+    minHeight: 48,
+  },
+  reportSubmitText: { color: colors.text, fontSize: 13, fontWeight: "900" },
   loadMore: {
     alignItems: "center",
     borderColor: colors.borderStrong,

@@ -375,6 +375,42 @@ describe("FeedExperience", () => {
     );
   });
 
+  it("loads the next feed page automatically near the page bottom", async () => {
+    const requestedFeeds: string[] = [];
+    const firstPage = { ...feed, items: [feed.items[0]!], nextCursor: "page-2" };
+    const secondPage = {
+      ...feed,
+      items: [{ ...feed.items[1]!, question: "자동으로 이어진 다음 질문" }],
+      nextCursor: null,
+    };
+    Object.defineProperty(document.documentElement, "scrollHeight", {
+      configurable: true,
+      value: 1_600,
+    });
+    Object.defineProperty(window, "innerHeight", { configurable: true, value: 800 });
+    Object.defineProperty(window, "scrollY", { configurable: true, value: 200, writable: true });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = String(input);
+        if (url === "/api/member-session") return jsonResponse({ code: "SESSION_INVALID" }, 401);
+        if (url === "/api/guest-subjects") return jsonResponse({ status: "ready" });
+        if (url.startsWith("/api/issues/feed?")) {
+          requestedFeeds.push(url);
+          return jsonResponse(url.includes("cursor=page-2") ? secondPage : firstPage);
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      }),
+    );
+
+    render(<FeedExperience />);
+
+    expect(await screen.findByText("여행은 미리 계획하는 편인가요?")).toBeInTheDocument();
+    fireEvent.scroll(window);
+    expect(await screen.findByText("자동으로 이어진 다음 질문")).toBeInTheDocument();
+    expect(requestedFeeds.some((url) => url.includes("cursor=page-2"))).toBe(true);
+  });
+
   it("shows an empty completion state and can retry a failed load", async () => {
     let feedAttempts = 0;
     vi.stubGlobal(

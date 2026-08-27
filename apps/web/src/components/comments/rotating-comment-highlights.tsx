@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
 
 import type { CommentHighlights, PublicComment } from "@/lib/contracts";
+import { relativeTimeLabel } from "@/lib/relative-time";
 
 import styles from "./rotating-comment-highlights.module.css";
 
@@ -174,7 +175,9 @@ function HighlightCard({ side, comment }: { side: "A" | "B"; comment: PublicComm
       {comment ? (
         <>
           <p>{comment.body}</p>
-          <span className={styles.author}>{comment.author.displayName}</span>
+          <span className={styles.author}>
+            {comment.author.displayName} · {relativeTimeLabel(comment.createdAt)}
+          </span>
         </>
       ) : (
         <p className={styles.emptySide}>아직 {side}를 고른 대표 댓글이 없어요.</p>

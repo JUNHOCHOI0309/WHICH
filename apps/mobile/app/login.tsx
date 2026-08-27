@@ -1,7 +1,7 @@
 import * as WebBrowser from "expo-web-browser";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { authenticateInSystemBrowser } from "@/lib/native-auth-browser";
@@ -62,6 +62,22 @@ export default function LoginScreen() {
     }
   }
 
+  function startAuthentication(provider: NativeAuthProvider, isLast: boolean) {
+    if (!isLast) {
+      void authenticate(provider);
+      return;
+    }
+
+    Alert.alert(
+      "최근 사용한 로그인",
+      `${providerLabels[provider]}에 로그인 상태가 남아 있으면 같은 계정으로 바로 연결될 수 있어요. 계속할까요?`,
+      [
+        { text: "다른 방식 선택", style: "cancel" },
+        { text: "같은 계정으로 계속", onPress: () => void authenticate(provider) },
+      ],
+    );
+  }
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.content}>
@@ -90,7 +106,7 @@ export default function LoginScreen() {
                 accessibilityRole="button"
                 disabled={pending !== null}
                 key={method.provider}
-                onPress={() => void authenticate(method.provider)}
+                onPress={() => startAuthentication(method.provider, isLast)}
                 style={({ pressed }) => [
                   styles.method,
                   method.provider === "x" && styles.methodX,
@@ -124,7 +140,8 @@ export default function LoginScreen() {
 
         {lastProvider ? (
           <Text style={styles.hint}>
-            이 기기에서는 최근 {providerLabels[lastProvider]} 로그인을 사용했어요.
+            최근 사용 수단은 같은 계정으로 바로 연결될 수 있어요. 다른 계정이면 다른 수단을
+            선택해 주세요.
           </Text>
         ) : null}
         {message ? (

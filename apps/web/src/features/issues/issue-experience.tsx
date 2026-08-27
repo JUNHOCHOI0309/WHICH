@@ -19,6 +19,7 @@ import type {
   VoteResponse,
 } from "@/lib/contracts";
 import { loginHref } from "@/lib/auth";
+import { relativeTimeLabel } from "@/lib/relative-time";
 
 import styles from "./issue-experience.module.css";
 import {
@@ -1198,10 +1199,7 @@ function CommentSection({
                   <span className={styles.commentChoice}>{comment.choice}</span>
                   <strong>{comment.author.displayName}</strong>
                   <time dateTime={comment.createdAt}>
-                    {new Intl.DateTimeFormat("ko-KR", {
-                      month: "short",
-                      day: "numeric",
-                    }).format(new Date(comment.createdAt))}
+                    {relativeTimeLabel(comment.createdAt)}
                   </time>
                 </header>
                 {isEditing ? (

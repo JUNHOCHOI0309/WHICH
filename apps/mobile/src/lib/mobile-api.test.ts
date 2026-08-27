@@ -189,10 +189,12 @@ describe("mobile API client", () => {
       "591f2e90-996a-50c5-af46-967dd0793000",
       12,
       "93831fba-b70f-598a-88f6-92eb4f70df9c",
+      undefined,
+      "next-page",
     );
 
     expect(request).toHaveBeenCalledWith(
-      "https://whichone.site/api/mobile/v1/issues/feed?limit=12&excludeIssueId=93831fba-b70f-598a-88f6-92eb4f70df9c",
+      "https://whichone.site/api/mobile/v1/issues/feed?limit=12&excludeIssueId=93831fba-b70f-598a-88f6-92eb4f70df9c&cursor=next-page",
       expect.objectContaining({
         headers: expect.objectContaining({
           "x-anonymous-subject-id": "591f2e90-996a-50c5-af46-967dd0793000",

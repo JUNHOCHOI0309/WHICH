@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { AccessibilityInfo, AppState, Pressable, StyleSheet, Text, View } from "react-native";
 
 import type { CommentHighlight, CommentHighlights } from "@/contracts";
+import { relativeTimeLabel } from "@/lib/relative-time";
 import { colors } from "@/theme";
 
 const ROTATION_INTERVAL_MS = 6_000;
@@ -167,7 +168,9 @@ function HighlightCard({ side, comment }: { side: "A" | "B"; comment: CommentHig
           <Text numberOfLines={2} style={styles.body}>
             {comment.body}
           </Text>
-          <Text style={styles.meta}>{comment.author.displayName}</Text>
+          <Text style={styles.meta}>
+            {comment.author.displayName} · {relativeTimeLabel(comment.createdAt)}
+          </Text>
         </>
       ) : (
         <Text style={styles.emptySide}>아직 {side}를 고른 대표 댓글이 없어요.</Text>

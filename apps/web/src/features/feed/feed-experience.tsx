@@ -182,6 +182,25 @@ export function FeedExperience({ creationEnabled = false }: { creationEnabled?: 
     }
   }, [loadingMore, nextCursor]);
 
+  useEffect(() => {
+    if (screen !== "ready" || !nextCursor) return;
+    const checkFeedEnd = () => {
+      const pageHeight = Math.max(
+        document.documentElement.scrollHeight,
+        document.body.scrollHeight,
+      );
+      if (pageHeight - (window.scrollY + window.innerHeight) <= 720) {
+        void loadMore();
+      }
+    };
+    window.addEventListener("scroll", checkFeedEnd, { passive: true });
+    window.addEventListener("resize", checkFeedEnd);
+    return () => {
+      window.removeEventListener("scroll", checkFeedEnd);
+      window.removeEventListener("resize", checkFeedEnd);
+    };
+  }, [loadMore, nextCursor, screen]);
+
   const submitCardVote = useCallback(
     async (issue: PublicFeedIssue, choice: IssueChoice, idempotencyKey: string) => {
       setCardStates((current) => ({
@@ -359,7 +378,7 @@ export function FeedExperience({ creationEnabled = false }: { creationEnabled?: 
                 disabled={loadingMore}
                 onClick={() => void loadMore()}
               >
-                {loadingMore ? "질문을 더 찾는 중…" : "질문 더 보기"}
+                {loadingMore ? "질문을 더 찾는 중…" : "아래로 내려 질문 더 보기"}
               </button>
             ) : null}
           </>

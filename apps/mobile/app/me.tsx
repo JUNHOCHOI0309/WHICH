@@ -222,21 +222,6 @@ export default function MeScreen() {
     }
   }
 
-  async function removeAvatar() {
-    if (!session || avatarPending) return;
-    setAvatarPending(true);
-    try {
-      const response = await mobileApi.removeMemberAvatar(session.token);
-      setProfile((current) =>
-        current ? { ...current, member: { ...current.member, ...response.member } } : current,
-      );
-    } catch (error) {
-      Alert.alert("프로필 이미지", apiMessage(error, "이미지를 삭제하지 못했습니다."));
-    } finally {
-      setAvatarPending(false);
-    }
-  }
-
   if (screen === "loading") return <LoadingState />;
   if (screen === "guest") return <GuestState />;
   if (screen === "error" || !session || !profile) {
@@ -265,12 +250,6 @@ export default function MeScreen() {
         </View>
         {tab === "profile" ? (
           <>
-            <AvatarSettings
-              onChoose={() => void chooseAvatar()}
-              onRemove={() => void removeAvatar()}
-              pending={avatarPending}
-              profile={profile}
-            />
             <ProfileSettings
               profile={profile}
               session={session}
@@ -444,38 +423,6 @@ function ProfileSummary({
       <View style={styles.participation}>
         <Text style={styles.participationValue}>{profile.member.participationCount}</Text>
         <Text style={styles.participationLabel}>참여한 질문</Text>
-      </View>
-    </View>
-  );
-}
-
-function AvatarSettings({
-  onChoose,
-  onRemove,
-  pending,
-  profile,
-}: {
-  onChoose: () => void;
-  onRemove: () => void;
-  pending: boolean;
-  profile: MemberPrivateProfile;
-}) {
-  return (
-    <View style={styles.sectionCard}>
-      <Text style={styles.eyebrow}>PROFILE IMAGE</Text>
-      <Text style={styles.sectionTitle}>프로필 이미지</Text>
-      <Text style={styles.description}>
-        JPG·PNG를 선택하면 512px WebP로 변환해 안전하게 저장해요.
-      </Text>
-      <View style={styles.rowActions}>
-        <Pressable disabled={pending} onPress={onChoose} style={styles.secondaryButton}>
-          <Text style={styles.secondaryButtonText}>{pending ? "처리 중…" : "이미지 변경"}</Text>
-        </Pressable>
-        {profile.member.avatarSource === "CUSTOM" ? (
-          <Pressable disabled={pending} onPress={onRemove} style={styles.secondaryButton}>
-            <Text style={styles.dangerText}>이미지 삭제</Text>
-          </Pressable>
-        ) : null}
       </View>
     </View>
   );

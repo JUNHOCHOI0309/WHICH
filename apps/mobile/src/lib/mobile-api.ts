@@ -223,9 +223,16 @@ export function createMobileApiClient(
       }
     },
 
-    async loadFeed(subjectId?: string, limit = 10, excludeIssueId?: string, sessionToken?: string) {
+    async loadFeed(
+      subjectId?: string,
+      limit = 10,
+      excludeIssueId?: string,
+      sessionToken?: string,
+      cursor?: string,
+    ) {
       const search = new URLSearchParams({ limit: String(limit) });
       if (excludeIssueId) search.set("excludeIssueId", excludeIssueId);
+      if (cursor) search.set("cursor", cursor);
       const response = await request(`${baseUrl}/api/mobile/v1/issues/feed?${search.toString()}`, {
         headers: {
           accept: "application/json",

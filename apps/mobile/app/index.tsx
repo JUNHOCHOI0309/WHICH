@@ -1,7 +1,15 @@
 import { router } from "expo-router";
 import { randomUUID } from "expo-crypto";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  FlatList,
+  Pressable,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import type { NativeScrollEvent, NativeSyntheticEvent, ViewToken } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -37,6 +45,9 @@ export default function FeedScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ranking, setRanking] = useState<PublicIssueFeed["ranking"] | null>(null);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadMoreError, setLoadMoreError] = useState(false);
   const [cardStates, setCardStates] = useState<Record<string, CardVoteState>>({});
   const [highlightStates, setHighlightStates] = useState<Record<string, HighlightState>>({});
   const [pointFeedback, setPointFeedback] = useState<PointFeedback | null>(null);
@@ -112,8 +123,55 @@ export default function FeedScreen() {
 
   const applyFeed = useCallback((feed: PublicIssueFeed) => {
     setIssues(feed.items);
+    setNextCursor(feed.nextCursor);
     setRanking(feed.ranking);
+    setLoadMoreError(false);
   }, []);
+
+  const loadMore = useCallback(async () => {
+    if (!nextCursor || loading || refreshing || loadingMore) return;
+    setLoadingMore(true);
+    setLoadMoreError(false);
+    try {
+      const subjectId = await guestSubjects.getOrCreate();
+      const feed = await mobileApi.loadFeed(
+        subjectId,
+        12,
+        undefined,
+        memberSessionToken.current ?? undefined,
+        nextCursor,
+      );
+      setIssues((current) => {
+        const merged = new Map(current.map((item) => [item.id, item]));
+        for (const item of feed.items) merged.set(item.id, item);
+        return [...merged.values()];
+      });
+      setNextCursor(feed.nextCursor);
+      const firstNewIssue = feed.items[0];
+      if (
+        firstNewIssue &&
+        feed.ranking.mode === "PERSONALIZED" &&
+        !viewedRecommendationRequests.current.has(feed.ranking.requestId)
+      ) {
+        viewedRecommendationRequests.current.add(feed.ranking.requestId);
+        void mobileApi
+          .recordAnalyticsEvent({
+            sessionId: analyticsSessionId.current,
+            eventId: randomUUID(),
+            eventType: "PERSONALIZED_FEED_VIEW",
+            issueId: firstNewIssue.id,
+            issueVersion: firstNewIssue.version,
+            recommendationRequestId: feed.ranking.requestId,
+            occurredAt: new Date().toISOString(),
+          })
+          .catch(() => undefined);
+      }
+    } catch {
+      setLoadMoreError(true);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [loading, loadingMore, nextCursor, refreshing]);
 
   const load = useCallback(
     async (refresh = false) => {
@@ -279,6 +337,10 @@ export default function FeedScreen() {
         contentContainerStyle={styles.content}
         onViewableItemsChanged={onViewableItemsChanged}
         onScroll={handleFeedScroll}
+        onEndReached={() => {
+          if (!loadMoreError) void loadMore();
+        }}
+        onEndReachedThreshold={0.45}
         scrollEventThrottle={100}
         viewabilityConfig={{ itemVisiblePercentThreshold: 50, minimumViewTime: 500 }}
         refreshControl={
@@ -294,13 +356,6 @@ export default function FeedScreen() {
               <Text accessibilityRole="header" style={styles.brand}>
                 <Text style={styles.brandW}>W</Text>HICH
               </Text>
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => router.push("/interests")}
-                style={({ pressed }) => [styles.interestLink, pressed && styles.pressed]}
-              >
-                <Text style={styles.interestLinkText}>관심사</Text>
-              </Pressable>
             </View>
             <Text style={styles.title}>지금, 어느 쪽인가요?</Text>
             <View style={styles.filters}>
@@ -389,6 +444,21 @@ export default function FeedScreen() {
           />
         )}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
+        ListFooterComponent={
+          nextCursor || loadingMore || loadMoreError ? (
+            <View style={styles.feedFooter}>
+              {loadingMore ? (
+                <ActivityIndicator color={colors.cyanStrong} />
+              ) : loadMoreError ? (
+                <Pressable accessibilityRole="button" onPress={() => void loadMore()}>
+                  <Text style={styles.feedFooterAction}>다음 질문 다시 불러오기</Text>
+                </Pressable>
+              ) : (
+                <Text style={styles.feedFooterText}>아래로 내려 다음 질문을 불러오세요.</Text>
+              )}
+            </View>
+          ) : null
+        }
       />
       <PointFeedbackToast feedback={pointFeedback} onDismiss={dismissPointFeedback} />
       {showTopAction ? (
@@ -574,16 +644,6 @@ const styles = StyleSheet.create({
   headerRow: { alignItems: "center", flexDirection: "row", justifyContent: "space-between" },
   brand: { color: colors.text, fontSize: 24, fontWeight: "900", letterSpacing: -1.2 },
   brandW: { color: colors.cyanStrong },
-  interestLink: {
-    alignItems: "center",
-    borderColor: colors.border,
-    borderRadius: 999,
-    borderWidth: 1,
-    justifyContent: "center",
-    minHeight: 42,
-    paddingHorizontal: 14,
-  },
-  interestLinkText: { color: colors.text, fontSize: 12, fontWeight: "800" },
   title: { color: colors.text, fontSize: 27, fontWeight: "900", lineHeight: 34 },
   filters: { alignItems: "center", flexDirection: "row", gap: 8 },
   filterActive: {
@@ -658,6 +718,9 @@ const styles = StyleSheet.create({
   cardFooterLink: { color: colors.text, fontSize: 12, fontWeight: "900" },
   pressed: { opacity: 0.92, transform: [{ scale: 0.995 }] },
   separator: { height: 12 },
+  feedFooter: { alignItems: "center", minHeight: 64, justifyContent: "center", padding: 12 },
+  feedFooterText: { color: colors.textTertiary, fontSize: 11, fontWeight: "700" },
+  feedFooterAction: { color: colors.cyanStrong, fontSize: 12, fontWeight: "900" },
   stateCard: {
     alignItems: "center",
     backgroundColor: colors.surface,
