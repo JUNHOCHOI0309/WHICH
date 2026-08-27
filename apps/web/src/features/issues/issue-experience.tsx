@@ -16,7 +16,9 @@ import type {
   CommentSort,
   IssueChoice,
   PublicComment,
+  PublicFeedIssue,
   PublicIssue,
+  RankingMode,
   VoteResponse,
 } from "@/lib/contracts";
 import { loginHref } from "@/lib/auth";
@@ -491,7 +493,11 @@ function ResultScreen({
           kakaoLoginEnabled={kakaoLoginEnabled}
           naverLoginEnabled={naverLoginEnabled}
         />
-        <FloatingNextIssueButton currentIssueId={issue.id} currentIssueVersion={issue.version} />
+        <NextIssuePreview
+          key={issue.id}
+          currentIssueId={issue.id}
+          currentIssueVersion={issue.version}
+        />
       </article>
     </ExperienceShell>
   );
@@ -1876,7 +1882,14 @@ function CommentSection({
   );
 }
 
-function FloatingNextIssueButton({
+type NextIssuePreviewState =
+  | { kind: "loading" }
+  | { kind: "ready"; issue: PublicFeedIssue; rankingMode: RankingMode }
+  | { kind: "empty" }
+  | { kind: "error" }
+  | { kind: "navigating"; issue: PublicFeedIssue; rankingMode: RankingMode };
+
+function NextIssuePreview({
   currentIssueId,
   currentIssueVersion,
 }: {
@@ -1884,61 +1897,131 @@ function FloatingNextIssueButton({
   currentIssueVersion: number;
 }) {
   const router = useRouter();
-  const [state, setState] = useState<"idle" | "loading" | "empty">("idle");
+  const [state, setState] = useState<NextIssuePreviewState>({ kind: "loading" });
+  const [retryKey, setRetryKey] = useState(0);
   const requestLocked = useRef(false);
+  const exhaustedRecorded = useRef(false);
 
-  const moveNext = useCallback(async () => {
+  useEffect(() => {
+    const controller = new AbortController();
+
+    void loadIssueFeed({
+      limit: 1,
+      excludeIssueId: currentIssueId,
+      signal: controller.signal,
+    })
+      .then((feed) => {
+        const nextIssue = feed.items[0];
+        if (!nextIssue) {
+          setState({ kind: "empty" });
+          if (!exhaustedRecorded.current) {
+            exhaustedRecorded.current = true;
+            void recordAnalyticsEvent({
+              eventType: "NEXT_ISSUE_EXHAUSTED",
+              issueId: currentIssueId,
+              issueVersion: currentIssueVersion,
+            }).catch(() => undefined);
+          }
+          return;
+        }
+        setState({ kind: "ready", issue: nextIssue, rankingMode: feed.ranking.mode });
+      })
+      .catch(() => {
+        if (controller.signal.aborted) return;
+        setState({ kind: "error" });
+      });
+
+    return () => controller.abort();
+  }, [currentIssueId, currentIssueVersion, retryKey]);
+
+  const moveNext = useCallback(() => {
+    if (state.kind !== "ready") return;
     if (requestLocked.current) return;
     requestLocked.current = true;
-    setState("loading");
+    setState({ kind: "navigating", issue: state.issue, rankingMode: state.rankingMode });
 
-    try {
-      const feed = await loadIssueFeed({ limit: 1, excludeIssueId: currentIssueId });
-      const nextIssue = feed.items[0];
-      if (!nextIssue) {
-        setState("empty");
-        void recordAnalyticsEvent({
-          eventType: "NEXT_ISSUE_EXHAUSTED",
-          issueId: currentIssueId,
-          issueVersion: currentIssueVersion,
-        }).catch(() => undefined);
-        toast.info("지금 참여할 수 있는 질문을 모두 골랐어요.");
-        return;
-      }
+    void recordAnalyticsEvent({
+      eventType: "NEXT_ISSUE_OPEN",
+      issueId: currentIssueId,
+      issueVersion: currentIssueVersion,
+    }).catch(() => undefined);
+    if (state.rankingMode === "PERSONALIZED") {
       void recordAnalyticsEvent({
-        eventType: "NEXT_ISSUE_OPEN",
-        issueId: currentIssueId,
-        issueVersion: currentIssueVersion,
+        eventType: "PERSONALIZED_ISSUE_OPEN",
+        issueId: state.issue.id,
+        issueVersion: state.issue.version,
+        recommendationRequestId: state.issue.recommendation.requestId,
       }).catch(() => undefined);
-      if (feed.ranking.mode === "PERSONALIZED") {
-        void recordAnalyticsEvent({
-          eventType: "PERSONALIZED_ISSUE_OPEN",
-          issueId: nextIssue.id,
-          issueVersion: nextIssue.version,
-          recommendationRequestId: nextIssue.recommendation.requestId,
-        }).catch(() => undefined);
-      }
-      router.push(`/issues/${nextIssue.id}`);
-    } catch {
-      requestLocked.current = false;
-      setState("idle");
-      toast.error("다음 질문을 찾지 못했어요. 잠시 후 다시 시도해 주세요.");
     }
-  }, [currentIssueId, currentIssueVersion, router]);
+    router.push(`/issues/${state.issue.id}`);
+  }, [currentIssueId, currentIssueVersion, router, state]);
 
-  if (state === "empty") return null;
+  if (state.kind === "loading") {
+    return (
+      <section className={styles.nextIssuePreview} aria-busy="true" aria-live="polite">
+        <span className={styles.nextIssueEyebrow}>NEXT ISSUE</span>
+        <strong className={styles.nextIssueLoading}>다음 질문을 준비하고 있어요.</strong>
+      </section>
+    );
+  }
+
+  if (state.kind === "empty") {
+    return (
+      <section className={styles.nextIssuePreview} aria-live="polite">
+        <span className={styles.nextIssueEyebrow}>NEXT ISSUE</span>
+        <strong className={styles.nextIssueEmpty}>지금 참여할 수 있는 질문을 모두 골랐어요.</strong>
+      </section>
+    );
+  }
+
+  if (state.kind === "error") {
+    return (
+      <section className={styles.nextIssuePreview} aria-live="polite">
+        <span className={styles.nextIssueEyebrow}>NEXT ISSUE</span>
+        <strong className={styles.nextIssueEmpty}>다음 질문을 불러오지 못했어요.</strong>
+        <button
+          type="button"
+          className={styles.nextIssueRetry}
+          onClick={() => {
+            setState({ kind: "loading" });
+            setRetryKey((current) => current + 1);
+          }}
+        >
+          다시 시도
+        </button>
+      </section>
+    );
+  }
+
+  const nextIssue = state.issue;
+  const navigating = state.kind === "navigating";
+  const choiceA = nextIssue.choices[0];
+  const choiceB = nextIssue.choices[1];
 
   return (
     <button
       type="button"
-      className={styles.nextIssueFloating}
-      aria-label={state === "loading" ? "다음 질문을 찾는 중" : "다음 질문"}
-      aria-busy={state === "loading"}
-      title="다음 질문"
-      disabled={state === "loading"}
-      onClick={() => void moveNext()}
+      className={styles.nextIssuePreview}
+      aria-label={`다음 질문으로 이동: ${nextIssue.question}`}
+      aria-busy={navigating}
+      disabled={navigating}
+      onClick={moveNext}
     >
-      <span aria-hidden="true">&gt;&gt;</span>
+      <span className={styles.nextIssueEyebrow}>NEXT ISSUE</span>
+      <span className={styles.nextIssueHeadline}>
+        <strong>{nextIssue.question}</strong>
+        <span className={styles.nextIssueAction}>{navigating ? "이동 중…" : "다음 →"}</span>
+      </span>
+      <span className={styles.nextIssueChoices} aria-hidden="true">
+        <span>
+          <b>{choiceA?.code ?? "A"}</b>
+          {choiceA?.label ?? "첫 번째 선택"}
+        </span>
+        <span>
+          <b>{choiceB?.code ?? "B"}</b>
+          {choiceB?.label ?? "두 번째 선택"}
+        </span>
+      </span>
     </button>
   );
 }

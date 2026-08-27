@@ -286,10 +286,15 @@ describe("IssueExperience", () => {
     expect(requestBody).toMatchObject({ issueVersion: 1, choiceId: "choice-a" });
     expect(requestBody.idempotencyKey).toEqual(expect.any(String));
 
-    expect(screen.getByRole("button", { name: "다음 질문" })).toHaveTextContent(">>");
+    const nextPreview = await screen.findByRole("button", {
+      name: "다음 질문으로 이동: 다음 질문",
+    });
+    expect(nextPreview).toHaveTextContent("NEXT ISSUE");
+    expect(nextPreview).toHaveTextContent("아침형 인간");
+    expect(nextPreview).toHaveTextContent("저녁형 인간");
   });
 
-  it("opens the next eligible Issue only after the floating next button is clicked", async () => {
+  it("prefetches the next Issue but opens it and records analytics only after preview click", async () => {
     const savedResult: VoteResponse = {
       outcome: "ACCEPTED",
       voteAttemptId: "attempt-auto-next",
@@ -308,10 +313,11 @@ describe("IssueExperience", () => {
     sessionStorage.setItem(`which:vote-result:${ISSUE_ID}`, JSON.stringify(savedResult));
 
     let feedRequests = 0;
+    const analyticsEvents: string[] = [];
 
     vi.stubGlobal(
       "fetch",
-      vi.fn(async (input: string | URL | Request) => {
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
         const url = String(input);
         if (url === "/api/guest-subjects") return jsonResponse({ status: "ready" });
         if (url.endsWith(`/api/issues/${ISSUE_ID}`)) return jsonResponse(issue);
@@ -344,15 +350,22 @@ describe("IssueExperience", () => {
             },
           });
         }
-        if (url === "/api/analytics/events") return jsonResponse({ accepted: true });
+        if (url === "/api/analytics/events") {
+          const body = JSON.parse(String(init?.body)) as { eventType: string };
+          analyticsEvents.push(body.eventType);
+          return jsonResponse({ accepted: true });
+        }
         throw new Error(`Unexpected request: ${url}`);
       }),
     );
 
     render(<IssueExperience issueId={ISSUE_ID} />);
-    const nextButton = await screen.findByRole("button", { name: "다음 질문" });
-    expect(feedRequests).toBe(0);
+    const nextButton = await screen.findByRole("button", {
+      name: `다음 질문으로 이동: ${issue.question}`,
+    });
+    expect(feedRequests).toBe(1);
     expect(navigation.push).not.toHaveBeenCalled();
+    expect(analyticsEvents).not.toContain("NEXT_ISSUE_OPEN");
 
     fireEvent.click(nextButton);
     fireEvent.click(nextButton);
@@ -361,6 +374,63 @@ describe("IssueExperience", () => {
       expect(navigation.push).toHaveBeenCalledWith("/issues/20000000-0000-4000-8000-000000000001"),
     );
     expect(feedRequests).toBe(1);
+    expect(navigation.push).toHaveBeenCalledTimes(1);
+    expect(analyticsEvents).toContain("NEXT_ISSUE_OPEN");
+  });
+
+  it("shows a completion message when there is no next eligible Issue", async () => {
+    const savedResult: VoteResponse = {
+      outcome: "ACCEPTED",
+      voteAttemptId: "attempt-next-empty",
+      voteId: "vote-next-empty",
+      issueId: ISSUE_ID,
+      issueVersion: 1,
+      choice: "A",
+      result: {
+        resultVersion: 1,
+        acceptedA: 1,
+        acceptedB: 0,
+        displayedTotal: 1,
+        integrityState: "NORMAL",
+      },
+    };
+    sessionStorage.setItem(`which:vote-result:${ISSUE_ID}`, JSON.stringify(savedResult));
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = String(input);
+        if (url === "/api/guest-subjects") return jsonResponse({ status: "ready" });
+        if (url.endsWith(`/api/issues/${ISSUE_ID}`)) return jsonResponse(issue);
+        if (url === "/api/member-session") return jsonResponse({ code: "SESSION_INVALID" }, 401);
+        if (url.startsWith(`/api/issues/${ISSUE_ID}/comments?`)) {
+          return jsonResponse({ items: [], nextCursor: null, totalCount: 0 });
+        }
+        if (url.startsWith("/api/issues/feed?")) {
+          return jsonResponse({
+            items: [],
+            nextCursor: null,
+            ranking: {
+              requestId: "30000000-0000-4000-8000-000000000002",
+              version: "interest_content_v2_refresh",
+              mode: "RECENCY",
+              reasonCode: "PROFILE_NOT_READY",
+              profileVersion: null,
+            },
+          });
+        }
+        if (url === "/api/analytics/events") return jsonResponse({ accepted: true });
+        throw new Error(`Unexpected request: ${url}`);
+      }),
+    );
+
+    render(<IssueExperience issueId={ISSUE_ID} />);
+
+    expect(
+      await screen.findByText("지금 참여할 수 있는 질문을 모두 골랐어요."),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /다음 질문으로 이동/ })).not.toBeInTheDocument();
+    expect(navigation.push).not.toHaveBeenCalled();
   });
 
   it("restores the server Vote after login instead of showing the voting screen again", async () => {
@@ -520,7 +590,7 @@ describe("IssueExperience", () => {
     fireEvent.click(screen.getByRole("button", { name: "B 선택" }));
     expect(await screen.findByText("늦은 시간에 더 집중이 잘돼요.")).toBeInTheDocument();
     expect(screen.getByText("대화 잠김")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "다음 질문" })).toHaveTextContent(">>");
+    expect(screen.getByText("NEXT ISSUE")).toBeInTheDocument();
   });
 
   it("keeps result and next action available when Comments fail", async () => {
@@ -561,7 +631,7 @@ describe("IssueExperience", () => {
       await screen.findByText("선택 이유를 불러오지 못했어요. 결과는 그대로 유지됩니다."),
     ).toBeInTheDocument();
     expect(screen.getByText("100%")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "다음 질문" })).toHaveTextContent(">>");
+    expect(screen.getByText("NEXT ISSUE")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "댓글만 다시 불러오기" })).toBeInTheDocument();
   });
 
