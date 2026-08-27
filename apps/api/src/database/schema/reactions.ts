@@ -8,6 +8,7 @@ import {
   pgTable,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
@@ -43,6 +44,9 @@ export const commentReactions = pgTable(
       table.subjectId,
       table.code,
     ),
+    uniqueIndex("comment_reactions_one_active_per_subject_unique")
+      .on(table.commentId, table.subjectId)
+      .where(sql`${table.active} = true`),
     foreignKey({
       columns: [table.mergedIntoReactionId],
       foreignColumns: [table.id],

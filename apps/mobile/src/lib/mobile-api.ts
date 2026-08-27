@@ -316,6 +316,7 @@ export function createMobileApiClient(
       sessionToken: string;
       idempotencyKey: string;
       body: string;
+      parentCommentId?: string;
     }) {
       const response = await request(
         `${baseUrl}/api/mobile/v1/issues/${encodeURIComponent(command.issueId)}/comments`,
@@ -328,20 +329,21 @@ export function createMobileApiClient(
             "idempotency-key": command.idempotencyKey,
             ...(command.subjectId ? { "x-anonymous-subject-id": command.subjectId } : {}),
           },
-          body: JSON.stringify({ body: command.body }),
+          body: JSON.stringify({ body: command.body, parentCommentId: command.parentCommentId }),
         },
       );
       return bodyOrError<{ comment: PublicComment }>(response);
     },
 
-    async toggleHelpfulReaction(command: {
+    async toggleCommentReaction(command: {
       commentId: string;
       subjectId?: string;
       sessionToken?: string;
       idempotencyKey: string;
+      code: "HELPFUL" | "DISLIKE";
     }) {
       const response = await request(
-        `${baseUrl}/api/mobile/v1/comments/${encodeURIComponent(command.commentId)}/reactions/helpful`,
+        `${baseUrl}/api/mobile/v1/comments/${encodeURIComponent(command.commentId)}/reactions/${command.code.toLowerCase()}`,
         {
           method: "POST",
           headers: {
@@ -353,7 +355,12 @@ export function createMobileApiClient(
         },
       );
       return bodyOrError<{
-        reaction: { code: "HELPFUL"; active: boolean; helpfulCount: number };
+        reaction: {
+          code: "HELPFUL" | "DISLIKE";
+          active: boolean;
+          helpfulCount: number;
+          dislikeCount: number;
+        };
       }>(response);
     },
 

@@ -421,6 +421,52 @@ describe("Guest Issue read API", () => {
 });
 
 describe("Guest Issue feed API", () => {
+  it("returns a result-free participation rail ordered by recent valid votes", async () => {
+    const popular = await createReadableIssue({}, new Date("2026-07-01T00:00:00.000Z"));
+    await createReadableIssue({}, new Date("2026-07-02T00:00:00.000Z"));
+
+    for (let index = 0; index < 2; index += 1) {
+      const subjectResponse = await app.inject({ method: "POST", url: "/v1/guest-subjects" });
+      const subject = subjectResponse.json<{ anonymousSubjectId: string }>();
+      const voteResponse = await app.inject({
+        method: "POST",
+        url: `/v1/issues/${popular.issueId}/votes`,
+        headers: {
+          "idempotency-key": randomUUID(),
+          "x-anonymous-subject-id": subject.anonymousSubjectId,
+        },
+        payload: { issueVersion: 1, choiceId: popular.choiceAId },
+      });
+      expect(voteResponse.statusCode).toBe(201);
+    }
+
+    const response = await app.inject({ method: "GET", url: "/v1/issues/feed?limit=1" });
+    const body = response.json<{
+      rightRail: {
+        version: string;
+        items: Array<{
+          issueId: string;
+          participationCount: number;
+          reasonCode: string;
+          acceptedA?: number;
+          acceptedB?: number;
+        }>;
+      };
+    }>();
+
+    expect(response.statusCode).toBe(200);
+    expect(body.rightRail.version).toBe("participation_v1");
+    expect(body.rightRail.items[0]).toMatchObject({
+      issueId: popular.issueId,
+      participationCount: 2,
+      reasonCode: "RECENT_PARTICIPATION",
+    });
+    expect(body.rightRail.items).toHaveLength(3);
+    expect(body.rightRail.items.some((item) => item.reasonCode === "RECENT_FALLBACK")).toBe(true);
+    expect(JSON.stringify(body.rightRail)).not.toContain("acceptedA");
+    expect(JSON.stringify(body.rightRail)).not.toContain("acceptedB");
+  });
+
   it("paginates with a stable publishedAt and Issue ID cursor", async () => {
     const now = Date.now();
     const newest = await createReadableIssue({}, new Date(now - 60_000));
@@ -485,6 +531,11 @@ describe("Guest Issue feed API", () => {
     expect(feed.items.map((item) => item.id)).toContain(nextIssue.issueId);
     expect(feed.items.map((item) => item.id)).not.toContain(votedIssue.issueId);
     expect(feed.items.map((item) => item.id)).not.toContain(currentIssue.issueId);
+    expect(
+      feedResponse
+        .json<{ rightRail: { items: Array<{ issueId: string }> } }>()
+        .rightRail.items.map((item) => item.issueId),
+    ).not.toContain(votedIssue.issueId);
   });
 
   it("rejects invalid cursors and omits Feed-ineligible Issues", async () => {

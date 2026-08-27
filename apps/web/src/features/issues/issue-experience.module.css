@@ -158,10 +158,39 @@
 
 .commentFilters {
   display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 8px;
   margin-top: 20px;
-  overflow-x: auto;
   padding: 3px;
+}
+
+.commentSideFilters,
+.commentSortFilters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.commentSideFilters {
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.commentSortFilters {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.commentTotal {
+  margin: 16px 3px 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.commentTotal strong {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
 }
 
 @media (max-width: 620px) {
@@ -202,6 +231,12 @@
   color: var(--surface);
 }
 
+.commentFilters button.commentSortActive {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--a) 14%, var(--surface));
+  color: var(--ink);
+}
+
 .commentFilters button:focus-visible,
 .loadMoreComments:focus-visible,
 .commentMessage button:focus-visible {
@@ -231,16 +266,34 @@
   --comment-side: var(--b);
 }
 
-.commentCard header {
+.commentAuthorHeader {
   display: flex;
   align-items: center;
   gap: 9px;
   font-size: 0.76rem;
 }
 
-.commentCard time {
-  margin-left: auto;
+.commentAuthorHeader time {
   color: var(--muted);
+}
+
+.commentAvatar {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--a) 12%, var(--surface));
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.commentAvatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .commentChoice {
@@ -254,14 +307,26 @@
   font-weight: 950;
 }
 
-.commentCard > p {
+.commentAuthorHeader .commentChoice {
+  width: 26px;
+  height: 26px;
+  flex: 0 0 26px;
+  border: 0;
+  color: var(--ink);
+}
+
+.commentCard > p,
+.commentReply > p {
   margin: 14px 0 0;
   line-height: 1.7;
   word-break: keep-all;
 }
 
-.commentCard footer {
+.commentCard footer,
+.commentReply footer {
   display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 8px;
   margin-top: 12px;
   color: var(--muted);
@@ -269,9 +334,9 @@
   font-weight: 750;
 }
 
-.commentCard footer button {
+.commentCard footer button,
+.commentReply footer button {
   min-height: 34px;
-  margin-left: auto;
   border: 1px solid var(--line);
   border-radius: 999px;
   background: transparent;
@@ -283,36 +348,167 @@
   padding: 5px 11px;
 }
 
-.commentCard footer button.reactionButton {
+.commentReactionActions,
+.commentSecondaryActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.commentReactionActions {
+  justify-content: flex-start;
+}
+
+.commentSecondaryActions {
+  justify-content: flex-end;
   margin-left: auto;
 }
 
-.commentCard footer button.reportButton {
-  margin-left: 0;
+.commentCard footer button.reactionButtonSecondary,
+.commentReply footer button.reactionButtonSecondary,
+.commentCard footer button.replyButton,
+.commentReply footer button.replyButton,
+.commentCard footer button.reportButton,
+.commentReply footer button.reportButton {
   color: var(--muted);
 }
 
-.commentCard footer button.commentOwnerButton {
-  margin-left: 0;
+.reactionButtonSecondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
 }
 
-.commentCard footer button.reportButton:first-of-type {
-  margin-left: auto;
+.reactionButtonSecondary img {
+  width: 16px;
+  height: 16px;
+  opacity: 0.62;
 }
 
-.commentCard footer button.reactionActive {
+.commentCard footer button.reactionActive,
+.commentReply footer button.reactionActive {
   border-color: var(--a);
   background: color-mix(in srgb, var(--a) 16%, var(--surface));
 }
 
-.commentCard footer button:focus-visible {
+.commentCard footer button.reactionDislikeActive,
+.commentReply footer button.reactionDislikeActive {
+  border-color: var(--b);
+  background: color-mix(in srgb, var(--b) 14%, var(--surface));
+}
+
+.commentCard footer button:focus-visible,
+.commentReply footer button:focus-visible {
   outline: 3px solid var(--a);
   outline-offset: 2px;
 }
 
-.commentCard footer button:disabled {
+.commentCard footer button:disabled,
+.commentReply footer button:disabled {
   cursor: wait;
   opacity: 0.65;
+}
+
+.replyComposer {
+  display: grid;
+  gap: 9px;
+  margin-top: 14px;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+.replyComposer label {
+  font-size: 0.76rem;
+  font-weight: 850;
+}
+
+.replyComposer textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  line-height: 1.6;
+  padding: 11px;
+  resize: vertical;
+}
+
+.replyComposer > div {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.replyComposer > div > span {
+  margin-right: auto;
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+.replyComposer button {
+  min-height: 34px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 850;
+  padding: 5px 12px;
+}
+
+.commentReplies {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+  margin-left: 28px;
+  border-left: 2px solid var(--line);
+  padding-left: 14px;
+}
+
+.commentReply {
+  --comment-side: var(--line);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--comment-side);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface) 94%, var(--canvas));
+  padding: 13px 14px;
+}
+
+@media (max-width: 640px) {
+  .commentFilters {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .commentSideFilters {
+    width: 100%;
+  }
+
+  .commentSortFilters {
+    margin-left: auto;
+  }
+
+  .commentReplies {
+    margin-left: 8px;
+    padding-left: 9px;
+  }
+
+  .commentCard footer,
+  .commentReply footer {
+    align-items: flex-start;
+    flex-direction: column;
+    flex-wrap: wrap;
+  }
+
+  .commentSecondaryActions {
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    margin-left: 0;
+  }
 }
 
 .reactionError {
@@ -831,8 +1027,7 @@
 }
 
 .shareLaunchers button,
-.sharePrimaryAction,
-.shareClose {
+.sharePrimaryAction {
   border: 1px solid var(--ink);
   background: var(--surface);
   color: var(--ink);
@@ -885,12 +1080,6 @@
   gap: 20px;
 }
 
-.shareClose {
-  min-height: 38px;
-  padding: 7px 12px;
-  white-space: nowrap;
-}
-
 .shareChoiceToggle {
   display: flex;
   align-items: center;
@@ -936,8 +1125,7 @@
 }
 
 .shareLaunchers button:focus-visible,
-.sharePrimaryAction:focus-visible,
-.shareClose:focus-visible {
+.sharePrimaryAction:focus-visible {
   outline: 3px solid var(--a);
   outline-offset: 2px;
 }
@@ -1053,43 +1241,42 @@
   margin-top: 12px;
 }
 
-.nextIssue {
-  margin-top: 30px;
-  border-top: 1px solid var(--line);
-  padding-top: 24px;
-}
-
-.nextIssue button {
-  width: 100%;
-  min-height: 58px;
-  border: 0;
-  border-radius: 999px;
+.nextIssueFloating {
+  position: fixed;
+  z-index: 56;
+  right: clamp(16px, 2.5vw, 32px);
+  bottom: calc(88px + env(safe-area-inset-bottom));
+  width: 52px;
+  height: 52px;
+  border: 1px solid rgb(255 255 255 / 55%);
+  border-radius: 50%;
   background: var(--a);
-  color: var(--ink);
+  box-shadow: 0 12px 30px rgb(15 23 42 / 22%);
+  color: #03212b;
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font: inherit;
-  font-weight: 900;
-  padding: 14px 22px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 1rem;
+  font-weight: 950;
+  letter-spacing: -0.12em;
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease,
+    background-color 160ms ease;
 }
 
-.nextIssue button:focus-visible {
-  outline: 3px solid var(--b);
-  outline-offset: 4px;
+.nextIssueFloating:hover:not(:disabled) {
+  transform: translateX(3px);
 }
 
-.nextIssue button:disabled {
+.nextIssueFloating:focus-visible {
+  outline: 3px solid var(--which-text);
+  outline-offset: 3px;
+}
+
+.nextIssueFloating:disabled {
   cursor: wait;
-  opacity: 0.65;
-}
-
-.nextIssue p {
-  margin: 12px 0 0;
-  color: var(--muted);
-  font-size: 0.8rem;
-  line-height: 1.55;
+  opacity: 0.56;
+  transform: none;
 }
 
 @keyframes pulse {
@@ -1102,6 +1289,13 @@
 @media (min-width: 700px) {
   .choiceGrid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 1023px) {
+  .nextIssueFloating {
+    right: 16px;
+    bottom: calc(144px + env(safe-area-inset-bottom));
   }
 }
 
@@ -1120,6 +1314,12 @@
 
   .resultTrack {
     grid-column: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nextIssueFloating {
+    transition: none;
   }
 }
 

@@ -21,6 +21,7 @@ export function CommentCard({
   onHelpful?: (comment: PublicComment) => void;
   onMore?: (comment: PublicComment) => void;
 }) {
+  const viewerHelpful = comment.reactions.viewerReaction === "HELPFUL";
   const canOpenMore = Boolean(
     onMore && (comment.reports.canReport || comment.reports.viewerReported),
   );
@@ -42,12 +43,7 @@ export function CommentCard({
               {comment.author.displayName}
             </Text>
             <Text style={styles.meta}>{relativeTimeLabel(comment.createdAt)}</Text>
-            <Text
-              style={[
-                styles.choice,
-                comment.choice === "A" ? styles.choiceA : styles.choiceB,
-              ]}
-            >
+            <Text style={[styles.choice, comment.choice === "A" ? styles.choiceA : styles.choiceB]}>
               {comment.choice}
             </Text>
           </View>
@@ -63,9 +59,7 @@ export function CommentCard({
             onPress={() => onMore?.(comment)}
             style={styles.moreButton}
           >
-            <Text style={styles.moreText}>
-              {comment.reports.viewerReported ? "신고됨" : "•••"}
-            </Text>
+            <Text style={styles.moreText}>{comment.reports.viewerReported ? "신고됨" : "•••"}</Text>
           </Pressable>
         ) : null}
       </View>
@@ -73,13 +67,13 @@ export function CommentCard({
       <View style={styles.actions}>
         <Pressable
           accessibilityRole="button"
-          accessibilityState={{ selected: comment.reactions.viewerReacted }}
+          accessibilityState={{ selected: viewerHelpful }}
           disabled={!onHelpful || busy}
           onPress={() => onHelpful?.(comment)}
-          style={[styles.action, comment.reactions.viewerReacted && styles.actionActive]}
+          style={[styles.action, viewerHelpful && styles.actionActive]}
         >
           <Text style={styles.actionText}>
-            {comment.reactions.viewerReacted ? "♥" : "♡"} {comment.reactions.helpfulCount}
+            {viewerHelpful ? "♥" : "♡"} {comment.reactions.helpfulCount}
           </Text>
         </Pressable>
         {comment.editedAt ? <Text style={styles.edited}>수정됨</Text> : null}

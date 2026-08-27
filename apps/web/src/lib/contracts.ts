@@ -96,24 +96,41 @@ export type PublicIssueFeed = {
     qualityMode?: "OFF" | "SHADOW" | "LIVE";
     fallbackReason?: string | null;
   };
+  rightRail?: {
+    version: "participation_v1";
+    items: Array<{
+      issueId: string;
+      question: string;
+      categoryCode: string;
+      participationCount: number;
+      reasonCode: "RECENT_PARTICIPATION" | "RECENT_FALLBACK";
+    }>;
+  };
 };
 
 export type CommentSide = "ALL" | "A" | "B";
+export type CommentSort = "NEWEST" | "HELPFUL";
 export type CommentReportReason =
   "SPAM" | "HARASSMENT" | "HATE_OR_ABUSE" | "PERSONAL_INFORMATION" | "OTHER";
 
 export type PublicComment = {
   id: string;
   choice: "A" | "B";
-  author: { displayName: string };
+  author: { displayName: string; avatarUrl?: string | null };
   body: string;
   visibility: "VISIBLE" | "DEPRIORITIZED" | "COLLAPSED";
   threadState: "OPEN" | "LOCKED";
   createdAt: string;
   editedAt: string | null;
-  reactions: { helpfulCount: number; viewerReacted: boolean };
+  parentCommentId: string | null;
+  reactions: {
+    helpfulCount: number;
+    dislikeCount: number;
+    viewerReaction: "HELPFUL" | "DISLIKE" | null;
+  };
   reports: { viewerReported: boolean; canReport: boolean };
   permissions: { canEdit: boolean; canDelete: boolean };
+  replies: PublicComment[];
 };
 
 export type PublicCommentPage = {
@@ -137,8 +154,13 @@ export type CommentDeleteResponse = {
   comment: { id: string; deleted: true };
 };
 
-export type HelpfulReactionResponse = {
-  reaction: { code: "HELPFUL"; active: boolean; helpfulCount: number };
+export type CommentReactionResponse = {
+  reaction: {
+    code: "HELPFUL" | "DISLIKE";
+    active: boolean;
+    helpfulCount: number;
+    dislikeCount: number;
+  };
 };
 
 export type CommentReportResponse = {

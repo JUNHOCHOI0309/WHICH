@@ -1,0 +1,1 @@
+ALTER TYPE "public"."comment_reaction_code" ADD VALUE 'DISLIKE';

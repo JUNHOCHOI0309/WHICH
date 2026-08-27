@@ -98,10 +98,11 @@ function toggleAsGuest(
   commentId: string,
   anonymousSubjectId: string,
   idempotencyKey = randomUUID(),
+  reaction: "helpful" | "dislike" = "helpful",
 ) {
   return app.inject({
     method: "POST",
-    url: `/v1/comments/${commentId}/reactions/helpful`,
+    url: `/v1/comments/${commentId}/reactions/${reaction}`,
     headers: {
       "x-anonymous-subject-id": anonymousSubjectId,
       "idempotency-key": idempotencyKey,
@@ -159,7 +160,7 @@ describe("Comment HELPFUL reaction API", () => {
     const replay = await toggleAsGuest(commentId, guest, idempotencyKey);
     expect(activated.statusCode).toBe(200);
     expect(activated.json()).toEqual({
-      reaction: { code: "HELPFUL", active: true, helpfulCount: 1 },
+      reaction: { code: "HELPFUL", active: true, helpfulCount: 1, dislikeCount: 0 },
     });
     expect(replay.json()).toEqual(activated.json());
 
@@ -172,15 +173,48 @@ describe("Comment HELPFUL reaction API", () => {
       items: [
         {
           id: commentId,
-          reactions: { helpfulCount: 1, viewerReacted: true },
+          reactions: { helpfulCount: 1, dislikeCount: 0, viewerReaction: "HELPFUL" },
         },
       ],
     });
 
     const deactivated = await toggleAsGuest(commentId, guest);
     expect(deactivated.json()).toEqual({
-      reaction: { code: "HELPFUL", active: false, helpfulCount: 0 },
+      reaction: { code: "HELPFUL", active: false, helpfulCount: 0, dislikeCount: 0 },
     });
+  });
+
+  it("switches between HELPFUL and DISLIKE without keeping both active", async () => {
+    const issue = await createIssue();
+    const commentId = await createPublishedComment(issue);
+    const guest = await createGuestVote(issue.issueId, issue.choiceBId);
+
+    expect((await toggleAsGuest(commentId, guest)).json()).toEqual({
+      reaction: { code: "HELPFUL", active: true, helpfulCount: 1, dislikeCount: 0 },
+    });
+    expect((await toggleAsGuest(commentId, guest, randomUUID(), "dislike")).json()).toEqual({
+      reaction: { code: "DISLIKE", active: true, helpfulCount: 0, dislikeCount: 1 },
+    });
+
+    const commentsResponse = await app.inject({
+      method: "GET",
+      url: `/v1/issues/${issue.issueId}/comments`,
+      headers: { "x-anonymous-subject-id": guest },
+    });
+    expect(commentsResponse.json()).toMatchObject({
+      items: [
+        {
+          id: commentId,
+          reactions: { helpfulCount: 0, dislikeCount: 1, viewerReaction: "DISLIKE" },
+        },
+      ],
+    });
+
+    const activeRows = await database.db
+      .select({ code: commentReactions.code })
+      .from(commentReactions)
+      .where(and(eq(commentReactions.commentId, commentId), eq(commentReactions.active, true)));
+    expect(activeRows).toEqual([{ code: "DISLIKE" }]);
   });
 
   it("requires a same-Issue accepted Vote", async () => {
@@ -204,7 +238,7 @@ describe("Comment HELPFUL reaction API", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({
-      reaction: { code: "HELPFUL", active: true, helpfulCount: 1 },
+      reaction: { code: "HELPFUL", active: true, helpfulCount: 1, dislikeCount: 0 },
     });
   });
 
@@ -237,7 +271,7 @@ describe("Comment HELPFUL reaction API", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({
-      reaction: { code: "HELPFUL", active: true, helpfulCount: 1 },
+      reaction: { code: "HELPFUL", active: true, helpfulCount: 1, dislikeCount: 0 },
     });
   });
 
@@ -256,7 +290,7 @@ describe("Comment HELPFUL reaction API", () => {
     const response = await toggleAsMember(commentId, member.token);
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({
-      reaction: { code: "HELPFUL", active: false, helpfulCount: 0 },
+      reaction: { code: "HELPFUL", active: false, helpfulCount: 0, dislikeCount: 0 },
     });
   });
 

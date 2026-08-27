@@ -90,6 +90,7 @@ function submitComment(
   idempotencyKey: string,
   body: string,
   anonymousSubjectId?: string,
+  parentCommentId?: string,
 ) {
   return app.inject({
     method: "POST",
@@ -99,7 +100,7 @@ function submitComment(
       "idempotency-key": idempotencyKey,
       ...(anonymousSubjectId ? { "x-anonymous-subject-id": anonymousSubjectId } : {}),
     },
-    payload: { body },
+    payload: { body, ...(parentCommentId ? { parentCommentId } : {}) },
   });
 }
 
@@ -316,6 +317,59 @@ describe("Member Comment write API", () => {
     );
     expect(duplicate.statusCode).toBe(409);
     expect(duplicate.json()).toMatchObject({ code: "COMMENT_ALREADY_EXISTS" });
+  });
+
+  it("nests one-level replies and rejects a reply to another reply", async () => {
+    const issue = await createIssue();
+    const authorGuest = await createGuestVote(issue.issueId, issue.choiceAId);
+    const author = await createSession(`reply-root-author-${issue.issueId}`, authorGuest);
+    const rootResponse = await submitComment(
+      issue.issueId,
+      author.token,
+      randomUUID(),
+      "답글을 받을 댓글",
+    );
+    const rootId = rootResponse.json<{ comment: { id: string } }>().comment.id;
+
+    const replierGuest = await createGuestVote(issue.issueId, issue.choiceBId);
+    const replier = await createSession(`reply-author-${issue.issueId}`, replierGuest);
+    const replyResponse = await submitComment(
+      issue.issueId,
+      replier.token,
+      randomUUID(),
+      "한 단계 답글",
+      undefined,
+      rootId,
+    );
+    expect(replyResponse.statusCode).toBe(201);
+    const replyId = replyResponse.json<{ comment: { id: string } }>().comment.id;
+
+    const listResponse = await app.inject({
+      method: "GET",
+      url: `/v1/issues/${issue.issueId}/comments?side=ALL&limit=10`,
+      headers: { authorization: `Bearer ${replier.token}` },
+    });
+    expect(listResponse.statusCode).toBe(200);
+    expect(listResponse.json()).toMatchObject({
+      items: [
+        {
+          id: rootId,
+          parentCommentId: null,
+          replies: [{ id: replyId, parentCommentId: rootId, body: "한 단계 답글" }],
+        },
+      ],
+    });
+
+    const nestedReply = await submitComment(
+      issue.issueId,
+      author.token,
+      randomUUID(),
+      "허용하지 않는 중첩 답글",
+      undefined,
+      replyId,
+    );
+    expect(nestedReply.statusCode).toBe(409);
+    expect(nestedReply.json()).toMatchObject({ code: "REPLY_PARENT_UNAVAILABLE" });
   });
 
   it("prefers a direct Member Vote over a linked Guest Vote", async () => {

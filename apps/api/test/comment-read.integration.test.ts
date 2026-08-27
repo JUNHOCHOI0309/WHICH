@@ -242,6 +242,66 @@ describe("Guest Comment read API", () => {
     expect(sidePage.totalCount).toBe(3);
   });
 
+  it("sorts public Comments by helpful reactions with a stable cursor and returns the full count", async () => {
+    const issue = await createIssue();
+    const reader = await createAcceptedVote({ issueId: issue.issueId, choiceId: issue.choiceAId });
+    const newest = await createComment({
+      issueId: issue.issueId,
+      choiceId: issue.choiceAId,
+      choice: "A",
+      body: "newest",
+      createdAt: new Date("2026-08-18T03:00:00.000Z"),
+    });
+    const mostHelpful = await createComment({
+      issueId: issue.issueId,
+      choiceId: issue.choiceBId,
+      choice: "B",
+      body: "most helpful",
+      createdAt: new Date("2026-08-18T02:00:00.000Z"),
+    });
+    const secondHelpful = await createComment({
+      issueId: issue.issueId,
+      choiceId: issue.choiceAId,
+      choice: "A",
+      body: "second helpful",
+      createdAt: new Date("2026-08-18T01:00:00.000Z"),
+    });
+    await addHelpfulReactions(mostHelpful, 4);
+    await addHelpfulReactions(secondHelpful, 2);
+
+    const firstResponse = await app.inject({
+      method: "GET",
+      url: `/v1/issues/${issue.issueId}/comments?sort=HELPFUL&limit=2`,
+      headers: { "x-anonymous-subject-id": reader.anonymousSubjectId },
+    });
+    const first = firstResponse.json<{
+      items: Array<{ id: string }>;
+      nextCursor: string | null;
+      totalCount: number;
+    }>();
+
+    expect(firstResponse.statusCode).toBe(200);
+    expect(first.items.map((comment) => comment.id)).toEqual([mostHelpful, secondHelpful]);
+    expect(first.totalCount).toBe(3);
+    expect(first.nextCursor).toEqual(expect.any(String));
+
+    const secondResponse = await app.inject({
+      method: "GET",
+      url: `/v1/issues/${issue.issueId}/comments?sort=HELPFUL&limit=2&cursor=${encodeURIComponent(first.nextCursor!)}`,
+      headers: { "x-anonymous-subject-id": reader.anonymousSubjectId },
+    });
+    expect(secondResponse.json<{ items: Array<{ id: string }> }>().items).toEqual([
+      expect.objectContaining({ id: newest }),
+    ]);
+
+    const sideResponse = await app.inject({
+      method: "GET",
+      url: `/v1/issues/${issue.issueId}/comments?side=A`,
+      headers: { "x-anonymous-subject-id": reader.anonymousSubjectId },
+    });
+    expect(sideResponse.json<{ totalCount: number }>().totalCount).toBe(3);
+  });
+
   it("hides non-public Comments while keeping locked Threads readable", async () => {
     const issue = await createIssue();
     const reader = await createAcceptedVote({ issueId: issue.issueId, choiceId: issue.choiceAId });
@@ -291,15 +351,17 @@ describe("Guest Comment read API", () => {
       {
         id: locked,
         choice: "A",
-        author: { displayName: "A 작성자" },
+        author: { displayName: "A 작성자", avatarUrl: null },
         body: "locked but public",
         visibility: "VISIBLE",
         threadState: "LOCKED",
         createdAt: "2026-08-18T03:00:00.000Z",
         editedAt: null,
-        reactions: { helpfulCount: 0, viewerReacted: false },
+        parentCommentId: null,
+        reactions: { helpfulCount: 0, dislikeCount: 0, viewerReaction: null },
         reports: { viewerReported: false, canReport: true },
         permissions: { canEdit: false, canDelete: false },
+        replies: [],
       },
     ]);
   });

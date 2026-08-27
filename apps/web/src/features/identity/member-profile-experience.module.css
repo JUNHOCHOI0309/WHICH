@@ -264,7 +264,7 @@
   color: var(--which-cyan-strong);
 }
 
-.profileIdentityCopy > p,
+.profileIdentityHeading > p,
 .historyHeading p,
 .privacyNote p,
 .message > p {
@@ -305,6 +305,41 @@
 .profileIdentityCopy {
   min-width: 0;
   flex: 1 1 auto;
+}
+
+.profileIdentityHeading {
+  min-height: 28px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 10px;
+}
+
+.profileIdentityHeading > p {
+  margin-bottom: 0;
+}
+
+.identityChips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.identityChips span {
+  min-height: 28px;
+  border: 1px solid var(--which-border-strong);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--which-surface) 84%, var(--which-cyan-soft));
+  color: var(--which-text-secondary);
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 10px;
+  font-size: 0.68rem;
+  font-weight: 850;
+  line-height: 1;
+  white-space: nowrap;
 }
 
 .profileAvatar,
@@ -843,6 +878,16 @@
     align-items: flex-start;
   }
 
+  .profileIdentityHeading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .identityChips {
+    justify-content: flex-start;
+  }
+
   .voteGrid {
     width: calc(100% + 20px);
     grid-auto-columns: minmax(82%, 1fr);
@@ -913,7 +958,7 @@
     word-break: normal;
   }
 
-  .profileIdentityCopy > p {
+  .profileIdentityHeading > p {
     font-size: 0.6rem;
     letter-spacing: 0.09em;
   }

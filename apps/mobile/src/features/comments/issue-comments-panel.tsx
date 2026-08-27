@@ -179,11 +179,12 @@ export function IssueCommentsPanel({
     setBusyCommentId(comment.id);
     setError(null);
     try {
-      const result = await mobileApi.toggleHelpfulReaction({
+      const result = await mobileApi.toggleCommentReaction({
         commentId: comment.id,
         subjectId: subjectId ?? undefined,
         sessionToken: sessionToken ?? undefined,
         idempotencyKey: randomUUID(),
+        code: "HELPFUL",
       });
       setComments((current) =>
         current.map((item) =>
@@ -192,7 +193,8 @@ export function IssueCommentsPanel({
                 ...item,
                 reactions: {
                   helpfulCount: result.reaction.helpfulCount,
-                  viewerReacted: result.reaction.active,
+                  dislikeCount: result.reaction.dislikeCount,
+                  viewerReaction: result.reaction.active ? "HELPFUL" : null,
                 },
               }
             : item,

@@ -302,14 +302,14 @@ describe("mobile API client", () => {
       threadState: "OPEN" as const,
       createdAt: "2026-08-27T00:00:00.000Z",
       editedAt: null,
-      reactions: { helpfulCount: 0, viewerReacted: false },
+      reactions: { helpfulCount: 0, dislikeCount: 0, viewerReaction: null },
       reports: { viewerReported: false, canReport: true },
       permissions: { canEdit: false, canDelete: false },
     };
     const responses = [
       { items: [comment], nextCursor: null },
       { comment },
-      { reaction: { code: "HELPFUL", active: true, helpfulCount: 1 } },
+      { reaction: { code: "HELPFUL", active: true, helpfulCount: 1, dislikeCount: 0 } },
       {
         report: { accepted: true, viewerReported: true },
         comment: { visibility: "VISIBLE" },
@@ -334,7 +334,12 @@ describe("mobile API client", () => {
       idempotencyKey,
       body: "이 선택이 더 편해요.",
     });
-    await api.toggleHelpfulReaction({ commentId: comment.id, subjectId, idempotencyKey });
+    await api.toggleCommentReaction({
+      commentId: comment.id,
+      subjectId,
+      idempotencyKey,
+      code: "HELPFUL",
+    });
     await api.reportComment({
       commentId: comment.id,
       subjectId,
