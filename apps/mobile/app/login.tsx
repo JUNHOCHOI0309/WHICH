@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { toast } from "@/components/feedback/toast";
 import { authenticateInSystemBrowser } from "@/lib/native-auth-browser";
 import type { NativeAuthProvider } from "@/lib/native-auth";
 import { guestSubjects, nativeAuth } from "@/lib/runtime";
@@ -54,6 +55,7 @@ export default function LoginScreen() {
         return;
       }
       setLastProvider(provider);
+      toast.success("로그인에 성공했습니다.");
       router.replace(completion.returnTo ?? "/me");
     } catch {
       setMessage("로그인을 완료하지 못했어요. Feed는 그대로 유지되니 다시 시도해 주세요.");
@@ -86,9 +88,16 @@ export default function LoginScreen() {
         </Pressable>
 
         <View style={styles.heading}>
-          <Text style={styles.brand}>
-            <Text style={styles.brandW}>W</Text>HICH
-          </Text>
+          <Pressable
+            accessibilityLabel="WHICH 홈으로 이동"
+            accessibilityRole="link"
+            onPress={() => router.replace("/")}
+            style={({ pressed }) => pressed && styles.brandPressed}
+          >
+            <Text style={styles.brand}>
+              <Text style={styles.brandW}>W</Text>HICH
+            </Text>
+          </Pressable>
           <Text accessibilityRole="header" style={styles.title}>
             내 선택을 계정에 이어 두세요.
           </Text>
@@ -140,8 +149,8 @@ export default function LoginScreen() {
 
         {lastProvider ? (
           <Text style={styles.hint}>
-            최근 사용 수단은 같은 계정으로 바로 연결될 수 있어요. 다른 계정이면 다른 수단을
-            선택해 주세요.
+            최근 사용 수단은 같은 계정으로 바로 연결될 수 있어요. 다른 계정이면 다른 수단을 선택해
+            주세요.
           </Text>
         ) : null}
         {message ? (
@@ -170,6 +179,7 @@ const styles = StyleSheet.create({
   heading: { gap: 12 },
   brand: { color: colors.text, fontSize: 27, fontWeight: "900", letterSpacing: -1.4 },
   brandW: { color: colors.cyanStrong },
+  brandPressed: { opacity: 0.72 },
   title: { color: colors.text, fontSize: 28, fontWeight: "900", lineHeight: 36 },
   description: { color: colors.textSecondary, fontSize: 15, lineHeight: 23 },
   methods: { gap: 10 },

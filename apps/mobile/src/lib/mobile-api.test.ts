@@ -321,7 +321,12 @@ describe("mobile API client", () => {
     const subjectId = "591f2e90-996a-50c5-af46-967dd0793000";
     const idempotencyKey = "ce976502-9409-56a2-b975-94c913a20fcf";
 
-    await api.loadComments({ issueId, subjectId, sessionToken: "member-session" });
+    const page = await api.loadComments({
+      issueId,
+      subjectId,
+      sessionToken: "member-session",
+      view: "HIGHLIGHT",
+    });
     await api.submitComment({
       issueId,
       subjectId,
@@ -339,11 +344,12 @@ describe("mobile API client", () => {
 
     expect(request).toHaveBeenNthCalledWith(
       1,
-      `https://whichone.site/api/mobile/v1/issues/${issueId}/comments?side=ALL&limit=10`,
+      `https://whichone.site/api/mobile/v1/issues/${issueId}/comments?side=ALL&limit=10&view=HIGHLIGHT`,
       expect.objectContaining({
         headers: expect.objectContaining({ authorization: "Bearer member-session" }),
       }),
     );
+    expect(page.totalCount).toBe(1);
     expect(request).toHaveBeenNthCalledWith(
       2,
       `https://whichone.site/api/mobile/v1/issues/${issueId}/comments`,

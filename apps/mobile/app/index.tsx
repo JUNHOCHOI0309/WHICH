@@ -13,9 +13,9 @@ import {
 import type { NativeScrollEvent, NativeSyntheticEvent, ViewToken } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { RotatingCommentHighlights } from "@/components/comments/rotating-comment-highlights";
 import { BalanceResultBar } from "@/components/vote/balance-result-bar";
 import { PointFeedbackToast, type PointFeedback } from "@/components/points/point-feedback-toast";
-import { RotatingCommentHighlights } from "@/components/comments/rotating-comment-highlights";
 import { ChoiceMediaPair, VoteChoiceRow } from "@/components/vote/vote-choice-row";
 import type {
   CommentHighlights,
@@ -34,9 +34,11 @@ type CardVoteState =
   | { status: "SUBMITTING"; choice: IssueChoice; idempotencyKey: string }
   | { status: "ERROR"; choice: IssueChoice; idempotencyKey: string; message: string }
   | { status: "RESULT"; vote: VoteResponse };
-type HighlightState =
-  { status: "LOADING" } | { status: "READY"; highlights: CommentHighlights } | { status: "ERROR" };
-
+type CardHighlightsState = {
+  data: CommentHighlights | null;
+  error: boolean;
+  loading: boolean;
+};
 const LAST_FIRST_ISSUE_KEY = "which.mobile.feed.last-first-issue.v1";
 
 export default function FeedScreen() {
@@ -49,7 +51,7 @@ export default function FeedScreen() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [loadMoreError, setLoadMoreError] = useState(false);
   const [cardStates, setCardStates] = useState<Record<string, CardVoteState>>({});
-  const [highlightStates, setHighlightStates] = useState<Record<string, HighlightState>>({});
+  const [cardHighlights, setCardHighlights] = useState<Record<string, CardHighlightsState>>({});
   const [pointFeedback, setPointFeedback] = useState<PointFeedback | null>(null);
   const [showTopAction, setShowTopAction] = useState(false);
   const dismissPointFeedback = useCallback(() => setPointFeedback(null), []);
@@ -209,16 +211,27 @@ export default function FeedScreen() {
     };
   }, [applyFeed, fetchFeed]);
 
-  const loadHighlights = useCallback(async (subjectId: string, issueId: string) => {
-    setHighlightStates((current) => ({ ...current, [issueId]: { status: "LOADING" } }));
+  const loadCardHighlights = useCallback(async (issueId: string) => {
+    setCardHighlights((current) => ({
+      ...current,
+      [issueId]: { data: current[issueId]?.data ?? null, error: false, loading: true },
+    }));
     try {
-      const highlights = await mobileApi.loadCommentHighlights(subjectId, issueId);
-      setHighlightStates((current) => ({
+      const subjectId = await guestSubjects.getOrCreate();
+      const highlights = await mobileApi.loadCommentHighlights(
+        subjectId,
+        issueId,
+        memberSessionToken.current ?? undefined,
+      );
+      setCardHighlights((current) => ({
         ...current,
-        [issueId]: { status: "READY", highlights },
+        [issueId]: { data: highlights, error: false, loading: false },
       }));
     } catch {
-      setHighlightStates((current) => ({ ...current, [issueId]: { status: "ERROR" } }));
+      setCardHighlights((current) => ({
+        ...current,
+        [issueId]: { data: current[issueId]?.data ?? null, error: true, loading: false },
+      }));
     }
   }, []);
 
@@ -275,8 +288,8 @@ export default function FeedScreen() {
           vote = await mobileApi.submitGuestVote({ ...command, subjectId });
         }
         setCardStates((current) => ({ ...current, [issue.id]: { status: "RESULT", vote } }));
+        void loadCardHighlights(issue.id);
         if (vote.pointFeedback) setPointFeedback(vote.pointFeedback);
-        void loadHighlights(subjectId, issue.id);
         void mobileApi
           .recordAnalyticsEvent({
             sessionId: analyticsSessionId.current,
@@ -299,7 +312,7 @@ export default function FeedScreen() {
         }));
       }
     },
-    [loadHighlights],
+    [loadCardHighlights],
   );
 
   const openIssue = useCallback(
@@ -353,9 +366,16 @@ export default function FeedScreen() {
         ListHeaderComponent={
           <View style={styles.header}>
             <View style={styles.headerRow}>
-              <Text accessibilityRole="header" style={styles.brand}>
-                <Text style={styles.brandW}>W</Text>HICH
-              </Text>
+              <Pressable
+                accessibilityLabel="WHICH 홈으로 이동"
+                accessibilityRole="link"
+                onPress={() => router.replace("/")}
+                style={({ pressed }) => pressed && styles.pressed}
+              >
+                <Text accessibilityRole="header" style={styles.brand}>
+                  <Text style={styles.brandW}>W</Text>HICH
+                </Text>
+              </Pressable>
             </View>
             <Text style={styles.title}>지금, 어느 쪽인가요?</Text>
             <View style={styles.filters}>
@@ -398,8 +418,8 @@ export default function FeedScreen() {
         renderItem={({ item }) => (
           <VoteFeedCard
             issue={item}
+            highlightsState={cardHighlights[item.id]}
             state={cardStates[item.id] ?? { status: "PRE_VOTE" }}
-            highlightState={highlightStates[item.id]}
             onChoose={(choice) => {
               const state = cardStates[item.id];
               if (state?.status === "SUBMITTING" || state?.status === "RESULT") return;
@@ -413,11 +433,7 @@ export default function FeedScreen() {
               }))
             }
             onOpen={() => openIssue(item)}
-            onRetryHighlights={() => {
-              void guestSubjects
-                .getOrCreate()
-                .then((subjectId) => loadHighlights(subjectId, item.id));
-            }}
+            onRetryHighlights={() => void loadCardHighlights(item.id)}
             onMediaLoad={(choice, outcome) => {
               const key = `${item.id}:${choice.id}:${outcome}`;
               if (recordedMediaLoads.current.has(key)) return;
@@ -505,7 +521,7 @@ export default function FeedScreen() {
 function VoteFeedCard({
   issue,
   state,
-  highlightState,
+  highlightsState,
   onChoose,
   onRetry,
   onReset,
@@ -515,7 +531,7 @@ function VoteFeedCard({
 }: {
   issue: PublicFeedIssue;
   state: CardVoteState;
-  highlightState?: HighlightState;
+  highlightsState?: CardHighlightsState;
   onChoose: (choice: IssueChoice) => void;
   onRetry: (choice: IssueChoice, idempotencyKey: string) => void;
   onReset: () => void;
@@ -606,11 +622,10 @@ function VoteFeedCard({
             selectedChoice={state.vote.choice}
           />
           <RotatingCommentHighlights
-            highlights={highlightState?.status === "READY" ? highlightState.highlights : null}
-            loading={highlightState?.status === "LOADING"}
-            error={highlightState?.status === "ERROR"}
+            error={highlightsState?.error ?? false}
+            highlights={highlightsState?.data ?? null}
+            loading={highlightsState?.loading ?? true}
             onRetry={onRetryHighlights}
-            onOpenAll={onOpen}
           />
         </View>
       ) : null}

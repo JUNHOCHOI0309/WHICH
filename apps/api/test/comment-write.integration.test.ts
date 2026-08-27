@@ -163,7 +163,7 @@ describe("Member Comment write API", () => {
       headers: { authorization: `Bearer ${session.token}` },
     });
     expect(list.statusCode).toBe(200);
-    expect(list.json()).toEqual({ items: [], nextCursor: null });
+    expect(list.json()).toEqual({ items: [], nextCursor: null, totalCount: 0 });
 
     const comment = await submitComment(
       issue.issueId,
@@ -506,7 +506,7 @@ describe("Member Comment write API", () => {
       url: `/v1/issues/${issue.issueId}/comments?side=ALL&limit=10`,
       headers: { authorization: `Bearer ${author.token}` },
     });
-    expect(afterDelete.json()).toEqual({ items: [], nextCursor: null });
+    expect(afterDelete.json()).toEqual({ items: [], nextCursor: null, totalCount: 0 });
 
     const events = await database.db
       .select({ type: outboxEvents.eventType })

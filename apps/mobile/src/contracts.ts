@@ -188,10 +188,13 @@ export type CommentHighlights = {
 export type PublicCommentPage = {
   items: PublicComment[];
   nextCursor: string | null;
+  totalCount: number;
 };
 
 export type CommentReportReason =
   "SPAM" | "HARASSMENT" | "HATE_OR_ABUSE" | "PERSONAL_INFORMATION" | "OTHER";
+
+export type CommentListView = "NEWEST" | "HIGHLIGHT";
 
 export type ShareChannel = "COPY" | "SYSTEM" | "X";
 

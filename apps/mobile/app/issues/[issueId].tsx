@@ -14,9 +14,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { BalanceResultBar } from "@/components/vote/balance-result-bar";
 import { PointFeedbackToast, type PointFeedback } from "@/components/points/point-feedback-toast";
-import { RotatingCommentHighlights } from "@/components/comments/rotating-comment-highlights";
 import { ChoiceMediaPair, VoteChoiceRow } from "@/components/vote/vote-choice-row";
-import type { CommentHighlights, IssueChoice, PublicIssue, VoteResponse } from "@/contracts";
+import type { IssueChoice, PublicIssue, VoteResponse } from "@/contracts";
+import { IssueCommentsPanel } from "@/features/comments/issue-comments-panel";
 import { InterestSelector } from "@/features/interests/interest-selector";
 import { readRememberedMemberVote } from "@/lib/member-vote-cache";
 import { MobileApiError } from "@/lib/mobile-api";
@@ -38,9 +38,6 @@ export default function IssueScreen() {
     "idle",
   );
   const [pointFeedback, setPointFeedback] = useState<PointFeedback | null>(null);
-  const [commentHighlights, setCommentHighlights] = useState<CommentHighlights | null>(null);
-  const [commentHighlightsLoading, setCommentHighlightsLoading] = useState(false);
-  const [commentHighlightsError, setCommentHighlightsError] = useState(false);
   const dismissPointFeedback = useCallback(() => setPointFeedback(null), []);
   const completedVote = vote?.issueId === issueId ? vote : rememberedVote;
   const attemptKey = useRef(randomUUID());
@@ -49,22 +46,7 @@ export default function IssueScreen() {
   const recordedMediaLoads = useRef(new Set<string>());
   const recordedResultViews = useRef(new Set<string>());
   const recordedNextEvents = useRef(new Set<string>());
-
-  const loadCommentHighlights = useCallback(async () => {
-    if (!issueId || !completedVote) return;
-    setCommentHighlightsLoading(true);
-    setCommentHighlightsError(false);
-    try {
-      const subjectId = await guestSubjects.getOrCreate();
-      setCommentHighlights(
-        await mobileApi.loadCommentHighlights(subjectId, issueId, memberSessionToken ?? undefined),
-      );
-    } catch {
-      setCommentHighlightsError(true);
-    } finally {
-      setCommentHighlightsLoading(false);
-    }
-  }, [completedVote, issueId, memberSessionToken]);
+  const nextSwipeStart = useRef({ x: 0, y: 0 });
 
   const fetchIssue = useCallback(async () => {
     if (!issueId) throw new Error("질문 ID가 필요합니다.");
@@ -174,11 +156,6 @@ export default function IssueScreen() {
       .catch(() => undefined);
   }, [completedVote, issue]);
 
-  useEffect(() => {
-    const timer = setTimeout(() => void loadCommentHighlights(), 0);
-    return () => clearTimeout(timer);
-  }, [loadCommentHighlights]);
-
   async function submit(choice: IssueChoice) {
     if (!issue || submittingChoice || completedVote) return;
     setSubmittingChoice(choice.id);
@@ -233,7 +210,7 @@ export default function IssueScreen() {
     }
   }
 
-  async function moveNext() {
+  const moveNext = useCallback(async () => {
     if (!issue || nextIssueState === "loading") return;
     setNextIssueState("loading");
     try {
@@ -290,12 +267,12 @@ export default function IssueScreen() {
           })
           .catch(() => undefined);
       }
-      router.push({ pathname: "/issues/[issueId]", params: { issueId: nextIssue.id } });
+      router.replace({ pathname: "/issues/[issueId]", params: { issueId: nextIssue.id } });
       setNextIssueState("idle");
     } catch {
       setNextIssueState("error");
     }
-  }
+  }, [issue, memberSessionToken, nextIssueState]);
 
   async function shareResult() {
     if (!issue || !completedVote || sharing) return;
@@ -492,31 +469,33 @@ export default function IssueScreen() {
                 </Pressable>
               </View>
             ) : null}
-            {completedVote ? (
-              <RotatingCommentHighlights
-                error={commentHighlightsError}
-                highlights={commentHighlights}
-                loading={commentHighlightsLoading}
-                onOpenAll={() =>
-                  router.push({ pathname: "/comments/[issueId]", params: { issueId: issue.id } })
-                }
-                onRetry={() => void loadCommentHighlights()}
-              />
-            ) : null}
+            {completedVote ? <IssueCommentsPanel embedded issueId={issue.id} /> : null}
             <InterestSelector
               mode="prompt"
               analyticsContext={{ issueId: issue.id, issueVersion: issue.version }}
             />
-            <Pressable
-              accessibilityRole="button"
-              disabled={nextIssueState === "loading"}
-              onPress={() => void moveNext()}
-              style={({ pressed }) => [styles.nextIssue, pressed && styles.choicePressed]}
+            <View
+              accessibilityLabel="오른쪽으로 밀어 다음 질문"
+              onTouchEnd={(event) => {
+                const dx = event.nativeEvent.pageX - nextSwipeStart.current.x;
+                const dy = event.nativeEvent.pageY - nextSwipeStart.current.y;
+                if (dx >= 72 && Math.abs(dy) <= 48) void moveNext();
+              }}
+              onTouchStart={(event) => {
+                nextSwipeStart.current = {
+                  x: event.nativeEvent.pageX,
+                  y: event.nativeEvent.pageY,
+                };
+              }}
+              style={styles.swipeHint}
             >
-              <Text style={styles.nextIssueText}>
-                {nextIssueState === "loading" ? "다음 질문을 찾는 중…" : "다음 질문 보기 →"}
+              <Text style={styles.swipeHintArrow}>→</Text>
+              <Text style={styles.swipeHintText}>
+                {nextIssueState === "loading"
+                  ? "다음 질문을 찾는 중…"
+                  : "화면 여백을 오른쪽으로 밀어 다음 질문"}
               </Text>
-            </Pressable>
+            </View>
             {nextIssueState === "empty" ? (
               <Text style={styles.nextIssueMessage}>지금 참여할 수 있는 질문을 모두 골랐어요.</Text>
             ) : null}
@@ -659,15 +638,15 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   shareButtonText: { color: "#062A31", fontSize: 15, fontWeight: "900" },
-  nextIssue: {
+  swipeHint: {
     alignItems: "center",
-    backgroundColor: colors.cyan,
-    borderRadius: 999,
-    minHeight: 60,
+    flexDirection: "row",
+    gap: 8,
     justifyContent: "center",
-    paddingHorizontal: 20,
+    minHeight: 52,
   },
-  nextIssueText: { color: "#062A31", fontSize: 16, fontWeight: "900" },
+  swipeHintArrow: { color: colors.cyanStrong, fontSize: 20, fontWeight: "900" },
+  swipeHintText: { color: colors.textTertiary, fontSize: 12, fontWeight: "700" },
   nextIssueMessage: { color: colors.textSecondary, fontSize: 14, textAlign: "center" },
   locked: { color: colors.textSecondary, fontSize: 14, textAlign: "center" },
 });

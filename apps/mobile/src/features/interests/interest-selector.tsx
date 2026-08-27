@@ -2,6 +2,7 @@ import { randomUUID } from "expo-crypto";
 import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 
+import { toast } from "@/components/feedback/toast";
 import type { InterestCardCode, InterestCardRegistry, InterestProfile } from "@/contracts";
 import { MobileApiError } from "@/lib/mobile-api";
 import { guestSubjects, memberSessions, mobileApi } from "@/lib/runtime";
@@ -24,7 +25,6 @@ export function InterestSelector({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
   const analyticsSessionId = useRef(randomUUID());
   const promptRecorded = useRef(false);
 
@@ -97,7 +97,6 @@ export function InterestSelector({
 
   function toggle(code: InterestCardCode) {
     setError(null);
-    setMessage(null);
     setSelected((current) => {
       if (current.includes(code)) return current.filter((item) => item !== code);
       if (current.length >= registry!.maxSelections) {
@@ -121,7 +120,7 @@ export function InterestSelector({
       });
       setProfile(updated);
       setSelected(updated.selectedCardCodes);
-      setMessage("관심 주제를 저장했어요.");
+      toast.success("관심 주제를 저장했습니다.");
       if (analyticsContext) {
         void mobileApi
           .recordAnalyticsEvent({
@@ -181,7 +180,7 @@ export function InterestSelector({
       );
       setProfile(updated);
       setSelected([]);
-      setMessage("추천 관심 신호만 초기화했어요. 투표 기록은 유지됩니다.");
+      toast.success("추천 관심 신호를 초기화했습니다. 투표 기록은 유지됩니다.");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "추천 설정을 초기화하지 못했습니다.");
     } finally {
@@ -253,7 +252,6 @@ export function InterestSelector({
         </Pressable>
       </View>
       {error ? <Text style={styles.error}>{error}</Text> : null}
-      {message ? <Text style={styles.message}>{message}</Text> : null}
     </View>
   );
 }

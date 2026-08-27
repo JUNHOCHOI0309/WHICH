@@ -119,6 +119,7 @@ export type PublicComment = {
 export type PublicCommentPage = {
   items: PublicComment[];
   nextCursor: string | null;
+  totalCount: number;
 };
 
 export type CommentHighlights = {

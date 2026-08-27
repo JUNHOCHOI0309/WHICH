@@ -420,16 +420,24 @@ export function createCommentService(database: Database["db"]): CommentService {
           );
         }
 
-        const filters: SQL[] = [
+        const totalCountFilters: SQL[] = [
           eq(comments.issueId, query.issueId),
           eq(comments.issueVersion, acceptedVote.issueVersion),
           isNull(comments.parentCommentId),
           eq(comments.publicationState, "PUBLISHED"),
-          view === "HIGHLIGHT"
-            ? eq(comments.visibility, "VISIBLE")
-            : inArray(comments.visibility, ["VISIBLE", "DEPRIORITIZED", "COLLAPSED"]),
+          inArray(comments.visibility, ["VISIBLE", "DEPRIORITIZED", "COLLAPSED"]),
           eq(comments.integrityState, "NORMAL"),
           isNull(comments.deletedAt),
+        ];
+
+        const [totalCountRow] = await transaction
+          .select({ totalCount: count() })
+          .from(comments)
+          .where(and(...totalCountFilters));
+
+        const filters: SQL[] = [
+          ...totalCountFilters,
+          ...(view === "HIGHLIGHT" ? [eq(comments.visibility, "VISIBLE")] : []),
         ];
 
         if (query.side !== "ALL") filters.push(eq(comments.choice, query.side));
@@ -534,6 +542,7 @@ export function createCommentService(database: Database["db"]): CommentService {
             view === "NEWEST" && hasMore && lastItem
               ? encodeCommentCursor({ createdAt: lastItem.createdAt, commentId: lastItem.id })
               : null,
+          totalCount: totalCountRow?.totalCount ?? 0,
         };
       });
     },

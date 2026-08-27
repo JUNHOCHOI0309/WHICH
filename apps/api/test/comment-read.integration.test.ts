@@ -214,9 +214,11 @@ describe("Guest Comment read API", () => {
     const first = firstResponse.json<{
       items: Array<{ id: string }>;
       nextCursor: string | null;
+      totalCount: number;
     }>();
     expect(firstResponse.statusCode).toBe(200);
     expect(first.items.map((item) => item.id)).toEqual([newestA, middleB]);
+    expect(first.totalCount).toBe(3);
 
     const secondResponse = await app.inject({
       method: "GET",
@@ -232,9 +234,12 @@ describe("Guest Comment read API", () => {
       url: `/v1/issues/${issue.issueId}/comments?side=A`,
       headers: { "x-anonymous-subject-id": reader.anonymousSubjectId },
     });
-    expect(
-      sideResponse.json<{ items: Array<{ choice: string }> }>().items.map((item) => item.choice),
-    ).toEqual(["A", "A"]);
+    const sidePage = sideResponse.json<{
+      items: Array<{ choice: string }>;
+      totalCount: number;
+    }>();
+    expect(sidePage.items.map((item) => item.choice)).toEqual(["A", "A"]);
+    expect(sidePage.totalCount).toBe(3);
   });
 
   it("hides non-public Comments while keeping locked Threads readable", async () => {

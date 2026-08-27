@@ -280,6 +280,7 @@ export function createMobileApiClient(
       subjectId?: string;
       sessionToken?: string;
       side?: "ALL" | "A" | "B";
+      view?: "NEWEST" | "HIGHLIGHT";
       cursor?: string;
       limit?: number;
     }) {
@@ -287,6 +288,7 @@ export function createMobileApiClient(
         side: command.side ?? "ALL",
         limit: String(command.limit ?? 10),
       });
+      if (command.view === "HIGHLIGHT") search.set("view", command.view);
       if (command.cursor) search.set("cursor", command.cursor);
       const response = await request(
         `${baseUrl}/api/mobile/v1/issues/${encodeURIComponent(command.issueId)}/comments?${search.toString()}`,
@@ -298,7 +300,14 @@ export function createMobileApiClient(
           },
         },
       );
-      return bodyOrError<PublicCommentPage>(response);
+      const page = await bodyOrError<PublicCommentPage>(response);
+      return {
+        ...page,
+        totalCount:
+          Number.isInteger(page.totalCount) && page.totalCount >= 0
+            ? page.totalCount
+            : page.items.length,
+      };
     },
 
     async submitComment(command: {

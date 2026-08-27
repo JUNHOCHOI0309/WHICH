@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { toast } from "@/components/feedback/toast";
 import { nativeAuth } from "@/lib/runtime";
 
 function first(value: string | string[] | undefined) {
@@ -35,7 +36,10 @@ export default function NativeAuthCallbackScreen() {
     }
     void nativeAuth
       .complete(callback.toString())
-      .then((completion) => router.replace(completion.returnTo ?? "/me"))
+      .then((completion) => {
+        toast.success("로그인에 성공했습니다.");
+        router.replace(completion.returnTo ?? "/me");
+      })
       .catch(() => setError("로그인을 완료하지 못했습니다. 다시 시도해 주세요."));
   }, [callbackError, nonce, router, state, ticket]);
 

@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { toast } from "@/components/feedback/toast";
 import type {
   MemberPointView,
   MemberPrivateProfile,
@@ -209,7 +210,7 @@ export default function MeScreen() {
       setProfile((current) =>
         current ? { ...current, member: { ...current.member, ...response.member } } : current,
       );
-      Alert.alert("프로필 이미지", "프로필 이미지를 변경했어요.");
+      toast.success("프로필 이미지를 변경했습니다.");
     } catch (error) {
       if (__DEV__) console.error("Profile avatar update failed", { error, phase });
       const fallback =
@@ -310,9 +311,16 @@ export default function MeScreen() {
 
 function Brand() {
   return (
-    <Text style={styles.brand}>
-      <Text style={styles.brandW}>W</Text>HICH
-    </Text>
+    <Pressable
+      accessibilityLabel="WHICH 홈으로 이동"
+      accessibilityRole="link"
+      onPress={() => router.replace("/")}
+      style={({ pressed }) => pressed && styles.brandPressed}
+    >
+      <Text style={styles.brand}>
+        <Text style={styles.brandW}>W</Text>HICH
+      </Text>
+    </Pressable>
   );
 }
 
@@ -458,7 +466,7 @@ function ProfileSettings({
       });
       setDisplayName(next.displayName);
       onUpdated(next);
-      Alert.alert("프로필", "프로필을 저장했어요.");
+      toast.success("프로필을 저장했습니다.");
     } catch (error) {
       Alert.alert("프로필", apiMessage(error, "프로필을 저장하지 못했습니다."));
     } finally {
@@ -628,10 +636,14 @@ function AccountActions({ session }: { session: MemberSessionView }) {
       </Text>
       <Pressable
         onPress={() =>
-          void memberSessions.logout().then(() => {
-            clearRememberedMemberVotes();
-            router.replace("/login");
-          })
+          void memberSessions
+            .logout()
+            .then(() => {
+              clearRememberedMemberVotes();
+              toast.success("로그아웃했습니다.");
+              router.replace("/login");
+            })
+            .catch((error) => toast.error(apiMessage(error, "로그아웃하지 못했습니다.")))
         }
         style={styles.secondaryButton}
       >
@@ -725,6 +737,7 @@ const styles = StyleSheet.create({
   },
   brand: { color: colors.text, fontSize: 27, fontWeight: "900", letterSpacing: -1.4 },
   brandW: { color: colors.cyanStrong },
+  brandPressed: { opacity: 0.72 },
   headerLabel: { color: colors.textSecondary, fontSize: 13, fontWeight: "800" },
   content: { gap: 16, padding: 18, paddingBottom: 28 },
   guestCard: {
