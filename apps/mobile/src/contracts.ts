@@ -167,7 +167,7 @@ export type MemberAccountDeletionResult = {
 export type PublicComment = {
   id: string;
   choice: "A" | "B";
-  author: { displayName: string };
+  author: { displayName: string; avatarUrl?: string | null };
   body: string;
   visibility: "VISIBLE" | "DEPRIORITIZED" | "COLLAPSED";
   threadState: "OPEN" | "LOCKED";
@@ -194,6 +194,7 @@ export type CommentHighlights = {
 export type PublicCommentPage = {
   items: PublicComment[];
   nextCursor: string | null;
+  totalCount: number;
 };
 
 export type CommentReportReason =

@@ -286,7 +286,106 @@ describe("IssueExperience", () => {
     expect(requestBody).toMatchObject({ issueVersion: 1, choiceId: "choice-a" });
     expect(requestBody.idempotencyKey).toEqual(expect.any(String));
 
-    fireEvent.click(screen.getByRole("button", { name: /다음 질문 보기/ }));
+    expect(screen.getByText("조금 더 내려 다음 투표로 이어가세요.")).toBeInTheDocument();
+  });
+
+  it("opens the next eligible Issue once the bottom continuation area becomes visible", async () => {
+    const savedResult: VoteResponse = {
+      outcome: "ACCEPTED",
+      voteAttemptId: "attempt-auto-next",
+      voteId: "vote-auto-next",
+      issueId: ISSUE_ID,
+      issueVersion: 1,
+      choice: "A",
+      result: {
+        resultVersion: 1,
+        acceptedA: 1,
+        acceptedB: 0,
+        displayedTotal: 1,
+        integrityState: "NORMAL",
+      },
+    };
+    sessionStorage.setItem(`which:vote-result:${ISSUE_ID}`, JSON.stringify(savedResult));
+
+    const observed: Array<{
+      callback: IntersectionObserverCallback;
+      target: Element;
+    }> = [];
+    class TestIntersectionObserver {
+      readonly root = null;
+      readonly rootMargin = "0px";
+      readonly thresholds = [0.5];
+      constructor(private readonly callback: IntersectionObserverCallback) {}
+      observe(target: Element) {
+        observed.push({ callback: this.callback, target });
+      }
+      disconnect() {}
+      unobserve() {}
+      takeRecords() {
+        return [];
+      }
+    }
+    vi.stubGlobal("IntersectionObserver", TestIntersectionObserver);
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = String(input);
+        if (url === "/api/guest-subjects") return jsonResponse({ status: "ready" });
+        if (url.endsWith(`/api/issues/${ISSUE_ID}`)) return jsonResponse(issue);
+        if (url === "/api/member-session") return jsonResponse({ code: "SESSION_INVALID" }, 401);
+        if (url.startsWith(`/api/issues/${ISSUE_ID}/comments?`)) {
+          return jsonResponse({ items: [], nextCursor: null, totalCount: 0 });
+        }
+        if (url.startsWith("/api/issues/feed?")) {
+          return jsonResponse({
+            items: [
+              {
+                ...issue,
+                id: "20000000-0000-4000-8000-000000000001",
+                recommendation: {
+                  requestId: "30000000-0000-4000-8000-000000000001",
+                  score: 0,
+                  reasonCodes: ["RECENT_FALLBACK"],
+                  matchedCardCodes: [],
+                },
+              },
+            ],
+            nextCursor: null,
+            ranking: {
+              requestId: "30000000-0000-4000-8000-000000000001",
+              version: "interest_content_v2_refresh",
+              mode: "RECENCY",
+              reasonCode: "PROFILE_NOT_READY",
+              profileVersion: null,
+            },
+          });
+        }
+        if (url === "/api/analytics/events") return jsonResponse({ accepted: true });
+        throw new Error(`Unexpected request: ${url}`);
+      }),
+    );
+
+    render(<IssueExperience issueId={ISSUE_ID} />);
+    await screen.findByText("조금 더 내려 다음 투표로 이어가세요.");
+    const continuation = observed.find((entry) =>
+      entry.target.textContent?.includes("조금 더 내려 다음 투표로 이어가세요."),
+    );
+    expect(continuation).toBeDefined();
+
+    act(() => {
+      continuation?.callback(
+        [
+          {
+            target: continuation.target,
+            isIntersecting: true,
+            intersectionRatio: 0.5,
+          } as IntersectionObserverEntry,
+        ],
+        {} as IntersectionObserver,
+      );
+    });
+
     await waitFor(() =>
       expect(navigation.push).toHaveBeenCalledWith("/issues/20000000-0000-4000-8000-000000000001"),
     );
@@ -449,7 +548,7 @@ describe("IssueExperience", () => {
     fireEvent.click(screen.getByRole("button", { name: "B 선택" }));
     expect(await screen.findByText("늦은 시간에 더 집중이 잘돼요.")).toBeInTheDocument();
     expect(screen.getByText("대화 잠김")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /다음 질문 보기/ })).toBeInTheDocument();
+    expect(screen.getByText("조금 더 내려 다음 투표로 이어가세요.")).toBeInTheDocument();
   });
 
   it("keeps result and next action available when Comments fail", async () => {
@@ -490,7 +589,7 @@ describe("IssueExperience", () => {
       await screen.findByText("선택 이유를 불러오지 못했어요. 결과는 그대로 유지됩니다."),
     ).toBeInTheDocument();
     expect(screen.getByText("100%")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /다음 질문 보기/ })).toBeInTheDocument();
+    expect(screen.getByText("조금 더 내려 다음 투표로 이어가세요.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "댓글만 다시 불러오기" })).toBeInTheDocument();
   });
 
@@ -780,6 +879,7 @@ describe("IssueExperience", () => {
     };
     sessionStorage.setItem(`which:vote-result:${ISSUE_ID}`, JSON.stringify(savedResult));
     const reactionRequests: RequestInit[] = [];
+    const commentListUrls: string[] = [];
 
     vi.stubGlobal(
       "fetch",
@@ -791,6 +891,7 @@ describe("IssueExperience", () => {
           return jsonResponse({ code: "SESSION_INVALID", message: "guest" }, 401);
         }
         if (url.startsWith(`/api/issues/${ISSUE_ID}/comments?`)) {
+          commentListUrls.push(url);
           return jsonResponse({
             items: [
               {
@@ -799,12 +900,13 @@ describe("IssueExperience", () => {
                 author: { displayName: "작성자" },
                 body: "공감 테스트 댓글",
                 threadState: "OPEN",
-                createdAt: "2026-08-18T02:00:00.000Z",
+                createdAt: new Date(Date.now() - 60 * 60 * 1_000).toISOString(),
                 editedAt: null,
                 reactions: { helpfulCount: 2, dislikeCount: 0, viewerReaction: null },
               },
             ],
             nextCursor: null,
+            totalCount: 7,
           });
         }
         if (url === "/api/comments/reaction-comment/reactions/helpful") {
@@ -818,8 +920,20 @@ describe("IssueExperience", () => {
     );
 
     render(<IssueExperience issueId={ISSUE_ID} />);
-    const reaction = await screen.findByRole("button", { name: "공감 2" });
-    fireEvent.click(reaction);
+    await screen.findByRole("button", { name: "공감 2" });
+    expect(screen.getByText("1시간 전")).toBeInTheDocument();
+    expect(screen.getByText("전체 댓글", { exact: false })).toHaveTextContent("7개");
+    expect(screen.getByRole("button", { name: "싫어요 0" }).querySelector("img")).toHaveAttribute(
+      "src",
+      expect.stringContaining("dislike.png"),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "공감순" }));
+    await waitFor(() =>
+      expect(commentListUrls.some((url) => url.includes("sort=HELPFUL"))).toBe(true),
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "공감 2" }));
 
     const activeReaction = await screen.findByRole("button", { name: "공감 3" });
     expect(activeReaction).toHaveAttribute("aria-pressed", "true");

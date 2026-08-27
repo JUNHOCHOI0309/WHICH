@@ -10,7 +10,10 @@ const errorResponseSchema = Type.Object({ code: Type.String(), message: Type.Str
 const commentSchemaFields = {
   id: uuidSchema,
   choice: Type.Union([Type.Literal("A"), Type.Literal("B")]),
-  author: Type.Object({ displayName: Type.String() }),
+  author: Type.Object({
+    displayName: Type.String(),
+    avatarUrl: Type.Union([Type.String({ format: "uri" }), Type.Null()]),
+  }),
   body: Type.String(),
   visibility: Type.Union([
     Type.Literal("VISIBLE"),
@@ -49,6 +52,7 @@ const publicCommentSchema = Type.Object({
 const commentPageSchema = Type.Object({
   items: Type.Array(publicCommentSchema),
   nextCursor: Type.Union([Type.String(), Type.Null()]),
+  totalCount: Type.Integer({ minimum: 0 }),
 });
 
 const commentHighlightsSchema = Type.Object({
@@ -58,7 +62,12 @@ const commentHighlightsSchema = Type.Object({
 
 type CommentRoute = {
   Params: { issueId: string };
-  Querystring: { side?: "ALL" | "A" | "B"; cursor?: string; limit?: number };
+  Querystring: {
+    side?: "ALL" | "A" | "B";
+    sort?: "NEWEST" | "HELPFUL";
+    cursor?: string;
+    limit?: number;
+  };
   Headers: { authorization?: string; "x-anonymous-subject-id"?: string };
 };
 
@@ -174,6 +183,11 @@ export async function registerCommentRoutes(
                 default: "ALL",
               }),
             ),
+            sort: Type.Optional(
+              Type.Union([Type.Literal("NEWEST"), Type.Literal("HELPFUL")], {
+                default: "NEWEST",
+              }),
+            ),
             cursor: Type.Optional(Type.String({ minLength: 1, maxLength: 512 })),
             limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 20, default: 10 })),
           }),
@@ -204,6 +218,7 @@ export async function registerCommentRoutes(
           sessionToken: sessionToken ?? undefined,
           anonymousSubjectId: request.headers["x-anonymous-subject-id"],
           side: request.query.side ?? "ALL",
+          sort: request.query.sort ?? "NEWEST",
           cursor: request.query.cursor,
           limit: request.query.limit ?? 10,
         });
