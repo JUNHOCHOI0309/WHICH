@@ -491,7 +491,7 @@ function ResultScreen({
           kakaoLoginEnabled={kakaoLoginEnabled}
           naverLoginEnabled={naverLoginEnabled}
         />
-        <NextIssueAutoAdvance currentIssueId={issue.id} currentIssueVersion={issue.version} />
+        <FloatingNextIssueButton currentIssueId={issue.id} currentIssueVersion={issue.version} />
       </article>
     </ExperienceShell>
   );
@@ -1876,7 +1876,7 @@ function CommentSection({
   );
 }
 
-function NextIssueAutoAdvance({
+function FloatingNextIssueButton({
   currentIssueId,
   currentIssueVersion,
 }: {
@@ -1884,13 +1884,12 @@ function NextIssueAutoAdvance({
   currentIssueVersion: number;
 }) {
   const router = useRouter();
-  const [state, setState] = useState<"idle" | "loading" | "empty" | "error">("idle");
-  const sentinelRef = useRef<HTMLDivElement>(null);
-  const triggeredRef = useRef(false);
+  const [state, setState] = useState<"idle" | "loading" | "empty">("idle");
+  const requestLocked = useRef(false);
 
   const moveNext = useCallback(async () => {
-    if (triggeredRef.current) return;
-    triggeredRef.current = true;
+    if (requestLocked.current) return;
+    requestLocked.current = true;
     setState("loading");
 
     try {
@@ -1903,6 +1902,7 @@ function NextIssueAutoAdvance({
           issueId: currentIssueId,
           issueVersion: currentIssueVersion,
         }).catch(() => undefined);
+        toast.info("지금 참여할 수 있는 질문을 모두 골랐어요.");
         return;
       }
       void recordAnalyticsEvent({
@@ -1920,37 +1920,26 @@ function NextIssueAutoAdvance({
       }
       router.push(`/issues/${nextIssue.id}`);
     } catch {
-      setState("error");
+      requestLocked.current = false;
+      setState("idle");
+      toast.error("다음 질문을 찾지 못했어요. 잠시 후 다시 시도해 주세요.");
     }
   }, [currentIssueId, currentIssueVersion, router]);
 
-  useEffect(() => {
-    const sentinel = sentinelRef.current;
-    if (!sentinel || typeof IntersectionObserver === "undefined") return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((entry) => entry.isIntersecting && entry.intersectionRatio >= 0.5)) {
-          void moveNext();
-        }
-      },
-      { threshold: 0.5 },
-    );
-    observer.observe(sentinel);
-    return () => observer.disconnect();
-  }, [moveNext]);
+  if (state === "empty") return null;
 
   return (
-    <div ref={sentinelRef} className={styles.nextIssue} aria-live="polite">
-      <p className={styles.nextIssuePrompt}>
-        {state === "idle" ? "조금 더 내려 다음 투표로 이어가세요." : null}
-        {state === "loading" ? "다음 질문을 찾는 중…" : null}
-      </p>
-      {state === "empty" ? <p role="status">지금 참여할 수 있는 질문을 모두 골랐어요.</p> : null}
-      {state === "error" ? (
-        <p role="alert">다음 질문을 찾지 못했어요. 새로고침 후 다시 시도해 주세요.</p>
-      ) : null}
-    </div>
+    <button
+      type="button"
+      className={styles.nextIssueFloating}
+      aria-label={state === "loading" ? "다음 질문을 찾는 중" : "다음 질문"}
+      aria-busy={state === "loading"}
+      title="다음 질문"
+      disabled={state === "loading"}
+      onClick={() => void moveNext()}
+    >
+      <span aria-hidden="true">&gt;&gt;</span>
+    </button>
   );
 }
 

@@ -286,10 +286,10 @@ describe("IssueExperience", () => {
     expect(requestBody).toMatchObject({ issueVersion: 1, choiceId: "choice-a" });
     expect(requestBody.idempotencyKey).toEqual(expect.any(String));
 
-    expect(screen.getByText("조금 더 내려 다음 투표로 이어가세요.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "다음 질문" })).toHaveTextContent(">>");
   });
 
-  it("opens the next eligible Issue once the bottom continuation area becomes visible", async () => {
+  it("opens the next eligible Issue only after the floating next button is clicked", async () => {
     const savedResult: VoteResponse = {
       outcome: "ACCEPTED",
       voteAttemptId: "attempt-auto-next",
@@ -307,25 +307,7 @@ describe("IssueExperience", () => {
     };
     sessionStorage.setItem(`which:vote-result:${ISSUE_ID}`, JSON.stringify(savedResult));
 
-    const observed: Array<{
-      callback: IntersectionObserverCallback;
-      target: Element;
-    }> = [];
-    class TestIntersectionObserver {
-      readonly root = null;
-      readonly rootMargin = "0px";
-      readonly thresholds = [0.5];
-      constructor(private readonly callback: IntersectionObserverCallback) {}
-      observe(target: Element) {
-        observed.push({ callback: this.callback, target });
-      }
-      disconnect() {}
-      unobserve() {}
-      takeRecords() {
-        return [];
-      }
-    }
-    vi.stubGlobal("IntersectionObserver", TestIntersectionObserver);
+    let feedRequests = 0;
 
     vi.stubGlobal(
       "fetch",
@@ -338,6 +320,7 @@ describe("IssueExperience", () => {
           return jsonResponse({ items: [], nextCursor: null, totalCount: 0 });
         }
         if (url.startsWith("/api/issues/feed?")) {
+          feedRequests += 1;
           return jsonResponse({
             items: [
               {
@@ -367,28 +350,17 @@ describe("IssueExperience", () => {
     );
 
     render(<IssueExperience issueId={ISSUE_ID} />);
-    await screen.findByText("조금 더 내려 다음 투표로 이어가세요.");
-    const continuation = observed.find((entry) =>
-      entry.target.textContent?.includes("조금 더 내려 다음 투표로 이어가세요."),
-    );
-    expect(continuation).toBeDefined();
+    const nextButton = await screen.findByRole("button", { name: "다음 질문" });
+    expect(feedRequests).toBe(0);
+    expect(navigation.push).not.toHaveBeenCalled();
 
-    act(() => {
-      continuation?.callback(
-        [
-          {
-            target: continuation.target,
-            isIntersecting: true,
-            intersectionRatio: 0.5,
-          } as IntersectionObserverEntry,
-        ],
-        {} as IntersectionObserver,
-      );
-    });
+    fireEvent.click(nextButton);
+    fireEvent.click(nextButton);
 
     await waitFor(() =>
       expect(navigation.push).toHaveBeenCalledWith("/issues/20000000-0000-4000-8000-000000000001"),
     );
+    expect(feedRequests).toBe(1);
   });
 
   it("restores the server Vote after login instead of showing the voting screen again", async () => {
@@ -548,7 +520,7 @@ describe("IssueExperience", () => {
     fireEvent.click(screen.getByRole("button", { name: "B 선택" }));
     expect(await screen.findByText("늦은 시간에 더 집중이 잘돼요.")).toBeInTheDocument();
     expect(screen.getByText("대화 잠김")).toBeInTheDocument();
-    expect(screen.getByText("조금 더 내려 다음 투표로 이어가세요.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "다음 질문" })).toHaveTextContent(">>");
   });
 
   it("keeps result and next action available when Comments fail", async () => {
@@ -589,7 +561,7 @@ describe("IssueExperience", () => {
       await screen.findByText("선택 이유를 불러오지 못했어요. 결과는 그대로 유지됩니다."),
     ).toBeInTheDocument();
     expect(screen.getByText("100%")).toBeInTheDocument();
-    expect(screen.getByText("조금 더 내려 다음 투표로 이어가세요.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "다음 질문" })).toHaveTextContent(">>");
     expect(screen.getByRole("button", { name: "댓글만 다시 불러오기" })).toBeInTheDocument();
   });
 
