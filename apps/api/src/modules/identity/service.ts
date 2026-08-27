@@ -1801,9 +1801,14 @@ export function createMemberIdentityService(
 
       const handle = normalizeHandle(command.handle);
       const bio = normalizeBio(command.bio);
+      const displayName = normalizedDisplayName(command.displayName ?? session.member.displayName);
       const now = new Date();
 
       return database.transaction(async (transaction) => {
+        await transaction
+          .update(members)
+          .set({ displayName, updatedAt: now })
+          .where(eq(members.id, session.member.id));
         await transaction.execute(
           sql`select pg_advisory_xact_lock(hashtextextended(${handle}, 0))`,
         );
@@ -1852,7 +1857,7 @@ export function createMemberIdentityService(
             },
           });
         }
-        return profileSettings(profile);
+        return { ...profileSettings(profile), displayName };
       });
     },
 

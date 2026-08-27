@@ -66,6 +66,43 @@ describe("mobile API client", () => {
     );
   });
 
+  it("updates profile settings and deletes the authenticated Member through mobile BFF routes", async () => {
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          displayName: "새 닉네임",
+          handle: "native_member",
+          bio: "소개",
+          visibility: "PUBLIC",
+          publicUrl: "/profiles/native_member",
+        }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ deleted: true }));
+    const api = createMobileApiClient({ baseUrl: "https://whichone.site", request });
+
+    await api.updateMemberProfile("member-session", {
+      displayName: "새 닉네임",
+      handle: "native_member",
+      bio: "소개",
+      visibility: "PUBLIC",
+    });
+    await api.deleteMemberAccount("member-session", "password");
+
+    expect(request).toHaveBeenNthCalledWith(
+      1,
+      "https://whichone.site/api/mobile/v1/me/profile",
+      expect.objectContaining({
+        method: "PATCH",
+        headers: expect.objectContaining({ authorization: "Bearer member-session" }),
+      }),
+    );
+    expect(JSON.parse(String(request.mock.calls[1]?.[1]?.body))).toEqual({
+      password: "password",
+      confirmation: "DELETE",
+    });
+  });
+
   it("exchanges, validates, refreshes, and revokes a Native Member session", async () => {
     const member = {
       id: "591f2e90-996a-50c5-af46-967dd0793000",

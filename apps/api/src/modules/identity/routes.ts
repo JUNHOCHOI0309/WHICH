@@ -75,6 +75,10 @@ const memberProfileSettingsSchema = Type.Object({
   visibility: Type.Union([Type.Literal("PRIVATE"), Type.Literal("PUBLIC")]),
   publicUrl: Type.Union([Type.String(), Type.Null()]),
 });
+const memberProfileUpdateResultSchema = Type.Intersect([
+  memberProfileSettingsSchema,
+  Type.Object({ displayName: Type.String({ minLength: 1, maxLength: 80 }) }),
+]);
 const privateProfileSchema = Type.Object({
   member: Type.Intersect([
     memberSchema,
@@ -802,7 +806,12 @@ export async function registerMemberIdentityRoutes(
 
     identityApp.patch<{
       Headers: { authorization?: string };
-      Body: { handle: string; bio: string | null; visibility: "PRIVATE" | "PUBLIC" };
+      Body: {
+        displayName?: string;
+        handle: string;
+        bio: string | null;
+        visibility: "PRIVATE" | "PUBLIC";
+      };
     }>(
       "/v1/me/profile",
       {
@@ -814,12 +823,13 @@ export async function registerMemberIdentityRoutes(
             { additionalProperties: true },
           ),
           body: Type.Object({
+            displayName: Type.Optional(Type.String({ minLength: 1, maxLength: 80 })),
             handle: Type.String({ minLength: 3, maxLength: 30, pattern: "^[A-Za-z0-9_]+$" }),
             bio: Type.Union([Type.String({ maxLength: 160 }), Type.Null()]),
             visibility: Type.Union([Type.Literal("PRIVATE"), Type.Literal("PUBLIC")]),
           }),
           response: {
-            200: memberProfileSettingsSchema,
+            200: memberProfileUpdateResultSchema,
             400: errorSchema,
             401: errorSchema,
             409: errorSchema,

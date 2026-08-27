@@ -5,7 +5,10 @@ import type {
   InterestCardRegistry,
   InterestProfile,
   MemberPointView,
+  MemberAccountDeletionResult,
+  MemberAvatarUpdate,
   MemberPrivateProfile,
+  MemberProfileSettings,
   MemberSessionView,
   MemberView,
   PublicIssue,
@@ -87,6 +90,62 @@ export function createMobileApiClient(
         headers: { accept: "application/json", authorization: `Bearer ${sessionToken}` },
       });
       return bodyOrError<MemberPrivateProfile>(response);
+    },
+
+    async updateMemberProfile(
+      sessionToken: string,
+      command: {
+        displayName: string;
+        handle: string;
+        bio: string | null;
+        visibility: "PRIVATE" | "PUBLIC";
+      },
+    ) {
+      const response = await request(`${baseUrl}/api/mobile/v1/me/profile`, {
+        method: "PATCH",
+        headers: {
+          accept: "application/json",
+          authorization: `Bearer ${sessionToken}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(command),
+      });
+      return bodyOrError<MemberProfileSettings>(response);
+    },
+
+    async uploadMemberAvatar(
+      sessionToken: string,
+      avatar: { uri: string; name: string; type: string },
+    ) {
+      const form = new FormData();
+      form.append("avatar", avatar as unknown as Blob);
+      const response = await request(`${baseUrl}/api/mobile/v1/me/avatar`, {
+        method: "PUT",
+        headers: { accept: "application/json", authorization: `Bearer ${sessionToken}` },
+        body: form,
+      });
+      return bodyOrError<MemberAvatarUpdate>(response);
+    },
+
+    async removeMemberAvatar(sessionToken: string) {
+      const response = await request(`${baseUrl}/api/mobile/v1/me/avatar`, {
+        method: "DELETE",
+        headers: { accept: "application/json", authorization: `Bearer ${sessionToken}` },
+      });
+      return bodyOrError<MemberAvatarUpdate>(response);
+    },
+
+    async deleteMemberAccount(sessionToken: string, password: string) {
+      const response = await request(`${baseUrl}/api/mobile/v1/me`, {
+        method: "DELETE",
+        headers: {
+          accept: "application/json",
+          authorization: `Bearer ${sessionToken}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ password, confirmation: "DELETE" }),
+      });
+      return bodyOrError<MemberAccountDeletionResult>(response);
     },
 
     async exchangeMobileSession(command: {

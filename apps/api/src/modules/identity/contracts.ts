@@ -133,9 +133,14 @@ export type MemberProfileSettings = {
 };
 
 export type MemberProfileUpdate = {
+  displayName?: string;
   handle: string;
   bio: string | null;
   visibility: "PRIVATE" | "PUBLIC";
+};
+
+export type MemberProfileUpdateResult = MemberProfileSettings & {
+  displayName: string;
 };
 
 export type PublicCreatorIssue = {
@@ -210,7 +215,10 @@ export interface MemberIdentityService {
     token: string,
     query: MemberVoteHistoryQuery,
   ): Promise<MemberPrivateProfile | null>;
-  updateProfile(token: string, command: MemberProfileUpdate): Promise<MemberProfileSettings | null>;
+  updateProfile(
+    token: string,
+    command: MemberProfileUpdate,
+  ): Promise<MemberProfileUpdateResult | null>;
   setAvatar(
     token: string,
     command: {

@@ -12,6 +12,9 @@ import { GET as loadFeed } from "@/app/api/mobile/v1/issues/feed/route";
 import { GET as loadCommentHighlights } from "@/app/api/mobile/v1/issues/[issueId]/comment-highlights/route";
 import { POST as submitVote } from "@/app/api/mobile/v1/issues/[issueId]/votes/route";
 import { GET as loadMemberVote } from "@/app/api/mobile/v1/me/votes/[issueId]/route";
+import { DELETE as deleteMember, GET as loadMemberProfile } from "@/app/api/mobile/v1/me/route";
+import { PATCH as updateMemberProfile } from "@/app/api/mobile/v1/me/profile/route";
+import { DELETE as deleteMemberAvatar } from "@/app/api/mobile/v1/me/avatar/route";
 import { POST as exchangeMobileSession } from "@/app/api/mobile/v1/mobile-auth/member-sessions/route";
 import {
   DELETE as revokeMobileSession,
@@ -32,6 +35,68 @@ afterEach(() => {
 });
 
 describe("mobile BFF routes", () => {
+  it("requires a Native Member Bearer session for protected profile surfaces", async () => {
+    const profile = await loadMemberProfile(
+      new NextRequest("https://whichone.site/api/mobile/v1/me"),
+    );
+    const avatar = await deleteMemberAvatar(
+      new NextRequest("https://whichone.site/api/mobile/v1/me/avatar", { method: "DELETE" }),
+    );
+
+    expect(profile.status).toBe(401);
+    expect(avatar.status).toBe(401);
+  });
+
+  it("proxies Native profile edits and account deletion with the Bearer session", async () => {
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          displayName: "새 닉네임",
+          handle: "native_member",
+          bio: null,
+          visibility: "PRIVATE",
+          publicUrl: null,
+        }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ deleted: true }));
+    vi.stubGlobal("fetch", request);
+    const authorization = "Bearer native-member-session";
+
+    const profileResponse = await updateMemberProfile(
+      new NextRequest("https://whichone.site/api/mobile/v1/me/profile", {
+        method: "PATCH",
+        headers: { authorization, "content-type": "application/json" },
+        body: JSON.stringify({
+          displayName: "새 닉네임",
+          handle: "native_member",
+          bio: null,
+          visibility: "PRIVATE",
+        }),
+      }),
+    );
+    const deleteResponse = await deleteMember(
+      new NextRequest("https://whichone.site/api/mobile/v1/me", {
+        method: "DELETE",
+        headers: { authorization, "content-type": "application/json" },
+        body: JSON.stringify({ password: "password", confirmation: "DELETE" }),
+      }),
+    );
+
+    expect(profileResponse.status).toBe(200);
+    expect(deleteResponse.status).toBe(200);
+    expect(request).toHaveBeenNthCalledWith(
+      1,
+      new URL("http://localhost:4000/v1/me/profile"),
+      expect.objectContaining({ headers: expect.objectContaining({ authorization }) }),
+    );
+    expect(request).toHaveBeenNthCalledWith(
+      2,
+      new URL("http://localhost:4000/v1/me"),
+      expect.objectContaining({ method: "DELETE" }),
+    );
+  });
+
   it("proxies Native session exchange and lifecycle without internal secrets", async () => {
     const request = vi
       .fn()

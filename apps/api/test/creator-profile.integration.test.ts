@@ -136,6 +136,34 @@ describe("Creator Profile v1", () => {
     expect(duplicate.json()).toMatchObject({ code: "HANDLE_TAKEN" });
   });
 
+  it("updates the private nickname together with Creator profile settings", async () => {
+    const session = await createSession("기존 닉네임");
+    const updated = await app.inject({
+      method: "PATCH",
+      url: "/v1/me/profile",
+      headers: { authorization: `Bearer ${session.token}` },
+      payload: {
+        displayName: "새 닉네임",
+        handle: "renamed_creator",
+        bio: "모바일에서 수정했어요.",
+        visibility: "PRIVATE",
+      },
+    });
+    const profile = await app.inject({
+      method: "GET",
+      url: "/v1/me?limit=1",
+      headers: { authorization: `Bearer ${session.token}` },
+    });
+
+    expect(updated.statusCode).toBe(200);
+    expect(updated.json()).toMatchObject({
+      displayName: "새 닉네임",
+      handle: "renamed_creator",
+    });
+    expect(profile.statusCode).toBe(200);
+    expect(profile.json()).toMatchObject({ member: { displayName: "새 닉네임" } });
+  });
+
   it("publishes only safe Creator fields and authored Issue aggregates", async () => {
     const session = await createSession("테크 질문가");
     const issueId = await createAuthoredIssue(session.member.id);

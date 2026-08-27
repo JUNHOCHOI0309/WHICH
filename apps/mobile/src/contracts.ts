@@ -142,6 +142,22 @@ export type MemberPrivateProfile = {
   };
 };
 
+export type MemberProfileSettings = {
+  displayName: string;
+  handle: string;
+  bio: string | null;
+  visibility: "PRIVATE" | "PUBLIC";
+  publicUrl: string | null;
+};
+
+export type MemberAvatarUpdate = {
+  member: MemberView & { avatarSource: "INITIALS" | "CUSTOM" };
+};
+
+export type MemberAccountDeletionResult = {
+  deleted: true;
+};
+
 export type CommentHighlight = {
   id: string;
   choice: "A" | "B";
