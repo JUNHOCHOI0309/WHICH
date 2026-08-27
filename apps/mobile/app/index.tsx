@@ -264,13 +264,10 @@ export default function FeedScreen() {
     [ranking?.mode],
   );
 
-  const handleFeedScroll = useCallback(
-    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-      const shouldShow = event.nativeEvent.contentOffset.y > 640;
-      setShowTopAction((current) => (current === shouldShow ? current : shouldShow));
-    },
-    [],
-  );
+  const handleFeedScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const shouldShow = event.nativeEvent.contentOffset.y > 640;
+    setShowTopAction((current) => (current === shouldShow ? current : shouldShow));
+  }, []);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["top", "left", "right", "bottom"]}>
