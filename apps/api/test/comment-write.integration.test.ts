@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { buildApp } from "../src/app.js";
@@ -8,6 +8,7 @@ import { getConfig } from "../src/config.js";
 import type { Database } from "../src/database/client.js";
 import {
   comments,
+  commentRevisions,
   commentWriteAttempts,
   issueChoices,
   issues,
@@ -591,6 +592,37 @@ describe("Member Comment write API", () => {
       version: 3,
     });
     expect(stored?.deletedAt).toBeInstanceOf(Date);
+
+    const revisions = await database.db
+      .select({
+        revision: commentRevisions.revision,
+        operation: commentRevisions.operation,
+        body: commentRevisions.body,
+        sourceCommentVersion: commentRevisions.sourceCommentVersion,
+      })
+      .from(commentRevisions)
+      .where(eq(commentRevisions.commentId, commentId))
+      .orderBy(asc(commentRevisions.revision));
+    expect(revisions).toEqual([
+      {
+        revision: 1,
+        operation: "CREATED",
+        body: "수정 전 댓글",
+        sourceCommentVersion: 1,
+      },
+      {
+        revision: 2,
+        operation: "EDITED",
+        body: "수정한 댓글",
+        sourceCommentVersion: 2,
+      },
+      {
+        revision: 3,
+        operation: "AUTHOR_REMOVED",
+        body: "[작성자가 삭제한 댓글]",
+        sourceCommentVersion: 3,
+      },
+    ]);
 
     const afterDelete = await app.inject({
       method: "GET",

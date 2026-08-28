@@ -31,6 +31,7 @@ import type {
   IssueWriteService,
   ResubmitMemberIssueCommand,
 } from "./contracts.js";
+import { sealIssueVersionSnapshot } from "../content-revisions/service.js";
 import { IssueWriteError } from "./errors.js";
 
 const DAILY_CREATION_LIMIT = 3;
@@ -603,6 +604,7 @@ export function createIssueWriteService(database: Database["db"]): IssueWriteSer
               label: choice.label,
             })),
           );
+          await sealIssueVersionSnapshot(transaction, issueId, ISSUE_VERSION);
           await transaction.insert(issueInterestCards).values({
             issueId,
             issueVersion: ISSUE_VERSION,

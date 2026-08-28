@@ -75,6 +75,7 @@ export const comments = pgTable(
     reporterCountBaseline: integer("reporter_count_baseline").default(0).notNull(),
     editedAt: timestamp("edited_at", { withTimezone: true }),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    bodyRevision: integer("body_revision").default(1).notNull(),
     version: integer("version").default(1).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
@@ -103,6 +104,7 @@ export const comments = pgTable(
     ),
     check("comments_body_not_blank_check", sql`length(btrim(${table.body})) > 0`),
     check("comments_positive_version_check", sql`${table.version} > 0`),
+    check("comments_positive_body_revision_check", sql`${table.bodyRevision} > 0`),
     check("comments_report_score_baseline_check", sql`${table.reportScoreBaseline} >= 0`),
     check("comments_reporter_count_baseline_check", sql`${table.reporterCountBaseline} >= 0`),
     check(
