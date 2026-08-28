@@ -15,6 +15,10 @@ import { GET as loadMemberVote } from "@/app/api/mobile/v1/me/votes/[issueId]/ro
 import { DELETE as deleteMember, GET as loadMemberProfile } from "@/app/api/mobile/v1/me/route";
 import { PATCH as updateMemberProfile } from "@/app/api/mobile/v1/me/profile/route";
 import { DELETE as deleteMemberAvatar } from "@/app/api/mobile/v1/me/avatar/route";
+import { GET as loadMemberModeration } from "@/app/api/mobile/v1/me/moderation/route";
+import { POST as submitModerationAppeal } from "@/app/api/mobile/v1/me/moderation/appeals/route";
+import { POST as submitModerationRights } from "@/app/api/mobile/v1/me/moderation/rights/route";
+import { POST as chooseModerationAlternative } from "@/app/api/mobile/v1/me/moderation/submissions/[submissionId]/asset-alternative/route";
 import { POST as exchangeMobileSession } from "@/app/api/mobile/v1/mobile-auth/member-sessions/route";
 import {
   DELETE as revokeMobileSession,
@@ -45,6 +49,77 @@ describe("mobile BFF routes", () => {
 
     expect(profile.status).toBe(401);
     expect(avatar.status).toBe(401);
+  });
+
+  it("requires a Native Member Bearer session for the moderation center", async () => {
+    const response = await loadMemberModeration(
+      new NextRequest("https://whichone.site/api/mobile/v1/me/moderation"),
+    );
+
+    expect(response.status).toBe(401);
+  });
+
+  it("proxies native moderation reads and Member actions with the Bearer session", async () => {
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          schemaVersion: 1,
+          generatedAt: "2026-08-29T00:00:00.000Z",
+          assets: [],
+          libraryAssets: [],
+          notices: [],
+          appeals: [],
+          rightsCases: [],
+        }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ id: "appeal-1", status: "SUBMITTED" }, 201))
+      .mockResolvedValueOnce(jsonResponse({ id: "rights-1", status: "SUBMITTED" }, 201))
+      .mockResolvedValueOnce(jsonResponse({ updated: true, revision: 2 }));
+    vi.stubGlobal("fetch", request);
+    const authorization = "Bearer native-member-session";
+
+    await loadMemberModeration(
+      new NextRequest("https://whichone.site/api/mobile/v1/me/moderation", {
+        headers: { authorization },
+      }),
+    );
+    await submitModerationAppeal(
+      new NextRequest("https://whichone.site/api/mobile/v1/me/moderation/appeals", {
+        method: "POST",
+        headers: { authorization, "content-type": "application/json" },
+        body: JSON.stringify({ targetType: "ISSUE_MEDIA_ASSET", targetId: "asset-1" }),
+      }),
+    );
+    await submitModerationRights(
+      new NextRequest("https://whichone.site/api/mobile/v1/me/moderation/rights", {
+        method: "POST",
+        headers: { authorization, "content-type": "application/json" },
+        body: JSON.stringify({ requestType: "COPYRIGHT", targetId: "asset-1" }),
+      }),
+    );
+    await chooseModerationAlternative(
+      new NextRequest(
+        "https://whichone.site/api/mobile/v1/me/moderation/submissions/submission-1/asset-alternative",
+        {
+          method: "POST",
+          headers: { authorization, "content-type": "application/json" },
+          body: JSON.stringify({ action: "TEXT_ONLY" }),
+        },
+      ),
+      { params: Promise.resolve({ submissionId: "submission-1" }) },
+    );
+
+    expect(request).toHaveBeenNthCalledWith(
+      1,
+      new URL("http://localhost:4000/v1/me/moderation"),
+      expect.objectContaining({ headers: expect.objectContaining({ authorization }) }),
+    );
+    expect(request).toHaveBeenNthCalledWith(
+      4,
+      new URL("http://localhost:4000/v1/me/moderation/submissions/submission-1/asset-alternative"),
+      expect.objectContaining({ method: "POST" }),
+    );
   });
 
   it("proxies Native profile edits and account deletion with the Bearer session", async () => {

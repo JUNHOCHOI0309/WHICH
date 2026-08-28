@@ -30,7 +30,7 @@ import { memberSessions, mobileApi } from "@/lib/runtime";
 import { colors } from "@/theme";
 
 type Screen = "loading" | "guest" | "ready" | "error";
-type Tab = "profile" | "votes";
+type Tab = "profile" | "votes" | "moderation";
 
 const providerLabels = {
   EMAIL: "이메일",
@@ -259,6 +259,11 @@ export default function MeScreen() {
         <View accessibilityRole="tablist" style={styles.tabs}>
           <TabButton active={tab === "profile"} label="프로필" onPress={() => setTab("profile")} />
           <TabButton active={tab === "votes"} label="투표 기록" onPress={() => setTab("votes")} />
+          <TabButton
+            active={tab === "moderation"}
+            label="Moderation"
+            onPress={() => router.push("/moderation")}
+          />
         </View>
         {tab === "profile" ? (
           <>

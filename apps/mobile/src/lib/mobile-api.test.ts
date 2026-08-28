@@ -10,6 +10,72 @@ function jsonResponse(body: unknown, status = 200) {
 }
 
 describe("mobile API client", () => {
+  it("loads the authenticated Member moderation center", async () => {
+    const request = vi.fn(async () =>
+      jsonResponse({
+        schemaVersion: 1,
+        generatedAt: "2026-08-29T00:00:00.000Z",
+        assets: [],
+        libraryAssets: [],
+        notices: [],
+        appeals: [],
+        rightsCases: [],
+      }),
+    );
+    const api = createMobileApiClient({ baseUrl: "https://whichone.site", request });
+
+    await expect(api.loadMemberModeration("member-session")).resolves.toMatchObject({
+      schemaVersion: 1,
+      assets: [],
+    });
+    expect(request).toHaveBeenCalledWith(
+      "https://whichone.site/api/mobile/v1/me/moderation",
+      expect.objectContaining({
+        headers: expect.objectContaining({ authorization: "Bearer member-session" }),
+      }),
+    );
+  });
+
+  it("submits native moderation alternatives, appeals, and rights cases", async () => {
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ updated: true, revision: 2 }))
+      .mockResolvedValueOnce(jsonResponse({ id: "appeal-1", status: "SUBMITTED" }, 201))
+      .mockResolvedValueOnce(jsonResponse({ id: "rights-1", status: "SUBMITTED" }, 201));
+    const api = createMobileApiClient({ baseUrl: "https://whichone.site", request });
+
+    await api.chooseModerationAssetAlternative("member-session", "submission-1", {
+      action: "TEXT_ONLY",
+    });
+    await api.submitModerationAppeal("member-session", {
+      targetType: "ISSUE_MEDIA_ASSET",
+      targetId: "asset-1",
+      reason: "This asset was incorrectly moderated and needs human review.",
+    });
+    await api.submitModerationRights("member-session", {
+      requestType: "COPYRIGHT",
+      targetType: "ISSUE_MEDIA_ASSET",
+      targetId: "asset-1",
+      details: "I own the copyright and can provide the original source file.",
+    });
+
+    expect(request).toHaveBeenNthCalledWith(
+      1,
+      "https://whichone.site/api/mobile/v1/me/moderation/submissions/submission-1/asset-alternative",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(request).toHaveBeenNthCalledWith(
+      2,
+      "https://whichone.site/api/mobile/v1/me/moderation/appeals",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(request).toHaveBeenNthCalledWith(
+      3,
+      "https://whichone.site/api/mobile/v1/me/moderation/rights",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
   it("loads the authenticated Member profile and vote history", async () => {
     const request = vi.fn(async () =>
       jsonResponse({
