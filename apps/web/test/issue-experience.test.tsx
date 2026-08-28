@@ -370,6 +370,7 @@ describe("IssueExperience", () => {
     expect(feedRequests).toBe(1);
     expect(navigation.push).not.toHaveBeenCalled();
     expect(analyticsEvents).not.toContain("NEXT_ISSUE_OPEN");
+    expect(screen.getByRole("button", { name: "다음 질문 미리보기 닫기" })).toBeInTheDocument();
 
     fireEvent.click(nextButton);
     fireEvent.click(nextButton);
@@ -437,6 +438,8 @@ describe("IssueExperience", () => {
       "data-placement",
       "bottom-right",
     );
+    fireEvent.click(screen.getByRole("button", { name: "다음 질문 미리보기 닫기" }));
+    expect(screen.queryByTestId("next-issue-preview-dock")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /다음 질문으로 이동/ })).not.toBeInTheDocument();
     expect(navigation.push).not.toHaveBeenCalled();
   });
