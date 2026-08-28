@@ -518,7 +518,7 @@ export function createCommentService(database: Database["db"]): CommentService {
                 .from(comments)
                 .where(
                   and(
-                    inArray(comments.parentCommentId, rootCommentIds),
+                    inArray(comments.threadRootCommentId, rootCommentIds),
                     eq(comments.publicationState, "PUBLISHED"),
                     inArray(comments.visibility, ["VISIBLE", "DEPRIORITIZED", "COLLAPSED"]),
                     eq(comments.integrityState, "NORMAL"),
@@ -616,16 +616,22 @@ export function createCommentService(database: Database["db"]): CommentService {
             avatarBySubject.get(row.authorSubjectId) ?? null,
           );
         };
-        const repliesByParent = new Map<string, PublicComment[]>();
+        const repliesByParent = new Map<string, Array<typeof comments.$inferSelect>>();
         for (const reply of replyRows) {
           if (!reply.parentCommentId) continue;
           const siblings = repliesByParent.get(reply.parentCommentId) ?? [];
-          siblings.push(materialize(reply));
+          siblings.push(reply);
           repliesByParent.set(reply.parentCommentId, siblings);
         }
 
+        const materializeTree = (row: typeof comments.$inferSelect): PublicComment =>
+          materialize(
+            row,
+            (repliesByParent.get(row.id) ?? []).map((reply) => materializeTree(reply)),
+          );
+
         return {
-          items: pageRows.map((row) => materialize(row, repliesByParent.get(row.id) ?? [])),
+          items: pageRows.map((row) => materializeTree(row)),
           totalCount: commentTotal?.total ?? 0,
           nextCursor:
             view !== "HIGHLIGHT" && hasMore && lastItem
@@ -706,38 +712,12 @@ export function createCommentService(database: Database["db"]): CommentService {
           return existingAttempt.responseSnapshot;
         }
 
-        await transaction.execute(
-          sql`select pg_advisory_xact_lock(hashtextextended(${`${session.memberId}:${command.issueId}`}, 0))`,
-        );
-
         const [authorSubject] = await transaction
           .select({ id: voterSubjects.id })
           .from(voterSubjects)
           .where(and(eq(voterSubjects.kind, "MEMBER"), eq(voterSubjects.userId, session.memberId)))
           .limit(1);
         if (!authorSubject) throw new Error("Member voter subject is missing.");
-
-        if (!command.parentCommentId) {
-          const [existingComment] = await transaction
-            .select({ id: comments.id })
-            .from(comments)
-            .where(
-              and(
-                eq(comments.issueId, command.issueId),
-                eq(comments.authorSubjectId, authorSubject.id),
-                isNull(comments.parentCommentId),
-                isNull(comments.deletedAt),
-              ),
-            )
-            .limit(1);
-          if (existingComment) {
-            throw new CommentError(
-              "COMMENT_ALREADY_EXISTS",
-              409,
-              "This Member already has a Comment on the Issue.",
-            );
-          }
-        }
 
         const [directVote] = await transaction
           .select({ id: votes.id, issueVersion: votes.issueVersion, choice: issueChoices.code })
@@ -823,17 +803,16 @@ export function createCommentService(database: Database["db"]): CommentService {
           );
         }
 
-        let parentComment: { id: string } | undefined;
+        let parentComment: { id: string; threadRootCommentId: string | null } | undefined;
         if (command.parentCommentId) {
           [parentComment] = await transaction
-            .select({ id: comments.id })
+            .select({ id: comments.id, threadRootCommentId: comments.threadRootCommentId })
             .from(comments)
             .where(
               and(
                 eq(comments.id, command.parentCommentId),
                 eq(comments.issueId, command.issueId),
                 eq(comments.issueVersion, eligibleVote.issueVersion),
-                isNull(comments.parentCommentId),
                 eq(comments.publicationState, "PUBLISHED"),
                 inArray(comments.visibility, ["VISIBLE", "DEPRIORITIZED", "COLLAPSED"]),
                 eq(comments.integrityState, "NORMAL"),
@@ -847,7 +826,7 @@ export function createCommentService(database: Database["db"]): CommentService {
             throw new CommentError(
               "REPLY_PARENT_UNAVAILABLE",
               409,
-              "Replies are only available on an open top-level Comment.",
+              "Replies are only available on an open published Comment.",
             );
           }
         }
@@ -868,7 +847,9 @@ export function createCommentService(database: Database["db"]): CommentService {
             acceptedVoteId: eligibleVote.id,
             choice: eligibleVote.choice,
             parentCommentId: parentComment?.id,
-            threadRootCommentId: parentComment?.id,
+            threadRootCommentId: parentComment
+              ? (parentComment.threadRootCommentId ?? parentComment.id)
+              : undefined,
             authorDisplayName: session.displayName.slice(0, 40),
             body,
             textPolicyVersion: TEXT_POLICY_VERSION,

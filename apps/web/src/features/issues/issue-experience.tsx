@@ -940,8 +940,6 @@ function CommentSection({
           setPostError("로그인이 만료됐어요. 초안은 보관했으니 다시 로그인해 주세요.");
         } else if (error.code === "VOTE_REQUIRED") {
           setPostError("이 계정에 연결된 유효한 투표가 없어 댓글을 게시할 수 없어요.");
-        } else if (error.code === "COMMENT_ALREADY_EXISTS") {
-          setPostError("이 안건에는 이미 댓글을 남겼어요.");
         } else if (error.status === 422) {
           setPostError("URL·제어문자·과도한 반복 없이 2~500자로 작성해 주세요.");
         } else {
@@ -1250,7 +1248,10 @@ function CommentSection({
     }
   };
 
-  const renderReply = (reply: PublicComment) => {
+  const renderReply = (reply: PublicComment, depth = 1) => {
+    const isCollapsed = reply.visibility === "COLLAPSED";
+    const isExpanded = expandedCollapsedIds.has(reply.id);
+    const replies = reply.replies ?? [];
     const reportState = reply.reports ?? { viewerReported: false, canReport: true };
     const permissions = reply.permissions ?? { canEdit: false, canDelete: false };
     const isEditing = editDraft?.commentId === reply.id;
@@ -1260,6 +1261,7 @@ function CommentSection({
       <article
         key={reply.id}
         className={`${styles.commentReply} ${styles[`comment${reply.choice}`]}`}
+        data-depth={depth}
       >
         <CommentAuthorHeader comment={reply} />
         {isEditing ? (
@@ -1289,43 +1291,72 @@ function CommentSection({
               </button>
             </div>
           </form>
+        ) : isCollapsed && !isExpanded ? (
+          <div className={styles.collapsedNotice}>
+            <p>여러 신고가 접수되어 내용을 접어 두었어요.</p>
+            <button
+              type="button"
+              onClick={() => setExpandedCollapsedIds((current) => new Set(current).add(reply.id))}
+            >
+              내용 확인
+            </button>
+          </div>
         ) : (
           <p>{reply.body}</p>
         )}
         <footer>
-          <div className={styles.commentReactionActions}>
-            <button
-              type="button"
-              className={`${styles.reactionButton} ${
-                reply.reactions.viewerReaction === "HELPFUL" ? styles.reactionActive : ""
-              }`}
-              aria-pressed={reply.reactions.viewerReaction === "HELPFUL"}
-              disabled={pendingReactionIds.has(reply.id)}
-              onClick={() => void toggleReaction(reply, "HELPFUL")}
-            >
-              <span aria-hidden="true">♡</span> 공감 {reply.reactions.helpfulCount}
-            </button>
-            <button
-              type="button"
-              className={`${styles.reactionButtonSecondary} ${
-                reply.reactions.viewerReaction === "DISLIKE" ? styles.reactionDislikeActive : ""
-              }`}
-              aria-label={`싫어요 ${reply.reactions.dislikeCount}`}
-              aria-pressed={reply.reactions.viewerReaction === "DISLIKE"}
-              disabled={pendingReactionIds.has(reply.id)}
-              onClick={() => void toggleReaction(reply, "DISLIKE")}
-            >
-              <Image src="/icons/dislike.png" alt="" width={16} height={16} />
-              <span>{reply.reactions.dislikeCount}</span>
-            </button>
-          </div>
+          {!isCollapsed ? (
+            <div className={styles.commentReactionActions}>
+              <button
+                type="button"
+                className={`${styles.reactionButton} ${
+                  reply.reactions.viewerReaction === "HELPFUL" ? styles.reactionActive : ""
+                }`}
+                aria-pressed={reply.reactions.viewerReaction === "HELPFUL"}
+                disabled={pendingReactionIds.has(reply.id)}
+                onClick={() => void toggleReaction(reply, "HELPFUL")}
+              >
+                <span aria-hidden="true">♡</span> 공감 {reply.reactions.helpfulCount}
+              </button>
+              <button
+                type="button"
+                className={`${styles.reactionButtonSecondary} ${
+                  reply.reactions.viewerReaction === "DISLIKE" ? styles.reactionDislikeActive : ""
+                }`}
+                aria-label={`싫어요 ${reply.reactions.dislikeCount}`}
+                aria-pressed={reply.reactions.viewerReaction === "DISLIKE"}
+                disabled={pendingReactionIds.has(reply.id)}
+                onClick={() => void toggleReaction(reply, "DISLIKE")}
+              >
+                <Image src="/icons/dislike.png" alt="" width={16} height={16} />
+                <span>{reply.reactions.dislikeCount}</span>
+              </button>
+            </div>
+          ) : null}
           <div className={styles.commentSecondaryActions}>
             {reply.editedAt ? <span>수정됨</span> : null}
+            {reply.threadState === "LOCKED" ? <span>대화 잠김</span> : null}
+            {!isCollapsed && reply.threadState === "OPEN" ? (
+              <button
+                type="button"
+                className={styles.replyButton}
+                onClick={() => {
+                  setCommentMutationError(null);
+                  setReplyDraft({ parentCommentId: reply.id, body: "" });
+                }}
+              >
+                답글
+              </button>
+            ) : null}
             {permissions.canEdit ? (
               <button
                 type="button"
                 className={styles.commentOwnerButton}
-                onClick={() => setEditDraft({ commentId: reply.id, body: reply.body })}
+                onClick={() => {
+                  setDeleteConfirmId(null);
+                  setCommentMutationError(null);
+                  setEditDraft({ commentId: reply.id, body: reply.body });
+                }}
               >
                 수정
               </button>
@@ -1334,7 +1365,11 @@ function CommentSection({
               <button
                 type="button"
                 className={styles.commentOwnerButton}
-                onClick={() => setDeleteConfirmId(reply.id)}
+                onClick={() => {
+                  setEditDraft(null);
+                  setCommentMutationError(null);
+                  setDeleteConfirmId(reply.id);
+                }}
               >
                 삭제
               </button>
@@ -1344,7 +1379,10 @@ function CommentSection({
                 type="button"
                 className={styles.reportButton}
                 disabled={reportState.viewerReported || !reportState.canReport || isReporting}
-                onClick={() => setReportDraft({ commentId: reply.id, reason: "SPAM", detail: "" })}
+                onClick={() => {
+                  setReportError(null);
+                  setReportDraft({ commentId: reply.id, reason: "SPAM", detail: "" });
+                }}
               >
                 {reportState.viewerReported ? "신고 완료" : isReporting ? "접수 중…" : "신고"}
               </button>
@@ -1370,6 +1408,40 @@ function CommentSection({
         ) : null}
         {commentMutationError?.commentId === reply.id ? (
           <p className={styles.commentMutationError}>{commentMutationError.message}</p>
+        ) : null}
+        {replyDraft?.parentCommentId === reply.id ? (
+          <form
+            className={styles.replyComposer}
+            onSubmit={(event) => {
+              event.preventDefault();
+              void publishReply();
+            }}
+          >
+            <label htmlFor={`reply-${reply.id}`}>답글 작성</label>
+            <textarea
+              id={`reply-${reply.id}`}
+              value={replyDraft.body}
+              maxLength={500}
+              rows={3}
+              placeholder={`${reply.author.displayName}님에게 답글을 남겨 보세요.`}
+              onChange={(event) =>
+                setReplyDraft({ parentCommentId: reply.id, body: event.target.value })
+              }
+            />
+            <div>
+              <span>{Array.from(replyDraft.body).length}/500</span>
+              <button type="submit" disabled={postingReplyId === reply.id}>
+                {postingReplyId === reply.id ? "작성 중…" : "작성"}
+              </button>
+              <button
+                type="button"
+                disabled={postingReplyId === reply.id}
+                onClick={() => setReplyDraft(null)}
+              >
+                취소
+              </button>
+            </div>
+          </form>
         ) : null}
         {reportDraft?.commentId === reply.id ? (
           <form
@@ -1423,6 +1495,11 @@ function CommentSection({
               </button>
             </div>
           </form>
+        ) : null}
+        {replies.length > 0 ? (
+          <div className={styles.commentReplies} aria-label={`${depth + 1}단계 답글 목록`}>
+            {replies.map((nestedReply) => renderReply(nestedReply, depth + 1))}
+          </div>
         ) : null}
       </article>
     );

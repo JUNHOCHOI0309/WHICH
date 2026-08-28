@@ -1,4 +1,11 @@
-import { act, fireEvent, render as testingRender, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render as testingRender,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import type { ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -820,6 +827,143 @@ describe("IssueExperience", () => {
     expect(requests).toHaveLength(1);
     expect(new Headers(requests[0]?.headers).get("idempotency-key")).toEqual(expect.any(String));
     expect(sessionStorage.getItem(`which:comment-draft:${ISSUE_ID}`)).toBeNull();
+  });
+
+  it("renders deeply nested replies and lets a Member reply at any depth", async () => {
+    const savedResult: VoteResponse = {
+      outcome: "ACCEPTED",
+      voteAttemptId: "attempt-nested-reply",
+      voteId: "vote-nested-reply",
+      issueId: ISSUE_ID,
+      issueVersion: 1,
+      choice: "A",
+      result: {
+        resultVersion: 1,
+        acceptedA: 1,
+        acceptedB: 0,
+        displayedTotal: 1,
+        integrityState: "NORMAL",
+      },
+    };
+    sessionStorage.setItem(`which:vote-result:${ISSUE_ID}`, JSON.stringify(savedResult));
+    const replyRequests: Array<{ parentCommentId?: string; body: string }> = [];
+    const commentBase = {
+      visibility: "VISIBLE" as const,
+      threadState: "OPEN" as const,
+      editedAt: null,
+      reactions: { helpfulCount: 0, dislikeCount: 0, viewerReaction: null },
+      reports: { viewerReported: false, canReport: true },
+      permissions: { canEdit: false, canDelete: false },
+    };
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = String(input);
+        if (url === "/api/guest-subjects") return jsonResponse({ status: "ready" });
+        if (url.endsWith(`/api/issues/${ISSUE_ID}`)) return jsonResponse(issue);
+        if (url === "/api/member-session") {
+          return jsonResponse({
+            member: { id: "member-nested", displayName: "회원", status: "ACTIVE" },
+            expiresAt: "2026-08-29T00:00:00.000Z",
+          });
+        }
+        if (url === `/api/issues/${ISSUE_ID}/comments` && init?.method === "POST") {
+          const request = JSON.parse(String(init.body)) as {
+            parentCommentId?: string;
+            body: string;
+          };
+          replyRequests.push(request);
+          return jsonResponse(
+            {
+              comment: {
+                ...commentBase,
+                id: "reply-3",
+                choice: "A",
+                author: { displayName: "회원" },
+                body: request.body,
+                createdAt: "2026-08-28T12:00:00.000Z",
+                parentCommentId: request.parentCommentId ?? null,
+                replies: [],
+              },
+            },
+            201,
+          );
+        }
+        if (url.startsWith(`/api/issues/${ISSUE_ID}/comments?`)) {
+          return jsonResponse({
+            items: [
+              {
+                ...commentBase,
+                id: "root-comment",
+                choice: "A",
+                author: { displayName: "첫번째" },
+                body: "최상위 댓글",
+                createdAt: "2026-08-28T09:00:00.000Z",
+                parentCommentId: null,
+                replies: [
+                  {
+                    ...commentBase,
+                    id: "reply-1",
+                    choice: "B",
+                    author: { displayName: "두번째" },
+                    body: "첫 단계 답글",
+                    createdAt: "2026-08-28T10:00:00.000Z",
+                    parentCommentId: "root-comment",
+                    replies: [
+                      {
+                        ...commentBase,
+                        id: "reply-2",
+                        choice: "A",
+                        author: { displayName: "세번째" },
+                        body: "두 단계 답글",
+                        createdAt: "2026-08-28T11:00:00.000Z",
+                        parentCommentId: "reply-1",
+                        replies: [],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+            nextCursor: null,
+            totalCount: 3,
+          });
+        }
+        if (url.startsWith("/api/issues/feed?")) {
+          return jsonResponse({
+            items: [],
+            nextCursor: null,
+            ranking: {
+              requestId: "30000000-0000-4000-8000-000000000003",
+              version: "interest_content_v2_refresh",
+              mode: "RECENCY",
+              reasonCode: "PROFILE_NOT_READY",
+              profileVersion: null,
+            },
+          });
+        }
+        if (url === "/api/analytics/events") return jsonResponse({ accepted: true });
+        throw new Error(`Unexpected request: ${url}`);
+      }),
+    );
+
+    render(<IssueExperience issueId={ISSUE_ID} />);
+
+    expect(await screen.findByText("두 단계 답글")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "작성" })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "답글" })).toHaveLength(3);
+
+    fireEvent.click(screen.getAllByRole("button", { name: "답글" })[2]!);
+    const editor = screen.getByRole("textbox", { name: "답글 작성" });
+    expect(editor).toHaveAttribute("placeholder", "세번째님에게 답글을 남겨 보세요.");
+    fireEvent.change(editor, { target: { value: "세 단계 답글입니다" } });
+    fireEvent.click(within(editor.closest("form")!).getByRole("button", { name: "작성" }));
+
+    await waitFor(() =>
+      expect(replyRequests).toEqual([{ parentCommentId: "reply-2", body: "세 단계 답글입니다" }]),
+    );
+    expect(await screen.findByText("세 단계 답글입니다")).toBeInTheDocument();
   });
 
   it("lets a Member edit and delete their own Comment", async () => {
