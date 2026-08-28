@@ -147,11 +147,6 @@
   font-weight: 950;
 }
 
-.notificationPanel > header span {
-  color: var(--which-text-secondary);
-  font-size: 0.74rem;
-}
-
 .notificationPanel > header button {
   width: 38px;
   height: 38px;

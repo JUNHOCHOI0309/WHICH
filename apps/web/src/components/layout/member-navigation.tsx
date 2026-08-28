@@ -291,7 +291,6 @@ export function HeaderMemberNotifications() {
           <header>
             <div>
               <strong>알림</strong>
-              <span>검수와 조치 내용을 알려드려요.</span>
             </div>
             <button type="button" aria-label="알림 닫기" onClick={() => setOpen(false)}>
               ×

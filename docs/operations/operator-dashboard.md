@@ -30,6 +30,12 @@ node apps/api/dist/ops-operator.js grant owner@example.com
 node apps/api/dist/ops-operator.js list
 ```
 
+회원 알림 센터에 운영 안내를 1건 추가할 때는 이메일 또는 Member ID, 짧은 제목, 다음 행동 안내를 순서대로 전달합니다. 대상은 활성 회원 1명으로 확인되며 알림과 감사 로그가 같은 트랜잭션에 기록됩니다.
+
+```bash
+node apps/api/dist/ops-operator.js notify-member owner@example.com "테스트 알림" "헤더의 알림 버튼에서 이 안내를 확인해 주세요."
+```
+
 Revoke access immediately when it is no longer needed:
 
 ```bash
