@@ -15,6 +15,7 @@ import type {
   MemberProfileSettings,
   MemberIssueSubmission,
   MemberIssueMediaAsset,
+  MemberModerationCenter,
   MemberSessionView,
   MemberView,
   PublicIssue,
@@ -85,6 +86,74 @@ export function createMobileApiClient(
   const request = options.request ?? ((input: string, init?: RequestInit) => fetch(input, init));
 
   return {
+    async loadMemberModeration(sessionToken: string) {
+      const response = await request(`${baseUrl}/api/mobile/v1/me/moderation`, {
+        headers: { accept: "application/json", authorization: `Bearer ${sessionToken}` },
+      });
+      return bodyOrError<MemberModerationCenter>(response);
+    },
+
+    async submitModerationAppeal(
+      sessionToken: string,
+      command: { targetType: "ISSUE_MEDIA_ASSET"; targetId: string; reason: string },
+    ) {
+      const response = await request(`${baseUrl}/api/mobile/v1/me/moderation/appeals`, {
+        method: "POST",
+        headers: {
+          accept: "application/json",
+          authorization: `Bearer ${sessionToken}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(command),
+      });
+      return bodyOrError<{ id: string; status: string }>(response);
+    },
+
+    async submitModerationRights(
+      sessionToken: string,
+      command: {
+        requestType: "PRIVACY" | "DEFAMATION" | "COPYRIGHT";
+        targetType: "ISSUE_MEDIA_ASSET";
+        targetId: string;
+        details: string;
+      },
+    ) {
+      const response = await request(`${baseUrl}/api/mobile/v1/me/moderation/rights`, {
+        method: "POST",
+        headers: {
+          accept: "application/json",
+          authorization: `Bearer ${sessionToken}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(command),
+      });
+      return bodyOrError<{ id: string; status: string }>(response);
+    },
+
+    async chooseModerationAssetAlternative(
+      sessionToken: string,
+      submissionId: string,
+      command: {
+        action: "TEXT_ONLY" | "APPROVED_LIBRARY" | "REPLACE_IMAGE" | "CANCEL_IMAGE";
+        replacementAssetAId?: string;
+        replacementAssetBId?: string;
+      },
+    ) {
+      const response = await request(
+        `${baseUrl}/api/mobile/v1/me/moderation/submissions/${encodeURIComponent(submissionId)}/asset-alternative`,
+        {
+          method: "POST",
+          headers: {
+            accept: "application/json",
+            authorization: `Bearer ${sessionToken}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify(command),
+        },
+      );
+      return bodyOrError<{ updated: true; revision: number }>(response);
+    },
+
     async loadPointShop(sessionToken: string) {
       const response = await request(`${baseUrl}/api/mobile/v1/me/point-shop`, {
         headers: { accept: "application/json", authorization: `Bearer ${sessionToken}` },
