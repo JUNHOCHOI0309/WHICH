@@ -19,6 +19,7 @@ import {
 import type { Database } from "../../database/client.js";
 import {
   comments,
+  commentRevisions,
   commentModerationDecisions,
   commentReactionAttempts,
   commentReactions,
@@ -46,6 +47,7 @@ import type {
   MemberCommentUpdateResult,
   PublicComment,
 } from "./contracts.js";
+import { sha256 } from "../content-revisions/service.js";
 import { decodeCommentCursor, encodeCommentCursor } from "./cursor.js";
 import { CommentError } from "./errors.js";
 
@@ -858,6 +860,20 @@ export function createCommentService(database: Database["db"]): CommentService {
           .returning();
         if (!comment) throw new Error("Comment insert did not return a row.");
 
+        await transaction.insert(commentRevisions).values({
+          commentId: comment.id,
+          revision: 1,
+          operation: "CREATED",
+          body: comment.body,
+          textPolicyVersion: comment.textPolicyVersion,
+          inputHash: sha256(comment.body),
+          sourceCommentVersion: comment.version,
+          publicationState: comment.publicationState,
+          visibility: comment.visibility,
+          integrityState: comment.integrityState,
+          createdAt: now,
+        });
+
         const eventId = randomUUID();
         await transaction.insert(outboxEvents).values({
           id: eventId,
@@ -966,12 +982,36 @@ export function createCommentService(database: Database["db"]): CommentService {
             body,
             textPolicyVersion: TEXT_POLICY_VERSION,
             editedAt: now,
+            bodyRevision: sql`${comments.bodyRevision} + 1`,
             version: sql`${comments.version} + 1`,
             updatedAt: now,
           })
           .where(eq(comments.id, command.commentId))
-          .returning({ id: comments.id, body: comments.body, editedAt: comments.editedAt });
+          .returning({
+            id: comments.id,
+            body: comments.body,
+            bodyRevision: comments.bodyRevision,
+            version: comments.version,
+            publicationState: comments.publicationState,
+            visibility: comments.visibility,
+            integrityState: comments.integrityState,
+            editedAt: comments.editedAt,
+          });
         if (!updated?.editedAt) throw new Error("Comment update did not return a row.");
+
+        await transaction.insert(commentRevisions).values({
+          commentId: updated.id,
+          revision: updated.bodyRevision,
+          operation: "EDITED",
+          body: updated.body,
+          textPolicyVersion: TEXT_POLICY_VERSION,
+          inputHash: sha256(updated.body),
+          sourceCommentVersion: updated.version,
+          publicationState: updated.publicationState,
+          visibility: updated.visibility,
+          integrityState: updated.integrityState,
+          createdAt: now,
+        });
 
         const eventId = randomUUID();
         await transaction.insert(outboxEvents).values({
@@ -1029,7 +1069,14 @@ export function createCommentService(database: Database["db"]): CommentService {
         }
 
         const [target] = await transaction
-          .select({ authorSubjectId: comments.authorSubjectId, deletedAt: comments.deletedAt })
+          .select({
+            authorSubjectId: comments.authorSubjectId,
+            bodyRevision: comments.bodyRevision,
+            version: comments.version,
+            publicationState: comments.publicationState,
+            integrityState: comments.integrityState,
+            deletedAt: comments.deletedAt,
+          })
           .from(comments)
           .where(eq(comments.id, command.commentId))
           .limit(1)
@@ -1045,16 +1092,37 @@ export function createCommentService(database: Database["db"]): CommentService {
           );
         }
 
-        await transaction
+        const removedBody = "[작성자가 삭제한 댓글]";
+        const [removed] = await transaction
           .update(comments)
           .set({
-            body: "[작성자가 삭제한 댓글]",
+            body: removedBody,
             visibility: "REMOVED_BY_AUTHOR",
             deletedAt: now,
+            bodyRevision: sql`${comments.bodyRevision} + 1`,
             version: sql`${comments.version} + 1`,
             updatedAt: now,
           })
-          .where(eq(comments.id, command.commentId));
+          .where(eq(comments.id, command.commentId))
+          .returning({
+            bodyRevision: comments.bodyRevision,
+            version: comments.version,
+          });
+        if (!removed) throw new Error("Comment delete did not return a row.");
+
+        await transaction.insert(commentRevisions).values({
+          commentId: command.commentId,
+          revision: removed.bodyRevision,
+          operation: "AUTHOR_REMOVED",
+          body: removedBody,
+          textPolicyVersion: TEXT_POLICY_VERSION,
+          inputHash: sha256(removedBody),
+          sourceCommentVersion: removed.version,
+          publicationState: target.publicationState,
+          visibility: "REMOVED_BY_AUTHOR",
+          integrityState: target.integrityState,
+          createdAt: now,
+        });
 
         const eventId = randomUUID();
         await transaction.insert(outboxEvents).values({

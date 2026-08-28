@@ -18,6 +18,7 @@ import type {
   IssuePublicationResult,
 } from "./contracts.js";
 import type { IssueManifest, IssueManifestItem, IssuePublicationTarget } from "./manifest.js";
+import { sealIssueVersionSnapshot } from "../content-revisions/service.js";
 
 type PublicationQueryExecutor = Pick<Database["db"], "select" | "insert" | "execute">;
 
@@ -412,6 +413,9 @@ export async function publishIssueManifest(
             })),
           ),
         );
+        for (const issue of createItems) {
+          await sealIssueVersionSnapshot(transaction, issue.id, issue.version);
+        }
         await transaction.insert(issueInterestCards).values(
           createItems.flatMap((issue) =>
             issue.interestCardCodes.map((cardCode) => ({

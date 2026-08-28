@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import Fastify from "fastify";
 import sharp from "sharp";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -8,8 +8,10 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { Database } from "../src/database/client.js";
 import {
   issueChoiceMedia,
+  issueChoiceMediaRevisions,
   issueChoices,
   issueMediaAssets,
+  issueMediaAssetVersions,
   issueMediaReviewDecisions,
   issueMediaRightsRequests,
   issues,
@@ -357,6 +359,16 @@ describe("operator Issue media foundation", () => {
     const normalizedMetadata = await sharp(normalizedBody).metadata();
     expect(normalizedMetadata).toMatchObject({ format: "webp" });
     expect(normalizedMetadata.exif).toBeUndefined();
+    const [assetVersion] = await database.db
+      .select()
+      .from(issueMediaAssetVersions)
+      .where(eq(issueMediaAssetVersions.assetId, stagedA!.id));
+    expect(assetVersion).toMatchObject({
+      version: 1,
+      sourceType: "OPERATOR_UPLOAD",
+      sha256: stagedA!.sha256,
+      normalizedObjectRef: `issue-media://asset/${stagedA!.id}/version/1`,
+    });
 
     await expect(stage("jpeg", [10, 120, 220])).rejects.toMatchObject({
       code: "MEDIA_DUPLICATE",
@@ -420,6 +432,30 @@ describe("operator Issue media foundation", () => {
       displayPosition: 0,
     });
     expect(replaced?.replacedAssetId).toBe(stagedA!.id);
+    const choiceARevisions = await database.db
+      .select({
+        revision: issueChoiceMediaRevisions.revision,
+        operation: issueChoiceMediaRevisions.operation,
+        assetId: issueChoiceMediaRevisions.mediaAssetId,
+        altText: issueChoiceMediaRevisions.altText,
+      })
+      .from(issueChoiceMediaRevisions)
+      .where(eq(issueChoiceMediaRevisions.choiceId, choiceAId))
+      .orderBy(asc(issueChoiceMediaRevisions.revision));
+    expect(choiceARevisions).toEqual([
+      {
+        revision: 1,
+        operation: "ATTACHED",
+        assetId: stagedA!.id,
+        altText: "Blue comparison image",
+      },
+      {
+        revision: 2,
+        operation: "REPLACED",
+        assetId: replacement!.id,
+        altText: "Replacement violet image",
+      },
+    ]);
     const [oldAsset] = await database.db
       .select()
       .from(issueMediaAssets)

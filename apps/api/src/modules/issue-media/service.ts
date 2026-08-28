@@ -5,8 +5,10 @@ import { and, eq, isNull, lt, sql } from "drizzle-orm";
 import type { Database } from "../../database/client.js";
 import {
   issueChoiceMedia,
+  issueChoiceMediaRevisions,
   issueChoices,
   issueMediaAssets,
+  issueMediaAssetVersions,
   issueVersions,
   members,
   operatorAccessGrants,
@@ -18,6 +20,7 @@ import type {
   IssueMediaObjectStorage,
   IssueMediaService,
 } from "./contracts.js";
+import { sha256 } from "../content-revisions/service.js";
 import { IssueMediaProcessingError, processIssueMedia } from "./image-processing.js";
 
 export class IssueMediaError extends Error {
@@ -87,6 +90,51 @@ export function createIssueMediaService(
   database: Database["db"],
   storage: IssueMediaObjectStorage,
 ): IssueMediaService {
+  async function appendChoiceMediaRevision(
+    transaction: Parameters<Parameters<typeof database.transaction>[0]>[0],
+    input: {
+      issueId: string;
+      issueVersion: number;
+      choiceId: string;
+      operation: "ATTACHED" | "REPLACED" | "DETACHED";
+      mediaAssetId?: string;
+      mediaSha256?: string;
+      altText?: string;
+      cropMode?: string;
+      displayPosition?: number;
+      rightsAttestation?: string;
+      linkedByMemberId: string;
+    },
+  ) {
+    const [latest] = await transaction
+      .select({ revision: issueChoiceMediaRevisions.revision })
+      .from(issueChoiceMediaRevisions)
+      .where(
+        and(
+          eq(issueChoiceMediaRevisions.issueId, input.issueId),
+          eq(issueChoiceMediaRevisions.issueVersion, input.issueVersion),
+          eq(issueChoiceMediaRevisions.choiceId, input.choiceId),
+        ),
+      )
+      .orderBy(sql`${issueChoiceMediaRevisions.revision} desc`)
+      .limit(1);
+    await transaction.insert(issueChoiceMediaRevisions).values({
+      issueId: input.issueId,
+      issueVersion: input.issueVersion,
+      choiceId: input.choiceId,
+      revision: (latest?.revision ?? 0) + 1,
+      operation: input.operation,
+      mediaAssetId: input.mediaAssetId,
+      mediaAssetVersion: input.mediaAssetId ? 1 : undefined,
+      mediaSha256: input.mediaSha256,
+      altText: input.altText,
+      cropMode: input.cropMode,
+      displayPosition: input.displayPosition,
+      rightsAttestation: input.rightsAttestation,
+      linkedByMemberId: input.linkedByMemberId,
+    });
+  }
+
   async function operator(memberId: string) {
     const [row] = await database
       .select({ id: members.id })
@@ -187,28 +235,52 @@ export function createIssueMediaService(
     const id = randomUUID();
     const staged = await storage.stage(id, processed.body);
     try {
-      const [created] = await database
-        .insert(issueMediaAssets)
-        .values({
-          id,
-          uploadedByMemberId: input.memberId,
+      const created = await database.transaction(async (transaction) => {
+        const rightsAttestedAt = new Date();
+        const [assetRow] = await transaction
+          .insert(issueMediaAssets)
+          .values({
+            id,
+            uploadedByMemberId: input.memberId,
+            sourceType: input.sourceType,
+            rightsAttestation,
+            rightsAttestedAt,
+            sha256: processed.sha256,
+            perceptualHash: processed.perceptualHash,
+            inputMimeType: processed.input.mimeType,
+            inputByteSize: processed.input.byteSize,
+            inputWidth: processed.input.width,
+            inputHeight: processed.input.height,
+            outputByteSize: processed.output.byteSize,
+            outputWidth: processed.output.width,
+            outputHeight: processed.output.height,
+            stagingObjectKey: staged.objectKey,
+            stagedAt: rightsAttestedAt,
+          })
+          .returning();
+        if (!assetRow) throw new Error("Media asset insert did not return a row.");
+        await transaction.insert(issueMediaAssetVersions).values({
+          assetId: id,
+          version: 1,
           sourceType: input.sourceType,
           rightsAttestation,
-          rightsAttestedAt: new Date(),
+          rightsAttestedAt,
           sha256: processed.sha256,
           perceptualHash: processed.perceptualHash,
           inputMimeType: processed.input.mimeType,
           inputByteSize: processed.input.byteSize,
           inputWidth: processed.input.width,
           inputHeight: processed.input.height,
+          outputMimeType: processed.output.mimeType,
           outputByteSize: processed.output.byteSize,
           outputWidth: processed.output.width,
           outputHeight: processed.output.height,
-          stagingObjectKey: staged.objectKey,
-          stagedAt: new Date(),
-        })
-        .returning();
-      return mapAsset(created!, storage);
+          normalizedObjectRef: `issue-media://asset/${id}/version/1`,
+          inputHash: sha256(processed.body),
+        });
+        return assetRow;
+      });
+      return mapAsset(created, storage);
     } catch (error) {
       await storage.purge([staged.objectKey]).catch(() => undefined);
       throw error;
@@ -263,25 +335,37 @@ export function createIssueMediaService(
   ) {
     if (row.storageState === "PURGED") return row;
     await storage.purge([row.stagingObjectKey, row.publishedObjectKey, row.quarantinedObjectKey]);
-    const affectedLinks = await database
-      .delete(issueChoiceMedia)
-      .where(eq(issueChoiceMedia.mediaAssetId, row.id))
-      .returning({
-        issueId: issueChoiceMedia.issueId,
-        issueVersion: issueChoiceMedia.issueVersion,
-      });
-    for (const link of affectedLinks) {
-      await database
-        .update(issueVersions)
-        .set({ mediaMode: "TEXT_ONLY" })
-        .where(
-          and(
-            eq(issueVersions.issueId, link.issueId),
-            eq(issueVersions.version, link.issueVersion),
-            isNull(issueVersions.publishedAt),
-          ),
-        );
-    }
+    await database.transaction(async (transaction) => {
+      const links = await transaction
+        .delete(issueChoiceMedia)
+        .where(eq(issueChoiceMedia.mediaAssetId, row.id))
+        .returning({
+          issueId: issueChoiceMedia.issueId,
+          issueVersion: issueChoiceMedia.issueVersion,
+          choiceId: issueChoiceMedia.choiceId,
+          linkedByMemberId: issueChoiceMedia.linkedByMemberId,
+        });
+      for (const link of links) {
+        await appendChoiceMediaRevision(transaction, {
+          issueId: link.issueId,
+          issueVersion: link.issueVersion,
+          choiceId: link.choiceId,
+          operation: "DETACHED",
+          linkedByMemberId: link.linkedByMemberId,
+        });
+        await transaction
+          .update(issueVersions)
+          .set({ mediaMode: "TEXT_ONLY" })
+          .where(
+            and(
+              eq(issueVersions.issueId, link.issueId),
+              eq(issueVersions.version, link.issueVersion),
+              isNull(issueVersions.publishedAt),
+            ),
+          );
+      }
+      return links;
+    });
     const [updated] = await database
       .update(issueMediaAssets)
       .set({
@@ -429,6 +513,9 @@ export function createIssueMediaService(
         );
       }
       const result = await database.transaction(async (transaction) => {
+        await transaction.execute(
+          sql`select pg_advisory_xact_lock(hashtextextended(${`${input.issueId}:${input.issueVersion}:${input.choiceId}`}, 0))`,
+        );
         const [previous] = await transaction
           .select({ assetId: issueChoiceMedia.mediaAssetId })
           .from(issueChoiceMedia)
@@ -467,6 +554,19 @@ export function createIssueMediaService(
               updatedAt: new Date(),
             },
           });
+        await appendChoiceMediaRevision(transaction, {
+          issueId: input.issueId,
+          issueVersion: input.issueVersion,
+          choiceId: input.choiceId,
+          operation: previous ? "REPLACED" : "ATTACHED",
+          mediaAssetId: input.assetId,
+          mediaSha256: row.sha256,
+          altText: input.altText.trim(),
+          cropMode: input.cropMode,
+          displayPosition: input.displayPosition,
+          rightsAttestation: row.rightsAttestation,
+          linkedByMemberId: input.memberId,
+        });
         const [count] = await transaction
           .select({ value: sql<number>`count(*)::int` })
           .from(issueChoiceMedia)
@@ -526,25 +626,40 @@ export function createIssueMediaService(
           "Published or locked Issue versions cannot change media links in place.",
         );
       }
-      const removed = await database
-        .delete(issueChoiceMedia)
-        .where(
-          and(
-            eq(issueChoiceMedia.issueId, input.issueId),
-            eq(issueChoiceMedia.issueVersion, input.issueVersion),
-            eq(issueChoiceMedia.choiceId, input.choiceId),
-          ),
-        )
-        .returning({ assetId: issueChoiceMedia.mediaAssetId });
-      await database
-        .update(issueVersions)
-        .set({ mediaMode: "TEXT_ONLY" })
-        .where(
-          and(
-            eq(issueVersions.issueId, input.issueId),
-            eq(issueVersions.version, input.issueVersion),
-          ),
+      const removed = await database.transaction(async (transaction) => {
+        await transaction.execute(
+          sql`select pg_advisory_xact_lock(hashtextextended(${`${input.issueId}:${input.issueVersion}:${input.choiceId}`}, 0))`,
         );
+        const rows = await transaction
+          .delete(issueChoiceMedia)
+          .where(
+            and(
+              eq(issueChoiceMedia.issueId, input.issueId),
+              eq(issueChoiceMedia.issueVersion, input.issueVersion),
+              eq(issueChoiceMedia.choiceId, input.choiceId),
+            ),
+          )
+          .returning({ assetId: issueChoiceMedia.mediaAssetId });
+        if (rows[0]) {
+          await appendChoiceMediaRevision(transaction, {
+            issueId: input.issueId,
+            issueVersion: input.issueVersion,
+            choiceId: input.choiceId,
+            operation: "DETACHED",
+            linkedByMemberId: input.memberId,
+          });
+        }
+        await transaction
+          .update(issueVersions)
+          .set({ mediaMode: "TEXT_ONLY" })
+          .where(
+            and(
+              eq(issueVersions.issueId, input.issueId),
+              eq(issueVersions.version, input.issueVersion),
+            ),
+          );
+        return rows;
+      });
       await audit({
         memberId: input.memberId,
         eventType,

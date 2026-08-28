@@ -1,6 +1,7 @@
 export * from "./enums.js";
 export * from "./analytics.js";
 export * from "./comments.js";
+export * from "./content-revisions.js";
 export * from "./identity.js";
 export * from "./interests.js";
 export * from "./issues.js";
