@@ -11,6 +11,8 @@ import type {
   MemberAvatarUpdate,
   MemberPrivateProfile,
   MemberProfileSettings,
+  MemberIssueSubmission,
+  MemberIssueMediaAsset,
   MemberSessionView,
   MemberView,
   PublicIssue,
@@ -81,6 +83,97 @@ export function createMobileApiClient(
   const request = options.request ?? ((input: string, init?: RequestInit) => fetch(input, init));
 
   return {
+    async submitMemberIssue(
+      sessionToken: string,
+      idempotencyKey: string,
+      command: {
+        question: string;
+        context: string | null;
+        choiceA: string;
+        choiceB: string;
+        mediaAssetAId?: string | null;
+        mediaAssetBId?: string | null;
+        interestCardCode: InterestCardCode;
+      },
+    ) {
+      const response = await request(`${baseUrl}/api/mobile/v1/member/issue-submissions`, {
+        method: "POST",
+        headers: {
+          accept: "application/json",
+          authorization: `Bearer ${sessionToken}`,
+          "content-type": "application/json",
+          "idempotency-key": idempotencyKey,
+        },
+        body: JSON.stringify(command),
+      });
+      return bodyOrError<{ submission: MemberIssueSubmission; created: boolean }>(response);
+    },
+
+    async loadMemberIssueSubmissions(sessionToken: string, limit = 10) {
+      const response = await request(
+        `${baseUrl}/api/mobile/v1/member/issue-submissions?limit=${limit}`,
+        { headers: { accept: "application/json", authorization: `Bearer ${sessionToken}` } },
+      );
+      return bodyOrError<{ items: MemberIssueSubmission[] }>(response);
+    },
+
+    async resubmitMemberIssue(
+      sessionToken: string,
+      submissionId: string,
+      idempotencyKey: string,
+      command: {
+        expectedRevision: number;
+        question: string;
+        context: string | null;
+        choiceA: string;
+        choiceB: string;
+        mediaAssetAId?: string | null;
+        mediaAssetBId?: string | null;
+        interestCardCode: InterestCardCode;
+      },
+    ) {
+      const response = await request(
+        `${baseUrl}/api/mobile/v1/member/issue-submissions/${encodeURIComponent(submissionId)}`,
+        {
+          method: "PUT",
+          headers: {
+            accept: "application/json",
+            authorization: `Bearer ${sessionToken}`,
+            "content-type": "application/json",
+            "idempotency-key": idempotencyKey,
+          },
+          body: JSON.stringify(command),
+        },
+      );
+      return bodyOrError<{ submission: MemberIssueSubmission; created: boolean }>(response);
+    },
+
+    async uploadMemberIssueMedia(
+      sessionToken: string,
+      media: { uri: string; name: string; type: "image/jpeg" | "image/png" | "image/webp" },
+      rightsAttestation: string,
+    ) {
+      const assetResponse = await request(media.uri);
+      if (!assetResponse.ok) {
+        throw new MobileApiError(
+          "ISSUE_MEDIA_FILE_UNREADABLE",
+          assetResponse.status,
+          "선택한 이미지를 읽지 못했습니다.",
+        );
+      }
+      const source = await assetResponse.blob();
+      const file = source.type === media.type ? source : source.slice(0, source.size, media.type);
+      const form = new FormData();
+      form.append("media", file, media.name);
+      form.append("rightsAttestation", rightsAttestation);
+      const response = await request(`${baseUrl}/api/mobile/v1/member/issue-submission-media`, {
+        method: "POST",
+        headers: { accept: "application/json", authorization: `Bearer ${sessionToken}` },
+        body: form,
+      });
+      return bodyOrError<{ asset: MemberIssueMediaAsset }>(response);
+    },
+
     async createGuestSubject() {
       const response = await request(`${baseUrl}/api/mobile/v1/guest-subjects`, {
         method: "POST",

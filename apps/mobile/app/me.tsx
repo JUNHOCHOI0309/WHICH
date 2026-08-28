@@ -166,6 +166,7 @@ export default function MeScreen() {
       const next = await mobileApi.loadMemberPoints(session.token, { limit: 20, cursor });
       setPoints({
         account: next.account,
+        badge: next.badge,
         ledger: {
           items: [...points.ledger.items, ...next.ledger.items],
           nextCursor: next.ledger.nextCursor,

@@ -89,6 +89,14 @@ export type MemberPointLedgerItem = {
   createdAt: string;
 };
 
+export type MemberPointBadge = {
+  code: "BRONZE" | "SILVER" | "GOLD" | "PLATINUM" | "DIAMOND";
+  label: string;
+  minimumLifetimePoints: number;
+  assetKey: string;
+  awardedAt?: string;
+};
+
 export type MemberPointView = {
   account: {
     balance: number;
@@ -96,6 +104,12 @@ export type MemberPointView = {
     lifetimeEarned: number;
     lifetimeSpent: number;
     hasPendingRecovery: boolean;
+  };
+  badge: {
+    policyVersion: string;
+    current: MemberPointBadge | null;
+    next: MemberPointBadge | null;
+    progress: number;
   };
   ledger: { items: MemberPointLedgerItem[]; nextCursor: string | null };
 };
@@ -259,4 +273,31 @@ export type InterestProfile = {
     guestCardCodes: InterestCardCode[];
     suggestedCardCodes: InterestCardCode[];
   } | null;
+};
+
+export type MemberIssueSubmissionStatus = "PENDING" | "APPROVED" | "NEEDS_CHANGES" | "REJECTED";
+
+export type MemberIssueSubmission = {
+  id: string;
+  revision: number;
+  status: MemberIssueSubmissionStatus;
+  question: string;
+  context: string | null;
+  choiceA: string;
+  choiceB: string;
+  mediaAssetAId: string | null;
+  mediaAssetBId: string | null;
+  interestCardCode: InterestCardCode;
+  reviewNote: string | null;
+  submittedAt: string;
+  updatedAt: string;
+};
+
+export type MemberIssueMediaAsset = {
+  id: string;
+  sourceType: "MEMBER_SUBMISSION";
+  processingState: "READY";
+  moderationState: "PENDING";
+  storageState: "STAGED";
+  rightsState: "ASSERTED";
 };

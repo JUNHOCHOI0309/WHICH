@@ -68,6 +68,23 @@ describe("Member vote history experience", () => {
               lifetimeSpent: 0,
               hasPendingRecovery: false,
             },
+            badge: {
+              policyVersion: "w_badge_v1",
+              current: {
+                code: "BRONZE",
+                label: "브론즈",
+                minimumLifetimePoints: 10,
+                assetKey: "bronze.webp",
+                awardedAt: "2026-08-26T00:00:00.000Z",
+              },
+              next: {
+                code: "SILVER",
+                label: "실버",
+                minimumLifetimePoints: 1000,
+                assetKey: "silver.webp",
+              },
+              progress: 110 / 990,
+            },
             ledger: {
               items: [
                 {

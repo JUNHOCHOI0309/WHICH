@@ -50,6 +50,23 @@ describe("mobile API client", () => {
           lifetimeSpent: 0,
           hasPendingRecovery: false,
         },
+        badge: {
+          policyVersion: "w_badge_v1",
+          current: {
+            code: "BRONZE",
+            label: "브론즈",
+            minimumLifetimePoints: 10,
+            assetKey: "bronze.webp",
+            awardedAt: "2026-08-27T00:00:00.000Z",
+          },
+          next: {
+            code: "SILVER",
+            label: "실버",
+            minimumLifetimePoints: 1000,
+            assetKey: "silver.webp",
+          },
+          progress: 10 / 990,
+        },
         ledger: { items: [], nextCursor: null },
       }),
     );
@@ -100,6 +117,44 @@ describe("mobile API client", () => {
     expect(uploaded).toBeInstanceOf(Blob);
     expect(uploaded.type).toBe("image/jpeg");
     expect(uploaded.name).toBe("avatar.jpg");
+  });
+
+  it("uploads selection media through the authenticated mobile BFF", async () => {
+    const requests: { input: string; init?: RequestInit }[] = [];
+    const request: RequestFunction = vi.fn(async (input, init) => {
+      requests.push({ input, init });
+      if (input === "file:///choice-a.png") {
+        return new Response(new Blob(["choice-bytes"], { type: "image/png" }));
+      }
+      return jsonResponse(
+        {
+          asset: {
+            id: "591f2e90-996a-50c5-af46-967dd0793000",
+            sourceType: "MEMBER_SUBMISSION",
+            processingState: "READY",
+            moderationState: "PENDING",
+            storageState: "STAGED",
+            rightsState: "ASSERTED",
+          },
+        },
+        201,
+      );
+    });
+    const api = createMobileApiClient({ baseUrl: "https://whichone.site", request });
+
+    await api.uploadMemberIssueMedia(
+      "member-session",
+      { uri: "file:///choice-a.png", name: "choice-a.png", type: "image/png" },
+      "I own this image and permit editorial review and publication.",
+    );
+
+    expect(requests.map(({ input }) => input)).toEqual([
+      "file:///choice-a.png",
+      "https://whichone.site/api/mobile/v1/member/issue-submission-media",
+    ]);
+    const form = requests[1]?.init?.body as FormData;
+    expect((form.get("media") as File).name).toBe("choice-a.png");
+    expect(form.get("rightsAttestation")).toContain("editorial review");
   });
 
   it("updates profile settings and deletes the authenticated Member through mobile BFF routes", async () => {

@@ -10,7 +10,10 @@ import {
   issueAuthors,
   issueChoices,
   issueInterestCards,
+  issueMediaAssets,
   issueVersions,
+  memberIssueSubmissionRevisions,
+  memberIssueSubmissions,
   outboxEvents,
   resultSnapshots,
   voteAggregates,
@@ -76,6 +79,105 @@ afterAll(async () => {
 });
 
 describe("Member Issue creation v1", () => {
+  it("accepts only paired staged media owned by the submitting Member", async () => {
+    const session = await createSession("이미지 질문 회원");
+    const mediaIds = [randomUUID(), randomUUID()];
+    await database.db.insert(issueMediaAssets).values(
+      mediaIds.map((id, index) => ({
+        id,
+        uploadedByMemberId: session.member.id,
+        sourceType: "MEMBER_SUBMISSION",
+        rightsAttestation: "I own this image and allow editorial review and publication.",
+        rightsAttestedAt: new Date(),
+        sha256: String(index + 1).repeat(64),
+        perceptualHash: String(index + 1).repeat(16),
+        inputMimeType: "image/png",
+        inputByteSize: 100,
+        inputWidth: 10,
+        inputHeight: 10,
+        outputByteSize: 80,
+        outputWidth: 10,
+        outputHeight: 10,
+        stagingObjectKey: `issue-media/staging/${id}.webp`,
+        stagedAt: new Date(),
+      })),
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/member/issue-submissions",
+      headers: { authorization: `Bearer ${session.token}`, "idempotency-key": randomUUID() },
+      payload: {
+        ...createPayload("이미지와 함께 무엇을 고를까"),
+        mediaAssetAId: mediaIds[0],
+        mediaAssetBId: mediaIds[1],
+      },
+    });
+    expect(response.statusCode).toBe(201);
+    expect(response.json()).toMatchObject({
+      submission: { mediaAssetAId: mediaIds[0], mediaAssetBId: mediaIds[1] },
+    });
+
+    const oneSided = await app.inject({
+      method: "POST",
+      url: "/v1/member/issue-submissions",
+      headers: { authorization: `Bearer ${session.token}`, "idempotency-key": randomUUID() },
+      payload: { ...createPayload("이미지 한 장만 제출하면 될까"), mediaAssetAId: mediaIds[0] },
+    });
+    expect(oneSided.statusCode).toBe(422);
+    expect(oneSided.json()).toMatchObject({ code: "ISSUE_SUBMISSION_MEDIA_INVALID" });
+  });
+
+  it("preserves revisions when a requested change is resubmitted", async () => {
+    const session = await createSession("수정본 제출 회원");
+    const submitted = await app.inject({
+      method: "POST",
+      url: "/v1/member/issue-submissions",
+      headers: { authorization: `Bearer ${session.token}`, "idempotency-key": randomUUID() },
+      payload: createPayload("아침에는 무엇을 먼저 할까"),
+    });
+    expect(submitted.statusCode).toBe(201);
+    const first = submitted.json<{ submission: { id: string; revision: number } }>().submission;
+
+    await database.db
+      .update(memberIssueSubmissions)
+      .set({ status: "NEEDS_CHANGES", reviewNote: "선택지를 더 구체적으로 작성해 주세요." })
+      .where(eq(memberIssueSubmissions.id, first.id));
+
+    const idempotencyKey = randomUUID();
+    const request = {
+      method: "PUT" as const,
+      url: `/v1/member/issue-submissions/${first.id}`,
+      headers: { authorization: `Bearer ${session.token}`, "idempotency-key": idempotencyKey },
+      payload: {
+        ...createPayload("아침에는 무엇을 먼저 할까"),
+        choiceA: "물 한 잔 마시기",
+        choiceB: "스트레칭부터 하기",
+        expectedRevision: 1,
+      },
+    };
+    const revised = await app.inject(request);
+    expect(revised.statusCode).toBe(200);
+    expect(revised.json()).toMatchObject({
+      created: true,
+      submission: { id: first.id, revision: 2, status: "PENDING", reviewNote: null },
+    });
+
+    const replayed = await app.inject(request);
+    expect(replayed.statusCode).toBe(200);
+    expect(replayed.json()).toMatchObject({
+      created: false,
+      submission: { id: first.id, revision: 2 },
+    });
+
+    const revisions = await database.db
+      .select()
+      .from(memberIssueSubmissionRevisions)
+      .where(eq(memberIssueSubmissionRevisions.submissionId, first.id));
+    expect(revisions).toHaveLength(2);
+    expect(revisions.map((revision) => revision.revision).sort()).toEqual([1, 2]);
+  });
+
   it("requires a Member session", async () => {
     const response = await app.inject({
       method: "POST",

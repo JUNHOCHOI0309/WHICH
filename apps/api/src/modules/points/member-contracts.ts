@@ -1,5 +1,15 @@
 export type MemberPointLedgerEntryType = "EARN" | "SPEND" | "REFUND" | "REVERSAL" | "ADJUSTMENT";
 
+export type MemberPointBadgeCode = "BRONZE" | "SILVER" | "GOLD" | "PLATINUM" | "DIAMOND";
+
+export type MemberPointBadge = {
+  code: MemberPointBadgeCode;
+  label: string;
+  minimumLifetimePoints: number;
+  assetKey: string;
+  awardedAt?: string;
+};
+
 export type MemberPointLedgerItem = {
   id: string;
   entryType: MemberPointLedgerEntryType;
@@ -16,6 +26,12 @@ export type MemberPointView = {
     lifetimeEarned: number;
     lifetimeSpent: number;
     hasPendingRecovery: boolean;
+  };
+  badge: {
+    policyVersion: string;
+    current: MemberPointBadge | null;
+    next: MemberPointBadge | null;
+    progress: number;
   };
   ledger: {
     items: MemberPointLedgerItem[];

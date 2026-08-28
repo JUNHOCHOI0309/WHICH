@@ -17,12 +17,16 @@ export type IssueWriteErrorCode =
   | "INVALID_ISSUE_CONTENT"
   | "UNSAFE_ISSUE_CONTENT"
   | "ISSUE_CREATION_LIMIT_REACHED"
+  | "ISSUE_SUBMISSION_NOT_FOUND"
+  | "ISSUE_SUBMISSION_REVISION_CONFLICT"
+  | "ISSUE_SUBMISSION_NOT_EDITABLE"
+  | "ISSUE_SUBMISSION_MEDIA_INVALID"
   | "IDEMPOTENCY_CONFLICT";
 
 export class IssueWriteError extends Error {
   constructor(
     public readonly code: IssueWriteErrorCode,
-    public readonly statusCode: 400 | 401 | 409 | 422 | 429,
+    public readonly statusCode: 400 | 401 | 404 | 409 | 422 | 429,
     message: string,
   ) {
     super(message);

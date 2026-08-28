@@ -14,6 +14,41 @@ const pointViewSchema = Type.Object({
     lifetimeSpent: Type.Integer({ minimum: 0 }),
     hasPendingRecovery: Type.Boolean(),
   }),
+  badge: Type.Object({
+    policyVersion: Type.String(),
+    current: Type.Union([
+      Type.Object({
+        code: Type.Union([
+          Type.Literal("BRONZE"),
+          Type.Literal("SILVER"),
+          Type.Literal("GOLD"),
+          Type.Literal("PLATINUM"),
+          Type.Literal("DIAMOND"),
+        ]),
+        label: Type.String(),
+        minimumLifetimePoints: Type.Integer({ minimum: 1 }),
+        assetKey: Type.String(),
+        awardedAt: Type.String({ format: "date-time" }),
+      }),
+      Type.Null(),
+    ]),
+    next: Type.Union([
+      Type.Object({
+        code: Type.Union([
+          Type.Literal("BRONZE"),
+          Type.Literal("SILVER"),
+          Type.Literal("GOLD"),
+          Type.Literal("PLATINUM"),
+          Type.Literal("DIAMOND"),
+        ]),
+        label: Type.String(),
+        minimumLifetimePoints: Type.Integer({ minimum: 1 }),
+        assetKey: Type.String(),
+      }),
+      Type.Null(),
+    ]),
+    progress: Type.Number({ minimum: 0, maximum: 1 }),
+  }),
   ledger: Type.Object({
     items: Type.Array(
       Type.Object({

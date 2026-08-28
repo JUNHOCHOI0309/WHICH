@@ -5,6 +5,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
   members,
+  memberPointBadgeAwards,
+  outboxEvents,
   pointAccounts,
   pointDailyCounters,
   pointLedgerEntries,
@@ -69,6 +71,26 @@ describe("point ledger foundation", () => {
       qualifyingCount: 1,
       awardedPoints: 10,
     });
+    const awards = await testDatabase.database.db
+      .select()
+      .from(memberPointBadgeAwards)
+      .where(eq(memberPointBadgeAwards.memberId, memberId));
+    expect(awards).toEqual([
+      expect.objectContaining({
+        badgeCode: "BRONZE",
+        policyVersion: "w_badge_v1",
+        thresholdSnapshot: 10,
+        awardSource: "LEDGER_ENTRY",
+        sourceLedgerEntryId: result.entryId,
+      }),
+    ]);
+    const badgeEvents = await testDatabase.database.db
+      .select()
+      .from(outboxEvents)
+      .where(eq(outboxEvents.aggregateId, awards[0]!.id));
+    expect(badgeEvents).toEqual([
+      expect.objectContaining({ eventType: "POINT_BADGE_AWARDED", status: "PENDING" }),
+    ]);
   });
 
   it("returns a no-op when the same idempotency key is replayed", async () => {
@@ -86,6 +108,11 @@ describe("point ledger foundation", () => {
       .from(pointLedgerEntries)
       .where(eq(pointLedgerEntries.memberId, memberId));
     expect(entries).toHaveLength(1);
+    const awards = await testDatabase.database.db
+      .select({ id: memberPointBadgeAwards.id })
+      .from(memberPointBadgeAwards)
+      .where(eq(memberPointBadgeAwards.memberId, memberId));
+    expect(awards).toHaveLength(1);
     expect(replay.account).toMatchObject({ cachedBalance: 10, lifetimeEarned: 10, version: 1 });
   });
 
@@ -142,6 +169,26 @@ describe("point ledger foundation", () => {
       .from(pointDailyCounters)
       .where(eq(pointDailyCounters.memberId, memberId));
     expect(counter).toMatchObject({ qualifyingCount: 12, awardedPoints: 120 });
+  });
+
+  it("awards every crossed badge exactly once from versioned policy data", async () => {
+    const memberId = await createMember();
+    const service = createPointLedgerService(testDatabase.database.db);
+    const first = earnCommand(memberId);
+    await service.applyEntry({ ...first, amount: 5_000 });
+
+    const awards = await testDatabase.database.db
+      .select({ badgeCode: memberPointBadgeAwards.badgeCode })
+      .from(memberPointBadgeAwards)
+      .where(eq(memberPointBadgeAwards.memberId, memberId));
+    expect(awards.map((award) => award.badgeCode).sort()).toEqual(["BRONZE", "GOLD", "SILVER"]);
+
+    await service.applyEntry(earnCommand(memberId));
+    const replayedAwards = await testDatabase.database.db
+      .select({ badgeCode: memberPointBadgeAwards.badgeCode })
+      .from(memberPointBadgeAwards)
+      .where(eq(memberPointBadgeAwards.memberId, memberId));
+    expect(replayedAwards).toHaveLength(3);
   });
 
   it("enforces a concurrent daily award cap inside the ledger transaction", async () => {
@@ -227,6 +274,11 @@ describe("point ledger foundation", () => {
       lifetimeSpent: 10,
       version: 2,
     });
+    const awards = await testDatabase.database.db
+      .select({ badgeCode: memberPointBadgeAwards.badgeCode })
+      .from(memberPointBadgeAwards)
+      .where(eq(memberPointBadgeAwards.memberId, memberId));
+    expect(awards).toEqual([{ badgeCode: "BRONZE" }]);
   });
 
   it("blocks update and delete mutations at the database boundary", async () => {

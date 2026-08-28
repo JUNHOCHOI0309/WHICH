@@ -146,6 +146,26 @@ afterAll(async () => {
 });
 
 describe("operator Issue media foundation", () => {
+  it("stages Member submission media privately without requiring operator access", async () => {
+    const storage = new FakeIssueMediaStorage();
+    const service = createIssueMediaService(database.db, storage);
+    const asset = await service.stageMemberAsset({
+      memberId: regularMemberId,
+      rightsAttestation: "I own this test image and allow editorial review and publication.",
+      declaredMimeType: "image/png",
+      bytes: await image("png", { r: 8, g: 120, b: 160 }),
+    });
+
+    expect(asset).toMatchObject({
+      sourceType: "MEMBER_SUBMISSION",
+      processingState: "READY",
+      moderationState: "PENDING",
+      storageState: "STAGED",
+      publishedUrl: null,
+    });
+    expect(storage.operations).toContain(`stage:${asset.id}`);
+  });
+
   it("fails closed when R2 media storage is missing, shared, or publicly misconfigured", () => {
     const base = {
       R2_ACCOUNT_ID: "account",
@@ -233,6 +253,50 @@ describe("operator Issue media foundation", () => {
     });
     expect(gif.statusCode).toBe(400);
     expect(stageAsset).not.toHaveBeenCalled();
+    await app.close();
+  });
+
+  it("accepts Member media through session auth without exposing the internal secret", async () => {
+    const app = Fastify({ logger: false });
+    const staged = {
+      id: randomUUID(),
+      sourceType: "MEMBER_SUBMISSION" as const,
+      sha256: "c".repeat(64),
+      perceptualHash: "d".repeat(16),
+      input: { mimeType: "image/png" as const, byteSize: 5, width: 1, height: 1 },
+      output: { mimeType: "image/webp" as const, byteSize: 5, width: 1, height: 1 },
+      processingState: "READY" as const,
+      moderationState: "PENDING" as const,
+      storageState: "STAGED" as const,
+      rightsState: "ASSERTED" as const,
+      publishedUrl: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    const stageMemberAsset = vi.fn(() => Promise.resolve(staged));
+    const service = { stageMemberAsset } as unknown as IssueMediaService;
+    const identity = {
+      getSession: vi.fn((token: string) =>
+        Promise.resolve(token === "member-token" ? { member: { id: regularMemberId } } : null),
+      ),
+    };
+    await registerIssueMediaRoutes(app, service, identity as never, "test-internal-secret");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/member/issue-submission-media",
+      headers: { authorization: "Bearer member-token" },
+      payload: {
+        rightsAttestation: "I own this image and allow editorial review and publication.",
+        declaredMimeType: "image/png",
+        contentBase64: "aGVsbG8=",
+      },
+    });
+    expect(response.statusCode).toBe(201);
+    expect(response.json()).toMatchObject({ asset: { sourceType: "MEMBER_SUBMISSION" } });
+    expect(stageMemberAsset).toHaveBeenCalledWith(
+      expect.objectContaining({ memberId: regularMemberId, bytes: Buffer.from("hello") }),
+    );
     await app.close();
   });
 

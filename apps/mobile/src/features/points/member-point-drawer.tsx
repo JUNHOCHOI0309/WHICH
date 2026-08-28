@@ -13,7 +13,6 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import type { MemberPointLedgerItem, MemberPointView } from "@/contracts";
-import { nextPointBadge, pointBadgeFor, pointBadgeProgress } from "@/features/points/point-badges";
 import { colors } from "@/theme";
 
 const badgeImages = {
@@ -59,9 +58,9 @@ export function MemberPointDrawer({
   visible: boolean;
 }) {
   const [translateX] = useState(() => new Animated.Value(HIDDEN_TRANSLATE_X));
-  const badge = pointBadgeFor(points?.account.lifetimeEarned ?? 0);
-  const nextBadge = nextPointBadge(points?.account.lifetimeEarned ?? 0);
-  const progress = pointBadgeProgress(points?.account.lifetimeEarned ?? 0);
+  const badge = points?.badge.current ?? null;
+  const nextBadge = points?.badge.next ?? null;
+  const progress = points?.badge.progress ?? 0;
 
   useEffect(() => {
     if (!visible) return;
@@ -147,15 +146,21 @@ export function MemberPointDrawer({
                       누적 획득 {points.account.lifetimeEarned.toLocaleString("ko-KR")}P
                     </Text>
                   </View>
-                  <Image
-                    accessibilityLabel={`${badge.label} 배지`}
-                    source={badgeImages[badge.code]}
-                    style={styles.badge}
-                  />
+                  {badge ? (
+                    <Image
+                      accessibilityLabel={`${badge.label} W Point 배지`}
+                      source={badgeImages[badge.code]}
+                      style={styles.badge}
+                    />
+                  ) : (
+                    <View style={styles.badgePending}>
+                      <Text style={styles.badgePendingText}>첫 적립 후{`\n`}배지 획득</Text>
+                    </View>
+                  )}
                 </View>
                 <View style={styles.milestone}>
                   <View style={styles.milestoneRow}>
-                    <Text style={styles.badgeLabel}>{badge.label}</Text>
+                    <Text style={styles.badgeLabel}>{badge?.label ?? "배지 준비 중"}</Text>
                     <Text style={styles.milestoneCopy}>
                       {nextBadge
                         ? `${nextBadge.label}까지 ${Math.max(0, nextBadge.minimumLifetimePoints - points.account.lifetimeEarned).toLocaleString("ko-KR")}P`
@@ -255,6 +260,23 @@ const styles = StyleSheet.create({
   today: { color: colors.cyanStrong, fontSize: 15, fontWeight: "900" },
   lifetime: { color: colors.textSecondary, fontSize: 11, fontWeight: "700", marginTop: 5 },
   badge: { height: 92, width: 92 },
+  badgePending: {
+    alignItems: "center",
+    borderColor: colors.borderStrong,
+    borderRadius: 46,
+    borderStyle: "dashed",
+    borderWidth: 1,
+    height: 92,
+    justifyContent: "center",
+    width: 92,
+  },
+  badgePendingText: {
+    color: colors.textSecondary,
+    fontSize: 11,
+    fontWeight: "800",
+    lineHeight: 16,
+    textAlign: "center",
+  },
   milestone: { gap: 8 },
   milestoneRow: { flexDirection: "row", justifyContent: "space-between" },
   badgeLabel: { color: colors.text, fontSize: 14, fontWeight: "900" },

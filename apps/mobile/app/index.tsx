@@ -506,6 +506,15 @@ export default function FeedScreen() {
           <Text style={styles.bottomNavText}>관심사</Text>
         </Pressable>
         <Pressable
+          accessibilityLabel="질문 만들기"
+          accessibilityRole="button"
+          onPress={() => router.push("/create")}
+          style={styles.bottomNavItem}
+        >
+          <Text style={styles.bottomNavCreateIcon}>?</Text>
+          <Text style={styles.bottomNavText}>질문</Text>
+        </Pressable>
+        <Pressable
           accessibilityRole="button"
           onPress={() => router.push("/me")}
           style={styles.bottomNavItem}
@@ -793,6 +802,12 @@ const styles = StyleSheet.create({
   },
   bottomNavIcon: { color: colors.textTertiary, fontSize: 19 },
   bottomNavIconActive: { color: colors.cyanStrong, fontSize: 19 },
+  bottomNavCreateIcon: {
+    color: colors.cyanStrong,
+    fontSize: 23,
+    fontWeight: "900",
+    lineHeight: 22,
+  },
   bottomNavText: { color: colors.textSecondary, fontSize: 10, fontWeight: "700" },
   bottomNavTextActive: { color: colors.text, fontSize: 10, fontWeight: "900" },
   topAction: {

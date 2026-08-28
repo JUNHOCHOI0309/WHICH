@@ -1,12 +1,16 @@
-import { and, eq, or, sql } from "drizzle-orm";
+import { and, asc, eq, lte, or, sql } from "drizzle-orm";
 
 import type { Database } from "../../database/client.js";
 import {
   members,
+  memberPointBadgeAwards,
+  outboxEvents,
   pointAccounts,
+  pointBadgePolicies,
   pointDailyCounters,
   pointLedgerEntries,
 } from "../../database/schema/index.js";
+import { POINT_BADGE_POLICY_VERSION } from "./badge-policy.js";
 
 export type PointLedgerEntryType = "EARN" | "SPEND" | "REFUND" | "REVERSAL" | "ADJUSTMENT";
 
@@ -378,6 +382,65 @@ export function createPointLedgerService(database: Database["db"]) {
                 updatedAt: new Date(),
               },
             });
+
+          const eligiblePolicies = await transaction
+            .select({
+              badgeCode: pointBadgePolicies.badgeCode,
+              label: pointBadgePolicies.label,
+              minimumLifetimePoints: pointBadgePolicies.minimumLifetimePoints,
+              policyVersion: pointBadgePolicies.policyVersion,
+            })
+            .from(pointBadgePolicies)
+            .where(
+              and(
+                eq(pointBadgePolicies.policyVersion, POINT_BADGE_POLICY_VERSION),
+                lte(pointBadgePolicies.minimumLifetimePoints, account.lifetimeEarned),
+              ),
+            )
+            .orderBy(asc(pointBadgePolicies.displayOrder));
+
+          if (eligiblePolicies.length > 0) {
+            const awarded = await transaction
+              .insert(memberPointBadgeAwards)
+              .values(
+                eligiblePolicies.map((policy) => ({
+                  memberId: command.memberId,
+                  badgeCode: policy.badgeCode,
+                  policyVersion: policy.policyVersion,
+                  thresholdSnapshot: policy.minimumLifetimePoints,
+                  labelSnapshot: policy.label,
+                  sourceLedgerEntryId: inserted[0]!.id,
+                  awardSource: "LEDGER_ENTRY",
+                })),
+              )
+              .onConflictDoNothing({
+                target: [memberPointBadgeAwards.memberId, memberPointBadgeAwards.badgeCode],
+              })
+              .returning({
+                id: memberPointBadgeAwards.id,
+                badgeCode: memberPointBadgeAwards.badgeCode,
+                policyVersion: memberPointBadgeAwards.policyVersion,
+                thresholdSnapshot: memberPointBadgeAwards.thresholdSnapshot,
+              });
+
+            if (awarded.length > 0) {
+              await transaction.insert(outboxEvents).values(
+                awarded.map((award) => ({
+                  aggregateType: "MEMBER_POINT_BADGE",
+                  aggregateId: award.id,
+                  eventType: "POINT_BADGE_AWARDED",
+                  schemaVersion: 1,
+                  payload: {
+                    memberId: command.memberId,
+                    awardId: award.id,
+                    badgeCode: award.badgeCode,
+                    policyVersion: award.policyVersion,
+                    minimumLifetimePoints: award.thresholdSnapshot,
+                  },
+                })),
+              );
+            }
+          }
         }
 
         return { applied: true, entryId: inserted[0]!.id, account };

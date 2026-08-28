@@ -1,11 +1,26 @@
 "use client";
 
+import Image from "next/image";
 import { useCallback, useEffect, useState } from "react";
 
 import { toast } from "@/components/feedback/toast-provider";
 import type { MemberPointLedgerItem, MemberPointView } from "@/lib/contracts";
 
 import styles from "./member-profile-experience.module.css";
+
+import bronzeBadge from "../../../../mobile/assets/badges/bronze.webp";
+import diamondBadge from "../../../../mobile/assets/badges/diamond.webp";
+import goldBadge from "../../../../mobile/assets/badges/gold.webp";
+import platinumBadge from "../../../../mobile/assets/badges/platinum.webp";
+import silverBadge from "../../../../mobile/assets/badges/silver.webp";
+
+const badgeImages = {
+  BRONZE: bronzeBadge,
+  SILVER: silverBadge,
+  GOLD: goldBadge,
+  PLATINUM: platinumBadge,
+  DIAMOND: diamondBadge,
+} as const;
 
 type PointScreen = "loading" | "ready" | "error";
 
@@ -20,6 +35,8 @@ async function readPoints(cursor?: string) {
     !body.account ||
     typeof body.account.balance !== "number" ||
     typeof body.account.todayEarned !== "number" ||
+    !body.badge ||
+    typeof body.badge.progress !== "number" ||
     !body.ledger ||
     !Array.isArray(body.ledger.items)
   ) {
@@ -83,6 +100,7 @@ export function MemberPointPanel() {
           current
             ? {
                 account: next.account,
+                badge: next.badge,
                 ledger: {
                   items: [...current.ledger.items, ...next.ledger.items],
                   nextCursor: next.ledger.nextCursor,
@@ -133,6 +151,36 @@ export function MemberPointPanel() {
               일부 기록을 다시 확인하고 있어 현재 사용할 수 있는 잔액만 표시합니다.
             </p>
           ) : null}
+          <div className={styles.pointBadgeSummary}>
+            {points.badge.current ? (
+              <Image
+                src={badgeImages[points.badge.current.code]}
+                alt={`${points.badge.current.label} W Point 배지`}
+                width={104}
+                height={104}
+              />
+            ) : (
+              <div className={styles.pointBadgePending}>첫 적립 후 배지 획득</div>
+            )}
+            <div>
+              <strong>{points.badge.current?.label ?? "배지 준비 중"}</strong>
+              <span>
+                {points.badge.next
+                  ? `${points.badge.next.label}까지 ${Math.max(0, points.badge.next.minimumLifetimePoints - points.account.lifetimeEarned).toLocaleString("ko-KR")}P`
+                  : "최고 등급 달성"}
+              </span>
+              <div
+                className={styles.pointBadgeProgress}
+                role="progressbar"
+                aria-label="다음 W Point 배지 진행률"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={Math.round(points.badge.progress * 100)}
+              >
+                <i style={{ width: `${Math.round(points.badge.progress * 100)}%` }} />
+              </div>
+            </div>
+          </div>
           {points.ledger.items.length === 0 ? (
             <div className={styles.pointEmpty}>
               <strong>아직 W Point 내역이 없어요.</strong>

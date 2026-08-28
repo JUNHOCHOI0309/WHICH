@@ -1,12 +1,19 @@
-import { and, desc, eq, lt, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, lt, or, sql } from "drizzle-orm";
 
 import type { Database } from "../../database/client.js";
-import { pointAccounts, pointLedgerEntries } from "../../database/schema/index.js";
+import {
+  memberPointBadgeAwards,
+  pointAccounts,
+  pointBadgePolicies,
+  pointLedgerEntries,
+} from "../../database/schema/index.js";
 import type {
   MemberPointLedgerEntryType,
   MemberPointLedgerItem,
+  MemberPointBadgeCode,
   MemberPointService,
 } from "./member-contracts.js";
+import { POINT_BADGE_POLICY_VERSION } from "./badge-policy.js";
 import { operationDayAt } from "./policy.js";
 
 const reasonLabels: Record<string, string> = {
@@ -44,7 +51,7 @@ export function createMemberPointService(database: Database["db"]): MemberPointS
           )
         : undefined;
 
-      const [accountRows, todayRows, ledgerRows] = await Promise.all([
+      const [accountRows, todayRows, ledgerRows, badgePolicies, badgeAwards] = await Promise.all([
         database
           .select({
             cachedBalance: pointAccounts.cachedBalance,
@@ -83,6 +90,23 @@ export function createMemberPointService(database: Database["db"]): MemberPointS
           )
           .orderBy(desc(pointLedgerEntries.createdAt), desc(pointLedgerEntries.id))
           .limit(query.limit + 1),
+        database
+          .select({
+            code: pointBadgePolicies.badgeCode,
+            label: pointBadgePolicies.label,
+            minimumLifetimePoints: pointBadgePolicies.minimumLifetimePoints,
+            assetKey: pointBadgePolicies.assetKey,
+          })
+          .from(pointBadgePolicies)
+          .where(eq(pointBadgePolicies.policyVersion, POINT_BADGE_POLICY_VERSION))
+          .orderBy(asc(pointBadgePolicies.displayOrder)),
+        database
+          .select({
+            code: memberPointBadgeAwards.badgeCode,
+            awardedAt: memberPointBadgeAwards.awardedAt,
+          })
+          .from(memberPointBadgeAwards)
+          .where(eq(memberPointBadgeAwards.memberId, memberId)),
       ]);
 
       const account = accountRows[0];
@@ -97,6 +121,31 @@ export function createMemberPointService(database: Database["db"]): MemberPointS
         createdAt: row.createdAt.toISOString(),
       }));
       const last = hasNextPage ? visibleRows.at(-1) : undefined;
+      const awardedAtByCode = new Map(
+        badgeAwards.map((award) => [award.code, award.awardedAt.toISOString()]),
+      );
+      const awardedPolicies = badgePolicies.filter((policy) => awardedAtByCode.has(policy.code));
+      const currentPolicy = awardedPolicies.at(-1) ?? null;
+      const nextPolicy = currentPolicy
+        ? (badgePolicies[
+            badgePolicies.findIndex((policy) => policy.code === currentPolicy.code) + 1
+          ] ?? null)
+        : (badgePolicies[0] ?? null);
+      const lifetimeEarned = account?.lifetimeEarned ?? 0;
+      const progressStart = currentPolicy?.minimumLifetimePoints ?? 0;
+      const progressEnd = nextPolicy?.minimumLifetimePoints ?? progressStart;
+      const progress = nextPolicy
+        ? Math.min(1, Math.max(0, (lifetimeEarned - progressStart) / (progressEnd - progressStart)))
+        : currentPolicy
+          ? 1
+          : 0;
+      const toBadge = (policy: (typeof badgePolicies)[number], includeAwardedAt = false) => ({
+        code: policy.code as MemberPointBadgeCode,
+        label: policy.label,
+        minimumLifetimePoints: policy.minimumLifetimePoints,
+        assetKey: policy.assetKey,
+        ...(includeAwardedAt ? { awardedAt: awardedAtByCode.get(policy.code)! } : {}),
+      });
 
       return {
         account: {
@@ -105,6 +154,12 @@ export function createMemberPointService(database: Database["db"]): MemberPointS
           lifetimeEarned: account?.lifetimeEarned ?? 0,
           lifetimeSpent: account?.lifetimeSpent ?? 0,
           hasPendingRecovery: (account?.restrictedDebt ?? 0) > 0,
+        },
+        badge: {
+          policyVersion: POINT_BADGE_POLICY_VERSION,
+          current: currentPolicy ? toBadge(currentPolicy, true) : null,
+          next: nextPolicy ? toBadge(nextPolicy) : null,
+          progress,
         },
         ledger: {
           items,

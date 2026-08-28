@@ -55,7 +55,7 @@ function mapAsset(
 ): IssueMediaAssetRecord {
   return {
     id: row.id,
-    sourceType: row.sourceType as "OPERATOR_UPLOAD",
+    sourceType: row.sourceType as IssueMediaAssetRecord["sourceType"],
     sha256: row.sha256,
     perceptualHash: row.perceptualHash,
     input: {
@@ -144,6 +144,75 @@ export function createIssueMediaService(
       .limit(1);
     if (!row) throw new IssueMediaError("MEDIA_NOT_FOUND", 404, "The media asset was not found.");
     return row;
+  }
+
+  async function stageStoredAsset(input: {
+    memberId: string;
+    sourceType: IssueMediaAssetRecord["sourceType"];
+    rightsAttestation: string;
+    declaredMimeType: IssueMediaAssetRecord["input"]["mimeType"];
+    bytes: Buffer;
+  }) {
+    const rightsAttestation = input.rightsAttestation.trim();
+    if (rightsAttestation.length < 20 || rightsAttestation.length > 2000) {
+      throw new IssueMediaError(
+        "MEDIA_RIGHTS_BLOCKED",
+        422,
+        "A 20-2000 character rights attestation is required.",
+      );
+    }
+    const processed = await processIssueMedia(input.bytes, input.declaredMimeType).catch(
+      mediaError,
+    );
+    const [duplicate] = await database
+      .select()
+      .from(issueMediaAssets)
+      .where(eq(issueMediaAssets.sha256, processed.sha256))
+      .limit(1);
+    if (duplicate) {
+      if (
+        input.sourceType === "MEMBER_SUBMISSION" &&
+        duplicate.sourceType === "MEMBER_SUBMISSION" &&
+        duplicate.uploadedByMemberId === input.memberId &&
+        duplicate.storageState === "STAGED"
+      ) {
+        return mapAsset(duplicate, storage);
+      }
+      throw new IssueMediaError(
+        "MEDIA_DUPLICATE",
+        409,
+        `This exact image already exists as asset ${duplicate.id}.`,
+      );
+    }
+    const id = randomUUID();
+    const staged = await storage.stage(id, processed.body);
+    try {
+      const [created] = await database
+        .insert(issueMediaAssets)
+        .values({
+          id,
+          uploadedByMemberId: input.memberId,
+          sourceType: input.sourceType,
+          rightsAttestation,
+          rightsAttestedAt: new Date(),
+          sha256: processed.sha256,
+          perceptualHash: processed.perceptualHash,
+          inputMimeType: processed.input.mimeType,
+          inputByteSize: processed.input.byteSize,
+          inputWidth: processed.input.width,
+          inputHeight: processed.input.height,
+          outputByteSize: processed.output.byteSize,
+          outputWidth: processed.output.width,
+          outputHeight: processed.output.height,
+          stagingObjectKey: staged.objectKey,
+          stagedAt: new Date(),
+        })
+        .returning();
+      return mapAsset(created!, storage);
+    } catch (error) {
+      await storage.purge([staged.objectKey]).catch(() => undefined);
+      throw error;
+    }
   }
 
   async function quarantineStoredAsset(
@@ -235,65 +304,15 @@ export function createIssueMediaService(
       const eventType = "OPS_ISSUE_MEDIA_STAGE";
       if (!(await requireOperator(input.memberId, eventType, input.requestId))) return null;
       try {
-        const rightsAttestation = input.rightsAttestation.trim();
-        if (rightsAttestation.length < 20 || rightsAttestation.length > 2000) {
-          throw new IssueMediaError(
-            "MEDIA_RIGHTS_BLOCKED",
-            422,
-            "A 20-2000 character rights attestation is required.",
-          );
-        }
-        const processed = await processIssueMedia(input.bytes, input.declaredMimeType).catch(
-          mediaError,
-        );
-        const [duplicate] = await database
-          .select({ id: issueMediaAssets.id })
-          .from(issueMediaAssets)
-          .where(eq(issueMediaAssets.sha256, processed.sha256))
-          .limit(1);
-        if (duplicate) {
-          throw new IssueMediaError(
-            "MEDIA_DUPLICATE",
-            409,
-            `This exact image already exists as asset ${duplicate.id}.`,
-          );
-        }
-        const id = randomUUID();
-        const staged = await storage.stage(id, processed.body);
-        try {
-          const [created] = await database
-            .insert(issueMediaAssets)
-            .values({
-              id,
-              uploadedByMemberId: input.memberId,
-              sourceType: input.sourceType,
-              rightsAttestation,
-              rightsAttestedAt: new Date(),
-              sha256: processed.sha256,
-              perceptualHash: processed.perceptualHash,
-              inputMimeType: processed.input.mimeType,
-              inputByteSize: processed.input.byteSize,
-              inputWidth: processed.input.width,
-              inputHeight: processed.input.height,
-              outputByteSize: processed.output.byteSize,
-              outputWidth: processed.output.width,
-              outputHeight: processed.output.height,
-              stagingObjectKey: staged.objectKey,
-              stagedAt: new Date(),
-            })
-            .returning();
-          await audit({
-            memberId: input.memberId,
-            eventType,
-            outcome: "SUCCEEDED",
-            requestId: input.requestId,
-            metadata: { assetId: id, sha256: processed.sha256 },
-          });
-          return mapAsset(created!, storage);
-        } catch (error) {
-          await storage.purge([staged.objectKey]).catch(() => undefined);
-          throw error;
-        }
+        const staged = await stageStoredAsset(input);
+        await audit({
+          memberId: input.memberId,
+          eventType,
+          outcome: "SUCCEEDED",
+          requestId: input.requestId,
+          metadata: { assetId: staged.id, sha256: staged.sha256 },
+        });
+        return staged;
       } catch (error) {
         await audit({
           memberId: input.memberId,
@@ -304,6 +323,10 @@ export function createIssueMediaService(
         }).catch(() => undefined);
         mediaError(error);
       }
+    },
+
+    async stageMemberAsset(input) {
+      return stageStoredAsset({ ...input, sourceType: "MEMBER_SUBMISSION" });
     },
 
     async approveAndPublish(input) {

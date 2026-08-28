@@ -16,7 +16,18 @@ const opsHeaders = Type.Object(
   },
   { additionalProperties: true },
 );
+const memberHeaders = Type.Object(
+  { authorization: Type.Optional(Type.String()) },
+  { additionalProperties: true },
+);
 type Headers = { authorization?: string; "x-internal-auth-secret"?: string };
+
+function plainBase64(value: string) {
+  const normalized = value.trim();
+  return /^[A-Za-z0-9+/]+={0,2}$/.test(normalized) && normalized.length % 4 === 0
+    ? normalized
+    : null;
+}
 
 function secretMatches(provided: string | undefined, expected: string) {
   if (!provided) return false;
@@ -32,6 +43,24 @@ export async function registerIssueMediaRoutes(
   internalSecret: string,
 ) {
   await app.register((mediaApp) => {
+    async function authenticateMember(
+      request: FastifyRequest<{ Headers: Headers }>,
+      reply: FastifyReply,
+    ) {
+      const authorization = request.headers.authorization;
+      const token = authorization?.startsWith("Bearer ")
+        ? authorization.slice("Bearer ".length).trim()
+        : "";
+      const session = token ? await identity.getSession(token) : null;
+      if (!session) {
+        await reply
+          .code(401)
+          .send({ code: "SESSION_INVALID", message: "Member session required." });
+        return null;
+      }
+      return session.member.id;
+    }
+
     async function authenticate(
       request: FastifyRequest<{ Headers: Headers }>,
       reply: FastifyReply,
@@ -86,6 +115,54 @@ export async function registerIssueMediaRoutes(
     mediaApp.post<{
       Headers: Headers;
       Body: {
+        rightsAttestation: string;
+        declaredMimeType: (typeof ISSUE_MEDIA_INPUT_MIME_TYPES)[number];
+        contentBase64: string;
+      };
+    }>(
+      "/v1/member/issue-submission-media",
+      {
+        bodyLimit: 14 * 1024 * 1024,
+        schema: {
+          tags: ["issues"],
+          summary: "Stage one Member-owned selection image for editorial review",
+          headers: memberHeaders,
+          body: Type.Object(
+            {
+              rightsAttestation: Type.String({ minLength: 20, maxLength: 2000 }),
+              declaredMimeType: Type.Union(
+                ISSUE_MEDIA_INPUT_MIME_TYPES.map((value) => Type.Literal(value)),
+              ),
+              contentBase64: Type.String({ minLength: 4, maxLength: 13_981_016 }),
+            },
+            { additionalProperties: false },
+          ),
+        },
+      },
+      async (request, reply) => {
+        const memberId = await authenticateMember(request, reply);
+        if (!memberId) return;
+        const normalized = plainBase64(request.body.contentBase64);
+        if (!normalized) {
+          return reply.code(400).send({
+            code: "INVALID_IMAGE_ENCODING",
+            message: "contentBase64 must contain a plain base64-encoded file.",
+          });
+        }
+        const asset = await service.stageMemberAsset({
+          memberId,
+          rightsAttestation: request.body.rightsAttestation,
+          declaredMimeType: request.body.declaredMimeType,
+          bytes: Buffer.from(normalized, "base64"),
+          requestId: request.id,
+        });
+        return reply.code(201).send({ asset });
+      },
+    );
+
+    mediaApp.post<{
+      Headers: Headers;
+      Body: {
         sourceType: "OPERATOR_UPLOAD";
         rightsAttestation: string;
         declaredMimeType: (typeof ISSUE_MEDIA_INPUT_MIME_TYPES)[number];
@@ -115,8 +192,8 @@ export async function registerIssueMediaRoutes(
       async (request, reply) => {
         const memberId = await authenticate(request, reply);
         if (!memberId) return;
-        const normalized = request.body.contentBase64.trim();
-        if (!/^[A-Za-z0-9+/]+={0,2}$/.test(normalized) || normalized.length % 4 !== 0) {
+        const normalized = plainBase64(request.body.contentBase64);
+        if (!normalized) {
           return reply.code(400).send({
             code: "INVALID_IMAGE_ENCODING",
             message: "contentBase64 must contain a plain base64-encoded file.",

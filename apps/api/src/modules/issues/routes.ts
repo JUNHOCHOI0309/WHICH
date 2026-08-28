@@ -153,9 +153,52 @@ type IssueCreateRoute = {
     context?: string | null;
     choiceA: string;
     choiceB: string;
+    mediaAssetAId?: string | null;
+    mediaAssetBId?: string | null;
     interestCardCode: (typeof INTEREST_CARD_CODES)[number];
   };
 };
+
+type MemberIssueSubmissionListRoute = {
+  Querystring: { limit?: number };
+  Headers: { authorization?: string };
+};
+
+type MemberIssueResubmitRoute = IssueCreateRoute & {
+  Params: { submissionId: string };
+  Body: IssueCreateRoute["Body"] & { expectedRevision: number };
+};
+
+const memberIssueSubmissionSchema = Type.Object({
+  id: uuidSchema,
+  revision: Type.Integer({ minimum: 1 }),
+  status: Type.Union([
+    Type.Literal("PENDING"),
+    Type.Literal("APPROVED"),
+    Type.Literal("NEEDS_CHANGES"),
+    Type.Literal("REJECTED"),
+  ]),
+  question: Type.String(),
+  context: Type.Union([Type.String(), Type.Null()]),
+  choiceA: Type.String(),
+  choiceB: Type.String(),
+  mediaAssetAId: Type.Union([uuidSchema, Type.Null()]),
+  mediaAssetBId: Type.Union([uuidSchema, Type.Null()]),
+  interestCardCode: Type.Union(INTEREST_CARD_CODES.map((code) => Type.Literal(code))),
+  reviewNote: Type.Union([Type.String(), Type.Null()]),
+  submittedAt: Type.String({ format: "date-time" }),
+  updatedAt: Type.String({ format: "date-time" }),
+});
+
+const memberIssueSubmissionBodySchema = Type.Object({
+  question: Type.String({ minLength: 1, maxLength: 200 }),
+  context: Type.Optional(Type.Union([Type.String({ maxLength: 500 }), Type.Null()])),
+  choiceA: Type.String({ minLength: 1, maxLength: 100 }),
+  choiceB: Type.String({ minLength: 1, maxLength: 100 }),
+  mediaAssetAId: Type.Optional(Type.Union([uuidSchema, Type.Null()])),
+  mediaAssetBId: Type.Optional(Type.Union([uuidSchema, Type.Null()])),
+  interestCardCode: Type.Union(INTEREST_CARD_CODES.map((code) => Type.Literal(code))),
+});
 
 function bearerToken(value: string | undefined) {
   const match = value?.match(/^Bearer\s+(.+)$/i);
@@ -193,6 +236,142 @@ export async function registerIssueRoutes(
     });
 
     if (writer) {
+      issueApp.post<IssueCreateRoute>(
+        "/v1/member/issue-submissions",
+        {
+          schema: {
+            tags: ["issues"],
+            summary: "Submit one Member-authored A/B Issue for editorial review",
+            headers: Type.Object(
+              {
+                authorization: Type.Optional(Type.String({ minLength: 8, maxLength: 4096 })),
+                "idempotency-key": uuidSchema,
+              },
+              { additionalProperties: true },
+            ),
+            body: memberIssueSubmissionBodySchema,
+            response: {
+              200: Type.Object({
+                submission: memberIssueSubmissionSchema,
+                created: Type.Boolean(),
+              }),
+              201: Type.Object({
+                submission: memberIssueSubmissionSchema,
+                created: Type.Boolean(),
+              }),
+              400: errorResponseSchema,
+              401: errorResponseSchema,
+              409: errorResponseSchema,
+              422: errorResponseSchema,
+              429: errorResponseSchema,
+              500: errorResponseSchema,
+            },
+          },
+        },
+        async (request, reply) => {
+          const token = bearerToken(request.headers.authorization);
+          if (!token) {
+            throw new IssueWriteError(
+              "SESSION_REQUIRED",
+              401,
+              "질문을 제출하려면 활성 Member 로그인이 필요합니다.",
+            );
+          }
+          const result = await writer.submitMemberIssue({
+            sessionToken: token,
+            idempotencyKey: request.headers["idempotency-key"],
+            ...request.body,
+          });
+          return reply.code(result.created ? 201 : 200).send(result);
+        },
+      );
+
+      issueApp.get<MemberIssueSubmissionListRoute>(
+        "/v1/member/issue-submissions",
+        {
+          schema: {
+            tags: ["issues"],
+            summary: "List the current Member's editorial Issue submissions",
+            headers: Type.Object(
+              { authorization: Type.Optional(Type.String({ minLength: 8, maxLength: 4096 })) },
+              { additionalProperties: true },
+            ),
+            querystring: Type.Object({
+              limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 20, default: 10 })),
+            }),
+            response: {
+              200: Type.Object({ items: Type.Array(memberIssueSubmissionSchema) }),
+              401: errorResponseSchema,
+              500: errorResponseSchema,
+            },
+          },
+        },
+        async (request) => {
+          const token = bearerToken(request.headers.authorization);
+          if (!token) {
+            throw new IssueWriteError(
+              "SESSION_REQUIRED",
+              401,
+              "제출 상태를 확인하려면 로그인이 필요합니다.",
+            );
+          }
+          return writer.listMemberIssueSubmissions({
+            sessionToken: token,
+            limit: request.query.limit ?? 10,
+          });
+        },
+      );
+
+      issueApp.put<MemberIssueResubmitRoute>(
+        "/v1/member/issue-submissions/:submissionId",
+        {
+          schema: {
+            tags: ["issues"],
+            summary: "Submit a new revision after editorial changes were requested",
+            params: Type.Object({ submissionId: uuidSchema }),
+            headers: Type.Object(
+              {
+                authorization: Type.Optional(Type.String({ minLength: 8, maxLength: 4096 })),
+                "idempotency-key": uuidSchema,
+              },
+              { additionalProperties: true },
+            ),
+            body: Type.Intersect([
+              memberIssueSubmissionBodySchema,
+              Type.Object({ expectedRevision: Type.Integer({ minimum: 1 }) }),
+            ]),
+            response: {
+              200: Type.Object({
+                submission: memberIssueSubmissionSchema,
+                created: Type.Boolean(),
+              }),
+              400: errorResponseSchema,
+              401: errorResponseSchema,
+              404: errorResponseSchema,
+              409: errorResponseSchema,
+              422: errorResponseSchema,
+              500: errorResponseSchema,
+            },
+          },
+        },
+        async (request) => {
+          const token = bearerToken(request.headers.authorization);
+          if (!token) {
+            throw new IssueWriteError(
+              "SESSION_REQUIRED",
+              401,
+              "질문 수정본을 제출하려면 활성 Member 로그인이 필요합니다.",
+            );
+          }
+          return writer.resubmitMemberIssue({
+            sessionToken: token,
+            submissionId: request.params.submissionId,
+            idempotencyKey: request.headers["idempotency-key"],
+            ...request.body,
+          });
+        },
+      );
+
       issueApp.post<IssueCreateRoute>(
         "/v1/issues",
         {

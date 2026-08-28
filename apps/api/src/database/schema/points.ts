@@ -58,6 +58,41 @@ export const pointAccounts = pgTable(
   ],
 );
 
+export const pointBadgePolicies = pgTable(
+  "point_badge_policies",
+  {
+    policyVersion: varchar("policy_version", { length: 32 }).notNull(),
+    badgeCode: varchar("badge_code", { length: 16 }).notNull(),
+    label: varchar("label", { length: 32 }).notNull(),
+    minimumLifetimePoints: integer("minimum_lifetime_points").notNull(),
+    displayOrder: integer("display_order").notNull(),
+    assetKey: varchar("asset_key", { length: 128 }).notNull(),
+    effectiveAt: timestamp("effective_at", { withTimezone: true }).notNull(),
+    retiredAt: timestamp("retired_at", { withTimezone: true }),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.policyVersion, table.badgeCode],
+      name: "point_badge_policies_pk",
+    }),
+    unique("point_badge_policies_threshold_unique").on(
+      table.policyVersion,
+      table.minimumLifetimePoints,
+    ),
+    unique("point_badge_policies_order_unique").on(table.policyVersion, table.displayOrder),
+    check(
+      "point_badge_policies_badge_code_check",
+      sql`${table.badgeCode} in ('BRONZE', 'SILVER', 'GOLD', 'PLATINUM', 'DIAMOND')`,
+    ),
+    check("point_badge_policies_threshold_check", sql`${table.minimumLifetimePoints} > 0`),
+    check("point_badge_policies_order_check", sql`${table.displayOrder} > 0`),
+    check(
+      "point_badge_policies_period_check",
+      sql`${table.retiredAt} is null or ${table.retiredAt} > ${table.effectiveAt}`,
+    ),
+  ],
+);
+
 export const pointLedgerEntries = pgTable(
   "point_ledger_entries",
   {
@@ -113,6 +148,39 @@ export const pointLedgerEntries = pgTable(
       "point_ledger_entries_not_self_reversal_check",
       sql`${table.reversesEntryId} is null or ${table.reversesEntryId} <> ${table.id}`,
     ),
+  ],
+);
+
+export const memberPointBadgeAwards = pgTable(
+  "member_point_badge_awards",
+  {
+    id: uuid("member_point_badge_award_id").defaultRandom().primaryKey(),
+    memberId: uuid("member_id")
+      .notNull()
+      .references(() => pointAccounts.memberId, { onDelete: "restrict" }),
+    badgeCode: varchar("badge_code", { length: 16 }).notNull(),
+    policyVersion: varchar("policy_version", { length: 32 }).notNull(),
+    thresholdSnapshot: integer("threshold_snapshot").notNull(),
+    labelSnapshot: varchar("label_snapshot", { length: 32 }).notNull(),
+    sourceLedgerEntryId: uuid("source_ledger_entry_id").references(() => pointLedgerEntries.id, {
+      onDelete: "restrict",
+    }),
+    awardSource: varchar("award_source", { length: 32 }).notNull(),
+    awardedAt: timestamp("awarded_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    unique("member_point_badge_awards_member_badge_unique").on(table.memberId, table.badgeCode),
+    foreignKey({
+      columns: [table.policyVersion, table.badgeCode],
+      foreignColumns: [pointBadgePolicies.policyVersion, pointBadgePolicies.badgeCode],
+      name: "member_point_badge_awards_policy_fk",
+    }).onDelete("restrict"),
+    check(
+      "member_point_badge_awards_source_check",
+      sql`${table.awardSource} in ('LEDGER_ENTRY', 'MIGRATION_BACKFILL', 'POLICY_RECONCILIATION')`,
+    ),
+    check("member_point_badge_awards_threshold_check", sql`${table.thresholdSnapshot} > 0`),
+    index("member_point_badge_awards_member_awarded_idx").on(table.memberId, table.awardedAt),
   ],
 );
 

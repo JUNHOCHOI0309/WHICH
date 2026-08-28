@@ -27,6 +27,9 @@ const issueReader: IssueReadService = {
 const createMemberIssue = vi.fn<IssueWriteService["createMemberIssue"]>();
 const issueWriter: IssueWriteService = {
   createMemberIssue,
+  submitMemberIssue: vi.fn(),
+  resubmitMemberIssue: vi.fn(),
+  listMemberIssueSubmissions: vi.fn(),
 };
 
 const commentReader: CommentService = {
@@ -200,6 +203,9 @@ describe("OpenAPI contract", () => {
     expect(response.statusCode).toBe(200);
     expect(document.paths).toHaveProperty(["/v1/issues/{issueId}", "get"]);
     expect(document.paths).toHaveProperty(["/v1/issues", "post"]);
+    expect(document.paths).toHaveProperty(["/v1/member/issue-submissions", "post"]);
+    expect(document.paths).toHaveProperty(["/v1/member/issue-submissions", "get"]);
+    expect(document.paths).toHaveProperty(["/v1/member/issue-submissions/{submissionId}", "put"]);
     expect(document.paths).toHaveProperty(["/v1/issues/feed", "get"]);
     expect(document.paths).toHaveProperty(["/v1/guest-subjects", "post"]);
     expect(document.paths).toHaveProperty(["/v1/issues/{issueId}/votes", "post"]);
@@ -236,6 +242,23 @@ describe("OpenAPI contract", () => {
         lifetimeEarned: 20,
         lifetimeSpent: 0,
         hasPendingRecovery: false,
+      },
+      badge: {
+        policyVersion: "w_badge_v1",
+        current: {
+          code: "BRONZE",
+          label: "브론즈",
+          minimumLifetimePoints: 10,
+          assetKey: "bronze.webp",
+          awardedAt: "2026-08-27T00:00:00.000Z",
+        },
+        next: {
+          code: "SILVER",
+          label: "실버",
+          minimumLifetimePoints: 1000,
+          assetKey: "silver.webp",
+        },
+        progress: 10 / 990,
       },
       ledger: { items: [], nextCursor: null },
     });

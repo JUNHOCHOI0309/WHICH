@@ -58,7 +58,10 @@ export const issueMediaAssets = pgTable(
       table.updatedAt,
     ),
     index("issue_media_assets_perceptual_hash_idx").on(table.perceptualHash),
-    check("issue_media_assets_source_type_check", sql`${table.sourceType} = 'OPERATOR_UPLOAD'`),
+    check(
+      "issue_media_assets_source_type_check",
+      sql`${table.sourceType} in ('OPERATOR_UPLOAD', 'MEMBER_SUBMISSION')`,
+    ),
     check(
       "issue_media_assets_processing_state_check",
       sql`${table.processingState} in ('PENDING', 'PROCESSING', 'READY', 'FAILED')`,

@@ -2,7 +2,12 @@ import { randomUUID } from "node:crypto";
 
 import { beforeAll, afterAll, describe, expect, it } from "vitest";
 
-import { members, pointAccounts, pointLedgerEntries } from "../src/database/schema/index.js";
+import {
+  members,
+  memberPointBadgeAwards,
+  pointAccounts,
+  pointLedgerEntries,
+} from "../src/database/schema/index.js";
 import { createMemberPointService } from "../src/modules/points/member-service.js";
 import { operationDayAt } from "../src/modules/points/policy.js";
 import { createTestDatabase } from "./helpers/test-database.js";
@@ -69,6 +74,15 @@ describe("Member W Point read model", () => {
         createdAt: new Date("2026-08-26T03:00:00.000Z"),
       },
     ]);
+    await testDatabase.database.db.insert(memberPointBadgeAwards).values({
+      memberId,
+      badgeCode: "BRONZE",
+      policyVersion: "w_badge_v1",
+      thresholdSnapshot: 10,
+      labelSnapshot: "브론즈",
+      awardSource: "POLICY_RECONCILIATION",
+      awardedAt: new Date("2026-08-26T02:00:00.000Z"),
+    });
     const service = createMemberPointService(testDatabase.database.db);
 
     const first = await service.getMemberPoints(memberId, { limit: 1 });
@@ -77,6 +91,11 @@ describe("Member W Point read model", () => {
       todayEarned: 30,
       lifetimeEarned: 30,
       lifetimeSpent: 10,
+    });
+    expect(first.badge).toMatchObject({
+      policyVersion: "w_badge_v1",
+      current: { code: "BRONZE", minimumLifetimePoints: 10 },
+      next: { code: "SILVER", minimumLifetimePoints: 1000 },
     });
     expect(first.ledger.items).toEqual([
       expect.objectContaining({ amount: 10, reasonLabel: "투표 참여" }),
@@ -108,6 +127,17 @@ describe("Member W Point read model", () => {
         lifetimeEarned: 0,
         lifetimeSpent: 0,
         hasPendingRecovery: false,
+      },
+      badge: {
+        policyVersion: "w_badge_v1",
+        current: null,
+        next: {
+          code: "BRONZE",
+          label: "브론즈",
+          minimumLifetimePoints: 10,
+          assetKey: "bronze.webp",
+        },
+        progress: 0,
       },
       ledger: { items: [], nextCursor: null },
     });

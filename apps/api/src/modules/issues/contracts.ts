@@ -95,6 +95,8 @@ export type CreateMemberIssueCommand = {
   context?: string | null;
   choiceA: string;
   choiceB: string;
+  mediaAssetAId?: string | null;
+  mediaAssetBId?: string | null;
   interestCardCode: InterestCardCode;
 };
 
@@ -113,4 +115,38 @@ export type CreatedMemberIssue = {
 
 export interface IssueWriteService {
   createMemberIssue(command: CreateMemberIssueCommand): Promise<CreatedMemberIssue>;
+  submitMemberIssue(command: CreateMemberIssueCommand): Promise<MemberIssueSubmissionResult>;
+  resubmitMemberIssue(command: ResubmitMemberIssueCommand): Promise<MemberIssueSubmissionResult>;
+  listMemberIssueSubmissions(command: {
+    sessionToken: string;
+    limit: number;
+  }): Promise<{ items: MemberIssueSubmission[] }>;
 }
+
+export type ResubmitMemberIssueCommand = CreateMemberIssueCommand & {
+  submissionId: string;
+  expectedRevision: number;
+};
+
+export type MemberIssueSubmissionStatus = "PENDING" | "APPROVED" | "NEEDS_CHANGES" | "REJECTED";
+
+export type MemberIssueSubmission = {
+  id: string;
+  revision: number;
+  status: MemberIssueSubmissionStatus;
+  question: string;
+  context: string | null;
+  choiceA: string;
+  choiceB: string;
+  mediaAssetAId: string | null;
+  mediaAssetBId: string | null;
+  interestCardCode: InterestCardCode;
+  reviewNote: string | null;
+  submittedAt: string;
+  updatedAt: string;
+};
+
+export type MemberIssueSubmissionResult = {
+  submission: MemberIssueSubmission;
+  created: boolean;
+};

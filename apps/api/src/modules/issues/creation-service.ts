@@ -1,12 +1,15 @@
 import { createHash, randomUUID } from "node:crypto";
 
-import { and, eq, gt, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, gt, isNull, sql } from "drizzle-orm";
 
 import type { Database } from "../../database/client.js";
 import {
   issueAuthors,
   issueChoices,
   issueInterestCards,
+  issueMediaAssets,
+  memberIssueSubmissionRevisions,
+  memberIssueSubmissions,
   issues,
   issueVersions,
   memberSessions,
@@ -24,7 +27,9 @@ import { computeIssueContentHash } from "../issue-publication/content-hash.js";
 import type {
   CreateMemberIssueCommand,
   CreatedMemberIssue,
+  MemberIssueSubmission,
   IssueWriteService,
+  ResubmitMemberIssueCommand,
 } from "./contracts.js";
 import { IssueWriteError } from "./errors.js";
 
@@ -103,6 +108,19 @@ function normalizeCommand(command: CreateMemberIssueCommand) {
     );
   }
 
+  const mediaAssetAId = command.mediaAssetAId ?? null;
+  const mediaAssetBId = command.mediaAssetBId ?? null;
+  if (
+    Boolean(mediaAssetAId) !== Boolean(mediaAssetBId) ||
+    (mediaAssetAId !== null && mediaAssetAId === mediaAssetBId)
+  ) {
+    throw new IssueWriteError(
+      "ISSUE_SUBMISSION_MEDIA_INVALID",
+      422,
+      "선택지 이미지는 A와 B를 함께 등록하고 서로 다른 이미지를 사용해 주세요.",
+    );
+  }
+
   const combined = [question, context, choiceA, choiceB].filter(Boolean).join(" ");
   if (URL_PATTERN.test(combined) || RESTRICTED_TOPIC_PATTERN.test(combined)) {
     throw new IssueWriteError(
@@ -112,11 +130,330 @@ function normalizeCommand(command: CreateMemberIssueCommand) {
     );
   }
 
-  return { question, context, choiceA, choiceB, interestCardCode: command.interestCardCode };
+  return {
+    question,
+    context,
+    choiceA,
+    choiceB,
+    mediaAssetAId,
+    mediaAssetBId,
+    interestCardCode: command.interestCardCode,
+  };
+}
+
+async function requireActiveMember(database: Pick<Database["db"], "select">, sessionToken: string) {
+  const now = new Date();
+  const [session] = await database
+    .select({ memberId: memberSessions.memberId })
+    .from(memberSessions)
+    .innerJoin(members, eq(memberSessions.memberId, members.id))
+    .where(
+      and(
+        eq(memberSessions.tokenHash, hashToken(sessionToken)),
+        isNull(memberSessions.revokedAt),
+        gt(memberSessions.expiresAt, now),
+        eq(members.status, "ACTIVE"),
+      ),
+    )
+    .limit(1);
+  if (!session) {
+    throw new IssueWriteError(
+      "SESSION_REQUIRED",
+      401,
+      "질문을 제출하려면 활성 Member 로그인이 필요합니다.",
+    );
+  }
+  return session;
+}
+
+function toSubmission(row: typeof memberIssueSubmissions.$inferSelect): MemberIssueSubmission {
+  return {
+    id: row.id,
+    revision: row.revision,
+    status: row.status as MemberIssueSubmission["status"],
+    question: row.question,
+    context: row.context,
+    choiceA: row.choiceA,
+    choiceB: row.choiceB,
+    mediaAssetAId: row.mediaAssetAId,
+    mediaAssetBId: row.mediaAssetBId,
+    interestCardCode: row.interestCardCode as InterestCardCode,
+    reviewNote: row.reviewNote,
+    submittedAt: row.submittedAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
+async function requireOwnedSubmissionMedia(
+  database: Pick<Database["db"], "select">,
+  memberId: string,
+  assetIds: Array<string | null>,
+) {
+  for (const assetId of assetIds) {
+    if (!assetId) continue;
+    const [asset] = await database
+      .select({
+        uploadedByMemberId: issueMediaAssets.uploadedByMemberId,
+        sourceType: issueMediaAssets.sourceType,
+        processingState: issueMediaAssets.processingState,
+        moderationState: issueMediaAssets.moderationState,
+        storageState: issueMediaAssets.storageState,
+        rightsState: issueMediaAssets.rightsState,
+      })
+      .from(issueMediaAssets)
+      .where(eq(issueMediaAssets.id, assetId))
+      .limit(1);
+    if (
+      !asset ||
+      asset.uploadedByMemberId !== memberId ||
+      asset.sourceType !== "MEMBER_SUBMISSION" ||
+      asset.processingState !== "READY" ||
+      asset.moderationState !== "PENDING" ||
+      asset.storageState !== "STAGED" ||
+      asset.rightsState !== "ASSERTED"
+    ) {
+      throw new IssueWriteError(
+        "ISSUE_SUBMISSION_MEDIA_INVALID",
+        422,
+        "선택지 이미지가 현재 계정의 검수 대기 상태인지 확인해 주세요.",
+      );
+    }
+  }
 }
 
 export function createIssueWriteService(database: Database["db"]): IssueWriteService {
   return {
+    async submitMemberIssue(command) {
+      const normalized = normalizeCommand(command);
+      const session = await requireActiveMember(database, command.sessionToken);
+      const contentHash = createHash("sha256").update(JSON.stringify(normalized)).digest("hex");
+      const submissionId = deterministicUuid(
+        `${session.memberId}:${command.idempotencyKey}:submission`,
+      );
+
+      return database.transaction(async (transaction) => {
+        await transaction.execute(
+          sql`select pg_advisory_xact_lock(hashtextextended(${`which:member-issue-submission:${session.memberId}`}, 0))`,
+        );
+        await requireOwnedSubmissionMedia(transaction, session.memberId, [
+          normalized.mediaAssetAId,
+          normalized.mediaAssetBId,
+        ]);
+
+        const [existing] = await transaction
+          .select()
+          .from(memberIssueSubmissions)
+          .where(
+            and(
+              eq(memberIssueSubmissions.memberId, session.memberId),
+              eq(memberIssueSubmissions.idempotencyKey, command.idempotencyKey),
+            ),
+          )
+          .limit(1);
+        if (existing) {
+          if (existing.contentHash !== contentHash) {
+            throw new IssueWriteError(
+              "IDEMPOTENCY_CONFLICT",
+              409,
+              "같은 요청 키가 다른 질문 제출에 이미 사용되었습니다.",
+            );
+          }
+          return { submission: toSubmission(existing), created: false };
+        }
+
+        const since = new Date(Date.now() - 24 * 60 * 60 * 1_000);
+        const [submissionCount] = await transaction
+          .select({ count: sql<number>`count(*)::int` })
+          .from(memberIssueSubmissions)
+          .where(
+            and(
+              eq(memberIssueSubmissions.memberId, session.memberId),
+              gt(memberIssueSubmissions.submittedAt, since),
+            ),
+          );
+        if ((submissionCount?.count ?? 0) >= DAILY_CREATION_LIMIT) {
+          throw new IssueWriteError(
+            "ISSUE_CREATION_LIMIT_REACHED",
+            429,
+            "질문은 24시간 동안 최대 3개까지 제출할 수 있어요.",
+          );
+        }
+
+        const [created] = await transaction
+          .insert(memberIssueSubmissions)
+          .values({
+            id: submissionId,
+            memberId: session.memberId,
+            idempotencyKey: command.idempotencyKey,
+            question: normalized.question,
+            context: normalized.context,
+            choiceA: normalized.choiceA,
+            choiceB: normalized.choiceB,
+            mediaAssetAId: normalized.mediaAssetAId,
+            mediaAssetBId: normalized.mediaAssetBId,
+            interestCardCode: normalized.interestCardCode,
+            contentHash,
+          })
+          .returning();
+        await transaction.insert(memberIssueSubmissionRevisions).values({
+          id: deterministicUuid(`${submissionId}:revision:1`),
+          submissionId,
+          memberId: session.memberId,
+          revision: 1,
+          idempotencyKey: command.idempotencyKey,
+          question: normalized.question,
+          context: normalized.context,
+          choiceA: normalized.choiceA,
+          choiceB: normalized.choiceB,
+          mediaAssetAId: normalized.mediaAssetAId,
+          mediaAssetBId: normalized.mediaAssetBId,
+          interestCardCode: normalized.interestCardCode,
+          contentHash,
+        });
+        return { submission: toSubmission(created!), created: true };
+      });
+    },
+
+    async resubmitMemberIssue(command: ResubmitMemberIssueCommand) {
+      const normalized = normalizeCommand(command);
+      const session = await requireActiveMember(database, command.sessionToken);
+      const contentHash = createHash("sha256").update(JSON.stringify(normalized)).digest("hex");
+
+      return database.transaction(async (transaction) => {
+        await transaction.execute(
+          sql`select pg_advisory_xact_lock(hashtextextended(${`which:member-issue-submission:${command.submissionId}`}, 0))`,
+        );
+        await requireOwnedSubmissionMedia(transaction, session.memberId, [
+          normalized.mediaAssetAId,
+          normalized.mediaAssetBId,
+        ]);
+
+        const [idempotentRevision] = await transaction
+          .select()
+          .from(memberIssueSubmissionRevisions)
+          .where(
+            and(
+              eq(memberIssueSubmissionRevisions.memberId, session.memberId),
+              eq(memberIssueSubmissionRevisions.idempotencyKey, command.idempotencyKey),
+            ),
+          )
+          .limit(1);
+        if (idempotentRevision) {
+          if (
+            idempotentRevision.submissionId !== command.submissionId ||
+            idempotentRevision.contentHash !== contentHash
+          ) {
+            throw new IssueWriteError(
+              "IDEMPOTENCY_CONFLICT",
+              409,
+              "같은 요청 키가 다른 질문 수정본에 이미 사용되었습니다.",
+            );
+          }
+          const [current] = await transaction
+            .select()
+            .from(memberIssueSubmissions)
+            .where(
+              and(
+                eq(memberIssueSubmissions.id, command.submissionId),
+                eq(memberIssueSubmissions.memberId, session.memberId),
+              ),
+            )
+            .limit(1);
+          if (!current) {
+            throw new IssueWriteError(
+              "ISSUE_SUBMISSION_NOT_FOUND",
+              404,
+              "제출 건을 찾지 못했습니다.",
+            );
+          }
+          return { submission: toSubmission(current), created: false };
+        }
+
+        const [current] = await transaction
+          .select()
+          .from(memberIssueSubmissions)
+          .where(
+            and(
+              eq(memberIssueSubmissions.id, command.submissionId),
+              eq(memberIssueSubmissions.memberId, session.memberId),
+            ),
+          )
+          .limit(1);
+        if (!current) {
+          throw new IssueWriteError(
+            "ISSUE_SUBMISSION_NOT_FOUND",
+            404,
+            "제출 건을 찾지 못했습니다.",
+          );
+        }
+        if (current.revision !== command.expectedRevision) {
+          throw new IssueWriteError(
+            "ISSUE_SUBMISSION_REVISION_CONFLICT",
+            409,
+            "이미 더 최신 수정본이 제출되었습니다. 상태를 새로 불러와 주세요.",
+          );
+        }
+        if (current.status !== "NEEDS_CHANGES") {
+          throw new IssueWriteError(
+            "ISSUE_SUBMISSION_NOT_EDITABLE",
+            409,
+            "운영자가 수정을 요청한 질문만 다시 제출할 수 있습니다.",
+          );
+        }
+
+        const revision = current.revision + 1;
+        const now = new Date();
+        const [updated] = await transaction
+          .update(memberIssueSubmissions)
+          .set({
+            revision,
+            status: "PENDING",
+            question: normalized.question,
+            context: normalized.context,
+            choiceA: normalized.choiceA,
+            choiceB: normalized.choiceB,
+            mediaAssetAId: normalized.mediaAssetAId,
+            mediaAssetBId: normalized.mediaAssetBId,
+            interestCardCode: normalized.interestCardCode,
+            contentHash,
+            reviewNote: null,
+            reviewedAt: null,
+            submittedAt: now,
+            updatedAt: now,
+          })
+          .where(eq(memberIssueSubmissions.id, current.id))
+          .returning();
+        await transaction.insert(memberIssueSubmissionRevisions).values({
+          id: deterministicUuid(`${current.id}:revision:${revision}`),
+          submissionId: current.id,
+          memberId: session.memberId,
+          revision,
+          idempotencyKey: command.idempotencyKey,
+          question: normalized.question,
+          context: normalized.context,
+          choiceA: normalized.choiceA,
+          choiceB: normalized.choiceB,
+          mediaAssetAId: normalized.mediaAssetAId,
+          mediaAssetBId: normalized.mediaAssetBId,
+          interestCardCode: normalized.interestCardCode,
+          contentHash,
+          submittedAt: now,
+        });
+        return { submission: toSubmission(updated!), created: true };
+      });
+    },
+
+    async listMemberIssueSubmissions(command) {
+      const session = await requireActiveMember(database, command.sessionToken);
+      const rows = await database
+        .select()
+        .from(memberIssueSubmissions)
+        .where(eq(memberIssueSubmissions.memberId, session.memberId))
+        .orderBy(desc(memberIssueSubmissions.updatedAt))
+        .limit(Math.min(Math.max(command.limit, 1), 20));
+      return { items: rows.map(toSubmission) };
+    },
+
     async createMemberIssue(command): Promise<CreatedMemberIssue> {
       const normalized = normalizeCommand(command);
 

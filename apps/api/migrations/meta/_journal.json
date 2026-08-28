@@ -253,6 +253,20 @@
       "when": 1787835677662,
       "tag": "0035_orange_jetstream",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1787893200000,
+      "tag": "0036_member_issue_submissions",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1787896800000,
+      "tag": "0037_point_badge_policy",
+      "breakpoints": true
     }
   ]
 }

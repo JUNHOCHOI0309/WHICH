@@ -23,6 +23,7 @@ export default function RootLayout() {
           <Stack.Screen name="login" options={{ headerShown: false }} />
           <Stack.Screen name="me" options={{ headerShown: false }} />
           <Stack.Screen name="interests" options={{ headerShown: false }} />
+          <Stack.Screen name="create" options={{ title: "질문 만들기" }} />
           <Stack.Screen name="auth/callback" options={{ headerShown: false }} />
           <Stack.Screen name="issues/[issueId]" options={{ title: "투표" }} />
           <Stack.Screen name="comments/[issueId]" options={{ title: "선택 이유" }} />

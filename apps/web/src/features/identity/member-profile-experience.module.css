@@ -158,6 +158,75 @@
   padding: 11px 14px;
 }
 
+.pointBadgeSummary {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+  margin-top: 18px;
+  border: 1px solid color-mix(in srgb, var(--which-cyan) 32%, var(--which-border));
+  border-radius: 15px;
+  background: color-mix(in srgb, var(--which-surface) 84%, transparent);
+  padding: 14px;
+}
+
+.pointBadgeSummary img {
+  width: 92px;
+  height: 92px;
+  object-fit: contain;
+}
+
+.pointBadgeSummary > div:last-child {
+  min-width: 0;
+  display: grid;
+  gap: 7px;
+}
+
+.pointBadgeSummary strong,
+.pointBadgeSummary span {
+  display: block;
+}
+
+.pointBadgeSummary strong {
+  color: var(--which-text);
+  font-size: 1rem;
+}
+
+.pointBadgeSummary span {
+  color: var(--which-text-secondary);
+  font-size: 0.72rem;
+  font-weight: 750;
+}
+
+.pointBadgePending {
+  width: 92px;
+  height: 92px;
+  border: 1px dashed var(--which-border-strong);
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: var(--which-text-secondary);
+  font-size: 0.68rem;
+  font-weight: 800;
+  line-height: 1.35;
+  padding: 12px;
+  text-align: center;
+}
+
+.pointBadgeProgress {
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--which-border);
+}
+
+.pointBadgeProgress i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--which-cyan);
+}
+
 .pointLedger {
   margin: 0;
   padding: 0;

@@ -3,7 +3,7 @@ export type IssueMediaInputMimeType = (typeof ISSUE_MEDIA_INPUT_MIME_TYPES)[numb
 
 export type IssueMediaAssetRecord = {
   id: string;
-  sourceType: "OPERATOR_UPLOAD";
+  sourceType: "OPERATOR_UPLOAD" | "MEMBER_SUBMISSION";
   sha256: string;
   perceptualHash: string;
   input: { mimeType: IssueMediaInputMimeType; byteSize: number; width: number; height: number };
@@ -40,6 +40,13 @@ export interface IssueMediaService {
     bytes: Buffer;
     requestId?: string;
   }): Promise<IssueMediaAssetRecord | null>;
+  stageMemberAsset(input: {
+    memberId: string;
+    rightsAttestation: string;
+    declaredMimeType: IssueMediaInputMimeType;
+    bytes: Buffer;
+    requestId?: string;
+  }): Promise<IssueMediaAssetRecord>;
   approveAndPublish(input: {
     memberId: string;
     assetId: string;

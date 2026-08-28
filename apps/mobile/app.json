@@ -3,15 +3,21 @@
     "name": "WHICH",
     "slug": "which-mobile",
     "version": "0.1.0",
+    "icon": "./assets/icon.png",
     "orientation": "portrait",
     "scheme": "which",
     "userInterfaceStyle": "dark",
     "ios": {
       "bundleIdentifier": "site.whichone.app",
+      "icon": "./assets/icon.png",
       "supportsTablet": true
     },
     "android": {
       "package": "site.whichone.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#071B43"
+      },
       "predictiveBackGestureEnabled": true
     },
     "web": {
