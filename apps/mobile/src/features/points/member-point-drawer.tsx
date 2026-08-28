@@ -22,6 +22,8 @@ import type {
 import { mobileApi } from "@/lib/runtime";
 import { colors } from "@/theme";
 
+import { MemberPointShopModal } from "./member-point-shop-modal";
+
 const badgeImages = {
   BRONZE: require("../../../assets/badges/bronze.webp"),
   SILVER: require("../../../assets/badges/silver.webp"),
@@ -52,6 +54,7 @@ export function MemberPointDrawer({
   onClose,
   onLoadMore,
   onRetry,
+  onShopChange,
   points,
   sessionToken,
   visible,
@@ -62,6 +65,7 @@ export function MemberPointDrawer({
   onClose: () => void;
   onLoadMore: () => void;
   onRetry: () => void;
+  onShopChange?: (shop: MemberPointShopView) => void;
   points: MemberPointView | null;
   sessionToken: string;
   visible: boolean;
@@ -73,6 +77,7 @@ export function MemberPointDrawer({
   const [shopOpen, setShopOpen] = useState(false);
   const [shop, setShop] = useState<MemberPointShopView | null>(null);
   const [shopPending, setShopPending] = useState(false);
+  const [previewItem, setPreviewItem] = useState<PointShopCatalogItem | null>(null);
 
   useEffect(() => {
     if (!visible) return;
@@ -100,19 +105,24 @@ export function MemberPointDrawer({
     setShopOpen(true);
     setShopPending(true);
     try {
-      setShop(await mobileApi.loadPointShop(sessionToken));
+      const next = await mobileApi.loadPointShop(sessionToken);
+      setShop(next);
+      setPreviewItem((current) => current ?? next.catalog[0] ?? null);
+      onShopChange?.(next);
     } catch {
       Alert.alert("W Point 상점", "상품을 불러오지 못했습니다.");
     } finally {
       setShopPending(false);
     }
-  }, [sessionToken]);
+  }, [onShopChange, sessionToken]);
 
   const mutateItem = useCallback(
     async (item: PointShopCatalogItem) => {
       setShopPending(true);
       try {
-        if (item.owned) {
+        if (item.equipped) {
+          await mobileApi.unequipPointShopItem(sessionToken, item.equipSlot);
+        } else if (item.owned) {
           await mobileApi.equipPointShopItem(sessionToken, item.equipSlot, item.id);
         } else {
           await mobileApi.purchasePointShopItem(
@@ -121,9 +131,18 @@ export function MemberPointDrawer({
             `mobile-${Date.now()}-${Math.random().toString(36).slice(2)}`,
           );
         }
-        setShop(await mobileApi.loadPointShop(sessionToken));
+        const next = await mobileApi.loadPointShop(sessionToken);
+        setShop(next);
+        onShopChange?.(next);
         onRetry();
-        Alert.alert("W Point 상점", item.owned ? "상품을 장착했습니다." : "상품을 구매했습니다.");
+        Alert.alert(
+          "W Point 상점",
+          item.equipped
+            ? "장착을 해제했습니다."
+            : item.owned
+              ? "상품을 장착했습니다."
+              : "상품을 구매했습니다.",
+        );
       } catch (error) {
         Alert.alert(
           "W Point 상점",
@@ -133,7 +152,7 @@ export function MemberPointDrawer({
         setShopPending(false);
       }
     },
-    [onRetry, sessionToken],
+    [onRetry, onShopChange, sessionToken],
   );
 
   return (
@@ -231,40 +250,8 @@ export function MemberPointDrawer({
                   onPress={() => void loadShop()}
                   style={styles.shopButton}
                 >
-                  <Text style={styles.shopButtonText}>
-                    {shopOpen ? "상점 새로고침" : "W Point 상점"}
-                  </Text>
+                  <Text style={styles.shopButtonText}>W Point 상점</Text>
                 </Pressable>
-                {shopOpen ? (
-                  <View style={styles.shopList}>
-                    <Text style={styles.sectionTitle}>꾸미기 상품</Text>
-                    {shopPending && !shop ? (
-                      <Text style={styles.emptyCopy}>상품을 불러오는 중…</Text>
-                    ) : null}
-                    {shop?.catalog.map((item) => (
-                      <View key={item.id} style={styles.shopItem}>
-                        <View style={styles.ledgerCopy}>
-                          <Text style={styles.ledgerReason}>{item.name}</Text>
-                          <Text style={styles.ledgerDate}>{item.description}</Text>
-                        </View>
-                        <Pressable
-                          accessibilityRole="button"
-                          disabled={shopPending || item.equipped}
-                          onPress={() => void mutateItem(item)}
-                          style={styles.shopAction}
-                        >
-                          <Text style={styles.shopActionText}>
-                            {item.equipped
-                              ? "장착 중"
-                              : item.owned
-                                ? "장착"
-                                : `${item.price.toLocaleString("ko-KR")}P`}
-                          </Text>
-                        </Pressable>
-                      </View>
-                    ))}
-                  </View>
-                ) : null}
 
                 <Text style={styles.sectionTitle}>최근 적립 내역</Text>
                 {points.ledger.items.length === 0 ? (
@@ -300,6 +287,16 @@ export function MemberPointDrawer({
             ) : null}
           </SafeAreaView>
         </Animated.View>
+        <MemberPointShopModal
+          onAction={(item) => void mutateItem(item)}
+          onClose={() => setShopOpen(false)}
+          onPreview={setPreviewItem}
+          onRefresh={() => void loadShop()}
+          pending={shopPending}
+          previewItem={previewItem}
+          shop={shop}
+          visible={visible && shopOpen}
+        />
       </View>
     </Modal>
   );
@@ -412,25 +409,6 @@ const styles = StyleSheet.create({
     minHeight: 48,
   },
   shopButtonText: { color: colors.surface, fontSize: 14, fontWeight: "900" },
-  shopList: { gap: 10 },
-  shopItem: {
-    alignItems: "center",
-    borderColor: colors.border,
-    borderRadius: 16,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 10,
-    padding: 12,
-  },
-  shopAction: {
-    alignItems: "center",
-    backgroundColor: colors.cyanSoft,
-    borderRadius: 999,
-    minWidth: 74,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  shopActionText: { color: colors.cyanStrong, fontSize: 11, fontWeight: "900" },
   stateCard: { gap: 12, padding: 20 },
   stateCopy: { color: colors.textSecondary, fontSize: 13, lineHeight: 20, padding: 20 },
   retryButton: {

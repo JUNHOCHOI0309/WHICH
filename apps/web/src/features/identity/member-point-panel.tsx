@@ -10,8 +10,8 @@ import type {
   MemberPointView,
   PointShopCatalogItem,
 } from "@/lib/contracts";
-
 import styles from "./member-profile-experience.module.css";
+import { MemberPointShopModal } from "./member-point-shop-modal";
 
 import bronzeBadge from "../../../../mobile/assets/badges/bronze.webp";
 import diamondBadge from "../../../../mobile/assets/badges/diamond.webp";
@@ -63,13 +63,18 @@ function pointAmountLabel(item: MemberPointLedgerItem) {
   return `${item.amount > 0 ? "+" : ""}${item.amount.toLocaleString("ko-KR")}P`;
 }
 
-export function MemberPointPanel() {
+export function MemberPointPanel({
+  onShopChange,
+}: {
+  onShopChange?: (shop: MemberPointShopView) => void;
+} = {}) {
   const [points, setPoints] = useState<MemberPointView | null>(null);
   const [screen, setScreen] = useState<PointScreen>("loading");
   const [morePending, setMorePending] = useState(false);
   const [shop, setShop] = useState<MemberPointShopView | null>(null);
   const [shopOpen, setShopOpen] = useState(false);
   const [shopPending, setShopPending] = useState(false);
+  const [previewItem, setPreviewItem] = useState<PointShopCatalogItem | null>(null);
 
   const load = useCallback(async () => {
     setScreen("loading");
@@ -127,169 +132,178 @@ export function MemberPointPanel() {
     try {
       const response = await fetch("/api/me/point-shop", { cache: "no-store" });
       if (!response.ok) throw new Error("shop unavailable");
-      setShop((await response.json()) as MemberPointShopView);
+      const next = (await response.json()) as MemberPointShopView;
+      setShop(next);
+      setPreviewItem((current) => current ?? next.catalog[0] ?? null);
+      onShopChange?.(next);
     } catch {
       toast.error("W Point 상점을 불러오지 못했어요.");
     } finally {
       setShopPending(false);
     }
-  }, []);
+  }, [onShopChange]);
 
-  const mutateItem = useCallback(async (item: PointShopCatalogItem) => {
-    setShopPending(true);
-    try {
-      const response = await fetch(
-        item.owned
-          ? `/api/me/point-shop/equipment/${encodeURIComponent(item.equipSlot)}`
-          : "/api/me/point-shop/purchases",
-        {
-          method: item.owned ? "PUT" : "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(
-            item.owned
-              ? { itemId: item.id }
-              : { itemId: item.id, idempotencyKey: crypto.randomUUID() },
-          ),
-        },
-      );
-      const body = (await response.json()) as { message?: string };
-      if (!response.ok) throw new Error(body.message ?? "상점 요청 실패");
-      toast.success(item.owned ? "상품을 장착했습니다." : "상품을 구매했습니다.");
-      const [nextShop, nextPoints] = await Promise.all([
-        fetch("/api/me/point-shop", { cache: "no-store" }),
-        readPoints(),
-      ]);
-      if (nextShop.ok) setShop((await nextShop.json()) as MemberPointShopView);
-      if (nextPoints) setPoints(nextPoints);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "상점 요청에 실패했습니다.");
-    } finally {
-      setShopPending(false);
-    }
-  }, []);
+  const mutateItem = useCallback(
+    async (item: PointShopCatalogItem) => {
+      setShopPending(true);
+      try {
+        const response = await fetch(
+          item.equipped
+            ? `/api/me/point-shop/equipment/${encodeURIComponent(item.equipSlot)}`
+            : item.owned
+              ? `/api/me/point-shop/equipment/${encodeURIComponent(item.equipSlot)}`
+              : "/api/me/point-shop/purchases",
+          {
+            method: item.equipped ? "DELETE" : item.owned ? "PUT" : "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(
+              item.owned
+                ? { itemId: item.id }
+                : { itemId: item.id, idempotencyKey: crypto.randomUUID() },
+            ),
+          },
+        );
+        const body = (await response.json()) as { message?: string };
+        if (!response.ok) throw new Error(body.message ?? "상점 요청 실패");
+        toast.success(
+          item.equipped
+            ? "장착을 해제했습니다."
+            : item.owned
+              ? "상품을 장착했습니다."
+              : "상품을 구매했습니다.",
+        );
+        const [nextShop, nextPoints] = await Promise.all([
+          fetch("/api/me/point-shop", { cache: "no-store" }),
+          readPoints(),
+        ]);
+        if (nextShop.ok) {
+          const next = (await nextShop.json()) as MemberPointShopView;
+          setShop(next);
+          onShopChange?.(next);
+        }
+        if (nextPoints) setPoints(nextPoints);
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "상점 요청에 실패했습니다.");
+      } finally {
+        setShopPending(false);
+      }
+    },
+    [onShopChange],
+  );
 
   return (
-    <section
-      className={`${styles.pointPanel} ${styles.pointPanelRail}`}
-      aria-labelledby="point-title"
-    >
-      <div className={styles.pointHeading}>
-        <div>
-          <p>W POINT</p>
-          <h2 id="point-title">나의 W Point</h2>
+    <>
+      <section
+        className={`${styles.pointPanel} ${styles.pointPanelRail}`}
+        aria-labelledby="point-title"
+      >
+        <div className={styles.pointHeading}>
+          <div>
+            <p>W POINT</p>
+            <h2 id="point-title">나의 W Point</h2>
+          </div>
+          {screen === "ready" && points ? (
+            <div className={styles.pointBalance}>
+              <strong>{points.account.balance.toLocaleString("ko-KR")}P</strong>
+              <span>오늘 +{points.account.todayEarned.toLocaleString("ko-KR")}P</span>
+            </div>
+          ) : null}
         </div>
-        {screen === "ready" && points ? (
-          <div className={styles.pointBalance}>
-            <strong>{points.account.balance.toLocaleString("ko-KR")}P</strong>
-            <span>오늘 +{points.account.todayEarned.toLocaleString("ko-KR")}P</span>
+
+        {screen === "loading" ? (
+          <div className={styles.pointState} aria-busy="true" aria-live="polite">
+            W Point를 확인하고 있어요.
           </div>
         ) : null}
-      </div>
-
-      {screen === "loading" ? (
-        <div className={styles.pointState} aria-busy="true" aria-live="polite">
-          W Point를 확인하고 있어요.
-        </div>
-      ) : null}
-      {screen === "error" ? (
-        <div className={styles.pointState} role="status">
-          <span>W Point만 잠시 불러오지 못했어요. 다른 기능은 그대로 사용할 수 있습니다.</span>
-          <button type="button" onClick={() => void load()}>
-            다시 확인
-          </button>
-        </div>
-      ) : null}
-      {screen === "ready" && points ? (
-        <>
-          <button type="button" className={styles.pointMore} onClick={() => void openShop()}>
-            {shopOpen ? "상점 새로고침" : "W Point 상점"}
-          </button>
-          {shopOpen ? (
-            <div className={styles.pointEmpty} aria-live="polite">
-              <strong>꾸미기 상품</strong>
-              <span>
-                초기 카탈로그는 프로필 강조색·아바타 프레임·공유 카드 배경으로 구성됩니다.
-              </span>
-              {shopPending && !shop ? <span>상품을 불러오는 중…</span> : null}
-              {shop?.catalog.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  className={styles.pointMore}
-                  disabled={shopPending || item.equipped}
-                  onClick={() => void mutateItem(item)}
+        {screen === "error" ? (
+          <div className={styles.pointState} role="status">
+            <span>W Point만 잠시 불러오지 못했어요. 다른 기능은 그대로 사용할 수 있습니다.</span>
+            <button type="button" onClick={() => void load()}>
+              다시 확인
+            </button>
+          </div>
+        ) : null}
+        {screen === "ready" && points ? (
+          <>
+            <button type="button" className={styles.pointMore} onClick={() => void openShop()}>
+              W Point 상점
+            </button>
+            {points.account.hasPendingRecovery ? (
+              <p className={styles.pointRecovery}>
+                일부 기록을 다시 확인하고 있어 현재 사용할 수 있는 잔액만 표시합니다.
+              </p>
+            ) : null}
+            <div className={styles.pointBadgeSummary}>
+              {points.badge.current ? (
+                <Image
+                  src={badgeImages[points.badge.current.code]}
+                  alt={`${points.badge.current.label} W Point 배지`}
+                  width={104}
+                  height={104}
+                />
+              ) : (
+                <div className={styles.pointBadgePending}>첫 적립 후 배지 획득</div>
+              )}
+              <div>
+                <strong>{points.badge.current?.label ?? "배지 준비 중"}</strong>
+                <span>
+                  {points.badge.next
+                    ? `${points.badge.next.label}까지 ${Math.max(0, points.badge.next.minimumLifetimePoints - points.account.lifetimeEarned).toLocaleString("ko-KR")}P`
+                    : "최고 등급 달성"}
+                </span>
+                <div
+                  className={styles.pointBadgeProgress}
+                  role="progressbar"
+                  aria-label="다음 W Point 배지 진행률"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={Math.round(points.badge.progress * 100)}
                 >
-                  {item.name} · {item.price.toLocaleString("ko-KR")}P ·{" "}
-                  {item.equipped ? "장착 중" : item.owned ? "장착" : "구매"}
-                </button>
-              ))}
-            </div>
-          ) : null}
-          {points.account.hasPendingRecovery ? (
-            <p className={styles.pointRecovery}>
-              일부 기록을 다시 확인하고 있어 현재 사용할 수 있는 잔액만 표시합니다.
-            </p>
-          ) : null}
-          <div className={styles.pointBadgeSummary}>
-            {points.badge.current ? (
-              <Image
-                src={badgeImages[points.badge.current.code]}
-                alt={`${points.badge.current.label} W Point 배지`}
-                width={104}
-                height={104}
-              />
-            ) : (
-              <div className={styles.pointBadgePending}>첫 적립 후 배지 획득</div>
-            )}
-            <div>
-              <strong>{points.badge.current?.label ?? "배지 준비 중"}</strong>
-              <span>
-                {points.badge.next
-                  ? `${points.badge.next.label}까지 ${Math.max(0, points.badge.next.minimumLifetimePoints - points.account.lifetimeEarned).toLocaleString("ko-KR")}P`
-                  : "최고 등급 달성"}
-              </span>
-              <div
-                className={styles.pointBadgeProgress}
-                role="progressbar"
-                aria-label="다음 W Point 배지 진행률"
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-valuenow={Math.round(points.badge.progress * 100)}
-              >
-                <i style={{ width: `${Math.round(points.badge.progress * 100)}%` }} />
+                  <i style={{ width: `${Math.round(points.badge.progress * 100)}%` }} />
+                </div>
               </div>
             </div>
-          </div>
-          {points.ledger.items.length === 0 ? (
-            <div className={styles.pointEmpty}>
-              <strong>아직 W Point 내역이 없어요.</strong>
-              <span>로그인, 투표, 확인된 공유 활동부터 차곡차곡 기록됩니다.</span>
-            </div>
-          ) : (
-            <ul className={styles.pointLedger}>
-              {points.ledger.items.map((item) => (
-                <li key={item.id}>
-                  <div>
-                    <strong>{item.reasonLabel}</strong>
-                    <time dateTime={item.createdAt}>{pointDateLabel(item.createdAt)}</time>
-                  </div>
-                  <span data-positive={item.amount > 0}>{pointAmountLabel(item)}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-          {points.ledger.nextCursor ? (
-            <button
-              type="button"
-              className={styles.pointMore}
-              disabled={morePending}
-              onClick={loadMore}
-            >
-              {morePending ? "불러오는 중…" : "내역 더 보기"}
-            </button>
-          ) : null}
-        </>
-      ) : null}
-    </section>
+            {points.ledger.items.length === 0 ? (
+              <div className={styles.pointEmpty}>
+                <strong>아직 W Point 내역이 없어요.</strong>
+                <span>로그인, 투표, 확인된 공유 활동부터 차곡차곡 기록됩니다.</span>
+              </div>
+            ) : (
+              <ul className={styles.pointLedger}>
+                {points.ledger.items.map((item) => (
+                  <li key={item.id}>
+                    <div>
+                      <strong>{item.reasonLabel}</strong>
+                      <time dateTime={item.createdAt}>{pointDateLabel(item.createdAt)}</time>
+                    </div>
+                    <span data-positive={item.amount > 0}>{pointAmountLabel(item)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {points.ledger.nextCursor ? (
+              <button
+                type="button"
+                className={styles.pointMore}
+                disabled={morePending}
+                onClick={loadMore}
+              >
+                {morePending ? "불러오는 중…" : "내역 더 보기"}
+              </button>
+            ) : null}
+          </>
+        ) : null}
+      </section>
+      <MemberPointShopModal
+        onAction={(item) => void mutateItem(item)}
+        onClose={() => setShopOpen(false)}
+        onPreview={setPreviewItem}
+        onRefresh={() => void openShop()}
+        pending={shopPending}
+        previewItem={previewItem}
+        shop={shop}
+        visible={shopOpen}
+      />
+    </>
   );
 }

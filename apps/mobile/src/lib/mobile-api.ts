@@ -121,6 +121,20 @@ export function createMobileApiClient(
       return bodyOrError<{ equipSlot: PointShopEquipSlot; itemId: string }>(response);
     },
 
+    async unequipPointShopItem(sessionToken: string, equipSlot: PointShopEquipSlot) {
+      const response = await request(
+        `${baseUrl}/api/mobile/v1/me/point-shop/equipment/${encodeURIComponent(equipSlot)}`,
+        {
+          method: "DELETE",
+          headers: {
+            accept: "application/json",
+            authorization: `Bearer ${sessionToken}`,
+          },
+        },
+      );
+      return bodyOrError<{ equipSlot: PointShopEquipSlot; itemId: null }>(response);
+    },
+
     async submitMemberIssue(
       sessionToken: string,
       idempotencyKey: string,

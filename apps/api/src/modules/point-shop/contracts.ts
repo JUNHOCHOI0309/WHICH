@@ -55,9 +55,4 @@ export interface PointShopService {
     memberId: string;
     equipSlot: PointShopEquipSlot;
   }): Promise<PointShopEquipmentResult>;
-  refund(input: {
-    memberId: string;
-    purchaseId: string;
-    idempotencyKey: string;
-  }): Promise<PointShopPurchaseResult>;
 }

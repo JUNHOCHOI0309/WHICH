@@ -17,6 +17,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { toast } from "@/components/feedback/toast";
 import type {
   MemberPointView,
+  MemberPointShopView,
   MemberPrivateProfile,
   MemberPrivateVote,
   MemberSessionView,
@@ -24,6 +25,7 @@ import type {
 import { MemberPointDrawer } from "@/features/points/member-point-drawer";
 import { clearRememberedMemberVotes, rememberMemberVote } from "@/lib/member-vote-cache";
 import { MobileApiError } from "@/lib/mobile-api";
+import { avatarFrameStyle, equippedShopItem, profileAccentStyle } from "@/lib/point-shop-cosmetics";
 import { memberSessions, mobileApi } from "@/lib/runtime";
 import { colors } from "@/theme";
 
@@ -67,6 +69,7 @@ export default function MeScreen() {
   const [session, setSession] = useState<MemberSessionView | null>(null);
   const [profile, setProfile] = useState<MemberPrivateProfile | null>(null);
   const [points, setPoints] = useState<MemberPointView | null>(null);
+  const [shop, setShop] = useState<MemberPointShopView | null>(null);
   const [pointDrawerOpen, setPointDrawerOpen] = useState(false);
   const [pointsLoading, setPointsLoading] = useState(false);
   const [pointsLoadingMore, setPointsLoadingMore] = useState(false);
@@ -104,6 +107,12 @@ export default function MeScreen() {
           setScreen("ready");
           setPointsLoading(true);
           setPointsError(null);
+          void mobileApi
+            .loadPointShop(restored.token)
+            .then((nextShop) => {
+              if (active) setShop(nextShop);
+            })
+            .catch(() => undefined);
           void mobileApi
             .loadMemberPoints(restored.token, { limit: 10 })
             .then((nextPoints) => {
@@ -245,6 +254,7 @@ export default function MeScreen() {
           avatarPending={avatarPending}
           onAvatarPress={() => void chooseAvatar()}
           profile={profile}
+          shop={shop}
         />
         <View accessibilityRole="tablist" style={styles.tabs}>
           <TabButton active={tab === "profile"} label="프로필" onPress={() => setTab("profile")} />
@@ -302,6 +312,7 @@ export default function MeScreen() {
         onClose={() => setPointDrawerOpen(false)}
         onLoadMore={() => void loadMorePoints()}
         onRetry={() => void reloadPoints()}
+        onShopChange={setShop}
         points={points}
         sessionToken={session.token}
         visible={pointDrawerOpen}
@@ -398,33 +409,39 @@ function ProfileSummary({
   avatarPending,
   onAvatarPress,
   profile,
+  shop,
 }: {
   avatarPending: boolean;
   onAvatarPress: () => void;
   profile: MemberPrivateProfile;
+  shop: MemberPointShopView | null;
 }) {
+  const profileAccent = equippedShopItem(shop, "PROFILE_ACCENT");
+  const avatarFrame = equippedShopItem(shop, "AVATAR_FRAME");
   return (
-    <View style={styles.profileCard}>
-      <Pressable
-        accessibilityHint="사진 보관함에서 새 프로필 이미지를 선택합니다."
-        accessibilityLabel="프로필 이미지 변경"
-        accessibilityRole="button"
-        disabled={avatarPending}
-        hitSlop={10}
-        onPress={onAvatarPress}
-        style={({ pressed }) => [styles.avatarButton, pressed && styles.avatarButtonPressed]}
-      >
-        {profile.member.avatar.kind === "IMAGE" ? (
-          <Image source={{ uri: profile.member.avatar.url }} style={styles.avatarImage} />
-        ) : (
-          <View style={styles.avatarInitials}>
-            <Text style={styles.avatarText}>{profile.member.avatar.initials}</Text>
+    <View style={[styles.profileCard, profileAccentStyle(profileAccent)]}>
+      <View style={avatarFrameStyle(avatarFrame)}>
+        <Pressable
+          accessibilityHint="사진 보관함에서 새 프로필 이미지를 선택합니다."
+          accessibilityLabel="프로필 이미지 변경"
+          accessibilityRole="button"
+          disabled={avatarPending}
+          hitSlop={10}
+          onPress={onAvatarPress}
+          style={({ pressed }) => [styles.avatarButton, pressed && styles.avatarButtonPressed]}
+        >
+          {profile.member.avatar.kind === "IMAGE" ? (
+            <Image source={{ uri: profile.member.avatar.url }} style={styles.avatarImage} />
+          ) : (
+            <View style={styles.avatarInitials}>
+              <Text style={styles.avatarText}>{profile.member.avatar.initials}</Text>
+            </View>
+          )}
+          <View style={styles.avatarEditBadge}>
+            <Text style={styles.avatarEditBadgeText}>{avatarPending ? "…" : "변경"}</Text>
           </View>
-        )}
-        <View style={styles.avatarEditBadge}>
-          <Text style={styles.avatarEditBadgeText}>{avatarPending ? "…" : "변경"}</Text>
-        </View>
-      </Pressable>
+        </Pressable>
+      </View>
       <Text style={styles.eyebrow}>PRIVATE MEMBER PROFILE</Text>
       <Text accessibilityRole="header" style={styles.title}>
         {profile.member.displayName}님의 선택

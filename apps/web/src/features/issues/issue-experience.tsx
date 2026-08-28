@@ -15,6 +15,7 @@ import type {
   CommentSide,
   CommentSort,
   IssueChoice,
+  MemberPointShopView,
   PublicComment,
   PublicFeedIssue,
   PublicIssue,
@@ -22,6 +23,7 @@ import type {
   VoteResponse,
 } from "@/lib/contracts";
 import { loginHref } from "@/lib/auth";
+import { equippedShopItem, shareBackgroundStyle } from "@/lib/point-shop-cosmetics";
 
 import styles from "./issue-experience.module.css";
 import {
@@ -539,6 +541,24 @@ function ResultSharePanel({ issue, result }: { issue: PublicIssue; result: VoteR
   const [channel, setChannel] = useState<ResultShareChannel>("SYSTEM");
   const [expanded, setExpanded] = useState(false);
   const [pending, setPending] = useState<ResultShareChannel | null>(null);
+  const [shop, setShop] = useState<MemberPointShopView | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void fetch("/api/me/point-shop", { cache: "no-store" })
+      .then(async (response) =>
+        response.ok ? ((await response.json()) as MemberPointShopView) : null,
+      )
+      .then((next) => {
+        if (active && next) setShop(next);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const shareBackground = equippedShopItem(shop, "SHARE_BACKGROUND");
 
   function openShare(nextChannel: ResultShareChannel) {
     if (expanded && channel === nextChannel) {
@@ -646,7 +666,11 @@ function ResultSharePanel({ issue, result }: { issue: PublicIssue; result: VoteR
       </div>
 
       {expanded ? (
-        <div className={styles.resultShare} id="result-share-panel">
+        <div
+          className={styles.resultShare}
+          id="result-share-panel"
+          style={shareBackgroundStyle(shareBackground)}
+        >
           <div className={styles.sharePanelHeading}>
             <div>
               <p className={styles.commentEyebrow}>RESULT SHARE</p>

@@ -155,22 +155,18 @@ describe("W Point shop foundation", () => {
     ).toHaveLength(0);
   });
 
-  it("equips owned items and revokes equipment and inventory on refund", async () => {
+  it("equips and unequips an owned item without revoking inventory", async () => {
     const memberId = await createMemberWithPoints(2_000);
     const item = await itemByCode("PAPER_VOTE_ACCENT");
     const service = createPointShopService(testDatabase.database.db);
-    const purchase = await service.purchase({
+    await service.purchase({
       memberId,
       itemId: item.id,
       idempotencyKey: randomUUID(),
     });
 
     await service.equip({ memberId, itemId: item.id, equipSlot: "PROFILE_ACCENT" });
-    await service.refund({
-      memberId,
-      purchaseId: purchase.purchaseId,
-      idempotencyKey: randomUUID(),
-    });
+    await service.unequip({ memberId, equipSlot: "PROFILE_ACCENT" });
 
     expect(
       await testDatabase.database.db
@@ -182,12 +178,6 @@ describe("W Point shop foundation", () => {
       .select()
       .from(memberInventory)
       .where(eq(memberInventory.memberId, memberId));
-    const [purchaseRow] = await testDatabase.database.db
-      .select()
-      .from(pointPurchases)
-      .where(eq(pointPurchases.id, purchase.purchaseId));
-    expect(inventory).toMatchObject({ state: "REVOKED" });
-    expect(purchaseRow).toMatchObject({ status: "REFUNDED" });
-    expect(purchaseRow?.refundLedgerEntryId).toBeTruthy();
+    expect(inventory).toMatchObject({ state: "OWNED" });
   });
 });

@@ -30,8 +30,7 @@ export type PointShopErrorCode =
   | "SHOP_INSUFFICIENT_BALANCE"
   | "SHOP_IDEMPOTENCY_CONFLICT"
   | "SHOP_INVENTORY_NOT_OWNED"
-  | "SHOP_SLOT_MISMATCH"
-  | "SHOP_PURCHASE_NOT_REFUNDABLE";
+  | "SHOP_SLOT_MISMATCH";
 
 export class PointShopError extends Error {
   constructor(
@@ -333,89 +332,5 @@ export function createPointShopService(database: Database["db"]): PointShopServi
     return { equipSlot: input.equipSlot, itemId: null };
   }
 
-  async function refund(input: {
-    memberId: string;
-    purchaseId: string;
-    idempotencyKey: string;
-  }): Promise<PointShopPurchaseResult> {
-    try {
-      return await database.transaction(async (transaction) => {
-        await transaction.execute(
-          sql`select pg_advisory_xact_lock(hashtextextended(${`${input.memberId}:point-shop`}, 0))`,
-        );
-        const [purchaseRow] = await transaction
-          .select()
-          .from(pointPurchases)
-          .where(
-            and(
-              eq(pointPurchases.id, input.purchaseId),
-              eq(pointPurchases.memberId, input.memberId),
-            ),
-          )
-          .limit(1);
-        if (!purchaseRow || purchaseRow.status !== "COMPLETED") {
-          throw new PointShopError(
-            "SHOP_PURCHASE_NOT_REFUNDABLE",
-            "환불할 수 있는 구매 기록이 아닙니다.",
-          );
-        }
-        const refund = await ledger.applyEntryWithinTransaction(transaction, {
-          memberId: input.memberId,
-          entryType: "REFUND",
-          amount: purchaseRow.priceSnapshot,
-          reasonCode: "POINT_ITEM_REFUND",
-          sourceType: "POINT_PURCHASE",
-          sourceId: purchaseRow.id,
-          operationDay: operationDayAt(new Date()),
-          idempotencyKey: `${internalIdempotencyKey(input.memberId, input.idempotencyKey)}:refund`,
-          policyVersion: "POINT_SHOP_V1",
-          metadata: { purchaseId: purchaseRow.id, itemId: purchaseRow.itemId },
-        });
-        await transaction
-          .delete(memberEquipment)
-          .where(
-            and(
-              eq(memberEquipment.memberId, input.memberId),
-              eq(memberEquipment.itemId, purchaseRow.itemId),
-            ),
-          );
-        await transaction
-          .update(memberInventory)
-          .set({ state: "REVOKED", revokedAt: new Date() })
-          .where(
-            and(
-              eq(memberInventory.memberId, input.memberId),
-              eq(memberInventory.itemId, purchaseRow.itemId),
-            ),
-          );
-        await transaction
-          .update(pointPurchases)
-          .set({ status: "REFUNDED", refundLedgerEntryId: refund.entryId, refundedAt: new Date() })
-          .where(eq(pointPurchases.id, purchaseRow.id));
-        await transaction.insert(outboxEvents).values({
-          aggregateType: "POINT_PURCHASE",
-          aggregateId: purchaseRow.id,
-          eventType: "POINT_ITEM_REFUNDED",
-          schemaVersion: 1,
-          payload: {
-            purchaseId: purchaseRow.id,
-            memberId: input.memberId,
-            itemId: purchaseRow.itemId,
-          },
-        });
-        return {
-          purchaseId: purchaseRow.id,
-          itemId: purchaseRow.itemId,
-          itemVersion: purchaseRow.itemVersion,
-          price: purchaseRow.priceSnapshot,
-          balance: refund.account.cachedBalance,
-          idempotent: !refund.applied,
-        };
-      });
-    } catch (error) {
-      return mapLedgerError(error);
-    }
-  }
-
-  return { listShop, purchase, equip, unequip, refund };
+  return { listShop, purchase, equip, unequip };
 }

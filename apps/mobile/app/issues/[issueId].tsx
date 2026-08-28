@@ -15,11 +15,12 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { BalanceResultBar } from "@/components/vote/balance-result-bar";
 import { PointFeedbackToast, type PointFeedback } from "@/components/points/point-feedback-toast";
 import { ChoiceMediaPair, VoteChoiceRow } from "@/components/vote/vote-choice-row";
-import type { IssueChoice, PublicIssue, VoteResponse } from "@/contracts";
+import type { IssueChoice, MemberPointShopView, PublicIssue, VoteResponse } from "@/contracts";
 import { IssueCommentsPanel } from "@/features/comments/issue-comments-panel";
 import { InterestSelector } from "@/features/interests/interest-selector";
 import { readRememberedMemberVote } from "@/lib/member-vote-cache";
 import { MobileApiError } from "@/lib/mobile-api";
+import { equippedShopItem, shareBackgroundStyle } from "@/lib/point-shop-cosmetics";
 import { guestSubjects, memberSessions, mobileApi } from "@/lib/runtime";
 import { colors } from "@/theme";
 
@@ -29,6 +30,7 @@ export default function IssueScreen() {
   const [issue, setIssue] = useState<PublicIssue | null>(null);
   const [vote, setVote] = useState<VoteResponse | null>(rememberedVote);
   const [memberSessionToken, setMemberSessionToken] = useState<string | null>(null);
+  const [shop, setShop] = useState<MemberPointShopView | null>(null);
   const [loading, setLoading] = useState(true);
   const [submittingChoice, setSubmittingChoice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -52,11 +54,17 @@ export default function IssueScreen() {
     if (!issueId) throw new Error("질문 ID가 필요합니다.");
     const subjectId = await guestSubjects.getOrCreate();
     const session = await memberSessions.restore().catch(() => null);
-    const [loadedIssue, restoredVote] = await Promise.all([
+    const [loadedIssue, restoredVote, loadedShop] = await Promise.all([
       mobileApi.loadIssue(issueId, subjectId, session?.token),
       session ? mobileApi.loadMemberVote(session.token, issueId) : Promise.resolve(null),
+      session ? mobileApi.loadPointShop(session.token).catch(() => null) : Promise.resolve(null),
     ]);
-    return { issue: loadedIssue, memberSessionToken: session?.token ?? null, vote: restoredVote };
+    return {
+      issue: loadedIssue,
+      memberSessionToken: session?.token ?? null,
+      shop: loadedShop,
+      vote: restoredVote,
+    };
   }, [issueId]);
 
   const load = useCallback(async () => {
@@ -66,6 +74,7 @@ export default function IssueScreen() {
       const loaded = await fetchIssue();
       setIssue(loaded.issue);
       setMemberSessionToken(loaded.memberSessionToken);
+      setShop(loaded.shop);
       setVote(loaded.vote ?? rememberedVote);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "질문을 불러오지 못했습니다.");
@@ -123,6 +132,7 @@ export default function IssueScreen() {
         if (active) {
           setIssue(loaded.issue);
           setMemberSessionToken(loaded.memberSessionToken);
+          setShop(loaded.shop);
           setVote(loaded.vote ?? rememberedVote);
         }
       })
@@ -429,7 +439,12 @@ export default function IssueScreen() {
               </View>
             ) : null}
             {completedVote ? (
-              <View style={styles.shareCard}>
+              <View
+                style={[
+                  styles.shareCard,
+                  shareBackgroundStyle(equippedShopItem(shop, "SHARE_BACKGROUND")),
+                ]}
+              >
                 <Text style={styles.shareTitle}>결과 공유</Text>
                 <Pressable
                   accessibilityRole="checkbox"

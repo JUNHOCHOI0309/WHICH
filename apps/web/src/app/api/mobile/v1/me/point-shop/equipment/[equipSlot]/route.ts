@@ -31,3 +31,28 @@ export async function PUT(
     );
   }
 }
+
+export async function DELETE(
+  request: NextRequest,
+  context: { params: Promise<{ equipSlot: string }> },
+) {
+  const authorization = request.headers.get("authorization");
+  if (!authorization)
+    return NextResponse.json(
+      { code: "SESSION_INVALID", message: "로그인이 필요합니다." },
+      { status: 401 },
+    );
+  try {
+    const { equipSlot } = await context.params;
+    const upstream = await fetchWhichApi(
+      `/v1/me/point-shop/equipment/${encodeURIComponent(equipSlot)}`,
+      { method: "DELETE", headers: { accept: "application/json", authorization } },
+    );
+    return NextResponse.json(await upstream.json(), { status: upstream.status });
+  } catch {
+    return NextResponse.json(
+      { code: "POINT_SHOP_UNAVAILABLE", message: "장착 상태를 변경하지 못했습니다." },
+      { status: 502 },
+    );
+  }
+}

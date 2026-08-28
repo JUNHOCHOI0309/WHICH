@@ -5,8 +5,9 @@ import { useCallback, useEffect, useState } from "react";
 
 import { toast } from "@/components/feedback/toast-provider";
 import { WhichShell } from "@/components/layout/which-shell";
-import type { MemberPrivateProfile, MemberPrivateVote } from "@/lib/contracts";
+import type { MemberPointShopView, MemberPrivateProfile, MemberPrivateVote } from "@/lib/contracts";
 import { logoutMemberSession, MEMBER_LOGOUT_ERROR } from "@/lib/member-session";
+import { avatarFrameStyle, equippedShopItem, profileAccentStyle } from "@/lib/point-shop-cosmetics";
 
 import styles from "./member-profile-experience.module.css";
 import { MemberPointPanel } from "./member-point-panel";
@@ -78,6 +79,7 @@ export function MemberProfileExperience({
 }) {
   const [screen, setScreen] = useState<Screen>("loading");
   const [profile, setProfile] = useState<MemberPrivateProfile | null>(null);
+  const [shop, setShop] = useState<MemberPointShopView | null>(null);
   const [logoutPending, setLogoutPending] = useState(false);
   const [accountDeletionOpen, setAccountDeletionOpen] = useState(false);
   const [accountDeletionPassword, setAccountDeletionPassword] = useState("");
@@ -123,11 +125,31 @@ export function MemberProfileExperience({
     };
   }, []);
 
+  useEffect(() => {
+    let active = true;
+    void fetch("/api/me/point-shop", { cache: "no-store" })
+      .then(async (response) =>
+        response.ok ? ((await response.json()) as MemberPointShopView) : null,
+      )
+      .then((next) => {
+        if (active && next) setShop(next);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const profileAccent = equippedShopItem(shop, "PROFILE_ACCENT");
+  const avatarFrame = equippedShopItem(shop, "AVATAR_FRAME");
+
   return (
     <WhichShell
       active="me"
       creationEnabled={creationEnabled}
-      aside={screen === "ready" && profile ? <MemberPointPanel /> : undefined}
+      aside={
+        screen === "ready" && profile ? <MemberPointPanel onShopChange={setShop} /> : undefined
+      }
       preserveAsideOnNarrow={screen === "ready" && Boolean(profile)}
     >
       <div className={styles.page}>
@@ -175,16 +197,24 @@ export function MemberProfileExperience({
 
         {screen === "ready" && profile ? (
           <>
-            <section className={styles.profile} aria-labelledby="profile-title">
+            <section
+              className={styles.profile}
+              aria-labelledby="profile-title"
+              style={profileAccentStyle(profileAccent)}
+            >
               <div className={styles.profileIdentity}>
-                <MemberAvatarSettings
-                  member={profile.member}
-                  onUpdated={(member) =>
-                    setProfile((current) =>
-                      current ? { ...current, member: { ...current.member, ...member } } : current,
-                    )
-                  }
-                />
+                <div className={styles.cosmeticAvatarFrame} style={avatarFrameStyle(avatarFrame)}>
+                  <MemberAvatarSettings
+                    member={profile.member}
+                    onUpdated={(member) =>
+                      setProfile((current) =>
+                        current
+                          ? { ...current, member: { ...current.member, ...member } }
+                          : current,
+                      )
+                    }
+                  />
+                </div>
                 <div className={styles.profileIdentityCopy}>
                   <div className={styles.profileIdentityHeading}>
                     <p>PRIVATE MEMBER PROFILE</p>
