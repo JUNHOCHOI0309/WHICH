@@ -10,6 +10,8 @@ import {
   issueMediaRightsRequests,
   issueVersions,
   members,
+  memberModerationNotices,
+  moderationAuditEvents,
   operatorAccessGrants,
   operatorAuditLogs,
 } from "../../database/schema/index.js";
@@ -199,6 +201,60 @@ export function createIssueMediaReviewService(
       .select({ displayName: members.displayName })
       .from(members)
       .where(eq(members.id, input.memberId));
+    const affectedMembers =
+      input.scope === "ASSET" && input.assetId
+        ? await database
+            .select({ memberId: issueMediaAssets.uploadedByMemberId })
+            .from(issueMediaAssets)
+            .where(eq(issueMediaAssets.id, input.assetId))
+        : input.issueId
+          ? await database
+              .select({ memberId: issueMediaAssets.uploadedByMemberId })
+              .from(issueChoiceMedia)
+              .innerJoin(issueMediaAssets, eq(issueMediaAssets.id, issueChoiceMedia.mediaAssetId))
+              .where(eq(issueChoiceMedia.issueId, input.issueId))
+          : [];
+    const targetId = input.assetId ?? input.issueId;
+    if (created && targetId) {
+      const summary =
+        input.status === "APPROVED"
+          ? "이미지 검수가 승인되었습니다."
+          : input.status === "RESTORED"
+            ? "재검토 결과 이미지가 복원되었습니다."
+            : input.status === "REJECTED"
+              ? "이미지 검수가 반려되었습니다."
+              : input.status === "DELETED"
+                ? "이미지가 삭제되었습니다."
+                : "이미지가 공개 화면에서 숨김 처리되었습니다.";
+      const nextStep = ["REJECTED", "HIDDEN", "DELETED"].includes(input.status)
+        ? "내 Moderation에서 이유를 확인하고 사람 재검토 또는 권리 절차를 선택할 수 있습니다."
+        : "질문 게시 상태는 이미지 상태와 별도로 계속 확인할 수 있습니다.";
+      for (const affected of new Set(affectedMembers.map((member) => member.memberId))) {
+        const [notice] = await database
+          .insert(memberModerationNotices)
+          .values({
+            memberId: affected,
+            targetType: input.scope === "ASSET" ? "ISSUE_MEDIA_ASSET" : "ISSUE_VERSION",
+            targetId,
+            policyVersion: input.policyVersion || POLICY_VERSION,
+            reasonCode: input.reasonCode,
+            actionType: input.status,
+            summary,
+            nextStep,
+            effectiveAt: created.createdAt,
+          })
+          .returning({ id: memberModerationNotices.id });
+        if (notice) {
+          await database.insert(moderationAuditEvents).values({
+            eventType: "MEMBER_NOTICE_RECORDED",
+            entityType: "NOTICE",
+            entityId: notice.id,
+            actorType: "SYSTEM",
+            metadata: { decisionId: created.id, targetId, status: input.status },
+          });
+        }
+      }
+    }
     return mapDecision({ decision: created!, reviewedBy: reviewer?.displayName ?? "OPERATOR" });
   }
 

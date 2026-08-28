@@ -13,9 +13,12 @@ import {
   members,
   moderationActions,
   moderationAuditEvents,
+  memberModerationNotices,
+  moderationAppeals,
   moderationCaseReferences,
   moderationCases,
   moderationTargets,
+  moderationRightsCases,
   operatorAccessGrants,
   operatorAuditLogs,
 } from "../../database/schema/index.js";
@@ -482,6 +485,102 @@ export function createOpsModerationQueueService(
         durationSeconds: Math.max(1, Math.round((Date.now() - startedAt) / 1000)),
         noticeKey: `ops.moderation.${input.decision.action.toLowerCase()}`,
       });
+      const caseReferences = await database
+        .select({
+          type: moderationCaseReferences.referenceType,
+          id: moderationCaseReferences.referenceId,
+        })
+        .from(moderationCaseReferences)
+        .where(eq(moderationCaseReferences.caseId, input.caseId));
+      const now = new Date();
+      for (const reference of caseReferences) {
+        if (reference.type === "APPEAL") {
+          const overturned = ["APPROVED", "RESTORED", "RESTORE"].includes(input.decision.action);
+          const [appeal] = await database
+            .update(moderationAppeals)
+            .set({
+              status: overturned ? "OVERTURNED" : "UPHELD",
+              resolution: input.decision.rationale,
+              reviewedAt: now,
+              resolvedAt: now,
+              updatedAt: now,
+            })
+            .where(eq(moderationAppeals.id, reference.id))
+            .returning();
+          if (appeal) {
+            const [notice] = await database
+              .insert(memberModerationNotices)
+              .values({
+                memberId: appeal.memberId,
+                targetType: appeal.targetType,
+                targetId: appeal.targetId,
+                policyVersion: input.decision.policyVersion,
+                reasonCode: input.decision.reasonCode,
+                actionType: overturned ? "APPEAL_OVERTURNED" : "APPEAL_UPHELD",
+                summary: overturned
+                  ? "재검토 결과 기존 조치가 변경되었습니다."
+                  : "재검토 결과 기존 조치가 유지됩니다.",
+                nextStep: overturned
+                  ? "복원된 상태를 다시 확인해 주세요."
+                  : "권리 침해에 해당한다면 별도의 Rights 절차를 이용할 수 있습니다.",
+                effectiveAt: now,
+              })
+              .returning({ id: memberModerationNotices.id });
+            if (notice) {
+              await database.insert(moderationAuditEvents).values({
+                eventType: overturned ? "APPEAL_OVERTURNED" : "APPEAL_UPHELD",
+                entityType: "APPEAL",
+                entityId: appeal.id,
+                actorType: "OPERATOR",
+                actorMemberId: input.memberId,
+                metadata: { caseId: input.caseId, noticeId: notice.id },
+              });
+            }
+          }
+        }
+        if (reference.type === "RIGHTS_REQUEST") {
+          const dismissed = ["APPROVED", "RESTORED", "RESTORE"].includes(input.decision.action);
+          const [rights] = await database
+            .update(moderationRightsCases)
+            .set({
+              status: dismissed ? "DISMISSED" : "ACTIONED",
+              resolution: input.decision.rationale,
+              resolvedAt: now,
+              updatedAt: now,
+            })
+            .where(eq(moderationRightsCases.id, reference.id))
+            .returning();
+          if (rights) {
+            const [notice] = await database
+              .insert(memberModerationNotices)
+              .values({
+                memberId: rights.memberId,
+                targetType: rights.targetType,
+                targetId: rights.targetId,
+                policyVersion: input.decision.policyVersion,
+                reasonCode: input.decision.reasonCode,
+                actionType: dismissed ? "RIGHTS_DISMISSED" : "RIGHTS_ACTIONED",
+                summary: dismissed
+                  ? "권리 요청 검토 결과 별도 조치 없이 종결되었습니다."
+                  : "권리 요청에 따른 보호 조치가 완료되었습니다.",
+                nextStep:
+                  "제출한 사건의 최종 결과와 보존 기한을 내 Moderation에서 확인할 수 있습니다.",
+                effectiveAt: now,
+              })
+              .returning({ id: memberModerationNotices.id });
+            if (notice) {
+              await database.insert(moderationAuditEvents).values({
+                eventType: dismissed ? "RIGHTS_DISMISSED" : "RIGHTS_ACTIONED",
+                entityType: "RIGHTS_REQUEST",
+                entityId: rights.id,
+                actorType: "OPERATOR",
+                actorMemberId: input.memberId,
+                metadata: { caseId: input.caseId, noticeId: notice.id },
+              });
+            }
+          }
+        }
+      }
       const resolved = await operations.updateCase({
         caseId: input.caseId,
         expectedRevision: claimed.expectedRevision,

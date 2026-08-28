@@ -225,6 +225,73 @@ export type MemberPrivateProfile = {
   };
 };
 
+export type MemberModerationTargetType =
+  "COMMENT_VERSION" | "ISSUE_VERSION" | "ISSUE_MEDIA_ASSET" | "PROFILE_VERSION";
+
+export type MemberModerationCenter = {
+  schemaVersion: 1;
+  generatedAt: string;
+  assets: Array<{
+    assetId: string;
+    issueSubmission: {
+      id: string;
+      question: string;
+      publicationStatus: "PENDING" | "APPROVED" | "NEEDS_CHANGES" | "REJECTED";
+      updatedAt: string;
+    } | null;
+    assetReview: {
+      status: "PENDING" | "APPROVED" | "REJECTED" | "HIDDEN" | "DELETED";
+      policyVersion: string;
+      reasonCode: string;
+      action: string;
+      submittedAt: string;
+      lastChangedAt: string;
+    };
+    alternatives: Array<"TEXT_ONLY" | "APPROVED_LIBRARY" | "REPLACE_IMAGE" | "CANCEL_IMAGE">;
+    appealId: string | null;
+  }>;
+  libraryAssets: Array<{ assetId: string; url: string }>;
+  notices: Array<{
+    id: string;
+    targetType: MemberModerationTargetType;
+    targetId: string;
+    policyVersion: string;
+    reasonCode: string;
+    actionType: string;
+    summary: string;
+    nextStep: string;
+    effectiveAt: string;
+    expiresAt: string | null;
+    createdAt: string;
+  }>;
+  appeals: Array<{
+    id: string;
+    targetType: MemberModerationTargetType;
+    targetId: string;
+    reason: string;
+    status: "SUBMITTED" | "IN_REVIEW" | "UPHELD" | "OVERTURNED" | "CANCELLED";
+    resolution: string | null;
+    submittedAt: string;
+    reviewedAt: string | null;
+    resolvedAt: string | null;
+    updatedAt: string;
+  }>;
+  rightsCases: Array<{
+    id: string;
+    requestType: "PRIVACY" | "DEFAMATION" | "COPYRIGHT";
+    targetType: MemberModerationTargetType;
+    targetId: string;
+    details: string;
+    status: "SUBMITTED" | "IN_REVIEW" | "ACTIONED" | "DISMISSED" | "WITHDRAWN";
+    resolution: string | null;
+    legalHoldUntil: string | null;
+    dueAt: string | null;
+    submittedAt: string;
+    resolvedAt: string | null;
+    updatedAt: string;
+  }>;
+};
+
 export type MemberPointLedgerItem = {
   id: string;
   entryType: "EARN" | "SPEND" | "REFUND" | "REVERSAL" | "ADJUSTMENT";
