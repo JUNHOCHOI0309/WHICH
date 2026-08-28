@@ -1241,6 +1241,42 @@
   margin-top: 12px;
 }
 
+.preVoteWheelNext {
+  min-height: 152px;
+  margin-top: 18px;
+  border: 1px dashed color-mix(in srgb, var(--a) 45%, var(--line));
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--a) 4%, transparent);
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  padding: 24px;
+  text-align: center;
+}
+
+.preVoteWheelNextEyebrow {
+  color: var(--which-cyan-strong);
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.66rem;
+  font-weight: 900;
+  letter-spacing: 0.15em;
+}
+
+.preVoteWheelNext p {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 750;
+  line-height: 1.55;
+}
+
+.preVoteWheelNextArrow {
+  color: var(--a);
+  font-size: 1.1rem;
+  font-weight: 900;
+}
+
 .nextIssuePreviewDock {
   position: fixed;
   z-index: 54;

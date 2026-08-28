@@ -89,7 +89,7 @@ describe("IssueExperience", () => {
   });
 
   it("records an impression only after 50% visibility lasts for 500ms", async () => {
-    let observerCallback: IntersectionObserverCallback = () => undefined;
+    const observerCallbacks = new Map<Element, IntersectionObserverCallback>();
     let resolveObserverReady: (() => void) | undefined;
     const observerReady = new Promise<void>((resolve) => {
       resolveObserverReady = resolve;
@@ -100,11 +100,11 @@ describe("IssueExperience", () => {
       readonly root = null;
       readonly rootMargin = "0px";
       readonly thresholds = [0.5];
-      constructor(callback: IntersectionObserverCallback) {
-        observerCallback = callback;
-        resolveObserverReady?.();
+      constructor(private readonly callback: IntersectionObserverCallback) {}
+      observe(target: Element) {
+        observerCallbacks.set(target, this.callback);
+        if (target.tagName === "ARTICLE") resolveObserverReady?.();
       }
-      observe() {}
       disconnect() {}
       unobserve() {}
       takeRecords() {
@@ -132,7 +132,8 @@ describe("IssueExperience", () => {
     await screen.findByRole("button", { name: "A 선택, 아침형 인간" });
     await observerReady;
     const article = screen.getByRole("article");
-    const callback = observerCallback;
+    const callback = observerCallbacks.get(article);
+    expect(callback).toBeDefined();
     const scheduledImpressions: Array<() => void> = [];
     const setTimeoutSpy = vi.spyOn(window, "setTimeout").mockImplementation((handler, delay) => {
       if (delay === 500 && typeof handler === "function") scheduledImpressions.push(handler);
@@ -140,7 +141,7 @@ describe("IssueExperience", () => {
     });
     try {
       act(() => {
-        callback(
+        callback?.(
           [{ target: article, intersectionRatio: 0.49 } as unknown as IntersectionObserverEntry],
           {} as IntersectionObserver,
         );
@@ -149,7 +150,7 @@ describe("IssueExperience", () => {
       expect(analyticsEvents).toHaveLength(0);
 
       act(() => {
-        callback(
+        callback?.(
           [{ target: article, intersectionRatio: 0.5 } as unknown as IntersectionObserverEntry],
           {} as IntersectionObserver,
         );
@@ -164,6 +165,205 @@ describe("IssueExperience", () => {
     } finally {
       setTimeoutSpy.mockRestore();
     }
+  });
+
+  it("opens one random eligible Issue only after the pre-vote lower area is 50% visible and the wheel moves down", async () => {
+    const observerCallbacks = new Map<Element, IntersectionObserverCallback>();
+    let feedRequests = 0;
+    const analyticsEvents: string[] = [];
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.75);
+
+    class TestIntersectionObserver {
+      readonly root = null;
+      readonly rootMargin = "0px";
+      readonly thresholds = [0, 0.5];
+      constructor(private readonly callback: IntersectionObserverCallback) {}
+      observe(target: Element) {
+        observerCallbacks.set(target, this.callback);
+      }
+      disconnect() {}
+      unobserve() {}
+      takeRecords() {
+        return [];
+      }
+    }
+
+    vi.stubGlobal("IntersectionObserver", TestIntersectionObserver);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = String(input);
+        if (url === "/api/guest-subjects") return jsonResponse({ status: "ready" });
+        if (url.endsWith(`/api/issues/${ISSUE_ID}`)) return jsonResponse(issue);
+        if (url.includes("vote-status")) return jsonResponse({ code: "VOTE_NOT_FOUND" }, 404);
+        if (url.startsWith("/api/issues/feed?")) {
+          feedRequests += 1;
+          expect(url).toContain("limit=6");
+          expect(url).toContain(`excludeIssueId=${ISSUE_ID}`);
+          return jsonResponse({
+            items: [
+              {
+                ...issue,
+                id: "20000000-0000-4000-8000-000000000001",
+                recommendation: {
+                  requestId: "30000000-0000-4000-8000-000000000001",
+                  score: 0,
+                  reasonCodes: ["RECENT_FALLBACK"],
+                  matchedCardCodes: [],
+                },
+              },
+              {
+                ...issue,
+                id: "20000000-0000-4000-8000-000000000002",
+                recommendation: {
+                  requestId: "30000000-0000-4000-8000-000000000002",
+                  score: 0,
+                  reasonCodes: ["EXPLORATION"],
+                  matchedCardCodes: [],
+                },
+              },
+            ],
+            nextCursor: null,
+            ranking: {
+              requestId: "30000000-0000-4000-8000-000000000003",
+              version: "interest_content_v2_refresh",
+              mode: "RECENCY",
+              reasonCode: "PROFILE_NOT_READY",
+              profileVersion: null,
+            },
+          });
+        }
+        if (url === "/api/analytics/events") {
+          const body = JSON.parse(String(init?.body)) as { eventType: string };
+          analyticsEvents.push(body.eventType);
+          return jsonResponse({ accepted: true });
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      }),
+    );
+
+    render(<IssueExperience issueId={ISSUE_ID} />);
+
+    const lowerArea = await screen.findByTestId("pre-vote-wheel-next");
+    await waitFor(() => expect(observerCallbacks.get(lowerArea)).toBeDefined());
+    const callback = observerCallbacks.get(lowerArea);
+
+    act(() => {
+      callback?.(
+        [
+          {
+            target: lowerArea,
+            isIntersecting: true,
+            intersectionRatio: 0.49,
+          } as unknown as IntersectionObserverEntry,
+        ],
+        {} as IntersectionObserver,
+      );
+    });
+    fireEvent.wheel(window, { deltaY: 120 });
+    expect(feedRequests).toBe(0);
+
+    act(() => {
+      callback?.(
+        [
+          {
+            target: lowerArea,
+            isIntersecting: true,
+            intersectionRatio: 0.5,
+          } as unknown as IntersectionObserverEntry,
+        ],
+        {} as IntersectionObserver,
+      );
+    });
+    fireEvent.wheel(window, { deltaY: -120 });
+    expect(feedRequests).toBe(0);
+
+    fireEvent.wheel(window, { deltaY: 120 });
+    fireEvent.wheel(window, { deltaY: 120 });
+
+    await waitFor(() =>
+      expect(navigation.push).toHaveBeenCalledWith("/issues/20000000-0000-4000-8000-000000000002"),
+    );
+    expect(feedRequests).toBe(1);
+    expect(navigation.push).toHaveBeenCalledTimes(1);
+    expect(analyticsEvents).toContain("NEXT_ISSUE_OPEN");
+    randomSpy.mockRestore();
+  });
+
+  it("cancels an in-flight wheel transition as soon as a choice is selected", async () => {
+    const observerCallbacks = new Map<Element, IntersectionObserverCallback>();
+    let feedSignal: AbortSignal | undefined;
+
+    class TestIntersectionObserver {
+      readonly root = null;
+      readonly rootMargin = "0px";
+      readonly thresholds = [0, 0.5];
+      constructor(private readonly callback: IntersectionObserverCallback) {}
+      observe(target: Element) {
+        observerCallbacks.set(target, this.callback);
+      }
+      disconnect() {}
+      unobserve() {}
+      takeRecords() {
+        return [];
+      }
+    }
+
+    vi.stubGlobal("IntersectionObserver", TestIntersectionObserver);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: string | URL | Request, init?: RequestInit) => {
+        const url = String(input);
+        if (url === "/api/guest-subjects") {
+          return Promise.resolve(jsonResponse({ status: "ready" }));
+        }
+        if (url.endsWith(`/api/issues/${ISSUE_ID}`)) return Promise.resolve(jsonResponse(issue));
+        if (url.includes("vote-status")) {
+          return Promise.resolve(jsonResponse({ code: "VOTE_NOT_FOUND" }, 404));
+        }
+        if (url.startsWith("/api/issues/feed?")) {
+          feedSignal = init?.signal ?? undefined;
+          return new Promise<Response>((_resolve, reject) => {
+            feedSignal?.addEventListener("abort", () =>
+              reject(new DOMException("Aborted", "AbortError")),
+            );
+          });
+        }
+        if (url.endsWith(`/api/issues/${ISSUE_ID}/votes`)) {
+          return new Promise<Response>(() => undefined);
+        }
+        if (url === "/api/analytics/events") {
+          return Promise.resolve(jsonResponse({ accepted: true }));
+        }
+        return Promise.reject(new Error(`Unexpected request: ${url}`));
+      }),
+    );
+
+    render(<IssueExperience issueId={ISSUE_ID} />);
+
+    const lowerArea = await screen.findByTestId("pre-vote-wheel-next");
+    const choice = screen.getByRole("button", { name: "A 선택, 아침형 인간" });
+    await waitFor(() => expect(observerCallbacks.get(lowerArea)).toBeDefined());
+    act(() => {
+      observerCallbacks.get(lowerArea)?.(
+        [
+          {
+            target: lowerArea,
+            isIntersecting: true,
+            intersectionRatio: 0.5,
+          } as unknown as IntersectionObserverEntry,
+        ],
+        {} as IntersectionObserver,
+      );
+    });
+    fireEvent.wheel(window, { deltaY: 120 });
+    await waitFor(() => expect(feedSignal).toBeDefined());
+
+    fireEvent.click(choice);
+
+    expect(screen.queryByTestId("pre-vote-wheel-next")).not.toBeInTheDocument();
+    expect(feedSignal?.aborted).toBe(true);
+    expect(navigation.push).not.toHaveBeenCalled();
   });
 
   it("records one vote and reveals results only after selection", async () => {
@@ -258,10 +458,12 @@ describe("IssueExperience", () => {
     render(<IssueExperience issueId={ISSUE_ID} />);
 
     const choice = await screen.findByRole("button", { name: "A 선택, 아침형 인간" });
+    expect(screen.getByTestId("pre-vote-wheel-next")).toBeInTheDocument();
     expect(screen.queryByText("75%")).not.toBeInTheDocument();
 
     fireEvent.click(choice);
     fireEvent.click(choice);
+    expect(screen.queryByTestId("pre-vote-wheel-next")).not.toBeInTheDocument();
 
     expect(await screen.findByText("당신의 선택이 반영됐어요.")).toBeInTheDocument();
     expect(screen.getByText("VOTE RECORD")).toBeInTheDocument();

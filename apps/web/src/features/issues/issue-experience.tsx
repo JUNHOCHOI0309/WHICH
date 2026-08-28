@@ -403,6 +403,9 @@ export function IssueExperience({
 
         <p className={styles.privacyNote}>투표 전에는 다른 사람의 선택 비율을 보여주지 않아요.</p>
       </article>
+      {screen === "ready" ? (
+        <PreVoteWheelNext currentIssueId={issue.id} currentIssueVersion={issue.version} />
+      ) : null}
     </ExperienceShell>
   );
 }
@@ -1965,6 +1968,141 @@ type NextIssuePreviewState =
   | { kind: "empty" }
   | { kind: "error" }
   | { kind: "navigating"; issue: PublicFeedIssue; rankingMode: RankingMode };
+
+type PreVoteWheelNextState = "idle" | "loading" | "empty" | "error" | "navigating";
+
+function randomFeedIssue(items: PublicFeedIssue[]) {
+  if (items.length === 0) return null;
+  return items[Math.floor(Math.random() * items.length)] ?? null;
+}
+
+function PreVoteWheelNext({
+  currentIssueId,
+  currentIssueVersion,
+}: {
+  currentIssueId: string;
+  currentIssueVersion: number;
+}) {
+  const router = useRouter();
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const requestLocked = useRef(false);
+  const requestController = useRef<AbortController | null>(null);
+  const [visible, setVisible] = useState(false);
+  const [state, setState] = useState<PreVoteWheelNextState>("idle");
+
+  const moveNext = useCallback(async () => {
+    if (requestLocked.current) return;
+    requestLocked.current = true;
+    setState("loading");
+    const controller = new AbortController();
+    requestController.current = controller;
+
+    try {
+      const feed = await loadIssueFeed({
+        limit: 6,
+        excludeIssueId: currentIssueId,
+        signal: controller.signal,
+      });
+      if (controller.signal.aborted) return;
+      const nextIssue = randomFeedIssue(feed.items);
+      if (!nextIssue) {
+        setState("empty");
+        void recordAnalyticsEvent({
+          eventType: "NEXT_ISSUE_EXHAUSTED",
+          issueId: currentIssueId,
+          issueVersion: currentIssueVersion,
+        }).catch(() => undefined);
+        return;
+      }
+
+      setState("navigating");
+      void recordAnalyticsEvent({
+        eventType: "NEXT_ISSUE_OPEN",
+        issueId: currentIssueId,
+        issueVersion: currentIssueVersion,
+      }).catch(() => undefined);
+      if (feed.ranking.mode === "PERSONALIZED") {
+        void recordAnalyticsEvent({
+          eventType: "PERSONALIZED_ISSUE_OPEN",
+          issueId: nextIssue.id,
+          issueVersion: nextIssue.version,
+          recommendationRequestId: nextIssue.recommendation.requestId,
+        }).catch(() => undefined);
+      }
+      router.push(`/issues/${nextIssue.id}`);
+    } catch {
+      if (controller.signal.aborted) return;
+      requestLocked.current = false;
+      setState("error");
+    } finally {
+      if (requestController.current === controller) requestController.current = null;
+    }
+  }, [currentIssueId, currentIssueVersion, router]);
+
+  useEffect(
+    () => () => {
+      requestController.current?.abort();
+      requestController.current = null;
+    },
+    [],
+  );
+
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel || typeof IntersectionObserver === "undefined") return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        setVisible(
+          entries.some(
+            (entry) =>
+              entry.target === sentinel && entry.isIntersecting && entry.intersectionRatio >= 0.5,
+          ),
+        );
+      },
+      { threshold: [0, 0.5] },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!visible || state === "loading" || state === "empty" || state === "navigating") return;
+
+    const handleWheel = (event: WheelEvent) => {
+      if (event.ctrlKey || event.deltaY <= 0) return;
+      void moveNext();
+    };
+
+    window.addEventListener("wheel", handleWheel, { passive: true });
+    return () => window.removeEventListener("wheel", handleWheel);
+  }, [moveNext, state, visible]);
+
+  return (
+    <div
+      ref={sentinelRef}
+      className={styles.preVoteWheelNext}
+      data-testid="pre-vote-wheel-next"
+      aria-live="polite"
+    >
+      <span className={styles.preVoteWheelNextEyebrow}>ANOTHER QUESTION</span>
+      <p>
+        {state === "loading" ? "다른 질문을 고르는 중…" : null}
+        {state === "navigating" ? "다른 질문으로 이동하고 있어요." : null}
+        {state === "empty" ? "지금 참여할 수 있는 다른 질문이 없어요." : null}
+        {state === "error" ? "다른 질문을 찾지 못했어요. 아래로 다시 스크롤해 주세요." : null}
+        {state === "idle"
+          ? visible
+            ? "아래로 한 번 더 스크롤하면 다른 질문으로 넘어가요."
+            : "고르지 않고 다른 질문을 보고 싶다면 아래로 내려보세요."
+          : null}
+      </p>
+      <span className={styles.preVoteWheelNextArrow} aria-hidden="true">
+        ↓
+      </span>
+    </div>
+  );
+}
 
 function NextIssuePreview({
   currentIssueId,
