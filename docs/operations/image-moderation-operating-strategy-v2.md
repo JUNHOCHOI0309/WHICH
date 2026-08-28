@@ -222,6 +222,13 @@ recognition, identity matching, demographic inference, and biometric embeddings 
 The current Korean privacy baseline is the Personal Information Protection Commission's
 [generative AI privacy guidance](https://m.pipc.go.kr/np/cop/bbs/selectBoardArticle.do?bbsId=BS217&mCode=D010030000&nttId=11439).
 
+WHICH-97 is now pinned by
+[`ai-image-provider-privacy-retention-gate-v1.md`](./ai-image-provider-privacy-retention-gate-v1.md).
+The decision is `NO_GO`: external image-provider mode remains `OFF` until every contractual,
+international-transfer, provider-data-control, deletion-propagation, and public-policy evidence item
+passes. OpenAI Moderation and Google Cloud Vision are conditional candidates only; neither is an
+approved production processor in the current release.
+
 ## Reviewer experience and automation-bias control
 
 The exception queue shows the Issue question, both options, both assets, alt text, crop, source and

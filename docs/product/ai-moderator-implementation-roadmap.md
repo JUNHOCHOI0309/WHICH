@@ -228,6 +228,12 @@ Task이기 전에 신고 방어·Case·Appeal·가역 제재 기반을 완성하
 | WHICH-111 | P1       | Side·신규 사용자·Reply Slice Random Audit와 Go/No-Go |
 | WHICH-141 | P1       | 승인 이미지 Library·라이선스 원장                    |
 
+WHICH-97의 확정 계약은
+[`ai-image-provider-privacy-retention-gate-v1.md`](../operations/ai-image-provider-privacy-retention-gate-v1.md)에
+있다. 외부 Provider는 현재 `OFF`이며, API Key 설정만으로 활성화할 수 없다. WHICH-99와
+WHICH-101은 Worker/Adapter에서 이 Gate를 호출하고, DPA·국외이전·Provider 데이터 제어·삭제
+전파 증거가 하나라도 빠지면 요청을 만들지 않아야 한다.
+
 권장 Critical Path:
 
 ```text
