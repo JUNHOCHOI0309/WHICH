@@ -155,7 +155,7 @@ export const moderationCaseReferences = pgTable(
     ),
     check(
       "moderation_case_references_type_check",
-      sql`${table.referenceType} in ('CONTENT_REPORT', 'COMMENT_REPORT', 'RIGHTS_REQUEST', 'APPEAL', 'RECONCILIATION')`,
+      sql`${table.referenceType} in ('CONTENT_REPORT', 'COMMENT_REPORT', 'RIGHTS_REQUEST', 'APPEAL', 'RANDOM_AUDIT', 'RECONCILIATION')`,
     ),
   ],
 );

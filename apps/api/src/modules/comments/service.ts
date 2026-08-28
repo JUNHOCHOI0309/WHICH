@@ -1976,21 +1976,24 @@ export function createCommentService(database: Database["db"]): CommentService {
             updatedAt: now,
           })
           .where(eq(comments.id, command.commentId));
-        await transaction.insert(commentModerationDecisions).values({
-          commentId: command.commentId,
-          revision: sql`(select coalesce(max(revision), 0) + 1 from comment_moderation_decisions where comment_id = ${command.commentId})`,
-          action: command.action,
-          source: "INTERNAL_MODERATOR",
-          reasonCode: command.reasonCode,
-          fromPublicationState: target.publicationState,
-          toPublicationState: publicationState,
-          fromVisibility: target.visibility,
-          toVisibility: visibility,
-          fromIntegrityState: target.integrityState,
-          toIntegrityState: integrityState,
-          evidence: { report_score: reportScore, reporter_count: reporterCount },
-          decidedAt: now,
-        });
+        const [decision] = await transaction
+          .insert(commentModerationDecisions)
+          .values({
+            commentId: command.commentId,
+            revision: sql`(select coalesce(max(revision), 0) + 1 from comment_moderation_decisions where comment_id = ${command.commentId})`,
+            action: command.action,
+            source: "INTERNAL_MODERATOR",
+            reasonCode: command.reasonCode,
+            fromPublicationState: target.publicationState,
+            toPublicationState: publicationState,
+            fromVisibility: target.visibility,
+            toVisibility: visibility,
+            fromIntegrityState: target.integrityState,
+            toIntegrityState: integrityState,
+            evidence: { report_score: reportScore, reporter_count: reporterCount },
+            decidedAt: now,
+          })
+          .returning({ id: commentModerationDecisions.id });
         const eventId = randomUUID();
         await transaction.insert(outboxEvents).values({
           id: eventId,
@@ -2016,6 +2019,7 @@ export function createCommentService(database: Database["db"]): CommentService {
           },
         });
         return {
+          decisionId: decision!.id,
           comment: {
             id: command.commentId,
             publicationState,

@@ -23,6 +23,8 @@ import type { ShareCardService } from "./modules/shares/contracts.js";
 import { registerShareCardRoutes } from "./modules/shares/routes.js";
 import type { OpsDashboardService } from "./modules/operations/contracts.js";
 import { registerOpsRoutes } from "./modules/operations/routes.js";
+import type { OpsModerationQueueService } from "./modules/operations/moderation-queue-contracts.js";
+import { registerOpsModerationQueueRoutes } from "./modules/operations/moderation-queue-routes.js";
 import type { IssueMediaService } from "./modules/issue-media/contracts.js";
 import { registerIssueMediaRoutes } from "./modules/issue-media/routes.js";
 import type { IssueMediaReviewService } from "./modules/issue-media/review-contracts.js";
@@ -48,6 +50,7 @@ export type AppDependencies = Pick<Database, "ping" | "close"> & {
   analytics?: AnalyticsService;
   shareCards?: ShareCardService;
   opsDashboard?: OpsDashboardService;
+  opsModerationQueue?: OpsModerationQueueService;
   issueMedia?: IssueMediaService;
   issueMediaReview?: IssueMediaReviewService;
   pointIntegrity?: PointIntegrityService;
@@ -163,6 +166,14 @@ export async function buildApp(config: AppConfig, database: AppDependencies) {
     await registerOpsRoutes(
       app,
       database.opsDashboard,
+      database.memberIdentity,
+      config.auth.internalSecret,
+    );
+  }
+  if (database.opsModerationQueue) {
+    await registerOpsModerationQueueRoutes(
+      app,
+      database.opsModerationQueue,
       database.memberIdentity,
       config.auth.internalSecret,
     );

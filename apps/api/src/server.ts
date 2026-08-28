@@ -14,6 +14,7 @@ import { createGuestVoteService } from "./modules/voting/service.js";
 import { createAnalyticsService } from "./modules/analytics/service.js";
 import { createShareCardService } from "./modules/shares/service.js";
 import { createOpsDashboardService } from "./modules/operations/service.js";
+import { createOpsModerationQueueService } from "./modules/operations/moderation-queue-service.js";
 import { createIssueMediaService } from "./modules/issue-media/service.js";
 import { createIssueMediaReviewService } from "./modules/issue-media/review-service.js";
 import {
@@ -38,6 +39,11 @@ const issueMediaStorage = mediaStorageConfig ? createR2IssueMediaStorage(mediaSt
 const issueMediaService = issueMediaStorage
   ? createIssueMediaService(database.db, issueMediaStorage)
   : null;
+const commentService = createCommentService(database.db);
+const issueMediaReviewService =
+  issueMediaStorage && issueMediaService
+    ? createIssueMediaReviewService(database.db, issueMediaStorage, issueMediaService)
+    : null;
 const app = await buildApp(config, {
   ...database,
   issueReader: createIssueReadService(database.db, {
@@ -53,7 +59,7 @@ const app = await buildApp(config, {
     ? { issueWriter: createIssueWriteService(database.db) }
     : {}),
   guestVotes: createGuestVoteService(database.db),
-  commentReader: createCommentService(database.db),
+  commentReader: commentService,
   memberIdentity: createMemberIdentityService(database.db, {
     sessionTtlSeconds: config.auth.memberSessionTtlSeconds,
     mobileAuthTicketTtlSeconds: config.auth.mobileAuthTicketTtlSeconds,
@@ -70,13 +76,14 @@ const app = await buildApp(config, {
     releaseId: config.releaseId,
     qualityRankerMode: config.featureFlags.qualityRankerMode,
   }),
-  ...(issueMediaStorage && issueMediaService
+  ...(issueMediaStorage && issueMediaService && issueMediaReviewService
     ? {
         issueMedia: issueMediaService,
-        issueMediaReview: createIssueMediaReviewService(
+        issueMediaReview: issueMediaReviewService,
+        opsModerationQueue: createOpsModerationQueueService(
           database.db,
-          issueMediaStorage,
-          issueMediaService,
+          issueMediaReviewService,
+          commentService,
         ),
       }
     : {}),

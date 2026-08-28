@@ -95,3 +95,29 @@ WHERE r.status IN ('REPAIRED', 'FAILED');
 - 배포 직후에는 테이블과 제약 생성 여부만 확인하고 자동 판정을 활성화하지 않는다.
 - 문제가 생기면 새 기록 생성을 중단한다. 기존 원장과 사용자 기능은 계속 동작한다.
 - 생성된 운영 기록은 감사 자료이므로 운영 중 임의 삭제하지 않는다.
+
+## WHICH-95 공통 예외 Queue
+
+`/ops`의 `Moderation Queue`는 기존 Image Review와 댓글 Human Review를 별도 원장으로
+복제하지 않고 공통 Case에 연결한다. AI가 없어도 신고 점수, 이미지 상태, Rights 요청과
+결정론적 Random Audit 표본만으로 Queue가 생성된다.
+
+- Lane은 `High`, `Normal`, `Rights`, `Appeal`, `Random Audit`으로 표시한다.
+- 이미지 Case는 질문, A/B 선택지, 양쪽 이미지 연결, alt text, crop, 권리 근거와 기존 판정을
+  한 문맥에서 보여준다.
+- High/Rights/Appeal 이미지는 기본 Blur이며, Case 열람·Blur 해제·원본 열람은 Operator
+  Member ID와 Request ID로 두 감사 원장에 기록한다.
+- 판정은 `expectedRevision`으로 Case를 먼저 선점한 뒤 기존 댓글·이미지 판정 원장을 호출한다.
+  충돌하면 409로 중단하고 운영자가 최신 Case를 다시 불러온다.
+- Queue 지표는 대기 수, 최장 대기, 처리 p50/p95, 자산당 평균 시간, 최근 7일 운영 시간과
+  유입/유출을 제공한다.
+- 영구 삭제를 포함한 일괄 작업은 제공하지 않는다. Rights와 Appeal의 최종 판단은 계속
+  사람의 단건 결정으로 남긴다.
+
+레거시 댓글 내부 경로는 shared secret만으로 호출할 수 없다. 자동화가 호출할 때는
+`x-moderation-service-id: which-moderation-worker`를 함께 전송해야 하며, 운영자 판정은
+Cloudflare Access와 WHICH Member Session, 활성 OPERATOR 권한을 모두 통과한 `/ops` 경로만
+사용한다.
+
+`0043_omniscient_major_mapleleaf.sql`은 Case reference에 `RANDOM_AUDIT`를 추가한다. 문제가
+생기면 Queue 동기화/표시를 중지하되 기존 Image Review와 댓글 도메인 판정 원장은 유지한다.

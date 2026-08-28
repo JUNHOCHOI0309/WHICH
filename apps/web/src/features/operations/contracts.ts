@@ -229,3 +229,72 @@ export type OpsMediaRightsRequest = {
   createdAt: string;
   resolvedAt: string | null;
 };
+
+export type OpsModerationQueueLane = "HIGH" | "NORMAL" | "RIGHTS" | "APPEAL" | "RANDOM_AUDIT";
+export type OpsModerationQueueItem = {
+  caseId: string;
+  expectedRevision: number;
+  lane: OpsModerationQueueLane;
+  priority: "P0" | "P1" | "P2" | "P3";
+  status: string;
+  targetType: "ISSUE_MEDIA_ASSET" | "COMMENT_VERSION";
+  targetId: string;
+  openedAt: string;
+  updatedAt: string;
+  risky: boolean;
+  summary: string;
+  context:
+    | {
+        kind: "IMAGE";
+        assetId: string;
+        question: string | null;
+        choices: Array<{
+          code: string;
+          label: string;
+          assetId: string | null;
+          altText: string | null;
+          cropMode: string | null;
+        }>;
+        rightsAttestation: string;
+        rightsState: string;
+        uploadedBy: string;
+        input: { width: number; height: number; byteSize: number };
+        output: { width: number; height: number; byteSize: number };
+        priorDecisions: Array<{
+          id: string;
+          status: string;
+          reasonCode: string;
+          rationale: string;
+          reviewedBy: string;
+          createdAt: string;
+        }>;
+      }
+    | {
+        kind: "COMMENT";
+        commentId: string;
+        issueId: string;
+        authorDisplayName: string;
+        body: string;
+        publicationState: string;
+        visibility: string;
+        integrityState: string;
+        reportScore: number;
+        reporterCount: number;
+      };
+};
+export type OpsModerationQueuePage = {
+  schemaVersion: 1;
+  generatedAt: string;
+  metrics: {
+    queueCount: number;
+    oldestAgeSeconds: number | null;
+    reviewSecondsP50: number | null;
+    reviewSecondsP95: number | null;
+    averageSecondsPerAsset: number | null;
+    weeklyOperatorHours: number;
+    inflow7d: number;
+    outflow7d: number;
+  };
+  counts: Record<OpsModerationQueueLane, number>;
+  items: OpsModerationQueueItem[];
+};

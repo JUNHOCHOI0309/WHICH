@@ -49,7 +49,10 @@ export async function proxyOpsApi(request: NextRequest, path: string, init: Requ
         ...init.headers,
       },
     });
-    const response = NextResponse.json(await upstream.json(), { status: upstream.status });
+    const response =
+      upstream.status === 204
+        ? new NextResponse(null, { status: 204 })
+        : NextResponse.json(await upstream.json(), { status: upstream.status });
     response.headers.set("cache-control", "private, no-store");
     if (upstream.status === 401) clearMemberSessionCookie(response);
     return response;

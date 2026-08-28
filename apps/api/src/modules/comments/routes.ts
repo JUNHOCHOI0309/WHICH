@@ -123,12 +123,12 @@ type CommentReportRoute = {
 
 type ModerationCasesRoute = {
   Querystring: { limit?: number };
-  Headers: { "x-moderation-auth-secret"?: string };
+  Headers: { "x-moderation-auth-secret"?: string; "x-moderation-service-id"?: string };
 };
 
 type ModerationDecisionRoute = {
   Params: { commentId: string };
-  Headers: { "x-moderation-auth-secret"?: string };
+  Headers: { "x-moderation-auth-secret"?: string; "x-moderation-service-id"?: string };
   Body: {
     action: "COLLAPSE" | "HIDE" | "REMOVE_POLICY" | "RESTORE";
     reasonCode: string;
@@ -578,7 +578,10 @@ export async function registerCommentRoutes(
           tags: ["internal"],
           summary: "List Comments awaiting internal moderation",
           headers: Type.Object(
-            { "x-moderation-auth-secret": Type.Optional(Type.String()) },
+            {
+              "x-moderation-auth-secret": Type.Optional(Type.String()),
+              "x-moderation-service-id": Type.Optional(Type.String()),
+            },
             { additionalProperties: true },
           ),
           querystring: Type.Object({
@@ -591,7 +594,10 @@ export async function registerCommentRoutes(
         },
       },
       async (request) => {
-        if (request.headers["x-moderation-auth-secret"] !== moderationInternalSecret) {
+        if (
+          request.headers["x-moderation-auth-secret"] !== moderationInternalSecret ||
+          request.headers["x-moderation-service-id"] !== "which-moderation-worker"
+        ) {
           throw new CommentError(
             "MODERATION_AUTH_REQUIRED",
             401,
@@ -610,7 +616,10 @@ export async function registerCommentRoutes(
           summary: "Apply an append-only internal Comment moderation decision",
           params: Type.Object({ commentId: uuidSchema }),
           headers: Type.Object(
-            { "x-moderation-auth-secret": Type.Optional(Type.String()) },
+            {
+              "x-moderation-auth-secret": Type.Optional(Type.String()),
+              "x-moderation-service-id": Type.Optional(Type.String()),
+            },
             { additionalProperties: true },
           ),
           body: Type.Object({
@@ -638,7 +647,10 @@ export async function registerCommentRoutes(
         },
       },
       async (request) => {
-        if (request.headers["x-moderation-auth-secret"] !== moderationInternalSecret) {
+        if (
+          request.headers["x-moderation-auth-secret"] !== moderationInternalSecret ||
+          request.headers["x-moderation-service-id"] !== "which-moderation-worker"
+        ) {
           throw new CommentError(
             "MODERATION_AUTH_REQUIRED",
             401,

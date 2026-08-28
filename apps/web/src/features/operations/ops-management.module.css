@@ -223,6 +223,28 @@
   background: #eef3f5;
   object-fit: contain;
 }
+.moderationMediaFrame {
+  position: relative;
+  overflow: hidden;
+  border-radius: 14px;
+}
+.moderationMediaFrame[data-blurred="true"] .mediaPreview {
+  filter: blur(28px);
+  transform: scale(1.05);
+}
+.moderationMediaFrame > button {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 1px solid #fff;
+  border-radius: 999px;
+  background: #062b35e8;
+  color: #fff;
+  font-weight: 900;
+  transform: translate(-50%, -50%);
+  cursor: pointer;
+}
 .mediaUnavailable {
   display: grid;
   min-height: 260px;
