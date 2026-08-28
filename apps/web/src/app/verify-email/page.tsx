@@ -1,9 +1,8 @@
-import type { Metadata } from "next";
-
 import { VerifyEmailExperience } from "@/features/identity/auth-recovery-experience";
+import { privatePageMetadata } from "@/lib/search-discovery";
 import { sanitizeReturnTo } from "@/lib/server/member-auth";
 
-export const metadata: Metadata = { title: "이메일 확인" };
+export const metadata = privatePageMetadata("이메일 확인");
 
 export default async function VerifyEmailPage({
   searchParams,

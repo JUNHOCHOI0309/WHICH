@@ -1,9 +1,8 @@
-import type { Metadata } from "next";
-
 import { CredentialAuthExperience } from "@/features/identity/credential-auth-experience";
+import { privatePageMetadata } from "@/lib/search-discovery";
 import { sanitizeReturnTo, kakaoLoginEnabled, naverLoginEnabled } from "@/lib/server/member-auth";
 
-export const metadata: Metadata = { title: "로그인", description: "WHICH 계정으로 로그인하세요." };
+export const metadata = privatePageMetadata("로그인", "WHICH 계정으로 로그인하세요.");
 
 export default async function LoginPage({
   searchParams,

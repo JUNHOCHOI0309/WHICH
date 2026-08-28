@@ -4,7 +4,11 @@ import { WhichAsideCard, WhichShell } from "@/components/layout/which-shell";
 
 import styles from "../legal.module.css";
 
-export const metadata: Metadata = { title: "개인정보 처리방침" };
+export const metadata: Metadata = {
+  title: "개인정보 처리방침",
+  description: "WHICH가 계정, 투표, 댓글과 서비스 운영 정보를 처리하는 범위를 설명합니다.",
+  alternates: { canonical: "/legal/privacy" },
+};
 
 export default function PrivacyPolicyPage() {
   const supportEmail = process.env.SUPPORT_EMAIL ?? "privacy@whichone.site";

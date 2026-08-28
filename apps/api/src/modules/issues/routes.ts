@@ -136,6 +136,21 @@ const feedResponseSchema = Type.Object({
   }),
 });
 
+const publicIssueCatalogResponseSchema = Type.Object({
+  items: Type.Array(
+    Type.Object({
+      id: uuidSchema,
+      version: Type.Integer({ minimum: 1 }),
+      question: Type.String(),
+      context: Type.Union([Type.String(), Type.Null()]),
+      publishedAt: Type.String({ format: "date-time" }),
+      categoryCode: Type.String(),
+      choices: Type.Array(choiceSchema, { minItems: 2, maxItems: 2 }),
+    }),
+    { maxItems: 500 },
+  ),
+});
+
 type IssueRoute = {
   Params: { issueId: string };
   Headers: { "x-anonymous-subject-id"?: string; authorization?: string };
@@ -144,6 +159,10 @@ type IssueRoute = {
 type IssueFeedRoute = {
   Querystring: { cursor?: string; limit?: number; excludeIssueId?: string };
   Headers: { "x-anonymous-subject-id"?: string; authorization?: string };
+};
+
+type PublicIssueCatalogRoute = {
+  Querystring: { limit?: number };
 };
 
 type IssueCreateRoute = {
@@ -423,6 +442,25 @@ export async function registerIssueRoutes(
         },
       );
     }
+
+    issueApp.get<PublicIssueCatalogRoute>(
+      "/v1/issues/catalog",
+      {
+        schema: {
+          tags: ["issues"],
+          summary: "List the newest public Issue versions for discovery without personalization",
+          querystring: Type.Object({
+            limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 500, default: 500 })),
+          }),
+          response: {
+            200: publicIssueCatalogResponseSchema,
+            400: errorResponseSchema,
+            500: errorResponseSchema,
+          },
+        },
+      },
+      async (request) => service.listPublicIssueCatalog({ limit: request.query.limit ?? 500 }),
+    );
 
     issueApp.get<IssueFeedRoute>(
       "/v1/issues/feed",

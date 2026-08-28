@@ -5,6 +5,7 @@ import {
   encodeEntryAttribution,
   ENTRY_ATTRIBUTION_COOKIE,
   ENTRY_ATTRIBUTION_MAX_AGE_SECONDS,
+  entryAttributionFromReferrer,
   entryAttributionFromSearchParams,
 } from "@/lib/server/entry-attribution";
 
@@ -15,7 +16,9 @@ export function proxy(request: NextRequest) {
   const existing = request.cookies.get(ENTRY_ATTRIBUTION_COOKIE)?.value;
   if (decodeEntryAttribution(existing)) return response;
 
-  const attribution = entryAttributionFromSearchParams(request.nextUrl.searchParams);
+  const attribution =
+    entryAttributionFromSearchParams(request.nextUrl.searchParams) ??
+    entryAttributionFromReferrer(request.headers.get("referer"), request.nextUrl.origin);
   if (!attribution) return response;
 
   response.cookies.set({
@@ -31,5 +34,5 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml).*)"],
+  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml|feed.xml).*)"],
 };

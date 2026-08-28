@@ -72,6 +72,15 @@ export type PublicIssueFeed = {
   };
 };
 
+export type PublicIssueCatalogItem = Pick<
+  PublicIssue,
+  "id" | "version" | "question" | "context" | "publishedAt" | "categoryCode" | "choices"
+>;
+
+export type PublicIssueCatalog = {
+  items: PublicIssueCatalogItem[];
+};
+
 export type GuestIssueFeedQuery = {
   cursor?: string;
   limit: number;
@@ -86,6 +95,7 @@ export interface IssueReadService {
     viewer?: { anonymousSubjectId?: string; sessionToken?: string },
   ): Promise<PublicIssue>;
   listGuestIssues(query: GuestIssueFeedQuery): Promise<PublicIssueFeed>;
+  listPublicIssueCatalog(query: { limit: number }): Promise<PublicIssueCatalog>;
 }
 
 export type CreateMemberIssueCommand = {

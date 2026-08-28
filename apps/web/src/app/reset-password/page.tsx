@@ -1,8 +1,7 @@
-import type { Metadata } from "next";
-
 import { ResetPasswordExperience } from "@/features/identity/auth-recovery-experience";
+import { privatePageMetadata } from "@/lib/search-discovery";
 
-export const metadata: Metadata = { title: "새 비밀번호 설정" };
+export const metadata = privatePageMetadata("새 비밀번호 설정");
 
 export default async function ResetPasswordPage({
   searchParams,

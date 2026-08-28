@@ -20,6 +20,7 @@ function publishedLabel(value: string) {
     year: "numeric",
     month: "short",
     day: "numeric",
+    timeZone: "Asia/Seoul",
   }).format(new Date(value));
 }
 
@@ -32,9 +33,15 @@ async function readCreatorProfile(handle: string) {
   return (await response.json()) as PublicCreatorProfile;
 }
 
-export function CreatorProfileExperience({ handle }: { handle: string }) {
-  const [screen, setScreen] = useState<Screen>("loading");
-  const [profile, setProfile] = useState<PublicCreatorProfile | null>(null);
+export function CreatorProfileExperience({
+  handle,
+  initialProfile,
+}: {
+  handle: string;
+  initialProfile?: PublicCreatorProfile;
+}) {
+  const [screen, setScreen] = useState<Screen>(initialProfile ? "ready" : "loading");
+  const [profile, setProfile] = useState<PublicCreatorProfile | null>(initialProfile ?? null);
 
   const load = useCallback(async () => {
     try {
@@ -53,6 +60,7 @@ export function CreatorProfileExperience({ handle }: { handle: string }) {
   }, [handle]);
 
   useEffect(() => {
+    if (initialProfile) return;
     let active = true;
     void readCreatorProfile(handle)
       .then((next) => {
@@ -71,7 +79,7 @@ export function CreatorProfileExperience({ handle }: { handle: string }) {
     return () => {
       active = false;
     };
-  }, [handle]);
+  }, [handle, initialProfile]);
 
   return (
     <WhichShell

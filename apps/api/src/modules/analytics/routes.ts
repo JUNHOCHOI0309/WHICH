@@ -51,6 +51,30 @@ const attributionSchema = Type.Union([
     content: uuidSchema,
     capturedAt: Type.String({ format: "date-time" }),
   }),
+  Type.Object(
+    {
+      source: Type.Union(["naver", "google", "bing", "daum"].map((source) => Type.Literal(source))),
+      medium: Type.Literal("organic"),
+      campaign: Type.Optional(Type.String({ minLength: 1, maxLength: 64 })),
+      content: Type.Optional(Type.String({ minLength: 1, maxLength: 96 })),
+      capturedAt: Type.String({ format: "date-time" }),
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      source: Type.Union(
+        ["chatgpt", "perplexity", "claude", "gemini", "copilot"].map((source) =>
+          Type.Literal(source),
+        ),
+      ),
+      medium: Type.Literal("ai_referral"),
+      campaign: Type.Optional(Type.String({ minLength: 1, maxLength: 64 })),
+      content: Type.Optional(Type.String({ minLength: 1, maxLength: 96 })),
+      capturedAt: Type.String({ format: "date-time" }),
+    },
+    { additionalProperties: false },
+  ),
 ]);
 
 function secretMatches(provided: string | undefined, expected: string) {

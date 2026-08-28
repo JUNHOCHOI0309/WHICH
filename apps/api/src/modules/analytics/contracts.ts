@@ -72,6 +72,20 @@ export type AcquisitionAttribution =
       campaign: "result" | "result_with_choice";
       content: string;
       capturedAt: string;
+    }
+  | {
+      source: "naver" | "google" | "bing" | "daum";
+      medium: "organic";
+      campaign?: string;
+      content?: string;
+      capturedAt: string;
+    }
+  | {
+      source: "chatgpt" | "perplexity" | "claude" | "gemini" | "copilot";
+      medium: "ai_referral";
+      campaign?: string;
+      content?: string;
+      capturedAt: string;
     };
 
 export type AnalyticsEventCommand = {

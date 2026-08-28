@@ -108,6 +108,15 @@ export type PublicIssueFeed = {
   };
 };
 
+export type PublicIssueCatalogItem = Pick<
+  PublicIssue,
+  "id" | "version" | "question" | "context" | "publishedAt" | "categoryCode" | "choices"
+>;
+
+export type PublicIssueCatalog = {
+  items: PublicIssueCatalogItem[];
+};
+
 export type CommentSide = "ALL" | "A" | "B";
 export type CommentSort = "NEWEST" | "HELPFUL";
 export type CommentReportReason =
