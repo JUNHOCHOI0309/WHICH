@@ -281,6 +281,13 @@
       "when": 1787928697604,
       "tag": "0039_point_shop_foundation",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1787942947788,
+      "tag": "0040_uneven_the_liberteens",
+      "breakpoints": true
     }
   ]
 }
