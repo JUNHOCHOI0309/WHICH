@@ -1898,6 +1898,7 @@ function NextIssuePreview({
 }) {
   const router = useRouter();
   const [state, setState] = useState<NextIssuePreviewState>({ kind: "loading" });
+  const [dismissed, setDismissed] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
   const requestLocked = useRef(false);
   const exhaustedRecorded = useRef(false);
@@ -1956,6 +1957,19 @@ function NextIssuePreview({
     router.push(`/issues/${state.issue.id}`);
   }, [currentIssueId, currentIssueVersion, router, state]);
 
+  if (dismissed) return null;
+
+  const closeButton = (
+    <button
+      type="button"
+      className={styles.nextIssueClose}
+      aria-label="다음 질문 미리보기 닫기"
+      onClick={() => setDismissed(true)}
+    >
+      <span aria-hidden="true">×</span>
+    </button>
+  );
+
   if (state.kind === "loading") {
     return (
       <aside
@@ -1964,6 +1978,7 @@ function NextIssuePreview({
         data-testid="next-issue-preview-dock"
         aria-label="다음 질문 미리보기"
       >
+        {closeButton}
         <section className={styles.nextIssuePreview} aria-busy="true" aria-live="polite">
           <span className={styles.nextIssueEyebrow}>NEXT ISSUE</span>
           <strong className={styles.nextIssueLoading}>다음 질문을 준비하고 있어요.</strong>
@@ -1980,6 +1995,7 @@ function NextIssuePreview({
         data-testid="next-issue-preview-dock"
         aria-label="다음 질문 미리보기"
       >
+        {closeButton}
         <section className={styles.nextIssuePreview} aria-live="polite">
           <span className={styles.nextIssueEyebrow}>NEXT ISSUE</span>
           <strong className={styles.nextIssueEmpty}>
@@ -1998,6 +2014,7 @@ function NextIssuePreview({
         data-testid="next-issue-preview-dock"
         aria-label="다음 질문 미리보기"
       >
+        {closeButton}
         <section className={styles.nextIssuePreview} aria-live="polite">
           <span className={styles.nextIssueEyebrow}>NEXT ISSUE</span>
           <strong className={styles.nextIssueEmpty}>다음 질문을 불러오지 못했어요.</strong>
@@ -2028,6 +2045,7 @@ function NextIssuePreview({
       data-testid="next-issue-preview-dock"
       aria-label="다음 질문 미리보기"
     >
+      {closeButton}
       <button
         type="button"
         className={styles.nextIssuePreview}

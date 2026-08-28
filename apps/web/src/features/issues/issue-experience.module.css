@@ -1250,9 +1250,36 @@
   pointer-events: none;
 }
 
+.nextIssueClose {
+  position: absolute;
+  z-index: 1;
+  top: 10px;
+  right: 10px;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--which-text-secondary);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  pointer-events: auto;
+}
+
+.nextIssueClose span {
+  font-size: 1.35rem;
+  line-height: 1;
+}
+
+.nextIssueClose:hover {
+  background: color-mix(in srgb, var(--which-text) 8%, transparent);
+  color: var(--which-text);
+}
+
 .nextIssuePreview {
   width: 100%;
-  padding: 22px 24px;
+  padding: 22px 56px 22px 24px;
   border: 1px solid var(--line);
   border-radius: 18px;
   background: #fff;
@@ -1277,6 +1304,7 @@ button.nextIssuePreview:hover:not(:disabled) {
 }
 
 button.nextIssuePreview:focus-visible,
+.nextIssueClose:focus-visible,
 .nextIssueRetry:focus-visible {
   outline: 3px solid var(--a);
   outline-offset: 3px;
@@ -1397,7 +1425,7 @@ button.nextIssuePreview:focus-visible,
 
 @media (max-width: 1023px) {
   .nextIssuePreviewDock {
-    bottom: calc(148px + env(safe-area-inset-bottom));
+    bottom: calc(72px + env(safe-area-inset-bottom));
   }
 }
 
@@ -1424,7 +1452,7 @@ button.nextIssuePreview:focus-visible,
   }
 
   .nextIssuePreview {
-    padding: 16px;
+    padding: 16px 50px 16px 16px;
     border-radius: 16px;
   }
 
