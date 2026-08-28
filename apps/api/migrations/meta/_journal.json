@@ -257,15 +257,22 @@
     {
       "idx": 36,
       "version": "7",
-      "when": 1787893200000,
-      "tag": "0036_member_issue_submissions",
+      "when": 1787920180713,
+      "tag": "0036_comment-community-threads",
       "breakpoints": true
     },
     {
       "idx": 37,
       "version": "7",
-      "when": 1787896800000,
-      "tag": "0037_point_badge_policy",
+      "when": 1787920200000,
+      "tag": "0037_member_issue_submissions",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1787920260000,
+      "tag": "0038_point_badge_policy",
       "breakpoints": true
     }
   ]

@@ -1,0 +1,1 @@
+DROP INDEX "comments_one_active_top_level_per_issue_author_unique";

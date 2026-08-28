@@ -8,7 +8,6 @@ import {
   pgTable,
   text,
   timestamp,
-  uniqueIndex,
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
@@ -102,9 +101,6 @@ export const comments = pgTable(
       table.createdAt,
       table.id,
     ),
-    uniqueIndex("comments_one_active_top_level_per_issue_author_unique")
-      .on(table.issueId, table.authorSubjectId)
-      .where(sql`${table.parentCommentId} is null and ${table.deletedAt} is null`),
     check("comments_body_not_blank_check", sql`length(btrim(${table.body})) > 0`),
     check("comments_positive_version_check", sql`${table.version} > 0`),
     check("comments_report_score_baseline_check", sql`${table.reportScoreBaseline} >= 0`),

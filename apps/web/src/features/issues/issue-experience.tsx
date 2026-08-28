@@ -403,6 +403,9 @@ export function IssueExperience({
 
         <p className={styles.privacyNote}>투표 전에는 다른 사람의 선택 비율을 보여주지 않아요.</p>
       </article>
+      {screen === "ready" ? (
+        <PreVoteWheelNext currentIssueId={issue.id} currentIssueVersion={issue.version} />
+      ) : null}
     </ExperienceShell>
   );
 }
@@ -940,8 +943,6 @@ function CommentSection({
           setPostError("로그인이 만료됐어요. 초안은 보관했으니 다시 로그인해 주세요.");
         } else if (error.code === "VOTE_REQUIRED") {
           setPostError("이 계정에 연결된 유효한 투표가 없어 댓글을 게시할 수 없어요.");
-        } else if (error.code === "COMMENT_ALREADY_EXISTS") {
-          setPostError("이 안건에는 이미 댓글을 남겼어요.");
         } else if (error.status === 422) {
           setPostError("URL·제어문자·과도한 반복 없이 2~500자로 작성해 주세요.");
         } else {
@@ -1250,7 +1251,10 @@ function CommentSection({
     }
   };
 
-  const renderReply = (reply: PublicComment) => {
+  const renderReply = (reply: PublicComment, depth = 1) => {
+    const isCollapsed = reply.visibility === "COLLAPSED";
+    const isExpanded = expandedCollapsedIds.has(reply.id);
+    const replies = reply.replies ?? [];
     const reportState = reply.reports ?? { viewerReported: false, canReport: true };
     const permissions = reply.permissions ?? { canEdit: false, canDelete: false };
     const isEditing = editDraft?.commentId === reply.id;
@@ -1260,6 +1264,7 @@ function CommentSection({
       <article
         key={reply.id}
         className={`${styles.commentReply} ${styles[`comment${reply.choice}`]}`}
+        data-depth={depth}
       >
         <CommentAuthorHeader comment={reply} />
         {isEditing ? (
@@ -1289,43 +1294,72 @@ function CommentSection({
               </button>
             </div>
           </form>
+        ) : isCollapsed && !isExpanded ? (
+          <div className={styles.collapsedNotice}>
+            <p>여러 신고가 접수되어 내용을 접어 두었어요.</p>
+            <button
+              type="button"
+              onClick={() => setExpandedCollapsedIds((current) => new Set(current).add(reply.id))}
+            >
+              내용 확인
+            </button>
+          </div>
         ) : (
           <p>{reply.body}</p>
         )}
         <footer>
-          <div className={styles.commentReactionActions}>
-            <button
-              type="button"
-              className={`${styles.reactionButton} ${
-                reply.reactions.viewerReaction === "HELPFUL" ? styles.reactionActive : ""
-              }`}
-              aria-pressed={reply.reactions.viewerReaction === "HELPFUL"}
-              disabled={pendingReactionIds.has(reply.id)}
-              onClick={() => void toggleReaction(reply, "HELPFUL")}
-            >
-              <span aria-hidden="true">♡</span> 공감 {reply.reactions.helpfulCount}
-            </button>
-            <button
-              type="button"
-              className={`${styles.reactionButtonSecondary} ${
-                reply.reactions.viewerReaction === "DISLIKE" ? styles.reactionDislikeActive : ""
-              }`}
-              aria-label={`싫어요 ${reply.reactions.dislikeCount}`}
-              aria-pressed={reply.reactions.viewerReaction === "DISLIKE"}
-              disabled={pendingReactionIds.has(reply.id)}
-              onClick={() => void toggleReaction(reply, "DISLIKE")}
-            >
-              <Image src="/icons/dislike.png" alt="" width={16} height={16} />
-              <span>{reply.reactions.dislikeCount}</span>
-            </button>
-          </div>
+          {!isCollapsed ? (
+            <div className={styles.commentReactionActions}>
+              <button
+                type="button"
+                className={`${styles.reactionButton} ${
+                  reply.reactions.viewerReaction === "HELPFUL" ? styles.reactionActive : ""
+                }`}
+                aria-pressed={reply.reactions.viewerReaction === "HELPFUL"}
+                disabled={pendingReactionIds.has(reply.id)}
+                onClick={() => void toggleReaction(reply, "HELPFUL")}
+              >
+                <span aria-hidden="true">♡</span> 공감 {reply.reactions.helpfulCount}
+              </button>
+              <button
+                type="button"
+                className={`${styles.reactionButtonSecondary} ${
+                  reply.reactions.viewerReaction === "DISLIKE" ? styles.reactionDislikeActive : ""
+                }`}
+                aria-label={`싫어요 ${reply.reactions.dislikeCount}`}
+                aria-pressed={reply.reactions.viewerReaction === "DISLIKE"}
+                disabled={pendingReactionIds.has(reply.id)}
+                onClick={() => void toggleReaction(reply, "DISLIKE")}
+              >
+                <Image src="/icons/dislike.png" alt="" width={16} height={16} />
+                <span>{reply.reactions.dislikeCount}</span>
+              </button>
+            </div>
+          ) : null}
           <div className={styles.commentSecondaryActions}>
             {reply.editedAt ? <span>수정됨</span> : null}
+            {reply.threadState === "LOCKED" ? <span>대화 잠김</span> : null}
+            {!isCollapsed && reply.threadState === "OPEN" ? (
+              <button
+                type="button"
+                className={styles.replyButton}
+                onClick={() => {
+                  setCommentMutationError(null);
+                  setReplyDraft({ parentCommentId: reply.id, body: "" });
+                }}
+              >
+                답글
+              </button>
+            ) : null}
             {permissions.canEdit ? (
               <button
                 type="button"
                 className={styles.commentOwnerButton}
-                onClick={() => setEditDraft({ commentId: reply.id, body: reply.body })}
+                onClick={() => {
+                  setDeleteConfirmId(null);
+                  setCommentMutationError(null);
+                  setEditDraft({ commentId: reply.id, body: reply.body });
+                }}
               >
                 수정
               </button>
@@ -1334,7 +1368,11 @@ function CommentSection({
               <button
                 type="button"
                 className={styles.commentOwnerButton}
-                onClick={() => setDeleteConfirmId(reply.id)}
+                onClick={() => {
+                  setEditDraft(null);
+                  setCommentMutationError(null);
+                  setDeleteConfirmId(reply.id);
+                }}
               >
                 삭제
               </button>
@@ -1344,7 +1382,10 @@ function CommentSection({
                 type="button"
                 className={styles.reportButton}
                 disabled={reportState.viewerReported || !reportState.canReport || isReporting}
-                onClick={() => setReportDraft({ commentId: reply.id, reason: "SPAM", detail: "" })}
+                onClick={() => {
+                  setReportError(null);
+                  setReportDraft({ commentId: reply.id, reason: "SPAM", detail: "" });
+                }}
               >
                 {reportState.viewerReported ? "신고 완료" : isReporting ? "접수 중…" : "신고"}
               </button>
@@ -1370,6 +1411,40 @@ function CommentSection({
         ) : null}
         {commentMutationError?.commentId === reply.id ? (
           <p className={styles.commentMutationError}>{commentMutationError.message}</p>
+        ) : null}
+        {replyDraft?.parentCommentId === reply.id ? (
+          <form
+            className={styles.replyComposer}
+            onSubmit={(event) => {
+              event.preventDefault();
+              void publishReply();
+            }}
+          >
+            <label htmlFor={`reply-${reply.id}`}>답글 작성</label>
+            <textarea
+              id={`reply-${reply.id}`}
+              value={replyDraft.body}
+              maxLength={500}
+              rows={3}
+              placeholder={`${reply.author.displayName}님에게 답글을 남겨 보세요.`}
+              onChange={(event) =>
+                setReplyDraft({ parentCommentId: reply.id, body: event.target.value })
+              }
+            />
+            <div>
+              <span>{Array.from(replyDraft.body).length}/500</span>
+              <button type="submit" disabled={postingReplyId === reply.id}>
+                {postingReplyId === reply.id ? "작성 중…" : "작성"}
+              </button>
+              <button
+                type="button"
+                disabled={postingReplyId === reply.id}
+                onClick={() => setReplyDraft(null)}
+              >
+                취소
+              </button>
+            </div>
+          </form>
         ) : null}
         {reportDraft?.commentId === reply.id ? (
           <form
@@ -1423,6 +1498,11 @@ function CommentSection({
               </button>
             </div>
           </form>
+        ) : null}
+        {replies.length > 0 ? (
+          <div className={styles.commentReplies} aria-label={`${depth + 1}단계 답글 목록`}>
+            {replies.map((nestedReply) => renderReply(nestedReply, depth + 1))}
+          </div>
         ) : null}
       </article>
     );
@@ -1889,6 +1969,141 @@ type NextIssuePreviewState =
   | { kind: "error" }
   | { kind: "navigating"; issue: PublicFeedIssue; rankingMode: RankingMode };
 
+type PreVoteWheelNextState = "idle" | "loading" | "empty" | "error" | "navigating";
+
+function randomFeedIssue(items: PublicFeedIssue[]) {
+  if (items.length === 0) return null;
+  return items[Math.floor(Math.random() * items.length)] ?? null;
+}
+
+function PreVoteWheelNext({
+  currentIssueId,
+  currentIssueVersion,
+}: {
+  currentIssueId: string;
+  currentIssueVersion: number;
+}) {
+  const router = useRouter();
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const requestLocked = useRef(false);
+  const requestController = useRef<AbortController | null>(null);
+  const [visible, setVisible] = useState(false);
+  const [state, setState] = useState<PreVoteWheelNextState>("idle");
+
+  const moveNext = useCallback(async () => {
+    if (requestLocked.current) return;
+    requestLocked.current = true;
+    setState("loading");
+    const controller = new AbortController();
+    requestController.current = controller;
+
+    try {
+      const feed = await loadIssueFeed({
+        limit: 6,
+        excludeIssueId: currentIssueId,
+        signal: controller.signal,
+      });
+      if (controller.signal.aborted) return;
+      const nextIssue = randomFeedIssue(feed.items);
+      if (!nextIssue) {
+        setState("empty");
+        void recordAnalyticsEvent({
+          eventType: "NEXT_ISSUE_EXHAUSTED",
+          issueId: currentIssueId,
+          issueVersion: currentIssueVersion,
+        }).catch(() => undefined);
+        return;
+      }
+
+      setState("navigating");
+      void recordAnalyticsEvent({
+        eventType: "NEXT_ISSUE_OPEN",
+        issueId: currentIssueId,
+        issueVersion: currentIssueVersion,
+      }).catch(() => undefined);
+      if (feed.ranking.mode === "PERSONALIZED") {
+        void recordAnalyticsEvent({
+          eventType: "PERSONALIZED_ISSUE_OPEN",
+          issueId: nextIssue.id,
+          issueVersion: nextIssue.version,
+          recommendationRequestId: nextIssue.recommendation.requestId,
+        }).catch(() => undefined);
+      }
+      router.push(`/issues/${nextIssue.id}`);
+    } catch {
+      if (controller.signal.aborted) return;
+      requestLocked.current = false;
+      setState("error");
+    } finally {
+      if (requestController.current === controller) requestController.current = null;
+    }
+  }, [currentIssueId, currentIssueVersion, router]);
+
+  useEffect(
+    () => () => {
+      requestController.current?.abort();
+      requestController.current = null;
+    },
+    [],
+  );
+
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel || typeof IntersectionObserver === "undefined") return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        setVisible(
+          entries.some(
+            (entry) =>
+              entry.target === sentinel && entry.isIntersecting && entry.intersectionRatio >= 0.5,
+          ),
+        );
+      },
+      { threshold: [0, 0.5] },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!visible || state === "loading" || state === "empty" || state === "navigating") return;
+
+    const handleWheel = (event: WheelEvent) => {
+      if (event.ctrlKey || event.deltaY <= 0) return;
+      void moveNext();
+    };
+
+    window.addEventListener("wheel", handleWheel, { passive: true });
+    return () => window.removeEventListener("wheel", handleWheel);
+  }, [moveNext, state, visible]);
+
+  return (
+    <div
+      ref={sentinelRef}
+      className={styles.preVoteWheelNext}
+      data-testid="pre-vote-wheel-next"
+      aria-live="polite"
+    >
+      <span className={styles.preVoteWheelNextEyebrow}>ANOTHER QUESTION</span>
+      <p>
+        {state === "loading" ? "다른 질문을 고르는 중…" : null}
+        {state === "navigating" ? "다른 질문으로 이동하고 있어요." : null}
+        {state === "empty" ? "지금 참여할 수 있는 다른 질문이 없어요." : null}
+        {state === "error" ? "다른 질문을 찾지 못했어요. 아래로 다시 스크롤해 주세요." : null}
+        {state === "idle"
+          ? visible
+            ? "아래로 한 번 더 스크롤하면 다른 질문으로 넘어가요."
+            : "고르지 않고 다른 질문을 보고 싶다면 아래로 내려보세요."
+          : null}
+      </p>
+      <span className={styles.preVoteWheelNextArrow} aria-hidden="true">
+        ↓
+      </span>
+    </div>
+  );
+}
+
 function NextIssuePreview({
   currentIssueId,
   currentIssueVersion,
@@ -1898,6 +2113,7 @@ function NextIssuePreview({
 }) {
   const router = useRouter();
   const [state, setState] = useState<NextIssuePreviewState>({ kind: "loading" });
+  const [dismissed, setDismissed] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
   const requestLocked = useRef(false);
   const exhaustedRecorded = useRef(false);
@@ -1956,40 +2172,79 @@ function NextIssuePreview({
     router.push(`/issues/${state.issue.id}`);
   }, [currentIssueId, currentIssueVersion, router, state]);
 
+  if (dismissed) return null;
+
+  const closeButton = (
+    <button
+      type="button"
+      className={styles.nextIssueClose}
+      aria-label="다음 질문 미리보기 닫기"
+      onClick={() => setDismissed(true)}
+    >
+      <span aria-hidden="true">×</span>
+    </button>
+  );
+
   if (state.kind === "loading") {
     return (
-      <section className={styles.nextIssuePreview} aria-busy="true" aria-live="polite">
-        <span className={styles.nextIssueEyebrow}>NEXT ISSUE</span>
-        <strong className={styles.nextIssueLoading}>다음 질문을 준비하고 있어요.</strong>
-      </section>
+      <aside
+        className={styles.nextIssuePreviewDock}
+        data-placement="bottom-right"
+        data-testid="next-issue-preview-dock"
+        aria-label="다음 질문 미리보기"
+      >
+        {closeButton}
+        <section className={styles.nextIssuePreview} aria-busy="true" aria-live="polite">
+          <span className={styles.nextIssueEyebrow}>NEXT ISSUE</span>
+          <strong className={styles.nextIssueLoading}>다음 질문을 준비하고 있어요.</strong>
+        </section>
+      </aside>
     );
   }
 
   if (state.kind === "empty") {
     return (
-      <section className={styles.nextIssuePreview} aria-live="polite">
-        <span className={styles.nextIssueEyebrow}>NEXT ISSUE</span>
-        <strong className={styles.nextIssueEmpty}>지금 참여할 수 있는 질문을 모두 골랐어요.</strong>
-      </section>
+      <aside
+        className={styles.nextIssuePreviewDock}
+        data-placement="bottom-right"
+        data-testid="next-issue-preview-dock"
+        aria-label="다음 질문 미리보기"
+      >
+        {closeButton}
+        <section className={styles.nextIssuePreview} aria-live="polite">
+          <span className={styles.nextIssueEyebrow}>NEXT ISSUE</span>
+          <strong className={styles.nextIssueEmpty}>
+            지금 참여할 수 있는 질문을 모두 골랐어요.
+          </strong>
+        </section>
+      </aside>
     );
   }
 
   if (state.kind === "error") {
     return (
-      <section className={styles.nextIssuePreview} aria-live="polite">
-        <span className={styles.nextIssueEyebrow}>NEXT ISSUE</span>
-        <strong className={styles.nextIssueEmpty}>다음 질문을 불러오지 못했어요.</strong>
-        <button
-          type="button"
-          className={styles.nextIssueRetry}
-          onClick={() => {
-            setState({ kind: "loading" });
-            setRetryKey((current) => current + 1);
-          }}
-        >
-          다시 시도
-        </button>
-      </section>
+      <aside
+        className={styles.nextIssuePreviewDock}
+        data-placement="bottom-right"
+        data-testid="next-issue-preview-dock"
+        aria-label="다음 질문 미리보기"
+      >
+        {closeButton}
+        <section className={styles.nextIssuePreview} aria-live="polite">
+          <span className={styles.nextIssueEyebrow}>NEXT ISSUE</span>
+          <strong className={styles.nextIssueEmpty}>다음 질문을 불러오지 못했어요.</strong>
+          <button
+            type="button"
+            className={styles.nextIssueRetry}
+            onClick={() => {
+              setState({ kind: "loading" });
+              setRetryKey((current) => current + 1);
+            }}
+          >
+            다시 시도
+          </button>
+        </section>
+      </aside>
     );
   }
 
@@ -1999,30 +2254,38 @@ function NextIssuePreview({
   const choiceB = nextIssue.choices[1];
 
   return (
-    <button
-      type="button"
-      className={styles.nextIssuePreview}
-      aria-label={`다음 질문으로 이동: ${nextIssue.question}`}
-      aria-busy={navigating}
-      disabled={navigating}
-      onClick={moveNext}
+    <aside
+      className={styles.nextIssuePreviewDock}
+      data-placement="bottom-right"
+      data-testid="next-issue-preview-dock"
+      aria-label="다음 질문 미리보기"
     >
-      <span className={styles.nextIssueEyebrow}>NEXT ISSUE</span>
-      <span className={styles.nextIssueHeadline}>
-        <strong>{nextIssue.question}</strong>
-        <span className={styles.nextIssueAction}>{navigating ? "이동 중…" : "다음 →"}</span>
-      </span>
-      <span className={styles.nextIssueChoices} aria-hidden="true">
-        <span>
-          <b>{choiceA?.code ?? "A"}</b>
-          {choiceA?.label ?? "첫 번째 선택"}
+      {closeButton}
+      <button
+        type="button"
+        className={styles.nextIssuePreview}
+        aria-label={`다음 질문으로 이동: ${nextIssue.question}`}
+        aria-busy={navigating}
+        disabled={navigating}
+        onClick={moveNext}
+      >
+        <span className={styles.nextIssueEyebrow}>NEXT ISSUE</span>
+        <span className={styles.nextIssueHeadline}>
+          <strong>{nextIssue.question}</strong>
+          <span className={styles.nextIssueAction}>{navigating ? "이동 중…" : "다음 →"}</span>
         </span>
-        <span>
-          <b>{choiceB?.code ?? "B"}</b>
-          {choiceB?.label ?? "두 번째 선택"}
+        <span className={styles.nextIssueChoices} aria-hidden="true">
+          <span>
+            <b>{choiceA?.code ?? "A"}</b>
+            <em>{choiceA?.label ?? "첫 번째 선택"}</em>
+          </span>
+          <span>
+            <b>{choiceB?.code ?? "B"}</b>
+            <em>{choiceB?.label ?? "두 번째 선택"}</em>
+          </span>
         </span>
-      </span>
-    </button>
+      </button>
+    </aside>
   );
 }
 

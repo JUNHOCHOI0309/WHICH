@@ -309,17 +309,23 @@ describe("Member Comment write API", () => {
     expect(conflict.statusCode).toBe(409);
     expect(conflict.json()).toMatchObject({ code: "IDEMPOTENCY_CONFLICT" });
 
-    const duplicate = await submitComment(
+    const secondComment = await submitComment(
       issue.issueId,
       session.token,
       randomUUID(),
       "두 번째 댓글",
     );
-    expect(duplicate.statusCode).toBe(409);
-    expect(duplicate.json()).toMatchObject({ code: "COMMENT_ALREADY_EXISTS" });
+    expect(secondComment.statusCode).toBe(201);
+    expect(secondComment.json()).toMatchObject({ comment: { body: "두 번째 댓글" } });
+
+    const allComments = await database.db
+      .select({ id: comments.id })
+      .from(comments)
+      .where(eq(comments.issueId, issue.issueId));
+    expect(allComments).toHaveLength(2);
   });
 
-  it("nests one-level replies and rejects a reply to another reply", async () => {
+  it("publishes and returns replies at arbitrary nesting depths", async () => {
     const issue = await createIssue();
     const authorGuest = await createGuestVote(issue.issueId, issue.choiceAId);
     const author = await createSession(`reply-root-author-${issue.issueId}`, authorGuest);
@@ -344,6 +350,28 @@ describe("Member Comment write API", () => {
     expect(replyResponse.statusCode).toBe(201);
     const replyId = replyResponse.json<{ comment: { id: string } }>().comment.id;
 
+    const nestedReply = await submitComment(
+      issue.issueId,
+      author.token,
+      randomUUID(),
+      "두 단계 답글",
+      undefined,
+      replyId,
+    );
+    expect(nestedReply.statusCode).toBe(201);
+    const nestedReplyId = nestedReply.json<{ comment: { id: string } }>().comment.id;
+
+    const deeplyNestedReply = await submitComment(
+      issue.issueId,
+      replier.token,
+      randomUUID(),
+      "세 단계 답글",
+      undefined,
+      nestedReplyId,
+    );
+    expect(deeplyNestedReply.statusCode).toBe(201);
+    const deeplyNestedReplyId = deeplyNestedReply.json<{ comment: { id: string } }>().comment.id;
+
     const listResponse = await app.inject({
       method: "GET",
       url: `/v1/issues/${issue.issueId}/comments?side=ALL&limit=10`,
@@ -355,21 +383,30 @@ describe("Member Comment write API", () => {
         {
           id: rootId,
           parentCommentId: null,
-          replies: [{ id: replyId, parentCommentId: rootId, body: "한 단계 답글" }],
+          replies: [
+            {
+              id: replyId,
+              parentCommentId: rootId,
+              body: "한 단계 답글",
+              replies: [
+                {
+                  id: nestedReplyId,
+                  parentCommentId: replyId,
+                  body: "두 단계 답글",
+                  replies: [
+                    {
+                      id: deeplyNestedReplyId,
+                      parentCommentId: nestedReplyId,
+                      body: "세 단계 답글",
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
         },
       ],
     });
-
-    const nestedReply = await submitComment(
-      issue.issueId,
-      author.token,
-      randomUUID(),
-      "허용하지 않는 중첩 답글",
-      undefined,
-      replyId,
-    );
-    expect(nestedReply.statusCode).toBe(409);
-    expect(nestedReply.json()).toMatchObject({ code: "REPLY_PARENT_UNAVAILABLE" });
   });
 
   it("prefers a direct Member Vote over a linked Guest Vote", async () => {
