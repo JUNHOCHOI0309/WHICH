@@ -63,6 +63,8 @@ gates. Those remaining gates are tracked by WHICH-49 through WHICH-52.
 ### Comments, reactions, and moderation
 
 - Comment read/write for an eligible Guest or Member after an accepted Vote.
+- Multiple top-level Comments by the same eligible Member and recursively nested Reply threads;
+  participation volume and Reply depth are not moderation violations by themselves.
 - A/B side preservation from the accepted Vote; the Client cannot choose or forge a side.
 - Latest and A/B filters, Cursor pagination, and representative A/B comment highlights.
 - Rotating representative comments in completed Feed cards.
@@ -72,6 +74,9 @@ gates. Those remaining gates are tracked by WHICH-49 through WHICH-52.
   automatic hide at 20 points/ten reporters.
 - Internal moderation queue and collapse, hide, policy removal, and restore decisions with audit
   evidence.
+- The deployed report thresholds are reversible content containment, not account Strikes or
+  automatic deletion. The staged enforcement boundary is defined in
+  [`community-enforcement-policy-v1.md`](./community-enforcement-policy-v1.md).
 
 ### Content, analytics, and release operations
 

@@ -10,7 +10,9 @@ Public v0 Release Candidate의 콘텐츠·측정·운영 준비도를 검증하�
 [`docs/product/which-v1-roadmap.md`](docs/product/which-v1-roadmap.md)에 정리되어 있습니다. Trending 질문,
 고품질 Feed 추천, Fine-tuned AI 보조 구조의 상세 설계는
 [`docs/product/post-v0-discovery-recommendation-ai-roadmap.md`](docs/product/post-v0-discovery-recommendation-ai-roadmap.md)에
-분리해 두었습니다.
+분리해 두었습니다. 복수 댓글·무한 Reply 이후의 신고, 반복 위반, 가역 제재와 Appeal 기준은
+[`docs/product/community-enforcement-policy-v1.md`](docs/product/community-enforcement-policy-v1.md)를
+따릅니다.
 
 ## 기술 기반
 

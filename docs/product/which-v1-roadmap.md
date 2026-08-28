@@ -1,7 +1,7 @@
 # WHICH v1 Product Roadmap
 
 - Status: Candidate roadmap — Public v0 beta evidence pending
-- Last synchronized: 2026-08-25
+- Last synchronized: 2026-08-28
 - Source snapshot: Notion Tasks `WHICH-1` through `WHICH-69`
 
 ## 문서 목적
@@ -16,6 +16,8 @@ Backlog를 저장소 문서 및 운영 경계와 교차 점검했다.
 
 세부 점수식, 모델 및 안전 원칙은
 [`post-v0-discovery-recommendation-ai-roadmap.md`](./post-v0-discovery-recommendation-ai-roadmap.md),
+커뮤니티 신고·제재 기준은
+[`community-enforcement-policy-v1.md`](./community-enforcement-policy-v1.md),
 Public v0 경계는 [`public-v0-release-scope.md`](./public-v0-release-scope.md)를 기준으로 한다.
 
 ## 전체 Task 점검 결과
@@ -201,7 +203,37 @@ Two-Tower, Sequence Model, 실시간 Bandit 또는 Black-box Ranker를 도입하
 
 ## v1 Safety & Operations
 
-### 5. AI Editorial·Moderation Assist
+### 5. Community Enforcement Hardening
+
+- Origin: 복수 최상위 댓글·무한 Reply Thread 공개 이후의 안전 운영 보강
+- 권장 우선순위: P0/P1 — 댓글 참여 제한을 완화한 만큼 가역 제재와 신고 공격 방어를 먼저 확보
+
+**현재 기준**
+
+- 댓글 수와 Reply 깊이는 제재 근거가 아니다.
+- 신고 임계치 기반 Collapse·Hide는 콘텐츠 단위의 임시 조치이며 자동 삭제가 아니다.
+- Raw Report, 싫어요와 의견의 비인기는 Member Strike로 누적하지 않는다.
+
+**v1 범위**
+
+- canonical Report Reason, Severity와 Content→Thread→Feature→Account Action Ladder;
+- Report Cluster, Subject dedupe, Reporter reliability Shadow와 신고 남용 Case;
+- 확인된 위반만 보존하는 append-only Policy Event와 기간·감쇠;
+- 반복 Spam의 짧은 Comment Cooldown, Premoderation과 Thread Slow Mode·Lock;
+- Notice, Appeal, 완전 복구와 자동 제재 Kill Switch;
+- A/B Side·Guest·신규 사용자·깊은 Reply Slice별 오탐 Guardrail.
+
+**완료 기준**
+
+- 하나의 Report Cluster나 신고 수만으로 계정 제한이 발생하지 않는다.
+- 24시간 초과 Feature 제한과 모든 Account 제한은 사람 승인을 요구한다.
+- Appeal 인용 시 콘텐츠, 작성 권한, 유효 위험 점수와 Ranking 파생 상태가 함께 복구된다.
+- 정상 댓글·답글 참여가 안전 개선보다 크게 감소하면 자동화 확대를 중지한다.
+
+세부 단계와 기존 `WHICH-91`–`WHICH-111` 연결은
+[`community-enforcement-policy-v1.md`](./community-enforcement-policy-v1.md)를 따른다.
+
+### 6. AI Editorial·Moderation Assist
 
 - Origin: `WHICH-55`
 - 권장 우선순위: P2 — `WHICH-49`, `WHICH-50`, `WHICH-52`의 Label과 운영 결과가 선행
@@ -229,7 +261,7 @@ Two-Tower, Sequence Model, 실시간 Bandit 또는 Black-box Ranker를 도입하
 - 최신 사실과 출처를 Fine-tuned Model의 기억에 맡기지 않고 Retrieval/RAG로 근거를 연결한다.
 - 추천 문제를 Generative AI로 대체하지 않는다.
 
-### 6. Production Hardening
+### 7. Production Hardening
 
 - Origin: Public v0 검증 문서의 명시된 v1 경계
 - 권장 우선순위: P1/P2 — Beta 장애와 운영 비용에 따라 분할
@@ -278,7 +310,7 @@ Native 구현을 Web 기능이 모두 끝날 때까지 미루거나, 반대로 N
 | Notification                  | 재방문 계기가 부족하고 수신 가치가 명확함       | v1.x, Opt-in |
 | Following·가벼운 Social Graph | 특정 Creator를 다시 찾는 행동이 확인됨          | v1.x         |
 | Live Surface                  | 충분한 동시 Traffic과 운영 대응력이 있음        | v1.x         |
-| Reply 고도화                  | 단일 댓글보다 대화 Thread가 핵심 가치라는 증거  | v1.x 또는 v2 |
+| Thread Safety·Navigation      | 깊은 Reply에서 공격·가독성 문제가 반복됨        | v1.x         |
 | Instagram OAuth               | 유입·로그인 전환 개선 근거와 운영 필요성이 있음 | Later        |
 | Channel Copy Assist           | Naver 등 외부 채널별 유입 실험이 반복 운영됨    | v1.x         |
 
@@ -287,7 +319,7 @@ Search, Bookmark, Notification, Following, Live를 디자인에 보인다는 이
 
 ## v2 또는 명시적 제외
 
-- Threaded Reply 전체 확장, DM, Group, Quote Post, Real-time Chat;
+- DM, Group, Quote Post, Real-time Chat과 별도 Social Graph 확장;
 - 무제한 Creator 공개 게시와 대규모 Social Graph;
 - 정치·선거 여론조사 또는 대표성 주장;
 - Monetization, B2B Analytics, Multi-region, Multilingual Launch;
