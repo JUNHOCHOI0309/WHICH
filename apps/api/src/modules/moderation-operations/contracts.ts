@@ -51,7 +51,12 @@ export type UpdateModerationCaseCommand = {
 export type LinkModerationCaseReferenceCommand = {
   caseId: string;
   referenceType:
-    "CONTENT_REPORT" | "COMMENT_REPORT" | "RIGHTS_REQUEST" | "APPEAL" | "RECONCILIATION";
+    | "CONTENT_REPORT"
+    | "COMMENT_REPORT"
+    | "RIGHTS_REQUEST"
+    | "APPEAL"
+    | "RANDOM_AUDIT"
+    | "RECONCILIATION";
   referenceId: string;
 };
 

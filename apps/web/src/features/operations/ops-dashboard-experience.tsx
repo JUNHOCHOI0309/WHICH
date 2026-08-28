@@ -7,12 +7,13 @@ import type { OpsDashboardSnapshot } from "./contracts";
 import { OpsEditorialPanel } from "./ops-editorial-panel";
 import { OpsMembersPanel } from "./ops-members-panel";
 import { OpsMediaReviewPanel } from "./ops-media-review-panel";
+import { OpsModerationQueuePanel } from "./ops-moderation-queue-panel";
 import { OpsRankingPreviewPanel } from "./ops-ranking-preview-panel";
 import styles from "./ops-dashboard-experience.module.css";
 
 type WindowDays = 1 | 7 | 30;
 type Screen = "loading" | "ready" | "login" | "denied" | "error";
-type Tab = "overview" | "members" | "editorial" | "media" | "ranking";
+type Tab = "overview" | "members" | "editorial" | "moderation" | "media" | "ranking";
 
 const stageLabels: Array<[keyof OpsDashboardSnapshot["funnel"]["stages"], string]> = [
   ["viewable", "Viewable"],
@@ -160,6 +161,7 @@ export function OpsDashboardExperience() {
                 ["overview", "Overview"],
                 ["members", "사용자 DB"],
                 ["editorial", "Issue Review"],
+                ["moderation", "Moderation Queue"],
                 ["media", "Image Review"],
                 ["ranking", "Ranking Preview"],
               ] as const
@@ -433,6 +435,8 @@ export function OpsDashboardExperience() {
                 </nav>
               </section>
             </>
+          ) : tab === "moderation" ? (
+            <OpsModerationQueuePanel />
           ) : tab === "members" ? (
             <OpsMembersPanel />
           ) : tab === "editorial" ? (

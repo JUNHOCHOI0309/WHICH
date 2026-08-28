@@ -150,6 +150,7 @@ export interface CommentService {
   reportComment(command: CommentReportCommand): Promise<CommentReportResult>;
   listModerationCases(limit: number): Promise<{ items: CommentModerationCase[] }>;
   decideModeration(command: CommentModerationDecisionCommand): Promise<{
+    decisionId: string;
     comment: { id: string; publicationState: string; visibility: string; integrityState: string };
   }>;
 }

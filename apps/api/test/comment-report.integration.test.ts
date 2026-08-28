@@ -244,10 +244,19 @@ describe("Comment report and automatic moderation API", () => {
       url: "/v1/internal/comment-moderation/cases",
     });
     expect(unauthorizedQueue.statusCode).toBe(401);
-    const queue = await app.inject({
+    const secretOnlyQueue = await app.inject({
       method: "GET",
       url: "/v1/internal/comment-moderation/cases",
       headers: { "x-moderation-auth-secret": MODERATION_SECRET },
+    });
+    expect(secretOnlyQueue.statusCode).toBe(401);
+    const queue = await app.inject({
+      method: "GET",
+      url: "/v1/internal/comment-moderation/cases",
+      headers: {
+        "x-moderation-auth-secret": MODERATION_SECRET,
+        "x-moderation-service-id": "which-moderation-worker",
+      },
     });
     expect(queue.statusCode).toBe(200);
     expect(queue.json()).toMatchObject({
@@ -265,7 +274,10 @@ describe("Comment report and automatic moderation API", () => {
     const restored = await app.inject({
       method: "POST",
       url: `/v1/internal/comments/${comment.id}/moderation-decisions`,
-      headers: { "x-moderation-auth-secret": MODERATION_SECRET },
+      headers: {
+        "x-moderation-auth-secret": MODERATION_SECRET,
+        "x-moderation-service-id": "which-moderation-worker",
+      },
       payload: { action: "RESTORE", reasonCode: "NO_POLICY_VIOLATION" },
     });
     expect(restored.statusCode).toBe(200);

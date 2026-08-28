@@ -1,0 +1,2 @@
+ALTER TABLE "moderation_case_references" DROP CONSTRAINT "moderation_case_references_type_check";--> statement-breakpoint
+ALTER TABLE "moderation_case_references" ADD CONSTRAINT "moderation_case_references_type_check" CHECK ("moderation_case_references"."reference_type" in ('CONTENT_REPORT', 'COMMENT_REPORT', 'RIGHTS_REQUEST', 'APPEAL', 'RANDOM_AUDIT', 'RECONCILIATION'));
