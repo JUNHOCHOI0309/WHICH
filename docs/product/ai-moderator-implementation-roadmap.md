@@ -3,6 +3,7 @@
 - Status: v2 backlog — exception-first image moderation and assisted enforcement
 - Last updated: 2026-08-28
 - Notion plan: [WHICH AI Moderator 구현 계획 v2 — 예외 중심 Moderation](https://app.notion.com/p/3c828b27a559818d9d2bd597065b6086)
+- Canonical policy: [`moderation-policy-registry-v1.md`](./moderation-policy-registry-v1.md)
 - Notion image review: [WHICH 이미지 Moderation 운영 전략 v2](https://app.notion.com/p/3c928b27a5598189aa9bef1335295840)
 - Image operations: [`image-moderation-operating-strategy-v2.md`](../operations/image-moderation-operating-strategy-v2.md)
 - Related AI roadmap: [WHICH v1 Fine-tuned AI 적용 후보](https://app.notion.com/p/3c628b27a55981c48216e6d292de7eae)
