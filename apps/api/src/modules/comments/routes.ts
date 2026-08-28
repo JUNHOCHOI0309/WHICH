@@ -39,25 +39,25 @@ const commentSchemaFields = {
   }),
 } as const;
 
-const replyCommentSchema = Type.Object({
-  ...commentSchemaFields,
-  replies: Type.Array(Type.Unknown(), { maxItems: 0 }),
-});
-
-const publicCommentSchema = Type.Object({
-  ...commentSchemaFields,
-  replies: Type.Array(replyCommentSchema),
-});
+const publicCommentSchema = Type.Recursive(
+  (comment) =>
+    Type.Object({
+      ...commentSchemaFields,
+      replies: Type.Array(comment),
+    }),
+  { $id: "PublicComment" },
+);
+const publicCommentReference = Type.Ref(publicCommentSchema);
 
 const commentPageSchema = Type.Object({
-  items: Type.Array(publicCommentSchema),
+  items: Type.Array(publicCommentReference),
   nextCursor: Type.Union([Type.String(), Type.Null()]),
   totalCount: Type.Integer({ minimum: 0 }),
 });
 
 const commentHighlightsSchema = Type.Object({
-  A: Type.Array(publicCommentSchema),
-  B: Type.Array(publicCommentSchema),
+  A: Type.Array(publicCommentReference),
+  B: Type.Array(publicCommentReference),
 });
 
 type CommentRoute = {
@@ -147,6 +147,7 @@ export async function registerCommentRoutes(
   moderationInternalSecret: string,
 ) {
   await app.register((commentApp) => {
+    commentApp.addSchema(publicCommentSchema);
     commentApp.setErrorHandler((error, request, reply) => {
       if (error instanceof CommentError) {
         return reply.code(error.statusCode).send({ code: error.code, message: error.message });
@@ -300,7 +301,7 @@ export async function registerCommentRoutes(
             parentCommentId: Type.Optional(uuidSchema),
           }),
           response: {
-            201: Type.Object({ comment: publicCommentSchema }),
+            201: Type.Object({ comment: publicCommentReference }),
             400: errorResponseSchema,
             401: errorResponseSchema,
             403: errorResponseSchema,
