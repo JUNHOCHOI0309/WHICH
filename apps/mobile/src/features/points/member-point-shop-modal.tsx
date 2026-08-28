@@ -1,7 +1,8 @@
+import { useState } from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import type { MemberPointShopView, PointShopCatalogItem } from "@/contracts";
+import type { MemberPointShopView, PointShopCatalogItem, PointShopEquipSlot } from "@/contracts";
 import {
   avatarFrameStyle,
   cosmeticTokens,
@@ -15,6 +16,8 @@ const slotLabels = {
   AVATAR_FRAME: "아바타 프레임",
   SHARE_BACKGROUND: "공유 배경",
 } as const;
+
+const shopSlots = Object.keys(slotLabels) as PointShopEquipSlot[];
 
 function CosmeticPreview({ item }: { item: PointShopCatalogItem | null }) {
   if (!item) {
@@ -94,6 +97,16 @@ export function MemberPointShopModal({
   shop: MemberPointShopView | null;
   visible: boolean;
 }) {
+  const [activeSlot, setActiveSlot] = useState<PointShopEquipSlot>("PROFILE_ACCENT");
+
+  const filteredCatalog = shop?.catalog.filter((item) => item.equipSlot === activeSlot) ?? [];
+
+  const selectSlot = (slot: PointShopEquipSlot) => {
+    setActiveSlot(slot);
+    const firstItem = shop?.catalog.find((item) => item.equipSlot === slot);
+    if (firstItem) onPreview(firstItem);
+  };
+
   return (
     <Modal
       animationType="fade"
@@ -152,9 +165,33 @@ export function MemberPointShopModal({
               </View>
             </View>
 
+            <ScrollView
+              accessibilityLabel="상품 종류"
+              contentContainerStyle={styles.catalogTabs}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+            >
+              {shopSlots.map((slot) => {
+                const active = activeSlot === slot;
+                return (
+                  <Pressable
+                    accessibilityRole="tab"
+                    accessibilityState={{ selected: active }}
+                    key={slot}
+                    onPress={() => selectSlot(slot)}
+                    style={[styles.catalogTab, active && styles.catalogTabActive]}
+                  >
+                    <Text style={[styles.catalogTabText, active && styles.catalogTabTextActive]}>
+                      {slotLabels[slot]}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+
             {pending && !shop ? <Text style={styles.loading}>상품을 불러오는 중…</Text> : null}
             <View style={styles.catalogGrid}>
-              {shop?.catalog.map((item) => {
+              {filteredCatalog.map((item) => {
                 const tokens = cosmeticTokens(item.themeFamily);
                 const selected = previewItem?.id === item.id;
                 return (
@@ -188,6 +225,9 @@ export function MemberPointShopModal({
                 );
               })}
             </View>
+            {!pending && shop && filteredCatalog.length === 0 ? (
+              <Text style={styles.catalogEmpty}>이 종류의 상품은 아직 준비 중이에요.</Text>
+            ) : null}
           </ScrollView>
         </View>
       </SafeAreaView>
@@ -351,7 +391,20 @@ const styles = StyleSheet.create({
     marginTop: 28,
   },
   catalogTitle: { color: colors.text, fontSize: 18, fontWeight: "900" },
+  catalogTabs: { gap: 8, paddingBottom: 14 },
+  catalogTab: {
+    borderColor: colors.border,
+    borderRadius: 999,
+    borderWidth: 1,
+    justifyContent: "center",
+    minHeight: 38,
+    paddingHorizontal: 15,
+  },
+  catalogTabActive: { backgroundColor: colors.text, borderColor: colors.text },
+  catalogTabText: { color: colors.textSecondary, fontSize: 12, fontWeight: "900" },
+  catalogTabTextActive: { color: colors.surface },
   loading: { color: colors.textSecondary, fontSize: 13, paddingVertical: 16 },
+  catalogEmpty: { color: colors.textSecondary, fontSize: 13, paddingVertical: 22 },
   catalogGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   productCard: {
     borderColor: colors.border,

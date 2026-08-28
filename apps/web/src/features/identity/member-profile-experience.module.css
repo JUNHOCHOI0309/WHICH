@@ -569,9 +569,50 @@
   font-weight: 850;
 }
 
+.shopCatalogTabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.shopCatalogTab {
+  min-width: 0;
+  min-height: 42px;
+  border: 1px solid var(--which-border);
+  border-radius: 999px;
+  background: var(--which-surface);
+  color: var(--which-text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 900;
+  padding: 8px 10px;
+  word-break: keep-all;
+}
+
+.shopCatalogTab[data-active="true"] {
+  border-color: var(--which-text);
+  background: var(--which-text);
+  color: var(--which-surface);
+}
+
+.shopCatalogTab:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--which-cyan) 40%, transparent);
+  outline-offset: 2px;
+}
+
 .shopLoading {
   color: var(--which-text-secondary);
   font-size: 0.8rem;
+}
+
+.shopCatalogEmpty {
+  margin: 0;
+  color: var(--which-text-secondary);
+  font-size: 0.8rem;
+  line-height: 1.6;
+  padding: 28px 4px;
 }
 
 .shopCatalogGrid {
@@ -678,6 +719,23 @@
 
   .shopCatalogGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .shopCatalogTabs {
+    display: flex;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    padding-bottom: 4px;
+    scrollbar-width: none;
+  }
+
+  .shopCatalogTabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .shopCatalogTab {
+    flex: 0 0 auto;
+    padding-inline: 16px;
   }
 }
 
@@ -814,6 +872,16 @@
   font-weight: 850;
   line-height: 1;
   white-space: nowrap;
+}
+
+.profileSummaryColumn {
+  min-width: 150px;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px;
 }
 
 .profileAvatar,
@@ -954,6 +1022,7 @@
 }
 
 .summary {
+  width: 100%;
   min-width: 150px;
   border: 1px solid color-mix(in srgb, var(--which-cyan) 45%, var(--which-border));
   border-radius: 16px;
@@ -1348,18 +1417,18 @@
     min-width: 0;
   }
 
+  .profileSummaryColumn {
+    width: 100%;
+    min-width: 0;
+    align-items: stretch;
+  }
+
   .profileIdentity {
     align-items: flex-start;
   }
 
-  .profileIdentityHeading {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 8px;
-  }
-
   .identityChips {
-    justify-content: flex-start;
+    justify-content: flex-end;
   }
 
   .voteGrid {

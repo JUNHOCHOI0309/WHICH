@@ -2037,6 +2037,7 @@ function PreVoteWheelNext({
   const sentinelRef = useRef<HTMLDivElement>(null);
   const requestLocked = useRef(false);
   const requestController = useRef<AbortController | null>(null);
+  const touchStart = useRef<{ x: number; y: number } | null>(null);
   const [visible, setVisible] = useState(false);
   const [state, setState] = useState<PreVoteWheelNextState>("idle");
 
@@ -2128,6 +2129,32 @@ function PreVoteWheelNext({
     return () => window.removeEventListener("wheel", handleWheel);
   }, [moveNext, state, visible]);
 
+  useEffect(() => {
+    if (!visible || state === "loading" || state === "empty" || state === "navigating") return;
+
+    const handleTouchStart = (event: TouchEvent) => {
+      const touch = event.touches[0];
+      touchStart.current = touch ? { x: touch.clientX, y: touch.clientY } : null;
+    };
+    const handleTouchEnd = (event: TouchEvent) => {
+      const start = touchStart.current;
+      const touch = event.changedTouches[0];
+      touchStart.current = null;
+      if (!start || !touch) return;
+      const deltaX = touch.clientX - start.x;
+      const deltaY = start.y - touch.clientY;
+      if (deltaY >= 72 && deltaY > Math.abs(deltaX) * 1.25) void moveNext();
+    };
+
+    window.addEventListener("touchstart", handleTouchStart, { passive: true });
+    window.addEventListener("touchend", handleTouchEnd, { passive: true });
+    return () => {
+      touchStart.current = null;
+      window.removeEventListener("touchstart", handleTouchStart);
+      window.removeEventListener("touchend", handleTouchEnd);
+    };
+  }, [moveNext, state, visible]);
+
   return (
     <div
       ref={sentinelRef}
@@ -2140,10 +2167,10 @@ function PreVoteWheelNext({
         {state === "loading" ? "다른 질문을 고르는 중…" : null}
         {state === "navigating" ? "다른 질문으로 이동하고 있어요." : null}
         {state === "empty" ? "지금 참여할 수 있는 다른 질문이 없어요." : null}
-        {state === "error" ? "다른 질문을 찾지 못했어요. 아래로 다시 스크롤해 주세요." : null}
+        {state === "error" ? "다른 질문을 찾지 못했어요. 아래로 다시 드래그해 주세요." : null}
         {state === "idle"
           ? visible
-            ? "아래로 한 번 더 스크롤하면 다른 질문으로 넘어가요."
+            ? "아래로 한 번 더 드래그하면 다른 질문으로 넘어가요."
             : "고르지 않고 다른 질문을 보고 싶다면 아래로 내려보세요."
           : null}
       </p>
