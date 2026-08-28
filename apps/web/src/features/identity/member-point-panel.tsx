@@ -134,7 +134,13 @@ export function MemberPointPanel({
       if (!response.ok) throw new Error("shop unavailable");
       const next = (await response.json()) as MemberPointShopView;
       setShop(next);
-      setPreviewItem((current) => current ?? next.catalog[0] ?? null);
+      setPreviewItem((current) =>
+        current
+          ? (next.catalog.find((catalogItem) => catalogItem.id === current.id) ??
+            next.catalog[0] ??
+            null)
+          : (next.catalog[0] ?? null),
+      );
       onShopChange?.(next);
     } catch {
       toast.error("W Point 상점을 불러오지 못했어요.");
@@ -167,10 +173,10 @@ export function MemberPointPanel({
         if (!response.ok) throw new Error(body.message ?? "상점 요청 실패");
         toast.success(
           item.equipped
-            ? "장착을 해제했습니다."
+            ? `${item.name} 착용을 해제했습니다.`
             : item.owned
-              ? "상품을 장착했습니다."
-              : "상품을 구매했습니다.",
+              ? `${item.name}을 장착했습니다.`
+              : `${item.name}을 구매했습니다.`,
         );
         const [nextShop, nextPoints] = await Promise.all([
           fetch("/api/me/point-shop", { cache: "no-store" }),
@@ -179,6 +185,11 @@ export function MemberPointPanel({
         if (nextShop.ok) {
           const next = (await nextShop.json()) as MemberPointShopView;
           setShop(next);
+          setPreviewItem((current) =>
+            current
+              ? (next.catalog.find((catalogItem) => catalogItem.id === current.id) ?? current)
+              : (next.catalog[0] ?? null),
+          );
           onShopChange?.(next);
         }
         if (nextPoints) setPoints(nextPoints);

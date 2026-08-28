@@ -100,6 +100,9 @@ export function MemberPointShopModal({
   const [activeSlot, setActiveSlot] = useState<PointShopEquipSlot>("PROFILE_ACCENT");
 
   const filteredCatalog = shop?.catalog.filter((item) => item.equipSlot === activeSlot) ?? [];
+  const currentPreviewItem = previewItem
+    ? (shop?.catalog.find((item) => item.id === previewItem.id) ?? previewItem)
+    : null;
 
   const selectSlot = (slot: PointShopEquipSlot) => {
     setActiveSlot(slot);
@@ -140,20 +143,20 @@ export function MemberPointShopModal({
 
           <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
             <Text style={styles.sectionLabel}>LIVE PREVIEW</Text>
-            <CosmeticPreview item={previewItem} />
-            {previewItem ? (
+            <CosmeticPreview item={currentPreviewItem} />
+            {currentPreviewItem ? (
               <Pressable
                 accessibilityRole="button"
                 disabled={pending}
-                onPress={() => onAction(previewItem)}
+                onPress={() => onAction(currentPreviewItem)}
                 style={[styles.primaryAction, pending && styles.disabled]}
               >
                 <Text style={styles.primaryActionText}>
-                  {previewItem.equipped
-                    ? "착용 해제하기"
-                    : previewItem.owned
+                  {currentPreviewItem.equipped
+                    ? "착용 해제"
+                    : currentPreviewItem.owned
                       ? "적용하기"
-                      : `${previewItem.price.toLocaleString("ko-KR")}P로 구매`}
+                      : `${currentPreviewItem.price.toLocaleString("ko-KR")}P로 구매`}
                 </Text>
               </Pressable>
             ) : null}
@@ -193,7 +196,7 @@ export function MemberPointShopModal({
             <View style={styles.catalogGrid}>
               {filteredCatalog.map((item) => {
                 const tokens = cosmeticTokens(item.themeFamily);
-                const selected = previewItem?.id === item.id;
+                const selected = currentPreviewItem?.id === item.id;
                 return (
                   <Pressable
                     accessibilityHint="상품이 적용된 모습을 미리 봅니다."

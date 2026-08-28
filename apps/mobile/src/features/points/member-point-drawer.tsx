@@ -107,7 +107,13 @@ export function MemberPointDrawer({
     try {
       const next = await mobileApi.loadPointShop(sessionToken);
       setShop(next);
-      setPreviewItem((current) => current ?? next.catalog[0] ?? null);
+      setPreviewItem((current) =>
+        current
+          ? (next.catalog.find((catalogItem) => catalogItem.id === current.id) ??
+            next.catalog[0] ??
+            null)
+          : (next.catalog[0] ?? null),
+      );
       onShopChange?.(next);
     } catch {
       Alert.alert("W Point 상점", "상품을 불러오지 못했습니다.");
@@ -133,15 +139,20 @@ export function MemberPointDrawer({
         }
         const next = await mobileApi.loadPointShop(sessionToken);
         setShop(next);
+        setPreviewItem((current) =>
+          current
+            ? (next.catalog.find((catalogItem) => catalogItem.id === current.id) ?? current)
+            : (next.catalog[0] ?? null),
+        );
         onShopChange?.(next);
         onRetry();
         Alert.alert(
           "W Point 상점",
           item.equipped
-            ? "장착을 해제했습니다."
+            ? `${item.name} 착용을 해제했습니다.`
             : item.owned
-              ? "상품을 장착했습니다."
-              : "상품을 구매했습니다.",
+              ? `${item.name}을 장착했습니다.`
+              : `${item.name}을 구매했습니다.`,
         );
       } catch (error) {
         Alert.alert(

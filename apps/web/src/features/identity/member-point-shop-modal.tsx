@@ -115,6 +115,9 @@ export function MemberPointShopModal({
   if (!visible) return null;
 
   const filteredCatalog = shop?.catalog.filter((item) => item.equipSlot === activeSlot) ?? [];
+  const currentPreviewItem = previewItem
+    ? (shop?.catalog.find((item) => item.id === previewItem.id) ?? previewItem)
+    : null;
 
   const selectSlot = (slot: PointShopEquipSlot) => {
     setActiveSlot(slot);
@@ -147,19 +150,19 @@ export function MemberPointShopModal({
         <div className={styles.shopModalBody}>
           <div className={styles.shopModalPreviewColumn}>
             <p className={styles.shopSectionLabel}>LIVE PREVIEW</p>
-            <CosmeticPreview item={previewItem} />
-            {previewItem ? (
+            <CosmeticPreview item={currentPreviewItem} />
+            {currentPreviewItem ? (
               <button
                 className={styles.shopPrimaryAction}
                 disabled={pending}
-                onClick={() => onAction(previewItem)}
+                onClick={() => onAction(currentPreviewItem)}
                 type="button"
               >
-                {previewItem.equipped
-                  ? "착용 해제하기"
-                  : previewItem.owned
+                {currentPreviewItem.equipped
+                  ? "착용 해제"
+                  : currentPreviewItem.owned
                     ? "적용하기"
-                    : `${previewItem.price.toLocaleString("ko-KR")}P로 구매`}
+                    : `${currentPreviewItem.price.toLocaleString("ko-KR")}P로 구매`}
               </button>
             ) : null}
           </div>
@@ -194,9 +197,9 @@ export function MemberPointShopModal({
                 const tokens = cosmeticTokens(item.themeFamily);
                 return (
                   <button
-                    aria-pressed={previewItem?.id === item.id}
+                    aria-pressed={currentPreviewItem?.id === item.id}
                     className={styles.shopProductCard}
-                    data-selected={previewItem?.id === item.id}
+                    data-selected={currentPreviewItem?.id === item.id}
                     key={item.id}
                     onClick={() => onPreview(item)}
                     type="button"
