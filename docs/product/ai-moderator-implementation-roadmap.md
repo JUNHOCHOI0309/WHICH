@@ -7,6 +7,7 @@
 - Image operations: [`image-moderation-operating-strategy-v2.md`](../operations/image-moderation-operating-strategy-v2.md)
 - Related AI roadmap: [WHICH v1 Fine-tuned AI 적용 후보](https://app.notion.com/p/3c628b27a55981c48216e6d292de7eae)
 - Related product roadmap: [`post-v0-discovery-recommendation-ai-roadmap.md`](./post-v0-discovery-recommendation-ai-roadmap.md)
+- Community enforcement policy: [`community-enforcement-policy-v1.md`](./community-enforcement-policy-v1.md)
 
 ## 문서 목적
 
@@ -40,6 +41,7 @@ WHICH에 AI Moderator를 적용할 수 있다. 다만 사용자 이미지 기능
 - User Issue 작성·게시 흐름과 Editorial 승인 기반
 - R2 staging/published 격리, WebP 정규화, SHA-256/dHash와 이미지 결정·Rights 이력
 - `ISSUE_IMAGE_UPLOAD` 후보 판정과 제한 Pilot 운영 계약
+- 동일 Issue의 복수 최상위 댓글과 깊이 제한 없는 Reply Thread
 
 ## 구현 전에 막아야 할 위험
 
@@ -52,6 +54,8 @@ WHICH에 AI Moderator를 적용할 수 있다. 다만 사용자 이미지 기능
 7. 이미지 안전·개인정보·권리·관련성·A/B 시각 편향을 한 점수로 합치면 자동화 경계를 검증할 수 없다.
 8. 30개 Pilot 표본은 UX와 Queue 작동만 확인할 뿐 자동 공개 안전성을 입증하지 못한다.
 9. Member 업로드가 mode·capability·동의·quota를 서버에서 강제하지 않으면 제한 Pilot을 우회한다.
+10. 댓글 수나 Reply 깊이를 다시 제한해 안전 문제를 우회하면 정상 참여를 막으면서 반복 위반자와
+    신고 공격은 놓친다.
 
 ## 목표 아키텍처
 
@@ -193,30 +197,35 @@ Worker만 별도 Render Service로 분리한다.
 
 ## Notion Backlog
 
-| Task      | Priority | 목적                                        |
-| --------- | -------- | ------------------------------------------- |
-| WHICH-91  | P0       | Moderation 정책 Taxonomy·Action Matrix 확정 |
-| WHICH-92  | P0       | 신고 Brigading 방어와 신고자 신뢰도         |
-| WHICH-93  | P0       | 수정 가능한 콘텐츠 Version·재검수 계약      |
-| WHICH-94  | P0       | Moderation Run·Case·Action 데이터 모델      |
-| WHICH-95  | P0       | Ops Queue·Actor Identity·Audit Log          |
-| WHICH-96  | P0       | 사용자 통지·이의 제기·복원·권리 처리        |
-| WHICH-97  | P0       | AI Privacy·Provider·Retention 정책          |
-| WHICH-98  | P0       | 규칙·Rate Limit·로컬 PII Screening          |
-| WHICH-99  | P1       | Outbox 기반 Shadow Moderation Worker        |
-| WHICH-100 | P1       | 한국어 Golden Set·Slice·Evaluation Harness  |
-| WHICH-101 | P1       | Generic Safety Classifier Shadow Mode       |
-| WHICH-102 | P1       | Ops Reviewer Assist UI와 Decision Capture   |
-| WHICH-103 | P1       | Decision Engine과 제한 자동화               |
-| WHICH-104 | P1       | Fallback·Cost Budget·Observability          |
-| WHICH-105 | P1       | 사용자 Issue 3경로와 비동기 검수 UX         |
-| WHICH-106 | P3       | Policy LLM·Fine-tuning 도입 평가            |
-| WHICH-107 | P2       | Vote Fraud 보조 신호와 검증                 |
-| WHICH-108 | P1       | 이미지 Rule·OCR/QR·Safety Shadow Gate       |
-| WHICH-109 | P1       | 프로필 최소 안전 Gate와 후속 AI 확장        |
-| WHICH-110 | P2       | Capability 제한·Cooldown·Risk Decay         |
-| WHICH-111 | P1       | Beta Random Audit와 Go/No-Go 검증           |
-| WHICH-141 | P1       | 승인 이미지 Library·라이선스 원장           |
+댓글·답글 제재는 [`community-enforcement-policy-v1.md`](./community-enforcement-policy-v1.md)를
+실행 기준으로 사용한다. Raw Report, 싫어요, 댓글 작성량은 Strike가 아니며, 확인된 위반만
+`policy_event`로 누적한다. `WHICH-91`–`WHICH-103`, `WHICH-110`, `WHICH-111`은 AI 모델 도입
+Task이기 전에 신고 방어·Case·Appeal·가역 제재 기반을 완성하는 Workstream이다.
+
+| Task      | Priority | 목적                                                 |
+| --------- | -------- | ---------------------------------------------------- |
+| WHICH-91  | P0       | 정책 Taxonomy·Severity·Enforcement Matrix 확정       |
+| WHICH-92  | P0       | 신고 Cluster·Brigading 방어와 신고자 신뢰도 Shadow   |
+| WHICH-93  | P0       | 수정 가능한 콘텐츠 Version·재검수 계약               |
+| WHICH-94  | P0       | Moderation Case·Policy Event·Enforcement 데이터 모델 |
+| WHICH-95  | P0       | Ops Queue·SLA·Actor Identity·Decision Audit          |
+| WHICH-96  | P0       | 사용자 통지·이의 제기·완전 복원·권리 처리            |
+| WHICH-97  | P0       | AI Privacy·Provider·Retention 정책                   |
+| WHICH-98  | P0       | 규칙·Rate Limit·로컬 PII Screening                   |
+| WHICH-99  | P1       | Outbox 기반 Shadow Moderation Worker                 |
+| WHICH-100 | P1       | 한국어 Golden Set·Slice·Evaluation Harness           |
+| WHICH-101 | P1       | Generic Safety Classifier Shadow Mode                |
+| WHICH-102 | P1       | Ops Reviewer Assist UI와 Decision Capture            |
+| WHICH-103 | P1       | Decision Engine과 가역적 E1–E3 제한 자동화           |
+| WHICH-104 | P1       | Fallback·Cost Budget·Observability                   |
+| WHICH-105 | P1       | 사용자 Issue 3경로와 비동기 검수 UX                  |
+| WHICH-106 | P3       | Policy LLM·Fine-tuning 도입 평가                     |
+| WHICH-107 | P2       | Vote Fraud 보조 신호와 검증                          |
+| WHICH-108 | P1       | 이미지 Rule·OCR/QR·Safety Shadow Gate                |
+| WHICH-109 | P1       | 프로필 최소 안전 Gate와 후속 AI 확장                 |
+| WHICH-110 | P2       | Capability 제한·Policy Event 만료·Risk Decay         |
+| WHICH-111 | P1       | Side·신규 사용자·Reply Slice Random Audit와 Go/No-Go |
+| WHICH-141 | P1       | 승인 이미지 Library·라이선스 원장                    |
 
 권장 Critical Path:
 
