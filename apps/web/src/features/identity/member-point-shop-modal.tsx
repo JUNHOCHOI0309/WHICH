@@ -156,9 +156,9 @@ export function MemberPointShopModal({
                 type="button"
               >
                 {previewItem.equipped
-                  ? "장착 해제"
+                  ? "착용 해제하기"
                   : previewItem.owned
-                    ? "이 상품 장착"
+                    ? "적용하기"
                     : `${previewItem.price.toLocaleString("ko-KR")}P로 구매`}
               </button>
             ) : null}
@@ -206,7 +206,7 @@ export function MemberPointShopModal({
                     <strong>{item.name}</strong>
                     <small>
                       {item.equipped
-                        ? "장착 중"
+                        ? "착용 됨"
                         : item.owned
                           ? "보유 중"
                           : `${item.price.toLocaleString("ko-KR")}P`}
