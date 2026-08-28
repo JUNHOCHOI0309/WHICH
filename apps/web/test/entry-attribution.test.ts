@@ -6,6 +6,7 @@ import {
   decodeEntryAttribution,
   encodeEntryAttribution,
   ENTRY_ATTRIBUTION_COOKIE,
+  entryAttributionFromReferrer,
   entryAttributionFromSearchParams,
 } from "@/lib/server/entry-attribution";
 
@@ -159,5 +160,82 @@ describe("Naver entry attribution", () => {
     expect(decodeEntryAttribution(encodeEntryAttribution(attribution!), capturedAt)).toEqual(
       attribution,
     );
+  });
+
+  it("classifies allowlisted search and AI referrers without retaining paths or queries", () => {
+    const capturedAt = Date.UTC(2026, 7, 29);
+    expect(
+      entryAttributionFromReferrer(
+        "https://www.google.com/search?q=private+query",
+        "https://whichone.site",
+        capturedAt,
+      ),
+    ).toEqual({
+      version: 1,
+      source: "google",
+      medium: "organic",
+      capturedAt,
+    });
+    expect(
+      entryAttributionFromReferrer(
+        "https://chatgpt.com/c/secret-conversation?id=123",
+        "https://whichone.site",
+        capturedAt,
+      ),
+    ).toEqual({
+      version: 1,
+      source: "chatgpt",
+      medium: "ai_referral",
+      capturedAt,
+    });
+  });
+
+  it("rejects same-site, malformed, and unknown referrers", () => {
+    expect(
+      entryAttributionFromReferrer("https://whichone.site/issues/one", "https://whichone.site"),
+    ).toBeNull();
+    expect(entryAttributionFromReferrer("not a URL", "https://whichone.site")).toBeNull();
+    expect(
+      entryAttributionFromReferrer("https://unknown.example/path", "https://whichone.site"),
+    ).toBeNull();
+  });
+
+  it("accepts explicit allowlisted SEO and AI UTM pairs", () => {
+    expect(
+      entryAttributionFromSearchParams(
+        new URLSearchParams("utm_source=google&utm_medium=organic&utm_campaign=launch"),
+      ),
+    ).toMatchObject({ source: "google", medium: "organic", campaign: "launch" });
+    expect(
+      entryAttributionFromSearchParams(
+        new URLSearchParams("utm_source=chatgpt&utm_medium=ai_referral"),
+      ),
+    ).toMatchObject({ source: "chatgpt", medium: "ai_referral" });
+    expect(
+      entryAttributionFromSearchParams(
+        new URLSearchParams("utm_source=google&utm_medium=ai_referral"),
+      ),
+    ).toBeNull();
+  });
+
+  it("captures a first referrer through the proxy and preserves explicit UTM precedence", () => {
+    const referrerOnly = proxy(
+      new NextRequest("https://whichone.site/issues/one", {
+        headers: { referer: "https://www.bing.com/search?q=not-stored" },
+      }),
+    );
+    expect(
+      decodeEntryAttribution(referrerOnly.cookies.get(ENTRY_ATTRIBUTION_COOKIE)?.value),
+    ).toMatchObject({ source: "bing", medium: "organic" });
+
+    const explicit = proxy(
+      new NextRequest(
+        "https://whichone.site/issues/one?utm_source=chatgpt&utm_medium=ai_referral",
+        { headers: { referer: "https://www.google.com/search?q=ignored" } },
+      ),
+    );
+    expect(
+      decodeEntryAttribution(explicit.cookies.get(ENTRY_ATTRIBUTION_COOKIE)?.value),
+    ).toMatchObject({ source: "chatgpt", medium: "ai_referral" });
   });
 });

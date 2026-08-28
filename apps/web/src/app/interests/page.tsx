@@ -1,12 +1,13 @@
 import { WhichAsideCard, WhichShell } from "@/components/layout/which-shell";
 import { InterestSelector } from "@/features/interests/interest-selector";
+import { privatePageMetadata } from "@/lib/search-discovery";
 
 import styles from "./page.module.css";
 
-export const metadata = {
-  title: "관심 주제 설정 | WHICH",
-  description: "관심 주제를 고르고 추천 설정을 관리합니다.",
-};
+export const metadata = privatePageMetadata(
+  "관심 주제 설정",
+  "관심 주제를 고르고 추천 설정을 관리합니다.",
+);
 
 export default function InterestsPage() {
   return (

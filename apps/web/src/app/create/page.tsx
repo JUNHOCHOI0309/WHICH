@@ -1,11 +1,12 @@
 import { WhichAsideCard, WhichShell } from "@/components/layout/which-shell";
 import { IssueCreatorExperience } from "@/features/issues/issue-creator-experience";
+import { privatePageMetadata } from "@/lib/search-discovery";
 import { creatorSubmissionsEnabled } from "@/lib/server/feature-flags";
 
-export const metadata = {
-  title: "질문 만들기 | WHICH",
-  description: "사람들에게 물어볼 A/B 질문을 만드세요.",
-};
+export const metadata = privatePageMetadata(
+  "질문 만들기",
+  "사람들에게 물어볼 A/B 질문을 만드세요.",
+);
 
 export default function CreateIssuePage() {
   const enabled = creatorSubmissionsEnabled();

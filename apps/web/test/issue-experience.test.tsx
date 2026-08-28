@@ -59,6 +59,43 @@ describe("IssueExperience", () => {
     vi.unstubAllGlobals();
   });
 
+  it("renders server-provided question content immediately but blocks voting while restoring", () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        () =>
+          new Promise<Response>(() => {
+            // Keep guest preparation pending so the restoring state can be asserted deterministically.
+          }),
+      ),
+    );
+
+    render(<IssueExperience issueId={ISSUE_ID} initialIssue={issue} />);
+
+    expect(screen.getByRole("heading", { name: issue.question })).toBeInTheDocument();
+    expect(screen.getByText(issue.context!)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "A 선택, 아침형 인간" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "B 선택, 저녁형 인간" })).toBeDisabled();
+    expect(screen.getByRole("status")).toHaveTextContent("참여 기록을 확인하고 있어요");
+  });
+
+  it("restores participation without refetching server-provided question content", async () => {
+    const request = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url === "/api/guest-subjects") return jsonResponse({ status: "ready" });
+      if (url.includes("vote-status")) return jsonResponse({ code: "VOTE_NOT_FOUND" }, 404);
+      return jsonResponse({});
+    });
+    vi.stubGlobal("fetch", request);
+
+    render(<IssueExperience issueId={ISSUE_ID} initialIssue={issue} />);
+
+    expect(await screen.findByRole("button", { name: "A 선택, 아침형 인간" })).toBeEnabled();
+    expect(request.mock.calls.some(([input]) => String(input) === `/api/issues/${ISSUE_ID}`)).toBe(
+      false,
+    );
+  });
+
   it("links an authored Issue to its public Creator profile", async () => {
     vi.stubGlobal(
       "fetch",

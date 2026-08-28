@@ -19,6 +19,7 @@ import {
   issues,
   issueVersions,
   members,
+  recommendationRequests,
   voteAggregates,
 } from "../src/database/schema/index.js";
 import { createIssueReadService } from "../src/modules/issues/service.js";
@@ -417,6 +418,81 @@ describe("Guest Issue read API", () => {
 
     expect(response.statusCode).toBe(409);
     expect(response.json()).toMatchObject({ code: "ISSUE_NOT_AVAILABLE" });
+  });
+});
+
+describe("public Issue discovery catalog API", () => {
+  it("returns a bounded newest-first safe catalog without recommendation audit writes", async () => {
+    const now = Date.now();
+    const older = await createReadableIssue({}, new Date(now - 2_000));
+    const newer = await createReadableIssue({}, new Date(now - 1_000));
+    const excluded = await Promise.all([
+      createReadableIssue({ feedEligibility: "EXCLUDED" }, new Date(now - 100)),
+      createReadableIssue({ riskLevel: "MEDIUM" }, new Date(now - 200)),
+      createReadableIssue({ riskLevel: "RESTRICTED", isPolitical: true }, new Date(now - 300)),
+      createReadableIssue({ visibility: "LIMITED" }, new Date(now - 400)),
+      createReadableIssue({ participation: "VOTING_CLOSED" }, new Date(now - 500)),
+      createReadableIssue({ lifecycle: "CLOSED" }, new Date(now - 600)),
+      createReadableIssue({ voteOpenAt: new Date(now + 60_000) }, new Date(now - 700)),
+      createReadableIssue(
+        { voteOpenAt: new Date(now - 60_000), voteCloseAt: new Date(now - 30_000) },
+        new Date(now - 800),
+      ),
+    ]);
+    await database.db
+      .update(issueVersions)
+      .set({ context: "검색 결과에서 질문의 전제를 이해할 수 있는 충분한 공개 설명입니다." })
+      .where(inArray(issueVersions.issueId, [older.issueId, newer.issueId]));
+
+    const auditBefore = await database.db
+      .select({ id: recommendationRequests.id })
+      .from(recommendationRequests);
+    const response = await app.inject({ method: "GET", url: "/v1/issues/catalog?limit=2" });
+    const auditAfter = await database.db
+      .select({ id: recommendationRequests.id })
+      .from(recommendationRequests);
+    const body = response.json<{
+      items: Array<{
+        id: string;
+        version: number;
+        question: string;
+        context: string | null;
+        publishedAt: string;
+        categoryCode: string;
+        choices: Array<{ code: "A" | "B"; label: string; media: null }>;
+      }>;
+    }>();
+    await database.db
+      .delete(issues)
+      .where(
+        inArray(issues.id, [
+          older.issueId,
+          newer.issueId,
+          ...excluded.map((issue) => issue.issueId),
+        ]),
+      );
+
+    expect(response.statusCode).toBe(200);
+    expect(body.items.map((item) => item.id)).toEqual([newer.issueId, older.issueId]);
+    expect(body.items[0]).toMatchObject({
+      context: "검색 결과에서 질문의 전제를 이해할 수 있는 충분한 공개 설명입니다.",
+      categoryCode: "TEST",
+      choices: [
+        { code: "A", label: "First A", media: null },
+        { code: "B", label: "First B", media: null },
+      ],
+    });
+    expect(body.items.some((item) => excluded.some((issue) => issue.issueId === item.id))).toBe(
+      false,
+    );
+    expect(auditAfter).toHaveLength(auditBefore.length);
+  });
+
+  it("rejects catalog limits above the public discovery bound", async () => {
+    const response = await app.inject({ method: "GET", url: "/v1/issues/catalog?limit=501" });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ code: "INVALID_REQUEST" });
   });
 });
 

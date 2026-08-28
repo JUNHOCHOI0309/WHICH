@@ -4,7 +4,11 @@ import { WhichAsideCard, WhichShell } from "@/components/layout/which-shell";
 
 import styles from "../legal.module.css";
 
-export const metadata: Metadata = { title: "서비스 이용약관" };
+export const metadata: Metadata = {
+  title: "서비스 이용약관",
+  description: "WHICH 질문, 투표, 댓글, 계정 기능의 이용 조건과 운영 원칙입니다.",
+  alternates: { canonical: "/legal/terms" },
+};
 
 export default function TermsPage() {
   const supportEmail = process.env.SUPPORT_EMAIL ?? "support@whichone.site";

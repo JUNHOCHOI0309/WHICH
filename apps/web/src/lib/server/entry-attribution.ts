@@ -16,6 +16,10 @@ export const NAVER_ENTRY_MEDIA = [
 export type NaverEntryMedium = (typeof NAVER_ENTRY_MEDIA)[number];
 export const SHARE_ENTRY_MEDIA = ["copy", "system", "x"] as const;
 export type ShareEntryMedium = (typeof SHARE_ENTRY_MEDIA)[number];
+export const SEARCH_ENTRY_SOURCES = ["naver", "google", "bing", "daum"] as const;
+export type SearchEntrySource = (typeof SEARCH_ENTRY_SOURCES)[number];
+export const AI_ENTRY_SOURCES = ["chatgpt", "perplexity", "claude", "gemini", "copilot"] as const;
+export type AiEntrySource = (typeof AI_ENTRY_SOURCES)[number];
 
 export type EntryAttribution =
   | {
@@ -33,13 +37,49 @@ export type EntryAttribution =
       campaign: "result" | "result_with_choice";
       content: string;
       capturedAt: number;
+    }
+  | {
+      version: 1;
+      source: SearchEntrySource;
+      medium: "organic";
+      campaign?: string;
+      content?: string;
+      capturedAt: number;
+    }
+  | {
+      version: 1;
+      source: AiEntrySource;
+      medium: "ai_referral";
+      campaign?: string;
+      content?: string;
+      capturedAt: number;
     };
 
 const allowedNaverMedia = new Set<string>(NAVER_ENTRY_MEDIA);
 const allowedShareMedia = new Set<string>(SHARE_ENTRY_MEDIA);
+const allowedSearchSources = new Set<string>(SEARCH_ENTRY_SOURCES);
+const allowedAiSources = new Set<string>(AI_ENTRY_SOURCES);
 const safeUtmToken = /^[a-z0-9][a-z0-9._-]*$/;
 const uuidToken = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const signatureContext = "which-entry-attribution-v1\0";
+
+const referrerHosts: ReadonlyArray<{
+  host: string;
+  source: SearchEntrySource | AiEntrySource;
+  medium: "organic" | "ai_referral";
+}> = [
+  { host: "chatgpt.com", source: "chatgpt", medium: "ai_referral" },
+  { host: "chat.openai.com", source: "chatgpt", medium: "ai_referral" },
+  { host: "perplexity.ai", source: "perplexity", medium: "ai_referral" },
+  { host: "claude.ai", source: "claude", medium: "ai_referral" },
+  { host: "gemini.google.com", source: "gemini", medium: "ai_referral" },
+  { host: "copilot.microsoft.com", source: "copilot", medium: "ai_referral" },
+  { host: "search.naver.com", source: "naver", medium: "organic" },
+  { host: "google.com", source: "google", medium: "organic" },
+  { host: "google.co.kr", source: "google", medium: "organic" },
+  { host: "bing.com", source: "bing", medium: "organic" },
+  { host: "search.daum.net", source: "daum", medium: "organic" },
+];
 
 function signingSecret() {
   const configured = process.env.ATTRIBUTION_COOKIE_SECRET ?? process.env.AUTH_FLOW_SECRET;
@@ -106,7 +146,10 @@ export function entryAttributionFromSearchParams(
       capturedAt,
     };
   }
-  if (source !== "naver" || !allowedNaverMedia.has(medium)) return null;
+  const isNaverCampaign = source === "naver" && allowedNaverMedia.has(medium);
+  const isOrganic = allowedSearchSources.has(source) && medium === "organic";
+  const isAiReferral = allowedAiSources.has(source) && medium === "ai_referral";
+  if (!isNaverCampaign && !isOrganic && !isAiReferral) return null;
 
   const campaign = typeof campaignValue === "string" ? safeToken(campaignValue, 64) : undefined;
   const content = typeof contentValue === "string" ? safeToken(contentValue, 96) : undefined;
@@ -117,14 +160,54 @@ export function entryAttributionFromSearchParams(
     return null;
   }
 
+  if (isNaverCampaign) {
+    return {
+      version: 1,
+      source: "naver",
+      medium: medium as NaverEntryMedium,
+      ...(campaign ? { campaign } : {}),
+      ...(content ? { content } : {}),
+      capturedAt,
+    };
+  }
   return {
     version: 1,
-    source: "naver",
-    medium: medium as NaverEntryMedium,
+    source: source as SearchEntrySource | AiEntrySource,
+    medium: isOrganic ? "organic" : "ai_referral",
     ...(campaign ? { campaign } : {}),
     ...(content ? { content } : {}),
     capturedAt,
-  };
+  } as EntryAttribution;
+}
+
+function hostMatches(hostname: string, allowedHost: string) {
+  return hostname === allowedHost || hostname.endsWith(`.${allowedHost}`);
+}
+
+export function entryAttributionFromReferrer(
+  referrer: string | null | undefined,
+  currentOrigin: string,
+  capturedAt = Date.now(),
+): EntryAttribution | null {
+  if (!referrer) return null;
+  try {
+    const url = new URL(referrer);
+    const origin = new URL(currentOrigin);
+    if ((url.protocol !== "https:" && url.protocol !== "http:") || url.origin === origin.origin) {
+      return null;
+    }
+    const hostname = url.hostname.toLowerCase().replace(/\.$/, "");
+    const match = referrerHosts.find((candidate) => hostMatches(hostname, candidate.host));
+    if (!match) return null;
+    return {
+      version: 1,
+      source: match.source,
+      medium: match.medium,
+      capturedAt,
+    } as EntryAttribution;
+  } catch {
+    return null;
+  }
 }
 
 export function encodeEntryAttribution(attribution: EntryAttribution) {
@@ -167,16 +250,23 @@ export function decodeEntryAttribution(
         !uuidToken.test(parsed.content)
       )
         return null;
-    } else if (
-      parsed.source !== "naver" ||
-      !allowedNaverMedia.has(medium) ||
-      (parsed.campaign !== undefined &&
-        (typeof parsed.campaign !== "string" ||
-          safeToken(parsed.campaign, 64) !== parsed.campaign)) ||
-      (parsed.content !== undefined &&
-        (typeof parsed.content !== "string" || safeToken(parsed.content, 96) !== parsed.content))
-    )
-      return null;
+    } else {
+      const source = parsed.source as string;
+      const validPair =
+        (source === "naver" && allowedNaverMedia.has(medium)) ||
+        (allowedSearchSources.has(source) && medium === "organic") ||
+        (allowedAiSources.has(source) && medium === "ai_referral");
+      if (
+        !validPair ||
+        (parsed.campaign !== undefined &&
+          (typeof parsed.campaign !== "string" ||
+            safeToken(parsed.campaign, 64) !== parsed.campaign)) ||
+        (parsed.content !== undefined &&
+          (typeof parsed.content !== "string" || safeToken(parsed.content, 96) !== parsed.content))
+      ) {
+        return null;
+      }
+    }
     return parsed as EntryAttribution;
   } catch {
     return null;

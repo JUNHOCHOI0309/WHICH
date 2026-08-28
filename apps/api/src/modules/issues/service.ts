@@ -314,6 +314,122 @@ export function createIssueReadService(
       return issue!;
     },
 
+    async listPublicIssueCatalog(query) {
+      const requestedLimit = Number.isFinite(query.limit) ? Math.floor(query.limit) : 500;
+      const limit = Math.min(500, Math.max(1, requestedLimit));
+
+      return database.transaction(async (transaction) => {
+        const now = new Date();
+        const latestPublishedVersions = transaction
+          .selectDistinctOn([issueVersions.issueId], {
+            issueId: issueVersions.issueId,
+            version: issueVersions.version,
+            question: issueVersions.question,
+            context: issueVersions.context,
+            publishedAt: issueVersions.publishedAt,
+            categoryCode: issueVersions.primaryCategoryCode,
+          })
+          .from(issueVersions)
+          .where(and(isNotNull(issueVersions.publishedAt), lte(issueVersions.publishedAt, now)))
+          .orderBy(issueVersions.issueId, desc(issueVersions.version))
+          .as("latest_catalog_versions");
+
+        const rows = await transaction
+          .select({
+            id: issues.id,
+            version: latestPublishedVersions.version,
+            question: latestPublishedVersions.question,
+            context: latestPublishedVersions.context,
+            publishedAt: latestPublishedVersions.publishedAt,
+            categoryCode: latestPublishedVersions.categoryCode,
+          })
+          .from(issues)
+          .innerJoin(latestPublishedVersions, eq(latestPublishedVersions.issueId, issues.id))
+          .where(
+            and(
+              eq(issues.lifecycle, "PUBLISHED"),
+              eq(issues.visibility, "VISIBLE"),
+              eq(issues.participation, "VOTING_OPEN"),
+              eq(issues.feedEligibility, "ELIGIBLE"),
+              eq(issues.riskLevel, "LOW"),
+              eq(issues.isPolitical, false),
+              or(isNull(issues.voteOpenAt), lte(issues.voteOpenAt, now)),
+              or(isNull(issues.voteCloseAt), gt(issues.voteCloseAt, now)),
+              exists(
+                transaction
+                  .select({ id: issueChoices.id })
+                  .from(issueChoices)
+                  .where(
+                    and(
+                      eq(issueChoices.issueId, issues.id),
+                      eq(issueChoices.issueVersion, latestPublishedVersions.version),
+                      eq(issueChoices.code, "A"),
+                    ),
+                  ),
+              ),
+              exists(
+                transaction
+                  .select({ id: issueChoices.id })
+                  .from(issueChoices)
+                  .where(
+                    and(
+                      eq(issueChoices.issueId, issues.id),
+                      eq(issueChoices.issueVersion, latestPublishedVersions.version),
+                      eq(issueChoices.code, "B"),
+                    ),
+                  ),
+              ),
+            ),
+          )
+          .orderBy(desc(latestPublishedVersions.publishedAt), desc(issues.id))
+          .limit(limit);
+
+        const choiceFilters = rows.map((row) =>
+          and(eq(issueChoices.issueId, row.id), eq(issueChoices.issueVersion, row.version)),
+        );
+        const choices = choiceFilters.length
+          ? await transaction
+              .select({
+                id: issueChoices.id,
+                issueId: issueChoices.issueId,
+                issueVersion: issueChoices.issueVersion,
+                code: issueChoices.code,
+                label: issueChoices.label,
+              })
+              .from(issueChoices)
+              .where(or(...choiceFilters))
+              .orderBy(issueChoices.issueId, issueChoices.code)
+          : [];
+
+        return {
+          items: rows.flatMap((row) => {
+            const issueChoicesForVersion = choices
+              .filter((choice) => choice.issueId === row.id && choice.issueVersion === row.version)
+              .map(({ id, code, label }) => ({ id, code, label, media: null }));
+            if (
+              issueChoicesForVersion.length !== 2 ||
+              issueChoicesForVersion[0]?.code !== "A" ||
+              issueChoicesForVersion[1]?.code !== "B" ||
+              !row.publishedAt
+            ) {
+              return [];
+            }
+            return [
+              {
+                id: row.id,
+                version: row.version,
+                question: row.question,
+                context: row.context,
+                publishedAt: row.publishedAt.toISOString(),
+                categoryCode: row.categoryCode,
+                choices: issueChoicesForVersion,
+              },
+            ];
+          }),
+        };
+      });
+    },
+
     async listGuestIssues(query) {
       const cursor = query.cursor ? decodeIssueFeedCursor(query.cursor) : null;
       let profile: RankingProfile;

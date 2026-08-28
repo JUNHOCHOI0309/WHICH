@@ -1,10 +1,12 @@
 import type { MetadataRoute } from "next";
 
+import { SITE_DESCRIPTION } from "@/lib/search-discovery";
+
 export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "WHICH",
     short_name: "WHICH",
-    description: "고르고, 결과를 보고, 다음 질문으로.",
+    description: SITE_DESCRIPTION,
     start_url: "/",
     display: "standalone",
     background_color: "#F7F9FA",

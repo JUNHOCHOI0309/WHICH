@@ -1,12 +1,8 @@
-import type { Metadata } from "next";
-
 import { CredentialAuthExperience } from "@/features/identity/credential-auth-experience";
+import { privatePageMetadata } from "@/lib/search-discovery";
 import { sanitizeReturnTo, kakaoLoginEnabled, naverLoginEnabled } from "@/lib/server/member-auth";
 
-export const metadata: Metadata = {
-  title: "빠른 회원가입",
-  description: "짧은 절차로 WHICH 계정을 만드세요.",
-};
+export const metadata = privatePageMetadata("빠른 회원가입", "짧은 절차로 WHICH 계정을 만드세요.");
 
 export default async function SignupPage({
   searchParams,

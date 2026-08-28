@@ -15,6 +15,43 @@ afterEach(() => {
 });
 
 describe("Creator public profile experience", () => {
+  it("keeps a server-provided profile without an immediate duplicate request", () => {
+    const request = vi.fn(async (_input: string | URL | Request) => jsonResponse({}, 500));
+    vi.stubGlobal("fetch", request);
+
+    render(
+      <CreatorProfileExperience
+        handle="tech_creator"
+        initialProfile={{
+          creator: {
+            displayName: "테크 질문가",
+            handle: "tech_creator",
+            bio: "기술의 두 선택지를 묻습니다.",
+            joinedMonth: "2026-08",
+            avatar: { kind: "INITIALS", initials: "테질" },
+          },
+          stats: { publishedIssueCount: 1, acceptedVoteCount: 0 },
+          issues: [
+            {
+              id: "591f2e90-996a-50c5-af46-967dd0793001",
+              version: 1,
+              question: "자정 경계의 공개 질문",
+              categoryCode: "TECH",
+              publishedAt: "2026-08-22T16:30:00.000Z",
+              acceptedVoteCount: 0,
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(screen.getByRole("heading", { name: "테크 질문가" })).toBeVisible();
+    expect(screen.getByText("2026년 8월 23일")).toBeVisible();
+    expect(
+      request.mock.calls.filter(([input]) => String(input).includes("/api/profiles/")),
+    ).toHaveLength(0);
+  });
+
   it("shows safe Creator stats and links to authored Issues", async () => {
     vi.stubGlobal(
       "fetch",

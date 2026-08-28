@@ -42,7 +42,8 @@ import {
   WebApiError,
 } from "./client";
 
-type Screen = "loading" | "ready" | "submitting" | "load-error" | "submit-error" | "result";
+type Screen =
+  "loading" | "restoring" | "ready" | "submitting" | "load-error" | "submit-error" | "result";
 
 type PendingAction = {
   choice: IssueChoice;
@@ -117,15 +118,17 @@ function loadErrorCopy(error: unknown) {
 
 export function IssueExperience({
   issueId,
+  initialIssue,
   kakaoLoginEnabled = false,
   naverLoginEnabled = false,
 }: {
   issueId: string;
+  initialIssue?: PublicIssue;
   kakaoLoginEnabled?: boolean;
   naverLoginEnabled?: boolean;
 }) {
-  const [screen, setScreen] = useState<Screen>("loading");
-  const [issue, setIssue] = useState<PublicIssue | null>(null);
+  const [screen, setScreen] = useState<Screen>(initialIssue ? "restoring" : "loading");
+  const [issue, setIssue] = useState<PublicIssue | null>(initialIssue ?? null);
   const [loadError, setLoadError] = useState<unknown>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [result, setResult] = useState<VoteResponse | null>(null);
@@ -218,8 +221,8 @@ export function IssueExperience({
     const controller = new AbortController();
 
     void ensureGuestSubject()
-      .then(() => loadPublicIssue(issueId, controller.signal))
-      .then(async (loadedIssue) => {
+      .then(async () => {
+        const loadedIssue = initialIssue ?? (await loadPublicIssue(issueId, controller.signal));
         if (!active) return;
         setIssue(loadedIssue);
         const restoredResult = await restoreVoteResult(issueId, controller.signal);
@@ -239,7 +242,7 @@ export function IssueExperience({
       active = false;
       controller.abort();
     };
-  }, [issueId]);
+  }, [initialIssue, issueId]);
 
   const sendPendingVote = useCallback(
     async (action: PendingAction) => {
@@ -375,7 +378,7 @@ export function IssueExperience({
             <VoteChoiceRow
               key={choice.id}
               choice={choice}
-              disabled={screen === "submitting" || screen === "submit-error"}
+              disabled={screen !== "ready"}
               pending={screen === "submitting" && selectedChoice?.id === choice.id}
               selected={selectedChoice?.id === choice.id}
               onMediaLoad={(outcome) => recordMediaLoad(choice, outcome)}
@@ -387,6 +390,12 @@ export function IssueExperience({
         {screen === "submitting" ? (
           <p className={styles.inlineStatus} role="status">
             선택을 안전하게 기록하고 있어요…
+          </p>
+        ) : null}
+
+        {screen === "restoring" ? (
+          <p className={styles.inlineStatus} role="status">
+            참여 기록을 확인하고 있어요…
           </p>
         ) : null}
 

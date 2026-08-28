@@ -22,6 +22,7 @@ const getGuestIssue = vi.fn<IssueReadService["getGuestIssue"]>();
 const issueReader: IssueReadService = {
   getGuestIssue,
   listGuestIssues: vi.fn(),
+  listPublicIssueCatalog: vi.fn(),
 };
 
 const createMemberIssue = vi.fn<IssueWriteService["createMemberIssue"]>();
@@ -207,6 +208,7 @@ describe("OpenAPI contract", () => {
     expect(document.paths).toHaveProperty(["/v1/member/issue-submissions", "get"]);
     expect(document.paths).toHaveProperty(["/v1/member/issue-submissions/{submissionId}", "put"]);
     expect(document.paths).toHaveProperty(["/v1/issues/feed", "get"]);
+    expect(document.paths).toHaveProperty(["/v1/issues/catalog", "get"]);
     expect(document.paths).toHaveProperty(["/v1/guest-subjects", "post"]);
     expect(document.paths).toHaveProperty(["/v1/issues/{issueId}/votes", "post"]);
     expect(document.paths).toHaveProperty(["/v1/issues/{issueId}/votes", "get"]);

@@ -379,6 +379,8 @@ button.navLink {
   border-top: 1px solid var(--which-border);
   color: var(--which-text-tertiary);
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 18px;
   padding: 22px clamp(16px, 3vw, 40px) 32px;
   font-size: 0.72rem;

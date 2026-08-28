@@ -197,6 +197,9 @@ export function WhichShell({
 
           <footer className={styles.footer}>
             <span>WHICH · 2026</span>
+            <Link href="/about">서비스 소개</Link>
+            <Link href="/methodology">결과 산정 원칙</Link>
+            <Link href="/moderation-policy">운영 정책</Link>
             <Link href="/legal/terms">서비스 이용약관</Link>
             <Link href="/legal/privacy">개인정보 처리방침</Link>
           </footer>
