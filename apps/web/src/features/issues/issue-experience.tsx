@@ -2271,17 +2271,17 @@ function NextIssuePreview({
       >
         <span className={styles.nextIssueEyebrow}>NEXT ISSUE</span>
         <span className={styles.nextIssueHeadline}>
-          <strong>{nextIssue.question}</strong>
+          <strong title={nextIssue.question}>{nextIssue.question}</strong>
           <span className={styles.nextIssueAction}>{navigating ? "이동 중…" : "다음 →"}</span>
         </span>
         <span className={styles.nextIssueChoices} aria-hidden="true">
           <span>
             <b>{choiceA?.code ?? "A"}</b>
-            <em>{choiceA?.label ?? "첫 번째 선택"}</em>
+            <em title={choiceA?.label ?? "첫 번째 선택"}>{choiceA?.label ?? "첫 번째 선택"}</em>
           </span>
           <span>
             <b>{choiceB?.code ?? "B"}</b>
-            <em>{choiceB?.label ?? "두 번째 선택"}</em>
+            <em title={choiceB?.label ?? "두 번째 선택"}>{choiceB?.label ?? "두 번째 선택"}</em>
           </span>
         </span>
       </button>

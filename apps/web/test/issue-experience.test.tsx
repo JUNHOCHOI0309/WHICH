@@ -501,6 +501,9 @@ describe("IssueExperience", () => {
     expect(nextPreview).toHaveTextContent("NEXT ISSUE");
     expect(nextPreview).toHaveTextContent("아침형 인간");
     expect(nextPreview).toHaveTextContent("저녁형 인간");
+    expect(within(nextPreview).getByText("다음 질문")).toHaveAttribute("title", "다음 질문");
+    expect(within(nextPreview).getByText("아침형 인간")).toHaveAttribute("title", "아침형 인간");
+    expect(within(nextPreview).getByText("저녁형 인간")).toHaveAttribute("title", "저녁형 인간");
   });
 
   it("prefetches the next Issue but opens it and records analytics only after preview click", async () => {

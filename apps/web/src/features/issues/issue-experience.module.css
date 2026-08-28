@@ -1385,6 +1385,13 @@ button.nextIssuePreview:focus-visible,
   -webkit-line-clamp: 2;
 }
 
+button.nextIssuePreview:hover:not(:disabled) .nextIssueHeadline strong,
+button.nextIssuePreview:focus-visible .nextIssueHeadline strong {
+  display: block;
+  overflow: visible;
+  -webkit-line-clamp: unset;
+}
+
 .nextIssueAction {
   color: var(--which-cyan-strong);
   font-size: 0.9rem;
@@ -1416,6 +1423,14 @@ button.nextIssuePreview:focus-visible,
   font-style: normal;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+button.nextIssuePreview:hover:not(:disabled) .nextIssueChoices em,
+button.nextIssuePreview:focus-visible .nextIssueChoices em {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  word-break: keep-all;
 }
 
 .nextIssueChoices b {
