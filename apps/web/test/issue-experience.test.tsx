@@ -204,7 +204,7 @@ describe("IssueExperience", () => {
     }
   });
 
-  it("opens one random eligible Issue only after the pre-vote lower area is 50% visible and the wheel moves down", async () => {
+  it("opens one random eligible Issue after the pre-vote lower area is visible and the screen is dragged upward", async () => {
     const observerCallbacks = new Map<Element, IntersectionObserverCallback>();
     let feedRequests = 0;
     const analyticsEvents: string[] = [];
@@ -315,8 +315,12 @@ describe("IssueExperience", () => {
     fireEvent.wheel(window, { deltaY: -120 });
     expect(feedRequests).toBe(0);
 
-    fireEvent.wheel(window, { deltaY: 120 });
-    fireEvent.wheel(window, { deltaY: 120 });
+    fireEvent.touchStart(window, {
+      touches: [{ clientX: 160, clientY: 560 }],
+    });
+    fireEvent.touchEnd(window, {
+      changedTouches: [{ clientX: 164, clientY: 450 }],
+    });
 
     await waitFor(() =>
       expect(navigation.push).toHaveBeenCalledWith("/issues/20000000-0000-4000-8000-000000000002"),

@@ -1,8 +1,12 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
-import type { MemberPointShopView, PointShopCatalogItem } from "@/lib/contracts";
+import type {
+  MemberPointShopView,
+  PointShopCatalogItem,
+  PointShopEquipSlot,
+} from "@/lib/contracts";
 import {
   avatarFrameStyle,
   cosmeticTokens,
@@ -17,6 +21,8 @@ const slotLabels = {
   AVATAR_FRAME: "아바타 프레임",
   SHARE_BACKGROUND: "공유 배경",
 } as const;
+
+const shopSlots = Object.keys(slotLabels) as PointShopEquipSlot[];
 
 function CosmeticPreview({ item }: { item: PointShopCatalogItem | null }) {
   if (!item) {
@@ -90,6 +96,8 @@ export function MemberPointShopModal({
   shop: MemberPointShopView | null;
   visible: boolean;
 }) {
+  const [activeSlot, setActiveSlot] = useState<PointShopEquipSlot>("PROFILE_ACCENT");
+
   useEffect(() => {
     if (!visible) return;
     const previousOverflow = document.body.style.overflow;
@@ -105,6 +113,14 @@ export function MemberPointShopModal({
   }, [onClose, visible]);
 
   if (!visible) return null;
+
+  const filteredCatalog = shop?.catalog.filter((item) => item.equipSlot === activeSlot) ?? [];
+
+  const selectSlot = (slot: PointShopEquipSlot) => {
+    setActiveSlot(slot);
+    const firstItem = shop?.catalog.find((item) => item.equipSlot === slot);
+    if (firstItem) onPreview(firstItem);
+  };
 
   return (
     <div className={styles.shopModalBackdrop} onMouseDown={onClose}>
@@ -156,9 +172,25 @@ export function MemberPointShopModal({
               </div>
             </div>
 
+            <div aria-label="상품 종류" className={styles.shopCatalogTabs} role="tablist">
+              {shopSlots.map((slot) => (
+                <button
+                  aria-selected={activeSlot === slot}
+                  className={styles.shopCatalogTab}
+                  data-active={activeSlot === slot}
+                  key={slot}
+                  onClick={() => selectSlot(slot)}
+                  role="tab"
+                  type="button"
+                >
+                  {slotLabels[slot]}
+                </button>
+              ))}
+            </div>
+
             {pending && !shop ? <p className={styles.shopLoading}>상품을 불러오는 중…</p> : null}
             <div className={styles.shopCatalogGrid}>
-              {shop?.catalog.map((item) => {
+              {filteredCatalog.map((item) => {
                 const tokens = cosmeticTokens(item.themeFamily);
                 return (
                   <button
@@ -183,6 +215,9 @@ export function MemberPointShopModal({
                 );
               })}
             </div>
+            {!pending && shop && filteredCatalog.length === 0 ? (
+              <p className={styles.shopCatalogEmpty}>이 종류의 상품은 아직 준비 중이에요.</p>
+            ) : null}
           </div>
         </div>
       </section>

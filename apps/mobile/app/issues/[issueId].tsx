@@ -48,7 +48,15 @@ export default function IssueScreen() {
   const recordedMediaLoads = useRef(new Set<string>());
   const recordedResultViews = useRef(new Set<string>());
   const recordedNextEvents = useRef(new Set<string>());
-  const nextSwipeStart = useRef({ x: 0, y: 0 });
+  const isAtScrollEnd = useRef(false);
+  const scrollMetrics = useRef({ contentHeight: 0, offsetY: 0, viewportHeight: 0 });
+  const nextSwipeStart = useRef({ x: 0, y: 0, atEnd: false });
+
+  const updateScrollEnd = useCallback(() => {
+    const { contentHeight, offsetY, viewportHeight } = scrollMetrics.current;
+    isAtScrollEnd.current =
+      contentHeight > 0 && viewportHeight > 0 && contentHeight - (offsetY + viewportHeight) <= 24;
+  }, []);
 
   const fetchIssue = useCallback(async () => {
     if (!issueId) throw new Error("질문 ID가 필요합니다.");
@@ -227,11 +235,14 @@ export default function IssueScreen() {
       const subjectId = await guestSubjects.getOrCreate();
       const feed = await mobileApi.loadFeed(
         subjectId,
-        1,
+        6,
         issue.id,
         memberSessionToken ?? undefined,
       );
-      const nextIssue = feed.items[0];
+      const nextIssue =
+        feed.items.length > 0
+          ? feed.items[Math.floor(Math.random() * feed.items.length)]
+          : undefined;
       if (!nextIssue) {
         setNextIssueState("empty");
         const eventKey = `NEXT_ISSUE_EXHAUSTED:${issue.id}`;
@@ -366,7 +377,38 @@ export default function IssueScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["left", "right", "bottom"]}>
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        onContentSizeChange={(_width, height) => {
+          scrollMetrics.current.contentHeight = height;
+          updateScrollEnd();
+        }}
+        onLayout={(event) => {
+          scrollMetrics.current.viewportHeight = event.nativeEvent.layout.height;
+          updateScrollEnd();
+        }}
+        onScroll={(event) => {
+          scrollMetrics.current.offsetY = event.nativeEvent.contentOffset.y;
+          scrollMetrics.current.contentHeight = event.nativeEvent.contentSize.height;
+          scrollMetrics.current.viewportHeight = event.nativeEvent.layoutMeasurement.height;
+          updateScrollEnd();
+        }}
+        onTouchEnd={(event) => {
+          const deltaX = event.nativeEvent.pageX - nextSwipeStart.current.x;
+          const deltaY = nextSwipeStart.current.y - event.nativeEvent.pageY;
+          if (nextSwipeStart.current.atEnd && deltaY >= 72 && deltaY > Math.abs(deltaX) * 1.25) {
+            void moveNext();
+          }
+        }}
+        onTouchStart={(event) => {
+          nextSwipeStart.current = {
+            x: event.nativeEvent.pageX,
+            y: event.nativeEvent.pageY,
+            atEnd: isAtScrollEnd.current,
+          };
+        }}
+        scrollEventThrottle={16}
+      >
         <Text style={styles.category}>{issue.categoryCode}</Text>
         <Text accessibilityRole="header" style={styles.question}>
           {issue.question}
@@ -489,38 +531,24 @@ export default function IssueScreen() {
               mode="prompt"
               analyticsContext={{ issueId: issue.id, issueVersion: issue.version }}
             />
-            <View
-              accessibilityLabel="오른쪽으로 밀어 다음 질문"
-              onTouchEnd={(event) => {
-                const dx = event.nativeEvent.pageX - nextSwipeStart.current.x;
-                const dy = event.nativeEvent.pageY - nextSwipeStart.current.y;
-                if (dx >= 72 && Math.abs(dy) <= 48) void moveNext();
-              }}
-              onTouchStart={(event) => {
-                nextSwipeStart.current = {
-                  x: event.nativeEvent.pageX,
-                  y: event.nativeEvent.pageY,
-                };
-              }}
-              style={styles.swipeHint}
-            >
-              <Text style={styles.swipeHintArrow}>→</Text>
-              <Text style={styles.swipeHintText}>
-                {nextIssueState === "loading"
-                  ? "다음 질문을 찾는 중…"
-                  : "화면 여백을 오른쪽으로 밀어 다음 질문"}
-              </Text>
-            </View>
-            {nextIssueState === "empty" ? (
-              <Text style={styles.nextIssueMessage}>지금 참여할 수 있는 질문을 모두 골랐어요.</Text>
-            ) : null}
-            {nextIssueState === "error" ? (
-              <Text style={styles.error}>다음 질문을 찾지 못했습니다. 다시 시도해 주세요.</Text>
-            ) : null}
           </>
         ) : (
           <Text style={styles.locked}>결과는 투표 후 공개됩니다.</Text>
         )}
+        <View accessibilityLabel="아래에서 위로 드래그해 다음 랜덤 질문" style={styles.swipeHint}>
+          <Text style={styles.swipeHintArrow}>↑</Text>
+          <Text style={styles.swipeHintText}>
+            {nextIssueState === "loading"
+              ? "다음 질문을 찾는 중…"
+              : "아래로 한 번 더 드래그하면 다른 질문으로 넘어가요."}
+          </Text>
+        </View>
+        {nextIssueState === "empty" ? (
+          <Text style={styles.nextIssueMessage}>지금 참여할 수 있는 질문을 모두 골랐어요.</Text>
+        ) : null}
+        {nextIssueState === "error" ? (
+          <Text style={styles.error}>다음 질문을 찾지 못했습니다. 다시 시도해 주세요.</Text>
+        ) : null}
       </ScrollView>
       <PointFeedbackToast feedback={pointFeedback} onDismiss={dismissPointFeedback} />
     </SafeAreaView>
