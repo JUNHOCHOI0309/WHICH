@@ -10,6 +10,9 @@ import {
   OPS_EDITORIAL_SCOPES,
   OPS_EDITORIAL_STATUSES,
   OPS_MEMBER_STATUSES,
+  OPS_POINT_SHOP_EQUIP_SLOTS,
+  OPS_POINT_SHOP_THEME_FAMILIES,
+  OpsPointShopConflictError,
   OpsReviewConflictError,
   type OpsDashboardService,
   type OpsDashboardWindow,
@@ -70,6 +73,12 @@ export async function registerOpsRoutes(
     }
 
     opsApp.setErrorHandler((error, request, reply) => {
+      if (error instanceof OpsPointShopConflictError) {
+        return reply.code(409).send({
+          code: "POINT_SHOP_CONFLICT",
+          message: error.message,
+        });
+      }
       if (error instanceof OpsReviewConflictError) {
         return reply.code(409).send({
           code: "REVISION_CONFLICT",
@@ -355,6 +364,143 @@ export async function registerOpsRoutes(
           });
         }
         return reply.send(decision);
+      },
+    );
+
+    opsApp.get<{ Headers: OpsHeaders }>(
+      "/v1/internal/ops/point-shop",
+      {
+        schema: {
+          hide: true,
+          headers: opsHeadersSchema,
+          response: {
+            200: Type.Any(),
+            401: Type.Object({ code: Type.String(), message: Type.String() }),
+            403: Type.Object({ code: Type.String(), message: Type.String() }),
+            500: Type.Object({ code: Type.String(), message: Type.String() }),
+          },
+        },
+      },
+      async (request, reply) => {
+        const memberId = await authenticate(request, reply);
+        if (!memberId) return;
+        const view = await service.readPointShop({ memberId, requestId: request.id });
+        if (!view) {
+          return reply.code(403).send({
+            code: "OPERATOR_ROLE_REQUIRED",
+            message: "This Member does not have active OPERATOR access.",
+          });
+        }
+        return reply.send(view);
+      },
+    );
+
+    opsApp.post<{
+      Headers: OpsHeaders;
+      Body: {
+        code: string;
+        equipSlot: (typeof OPS_POINT_SHOP_EQUIP_SLOTS)[number];
+        themeFamily: (typeof OPS_POINT_SHOP_THEME_FAMILIES)[number];
+        name: string;
+        description: string;
+        price: number;
+        status: "ACTIVE" | "PAUSED";
+        reason: string;
+      };
+    }>(
+      "/v1/internal/ops/point-shop/items",
+      {
+        schema: {
+          hide: true,
+          headers: opsHeadersSchema,
+          body: Type.Object({
+            code: Type.String({ minLength: 3, maxLength: 64, pattern: "^[A-Z0-9_]+$" }),
+            equipSlot: Type.Union(OPS_POINT_SHOP_EQUIP_SLOTS.map((value) => Type.Literal(value))),
+            themeFamily: Type.Union(
+              OPS_POINT_SHOP_THEME_FAMILIES.map((value) => Type.Literal(value)),
+            ),
+            name: Type.String({ minLength: 2, maxLength: 80 }),
+            description: Type.String({ minLength: 5, maxLength: 280 }),
+            price: Type.Integer({ minimum: 1, maximum: 1_000_000 }),
+            status: Type.Union([Type.Literal("ACTIVE"), Type.Literal("PAUSED")]),
+            reason: Type.String({ minLength: 8, maxLength: 500 }),
+          }),
+          response: {
+            200: Type.Any(),
+            400: Type.Object({ code: Type.String(), message: Type.String() }),
+            401: Type.Object({ code: Type.String(), message: Type.String() }),
+            403: Type.Object({ code: Type.String(), message: Type.String() }),
+            409: Type.Object({ code: Type.String(), message: Type.String() }),
+            500: Type.Object({ code: Type.String(), message: Type.String() }),
+          },
+        },
+      },
+      async (request, reply) => {
+        const memberId = await authenticate(request, reply);
+        if (!memberId) return;
+        const item = await service.createPointShopItem({
+          memberId,
+          ...request.body,
+          requestId: request.id,
+        });
+        if (!item) {
+          return reply.code(403).send({
+            code: "OPERATOR_ROLE_REQUIRED",
+            message: "This Member does not have active OPERATOR access.",
+          });
+        }
+        return reply.send(item);
+      },
+    );
+
+    opsApp.patch<{
+      Headers: OpsHeaders;
+      Params: { itemId: string };
+      Body: {
+        expectedUpdatedAt: string;
+        price: number;
+        status: "ACTIVE" | "PAUSED";
+        reason: string;
+      };
+    }>(
+      "/v1/internal/ops/point-shop/items/:itemId",
+      {
+        schema: {
+          hide: true,
+          headers: opsHeadersSchema,
+          params: Type.Object({ itemId: Type.String({ format: "uuid" }) }),
+          body: Type.Object({
+            expectedUpdatedAt: Type.String({ format: "date-time" }),
+            price: Type.Integer({ minimum: 1, maximum: 1_000_000 }),
+            status: Type.Union([Type.Literal("ACTIVE"), Type.Literal("PAUSED")]),
+            reason: Type.String({ minLength: 8, maxLength: 500 }),
+          }),
+          response: {
+            200: Type.Any(),
+            400: Type.Object({ code: Type.String(), message: Type.String() }),
+            401: Type.Object({ code: Type.String(), message: Type.String() }),
+            403: Type.Object({ code: Type.String(), message: Type.String() }),
+            409: Type.Object({ code: Type.String(), message: Type.String() }),
+            500: Type.Object({ code: Type.String(), message: Type.String() }),
+          },
+        },
+      },
+      async (request, reply) => {
+        const memberId = await authenticate(request, reply);
+        if (!memberId) return;
+        const item = await service.updatePointShopItem({
+          memberId,
+          itemId: request.params.itemId,
+          ...request.body,
+          requestId: request.id,
+        });
+        if (!item) {
+          return reply.code(403).send({
+            code: "OPERATOR_ROLE_REQUIRED",
+            message: "This Member does not have active OPERATOR access.",
+          });
+        }
+        return reply.send(item);
       },
     );
   });

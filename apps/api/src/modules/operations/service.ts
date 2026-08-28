@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import type { Database } from "../../database/client.js";
@@ -11,6 +11,9 @@ import {
   operatorAccessGrants,
   operatorAuditLogs,
   operatorEditorialDecisions,
+  pointCatalogItems,
+  pointCatalogItemVersions,
+  pointPurchases,
 } from "../../database/schema/index.js";
 import { defaultReviewConsolePaths } from "../../editorial-review-console.js";
 import { loadIssueInventoryReadiness } from "../issue-publication/inventory.js";
@@ -18,12 +21,15 @@ import { EditorialReviewConsole } from "../issue-publication/review-console.js";
 
 import {
   OpsReviewConflictError,
+  OpsPointShopConflictError,
   type OpsDashboardService,
   type OpsDashboardSnapshot,
   type OpsDashboardWindow,
   type OpsEditorialDecision,
   type OpsEditorialPage,
   type OpsMemberPage,
+  type OpsPointShopItem,
+  type OpsPointShopView,
   type OpsRankingPreview,
 } from "./contracts.js";
 
@@ -144,6 +150,62 @@ type OpsManagementMethods = Pick<
   OpsDashboardService,
   "readMembers" | "readEditorial" | "saveEditorialDecision"
 >;
+
+type OpsPointShopMethods = Pick<
+  OpsDashboardService,
+  "readPointShop" | "createPointShopItem" | "updatePointShopItem"
+>;
+
+const pointShopAuditEvents = [
+  "OPS_POINT_SHOP_ITEM_CREATED",
+  "OPS_POINT_SHOP_ITEM_UPDATED",
+] as const;
+
+function mapPointShopItem(row: {
+  id: string;
+  code: string;
+  equipSlot: string;
+  themeFamily: string;
+  name: string;
+  description: string;
+  price: number;
+  status: string;
+  currentVersion: number;
+  purchaseCount: number | string;
+  createdAt: Date;
+  updatedAt: Date;
+}): OpsPointShopItem {
+  return {
+    ...row,
+    equipSlot: row.equipSlot as OpsPointShopItem["equipSlot"],
+    themeFamily: row.themeFamily as OpsPointShopItem["themeFamily"],
+    status: row.status as OpsPointShopItem["status"],
+    purchaseCount: Number(row.purchaseCount),
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
+function pointShopItemSelection() {
+  return {
+    id: pointCatalogItems.id,
+    code: pointCatalogItems.code,
+    equipSlot: pointCatalogItems.equipSlot,
+    themeFamily: pointCatalogItems.themeFamily,
+    name: pointCatalogItems.name,
+    description: pointCatalogItems.description,
+    price: pointCatalogItems.price,
+    status: pointCatalogItems.status,
+    currentVersion: pointCatalogItems.currentVersion,
+    purchaseCount: sql<number>`(
+      select count(*)::int from ${pointPurchases}
+      where ${pointPurchases.itemId} = ${pointCatalogItems.id}
+        and ${pointPurchases.status} = 'COMPLETED'
+    )`,
+    createdAt: pointCatalogItems.createdAt,
+    updatedAt: pointCatalogItems.updatedAt,
+  };
+}
 
 function createOpsManagementMethods(
   database: Database["db"],
@@ -526,6 +588,229 @@ function createOpsManagementMethods(
   };
 }
 
+function createOpsPointShopMethods(
+  database: Database["db"],
+  operator: (memberId: string) => Promise<{ memberId: string; displayName: string } | null>,
+  audit: (input: {
+    memberId: string;
+    eventType?: string;
+    outcome: "ALLOWED" | "DENIED" | "SUCCEEDED" | "FAILED";
+    windowDays?: OpsDashboardWindow;
+    requestId?: string;
+    metadata?: Record<string, unknown>;
+  }) => Promise<void>,
+): OpsPointShopMethods {
+  async function requireOperator(input: { memberId: string; requestId?: string }) {
+    const actor = await operator(input.memberId);
+    if (!actor) {
+      await audit({
+        memberId: input.memberId,
+        eventType: "OPS_POINT_SHOP_ACCESS",
+        outcome: "DENIED",
+        requestId: input.requestId,
+        metadata: { reason: "OPERATOR_ROLE_REQUIRED" },
+      });
+    }
+    return actor;
+  }
+
+  async function itemById(itemId: string) {
+    const rows = await database
+      .select(pointShopItemSelection())
+      .from(pointCatalogItems)
+      .where(eq(pointCatalogItems.id, itemId))
+      .limit(1);
+    return rows[0] ? mapPointShopItem(rows[0]) : null;
+  }
+
+  return {
+    async readPointShop(input): Promise<OpsPointShopView | null> {
+      const actor = await requireOperator(input);
+      if (!actor) return null;
+
+      const [rows, auditRows] = await Promise.all([
+        database
+          .select(pointShopItemSelection())
+          .from(pointCatalogItems)
+          .orderBy(desc(pointCatalogItems.updatedAt), desc(pointCatalogItems.createdAt)),
+        database
+          .select({
+            id: operatorAuditLogs.id,
+            eventType: operatorAuditLogs.eventType,
+            outcome: operatorAuditLogs.outcome,
+            operator: members.displayName,
+            requestId: operatorAuditLogs.requestId,
+            metadata: operatorAuditLogs.metadata,
+            occurredAt: operatorAuditLogs.occurredAt,
+          })
+          .from(operatorAuditLogs)
+          .innerJoin(members, eq(members.id, operatorAuditLogs.memberId))
+          .where(inArray(operatorAuditLogs.eventType, [...pointShopAuditEvents]))
+          .orderBy(desc(operatorAuditLogs.occurredAt))
+          .limit(50),
+      ]);
+
+      await audit({
+        memberId: input.memberId,
+        eventType: "OPS_POINT_SHOP_READ",
+        outcome: "ALLOWED",
+        requestId: input.requestId,
+        metadata: { itemCount: rows.length, auditCount: auditRows.length },
+      });
+
+      const items = rows.map(mapPointShopItem);
+      const counts: OpsPointShopView["counts"] = { ACTIVE: 0, PAUSED: 0, RETIRED: 0 };
+      for (const item of items) counts[item.status] += 1;
+      return {
+        schemaVersion: 1,
+        generatedAt: new Date().toISOString(),
+        counts,
+        items,
+        audit: auditRows.map((row) => ({
+          id: row.id,
+          eventType: row.eventType as OpsPointShopView["audit"][number]["eventType"],
+          outcome: row.outcome as OpsPointShopView["audit"][number]["outcome"],
+          operator: row.operator,
+          requestId: row.requestId,
+          metadata: row.metadata,
+          occurredAt: row.occurredAt.toISOString(),
+        })),
+      };
+    },
+
+    async createPointShopItem(input): Promise<OpsPointShopItem | null> {
+      const actor = await requireOperator(input);
+      if (!actor) return null;
+
+      const createdAt = new Date();
+      let itemId: string;
+      try {
+        itemId = await database.transaction(async (transaction) => {
+          const [created] = await transaction
+            .insert(pointCatalogItems)
+            .values({
+              code: input.code,
+              itemType: "COSMETIC",
+              surface: input.equipSlot === "SHARE_BACKGROUND" ? "SHARE_CARD" : "PROFILE",
+              equipSlot: input.equipSlot,
+              themeFamily: input.themeFamily,
+              name: input.name,
+              description: input.description,
+              price: input.price,
+              status: input.status,
+              createdAt,
+              updatedAt: createdAt,
+            })
+            .returning({ id: pointCatalogItems.id });
+          if (!created) throw new Error("The point shop item was not created.");
+
+          await transaction.insert(pointCatalogItemVersions).values({
+            itemId: created.id,
+            version: 1,
+            assetManifest: {
+              schemaVersion: 1,
+              renderType: "TOKEN_THEME",
+              themeFamily: input.themeFamily,
+              equipSlot: input.equipSlot,
+              choiceA: "#15C4D6",
+              choiceB: "#FF7A1A",
+            },
+            previewAssets: { kind: "CSS_TOKEN_PREVIEW", themeFamily: input.themeFamily },
+            accessibilityMetadata: {
+              decorativeOnly: true,
+              requiresTextContrast: true,
+              reducedMotionSafe: true,
+            },
+            releaseNotes: `Ops catalog creation: ${input.reason}`.slice(0, 500),
+          });
+          await transaction.insert(operatorAuditLogs).values({
+            memberId: input.memberId,
+            eventType: "OPS_POINT_SHOP_ITEM_CREATED",
+            outcome: "SUCCEEDED",
+            requestId: input.requestId,
+            metadata: {
+              itemId: created.id,
+              code: input.code,
+              after: { price: input.price, status: input.status },
+              reason: input.reason,
+            },
+          });
+          return created.id;
+        });
+      } catch (error) {
+        if (
+          typeof error === "object" &&
+          error !== null &&
+          "code" in error &&
+          error.code === "23505"
+        ) {
+          throw new OpsPointShopConflictError("이미 사용 중인 상품 코드입니다.");
+        }
+        throw error;
+      }
+      return itemById(itemId);
+    },
+
+    async updatePointShopItem(input): Promise<OpsPointShopItem | null> {
+      const actor = await requireOperator(input);
+      if (!actor) return null;
+
+      const expectedUpdatedAt = new Date(input.expectedUpdatedAt);
+      if (Number.isNaN(expectedUpdatedAt.getTime())) {
+        throw new OpsPointShopConflictError("상품 수정 기준 시각이 올바르지 않습니다.");
+      }
+      await database.transaction(async (transaction) => {
+        const [before] = await transaction
+          .select({
+            code: pointCatalogItems.code,
+            price: pointCatalogItems.price,
+            status: pointCatalogItems.status,
+            updatedAt: pointCatalogItems.updatedAt,
+          })
+          .from(pointCatalogItems)
+          .where(eq(pointCatalogItems.id, input.itemId))
+          .limit(1);
+        if (!before) throw new OpsPointShopConflictError("상품을 찾을 수 없습니다.");
+        if (before.status === "RETIRED") {
+          throw new OpsPointShopConflictError("Archive된 상품은 다시 판매할 수 없습니다.");
+        }
+
+        const changedAt = new Date();
+        const [updated] = await transaction
+          .update(pointCatalogItems)
+          .set({ price: input.price, status: input.status, updatedAt: changedAt })
+          .where(
+            and(
+              eq(pointCatalogItems.id, input.itemId),
+              eq(pointCatalogItems.updatedAt, expectedUpdatedAt),
+            ),
+          )
+          .returning({ id: pointCatalogItems.id });
+        if (!updated) {
+          throw new OpsPointShopConflictError(
+            "다른 운영자가 먼저 상품을 변경했습니다. 목록을 새로고침해 주세요.",
+          );
+        }
+
+        await transaction.insert(operatorAuditLogs).values({
+          memberId: input.memberId,
+          eventType: "OPS_POINT_SHOP_ITEM_UPDATED",
+          outcome: "SUCCEEDED",
+          requestId: input.requestId,
+          metadata: {
+            itemId: input.itemId,
+            code: before.code,
+            before: { price: before.price, status: before.status },
+            after: { price: input.price, status: input.status },
+            reason: input.reason,
+          },
+        });
+      });
+      return itemById(input.itemId);
+    },
+  };
+}
+
 export function createOpsDashboardService(
   database: Database["db"],
   options: { releaseId: string; qualityRankerMode?: "OFF" | "SHADOW" | "LIVE" },
@@ -567,6 +852,7 @@ export function createOpsDashboardService(
 
   return {
     ...createOpsManagementMethods(database, operator, audit),
+    ...createOpsPointShopMethods(database, operator, audit),
     async readRankingPreview(input): Promise<OpsRankingPreview | null> {
       const actor = await operator(input.memberId);
       if (!actor) {

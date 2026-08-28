@@ -8,6 +8,8 @@ import {
   operatorAccessGrants,
   operatorAuditLogs,
   operatorEditorialDecisions,
+  pointCatalogItems,
+  pointCatalogItemVersions,
 } from "../src/database/schema/index.js";
 import { createCommentReadService } from "../src/modules/comments/service.js";
 import { createMemberIdentityService } from "../src/modules/identity/service.js";
@@ -99,7 +101,7 @@ function readDashboard(days = 7) {
 }
 
 function opsRequest(
-  method: "GET" | "PUT",
+  method: "GET" | "POST" | "PUT" | "PATCH",
   url: string,
   payload?: Record<string, unknown>,
   sessionToken = token,
@@ -231,6 +233,89 @@ describe("operator dashboard", () => {
     ]) {
       expect(serialized).not.toContain(forbidden);
     }
+  });
+
+  it("creates, pauses, reprices, and audits Point Shop catalog items", async () => {
+    const denied = await opsRequest("GET", "/v1/internal/ops/point-shop", undefined, ordinaryToken);
+    expect(denied.statusCode).toBe(403);
+
+    const createdResponse = await opsRequest("POST", "/v1/internal/ops/point-shop/items", {
+      code: "OPS_TEST_SOFT_ORBIT_ACCENT",
+      equipSlot: "PROFILE_ACCENT",
+      themeFamily: "SOFT_ORBIT",
+      name: "Ops Test Accent",
+      description: "운영 콘솔 통합 테스트용 프로필 강조색입니다.",
+      price: 800,
+      status: "PAUSED",
+      reason: "운영 상점 생성 감사 로그 검증",
+    });
+    expect(createdResponse.statusCode, createdResponse.body).toBe(200);
+    const created = createdResponse.json<{
+      id: string;
+      code: string;
+      price: number;
+      status: string;
+      updatedAt: string;
+    }>();
+    expect(created).toMatchObject({
+      code: "OPS_TEST_SOFT_ORBIT_ACCENT",
+      price: 800,
+      status: "PAUSED",
+    });
+
+    const updatedResponse = await opsRequest(
+      "PATCH",
+      `/v1/internal/ops/point-shop/items/${created.id}`,
+      {
+        expectedUpdatedAt: created.updatedAt,
+        price: 950,
+        status: "ACTIVE",
+        reason: "출시 가격 확정 및 판매 시작",
+      },
+    );
+    expect(updatedResponse.statusCode, updatedResponse.body).toBe(200);
+    expect(updatedResponse.json()).toMatchObject({ price: 950, status: "ACTIVE" });
+
+    const staleResponse = await opsRequest(
+      "PATCH",
+      `/v1/internal/ops/point-shop/items/${created.id}`,
+      {
+        expectedUpdatedAt: created.updatedAt,
+        price: 1000,
+        status: "PAUSED",
+        reason: "오래된 화면의 변경 충돌 검증",
+      },
+    );
+    expect(staleResponse.statusCode).toBe(409);
+    expect(staleResponse.json()).toMatchObject({ code: "POINT_SHOP_CONFLICT" });
+
+    const viewResponse = await opsRequest("GET", "/v1/internal/ops/point-shop");
+    expect(viewResponse.statusCode, viewResponse.body).toBe(200);
+    const view = viewResponse.json<{
+      items: Array<{ code: string; price: number; status: string }>;
+      audit: Array<{ eventType: string; metadata: Record<string, unknown> }>;
+    }>();
+    expect(view.items).toContainEqual(
+      expect.objectContaining({
+        code: "OPS_TEST_SOFT_ORBIT_ACCENT",
+        price: 950,
+        status: "ACTIVE",
+      }),
+    );
+    expect(view.audit.map((entry) => entry.eventType)).toEqual(
+      expect.arrayContaining(["OPS_POINT_SHOP_ITEM_CREATED", "OPS_POINT_SHOP_ITEM_UPDATED"]),
+    );
+
+    const [catalogItem] = await database.db
+      .select({ id: pointCatalogItems.id })
+      .from(pointCatalogItems)
+      .where(eq(pointCatalogItems.code, "OPS_TEST_SOFT_ORBIT_ACCENT"));
+    expect(catalogItem).toBeDefined();
+    const versions = await database.db
+      .select({ version: pointCatalogItemVersions.version })
+      .from(pointCatalogItemVersions)
+      .where(eq(pointCatalogItemVersions.itemId, catalogItem!.id));
+    expect(versions).toEqual([{ version: 1 }]);
   });
 
   it("persists Editorial decisions and rejects stale revisions", async () => {
