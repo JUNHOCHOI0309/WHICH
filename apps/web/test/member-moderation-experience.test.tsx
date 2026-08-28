@@ -48,6 +48,7 @@ function center() {
         nextStep: "사람 검토가 끝나면 최종 결과를 확인할 수 있습니다.",
         effectiveAt: "2026-08-29T00:00:00.000Z",
         expiresAt: null,
+        readAt: null,
         createdAt: "2026-08-29T00:00:00.000Z",
       },
     ],

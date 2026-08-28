@@ -241,7 +241,6 @@ export function MemberProfileExperience({
                 프로필
               </Link>
               <Link href="/me/votes">투표 기록</Link>
-              <Link href="/me/moderation">Moderation</Link>
             </nav>
 
             <MemberPublicProfileSettings

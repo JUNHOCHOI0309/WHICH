@@ -22,6 +22,14 @@ async function activeMemberResponse(input: string | URL | Request) {
       member: { id: "member-1", displayName: "테스트 회원", status: "ACTIVE" },
     });
   }
+  if (url === "/api/me/notifications") {
+    return jsonResponse({
+      schemaVersion: 1,
+      generatedAt: new Date().toISOString(),
+      unreadCount: 0,
+      items: [],
+    });
+  }
   if (url === "/api/interests/cards") {
     return jsonResponse({
       taxonomyVersion: "interest_cards_v1",
@@ -81,6 +89,87 @@ describe("Member navigation", () => {
     const links = await screen.findAllByRole("link", { name: "내 기록" });
     expect(links).toHaveLength(3);
     expect(links.every((link) => link.getAttribute("href") === "/me")).toBe(true);
+  });
+
+  it("shows the Member's moderation notices and marks them read when opened", async () => {
+    const noticeId = "05739bff-8463-4474-a0c1-3f67ae75d586";
+    const requests: Array<{ url: string; method: string; body: unknown }> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = String(input);
+        const method = init?.method ?? "GET";
+        requests.push({
+          url,
+          method,
+          body: init?.body ? JSON.parse(String(init.body)) : null,
+        });
+        if (url === "/api/member-session") {
+          return jsonResponse({
+            member: { id: "member-1", displayName: "테스트 회원", status: "ACTIVE" },
+          });
+        }
+        if (url === "/api/me/notifications" && method === "PATCH") {
+          return jsonResponse({ updated: 1 });
+        }
+        if (url === "/api/me/notifications") {
+          return jsonResponse({
+            schemaVersion: 1,
+            generatedAt: "2026-08-29T03:00:00.000Z",
+            unreadCount: 1,
+            items: [
+              {
+                id: noticeId,
+                targetType: "ISSUE_MEDIA_ASSET",
+                targetId: "dd353808-7318-45a5-83f0-91a04143322e",
+                policyVersion: "which-moderation-v1",
+                reasonCode: "ASSET_APPROVED",
+                actionType: "APPROVED",
+                summary: "이미지 검수가 승인됐어요.",
+                nextStep: "질문 공개 상태를 확인해 주세요.",
+                effectiveAt: "2026-08-29T02:59:00.000Z",
+                expiresAt: null,
+                readAt: null,
+                createdAt: "2026-08-29T02:59:00.000Z",
+              },
+            ],
+          });
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      }),
+    );
+
+    render(<WhichShell active="home">내용</WhichShell>);
+
+    const button = await screen.findByRole("button", { name: "알림 1개" });
+    fireEvent.click(button);
+    const dialog = await screen.findByRole("dialog", { name: "알림" });
+    expect(within(dialog).getByText("이미지 검수가 승인됐어요.")).toBeInTheDocument();
+    expect(within(dialog).getByText("질문 공개 상태를 확인해 주세요.")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(
+        requests.some(
+          (request) =>
+            request.url === "/api/me/notifications" &&
+            request.method === "PATCH" &&
+            JSON.stringify(request.body) === JSON.stringify({ noticeIds: [noticeId] }),
+        ),
+      ).toBe(true);
+    });
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "알림" })).not.toBeInTheDocument();
+  });
+
+  it("does not expose the moderation notification control to a Guest", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonResponse({ code: "SESSION_INVALID" }, 401)),
+    );
+
+    render(<WhichShell active="home">내용</WhichShell>);
+
+    await screen.findAllByRole("link", { name: "로그인" });
+    expect(screen.queryByRole("button", { name: /^알림/ })).not.toBeInTheDocument();
   });
 
   it("opens and closes a preserved mobile aside from its edge control", async () => {

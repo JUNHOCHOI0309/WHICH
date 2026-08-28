@@ -262,6 +262,7 @@ export type MemberModerationCenter = {
     nextStep: string;
     effectiveAt: string;
     expiresAt: string | null;
+    readAt: string | null;
     createdAt: string;
   }>;
   appeals: Array<{
@@ -290,6 +291,13 @@ export type MemberModerationCenter = {
     resolvedAt: string | null;
     updatedAt: string;
   }>;
+};
+
+export type MemberNotificationCenter = {
+  schemaVersion: 1;
+  generatedAt: string;
+  unreadCount: number;
+  items: MemberModerationCenter["notices"];
 };
 
 export type MemberPointLedgerItem = {

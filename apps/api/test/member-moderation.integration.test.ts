@@ -8,6 +8,7 @@ import {
   issueMediaAssets,
   memberIssueSubmissionRevisions,
   memberIssueSubmissions,
+  memberModerationNotices,
   members,
   moderationAuditEvents,
   moderationCaseReferences,
@@ -133,6 +134,44 @@ describe("WHICH-96 member moderation experience", () => {
     expect(center.notices.map((notice) => notice.reasonCode)).toEqual(
       expect.arrayContaining(["APPEAL_SUBMITTED", "COPYRIGHT_RIGHTS_SUBMITTED"]),
     );
+    const notifications = await service.readNotifications(member!.id);
+    expect(notifications.unreadCount).toBe(2);
+    expect(notifications.items.every((notice) => notice.readAt === null)).toBe(true);
+
+    const [otherMember] = await database.db
+      .insert(members)
+      .values({ displayName: "WHICH-143 other member" })
+      .returning();
+    const [otherNotice] = await database.db
+      .insert(memberModerationNotices)
+      .values({
+        memberId: otherMember!.id,
+        targetType: "ISSUE_MEDIA_ASSET",
+        targetId: first.id,
+        policyVersion: "which-moderation-v1",
+        reasonCode: "TEST_OTHER_MEMBER",
+        actionType: "REVIEWED",
+        summary: "다른 회원의 알림",
+        nextStep: "현재 회원에게 노출되거나 읽음 처리되면 안 됩니다.",
+        effectiveAt: new Date(),
+      })
+      .returning();
+    await expect(service.markNotificationsRead(member!.id, [otherNotice!.id])).resolves.toEqual({
+      updated: 0,
+    });
+    await expect(
+      service.markNotificationsRead(
+        member!.id,
+        notifications.items.map((notice) => notice.id),
+      ),
+    ).resolves.toEqual({ updated: 2 });
+    expect((await service.readNotifications(member!.id)).unreadCount).toBe(0);
+    const [unaffected] = await database.db
+      .select()
+      .from(memberModerationNotices)
+      .where(eq(memberModerationNotices.id, otherNotice!.id));
+    expect(unaffected?.readAt).toBeNull();
+
     const [audit] = await database.db
       .select()
       .from(moderationAuditEvents)
