@@ -68,6 +68,28 @@ function saveResult(result: VoteResponse) {
   sessionStorage.setItem(savedResultKey(result.issueId), JSON.stringify(result));
 }
 
+function clearSavedResult(issueId: string) {
+  sessionStorage.removeItem(savedResultKey(issueId));
+}
+
+async function restoreVoteResult(issueId: string, signal?: AbortSignal) {
+  const savedResult = readSavedResult(issueId);
+
+  try {
+    const currentResult = await loadExistingVote(issueId, signal);
+    if (!currentResult) {
+      clearSavedResult(issueId);
+      return null;
+    }
+
+    saveResult(currentResult);
+    return currentResult;
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") throw error;
+    return savedResult;
+  }
+}
+
 function loadErrorCopy(error: unknown) {
   if (error instanceof WebApiError) {
     if (error.code === "ISSUE_NOT_FOUND") {
@@ -180,11 +202,9 @@ export function IssueExperience({
       await ensureGuestSubject();
       const loadedIssue = await loadPublicIssue(issueId);
       setIssue(loadedIssue);
-      const restoredResult =
-        readSavedResult(issueId) ?? (await loadExistingVote(issueId).catch(() => null));
+      const restoredResult = await restoreVoteResult(issueId);
       if (restoredResult) {
         setResult(restoredResult);
-        saveResult(restoredResult);
       }
       setScreen(restoredResult ? "result" : "ready");
     } catch (error) {
@@ -202,13 +222,10 @@ export function IssueExperience({
       .then(async (loadedIssue) => {
         if (!active) return;
         setIssue(loadedIssue);
-        const restoredResult =
-          readSavedResult(issueId) ??
-          (await loadExistingVote(issueId, controller.signal).catch(() => null));
+        const restoredResult = await restoreVoteResult(issueId, controller.signal);
         if (!active) return;
         if (restoredResult) {
           setResult(restoredResult);
-          saveResult(restoredResult);
         }
         setScreen(restoredResult ? "result" : "ready");
       })

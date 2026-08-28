@@ -705,6 +705,64 @@ describe("IssueExperience", () => {
     );
   });
 
+  it("revalidates a saved Vote and renders the current server aggregate", async () => {
+    const savedResult: VoteResponse = {
+      outcome: "ACCEPTED",
+      voteAttemptId: "attempt-stale",
+      voteId: "vote-stale",
+      issueId: ISSUE_ID,
+      issueVersion: 1,
+      choice: "A",
+      result: {
+        resultVersion: 2,
+        acceptedA: 1,
+        acceptedB: 1,
+        displayedTotal: 2,
+        integrityState: "NORMAL",
+      },
+    };
+    const currentResult: VoteResponse = {
+      ...savedResult,
+      result: {
+        resultVersion: 3,
+        acceptedA: 2,
+        acceptedB: 1,
+        displayedTotal: 3,
+        integrityState: "NORMAL",
+      },
+    };
+    sessionStorage.setItem(`which:vote-result:${ISSUE_ID}`, JSON.stringify(savedResult));
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = String(input);
+        if (url === "/api/guest-subjects") return jsonResponse({ status: "ready" });
+        if (url.endsWith(`/api/issues/${ISSUE_ID}`)) return jsonResponse(issue);
+        if (url.endsWith(`/api/issues/${ISSUE_ID}/vote-status`)) {
+          return jsonResponse(currentResult);
+        }
+        if (url === "/api/member-session") return jsonResponse({ code: "SESSION_INVALID" }, 401);
+        if (url.startsWith(`/api/issues/${ISSUE_ID}/comments?`)) {
+          return jsonResponse({ items: [], nextCursor: null, totalCount: 0 });
+        }
+        if (url.startsWith("/api/issues/feed?")) {
+          return jsonResponse({ items: [], nextCursor: null });
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      }),
+    );
+
+    render(<IssueExperience issueId={ISSUE_ID} />);
+
+    expect(await screen.findByText("67%")).toBeInTheDocument();
+    expect(screen.queryByText("50%")).not.toBeInTheDocument();
+    expect(screen.getByText("3명 참여")).toBeInTheDocument();
+    expect(JSON.parse(sessionStorage.getItem(`which:vote-result:${ISSUE_ID}`) ?? "null")).toEqual(
+      currentResult,
+    );
+  });
+
   it("explains that the first choice remains for a duplicate vote", async () => {
     const duplicateResult: VoteResponse = {
       outcome: "REJECTED_DUPLICATE",
