@@ -81,7 +81,6 @@ export function MemberPointShopModal({
   onAction,
   onClose,
   onPreview,
-  onRefresh,
   pending,
   previewItem,
   shop,
@@ -90,7 +89,6 @@ export function MemberPointShopModal({
   onAction: (item: PointShopCatalogItem) => void;
   onClose: () => void;
   onPreview: (item: PointShopCatalogItem) => void;
-  onRefresh: () => void;
   pending: boolean;
   previewItem: PointShopCatalogItem | null;
   shop: MemberPointShopView | null;
@@ -152,9 +150,6 @@ export function MemberPointShopModal({
                 <Text style={styles.sectionLabel}>CATALOG</Text>
                 <Text style={styles.catalogTitle}>꾸미기 상품</Text>
               </View>
-              <Pressable disabled={pending} onPress={onRefresh}>
-                <Text style={styles.refreshText}>새로고침</Text>
-              </Pressable>
             </View>
 
             {pending && !shop ? <Text style={styles.loading}>상품을 불러오는 중…</Text> : null}
@@ -356,7 +351,6 @@ const styles = StyleSheet.create({
     marginTop: 28,
   },
   catalogTitle: { color: colors.text, fontSize: 18, fontWeight: "900" },
-  refreshText: { color: colors.textSecondary, fontSize: 12, fontWeight: "800" },
   loading: { color: colors.textSecondary, fontSize: 13, paddingVertical: 16 },
   catalogGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   productCard: {

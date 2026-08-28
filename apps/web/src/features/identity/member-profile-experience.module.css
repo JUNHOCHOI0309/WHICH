@@ -292,12 +292,15 @@
 
 .shopModal {
   width: min(1080px, 100%);
+  height: min(760px, 92svh);
   max-height: min(880px, 92svh);
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--which-cyan) 45%, var(--which-border));
   border-radius: 24px;
   background: var(--which-surface);
   box-shadow: 0 30px 90px rgb(0 16 25 / 34%);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
 }
 
 .shopModalHeader {
@@ -350,15 +353,18 @@
 .shopModalBody {
   display: grid;
   grid-template-columns: minmax(300px, 0.9fr) minmax(420px, 1.35fr);
-  min-height: 560px;
-  max-height: calc(92svh - 92px);
+  min-height: 0;
 }
 
 .shopModalPreviewColumn,
 .shopModalCatalogColumn {
+  min-height: 0;
   min-width: 0;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 24px;
+  scrollbar-gutter: stable;
 }
 
 .shopModalPreviewColumn {
@@ -629,6 +635,7 @@
   }
 
   .shopModal {
+    height: 94svh;
     max-height: 94svh;
     border-radius: 22px 22px 0 0;
   }
@@ -638,26 +645,35 @@
   }
 
   .shopModalBody {
-    display: block;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
     min-height: 0;
-    max-height: calc(94svh - 84px);
-    overflow: auto;
+    overflow: hidden;
   }
 
   .shopModalPreviewColumn,
   .shopModalCatalogColumn {
-    overflow: visible;
     padding: 18px;
   }
 
   .shopModalPreviewColumn {
+    overflow: hidden;
     border-right: 0;
     border-bottom: 1px solid var(--which-border);
   }
 
+  .shopModalCatalogColumn {
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
   .shopPreviewStage,
   .shopPreviewEmpty {
-    min-height: 280px;
+    min-height: clamp(180px, 26svh, 250px);
   }
 
   .shopCatalogGrid {

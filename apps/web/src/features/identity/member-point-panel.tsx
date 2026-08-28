@@ -298,7 +298,6 @@ export function MemberPointPanel({
         onAction={(item) => void mutateItem(item)}
         onClose={() => setShopOpen(false)}
         onPreview={setPreviewItem}
-        onRefresh={() => void openShop()}
         pending={shopPending}
         previewItem={previewItem}
         shop={shop}
