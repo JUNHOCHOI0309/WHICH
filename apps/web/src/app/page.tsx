@@ -8,7 +8,10 @@ import { creatorSubmissionsEnabled } from "@/lib/server/feature-flags";
 export const metadata: Metadata = {
   alternates: {
     canonical: "/",
-    types: { "application/atom+xml": "/feed.xml" },
+    types: {
+      "application/atom+xml": "/feed.xml",
+      "application/rss+xml": "/rss.xml",
+    },
   },
 };
 

@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import robots from "@/app/robots";
 import sitemap from "@/app/sitemap";
 import { GET as readAtomFeed } from "@/app/feed.xml/route";
+import { GET as readRssFeed } from "@/app/rss.xml/route";
 import { StructuredData } from "@/components/search/structured-data";
 import type { PublicIssue, PublicIssueCatalog } from "@/lib/contracts";
 import {
@@ -157,6 +158,40 @@ describe("search discovery foundation", () => {
     expect(body).not.toContain("recommendationRequestId");
   });
 
+  it("publishes a Naver-compatible RSS 2.0 feed", async () => {
+    const catalog: PublicIssueCatalog = {
+      items: [
+        {
+          id: issue.id,
+          version: issue.version,
+          question: issue.question,
+          context: issue.context,
+          publishedAt: issue.publishedAt,
+          categoryCode: issue.categoryCode,
+          choices: issue.choices,
+        },
+      ],
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json(catalog)),
+    );
+
+    const response = await readRssFeed();
+    const body = await response.text();
+
+    expect(response.headers.get("content-type")).toContain("application/rss+xml");
+    expect(body).toContain('<rss version="2.0">');
+    expect(body).toContain("<channel>");
+    expect(body).toContain(
+      `<guid isPermaLink="true">${canonicalUrl(`/issues/${issue.id}`)}</guid>`,
+    );
+    expect(body).toContain(issue.context);
+    expect(body).toContain("A. 바로 자기 · B. 조금 더 놀기");
+    expect(body).not.toContain("<feed");
+    expect(body).not.toContain("recommendationRequestId");
+  });
+
   it("returns an error during a catalog outage instead of publishing empty inventory", async () => {
     vi.stubGlobal(
       "fetch",
@@ -167,6 +202,7 @@ describe("search discovery foundation", () => {
     await expect(readAtomFeed()).rejects.toThrow(
       "Public Issue catalog read failed with status 503",
     );
+    await expect(readRssFeed()).rejects.toThrow("Public Issue catalog read failed with status 503");
   });
 
   it("keeps an empty Atom feed timestamp stable", async () => {
@@ -180,5 +216,20 @@ describe("search discovery foundation", () => {
 
     expect(body).toContain("<updated>2026-08-29T00:00:00.000Z</updated>");
     expect(body).not.toContain("<entry>");
+  });
+
+  it("keeps an empty RSS feed timestamp stable", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json({ items: [] } satisfies PublicIssueCatalog)),
+    );
+
+    const response = await readRssFeed();
+    const body = await response.text();
+
+    expect(body).toContain(
+      `<lastBuildDate>${new Date("2026-08-29T00:00:00.000Z").toUTCString()}</lastBuildDate>`,
+    );
+    expect(body).not.toContain("<item>");
   });
 });
