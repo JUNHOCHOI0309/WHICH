@@ -26,6 +26,7 @@ import { createMemberPointService } from "./modules/points/member-service.js";
 import { createPointShopService } from "./modules/point-shop/service.js";
 import { createContentReportService } from "./modules/reports/service.js";
 import { createContentRevisionService } from "./modules/content-revisions/service.js";
+import { createMemberModerationService } from "./modules/member-moderation/service.js";
 
 loadEnvironment({
   path: [resolve(process.cwd(), "../../.env.local"), resolve(process.cwd(), "../../.env")],
@@ -94,6 +95,9 @@ const app = await buildApp(config, {
   pointShop: createPointShopService(database.db),
   contentReports: createContentReportService(database.db),
   contentRevisions: createContentRevisionService(database.db),
+  memberModeration: createMemberModerationService(database.db, {
+    ...(issueMediaStorage ? { publicUrl: (key) => issueMediaStorage.publicUrl(key) } : {}),
+  }),
 });
 
 try {

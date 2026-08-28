@@ -181,6 +181,7 @@ export function MemberVoteHistoryExperience({
               <Link aria-current="page" className={styles.profileTabActive} href="/me/votes">
                 투표 기록
               </Link>
+              <Link href="/me/moderation">Moderation</Link>
             </nav>
 
             {groups.length === 0 ? (

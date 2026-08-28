@@ -253,8 +253,11 @@ export const moderationAuditEvents = pgTable(
     ),
     check(
       "moderation_audit_events_entity_check",
-      sql`${table.entityType} in ('TARGET', 'RUN', 'CASE', 'ACTION', 'RECONCILIATION')`,
+      sql`${table.entityType} in ('TARGET', 'RUN', 'CASE', 'ACTION', 'RECONCILIATION', 'NOTICE', 'APPEAL', 'RIGHTS_REQUEST')`,
     ),
-    check("moderation_audit_events_actor_check", sql`${table.actorType} in ('OPERATOR', 'SYSTEM')`),
+    check(
+      "moderation_audit_events_actor_check",
+      sql`${table.actorType} in ('MEMBER', 'OPERATOR', 'SYSTEM')`,
+    ),
   ],
 );
