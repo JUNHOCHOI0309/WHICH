@@ -185,10 +185,66 @@ export type OpsEditorialPage = {
   nextCursor: string | null;
 };
 
+export const OPS_POINT_SHOP_STATUSES = ["ACTIVE", "PAUSED", "RETIRED"] as const;
+export type OpsPointShopStatus = (typeof OPS_POINT_SHOP_STATUSES)[number];
+export const OPS_POINT_SHOP_EQUIP_SLOTS = [
+  "PROFILE_ACCENT",
+  "AVATAR_FRAME",
+  "SHARE_BACKGROUND",
+] as const;
+export type OpsPointShopEquipSlot = (typeof OPS_POINT_SHOP_EQUIP_SLOTS)[number];
+export const OPS_POINT_SHOP_THEME_FAMILIES = [
+  "SIGNAL_GRID",
+  "PAPER_VOTE",
+  "NEON_RIFT",
+  "SOFT_ORBIT",
+] as const;
+export type OpsPointShopThemeFamily = (typeof OPS_POINT_SHOP_THEME_FAMILIES)[number];
+
+export type OpsPointShopItem = {
+  id: string;
+  code: string;
+  equipSlot: OpsPointShopEquipSlot;
+  themeFamily: OpsPointShopThemeFamily;
+  name: string;
+  description: string;
+  price: number;
+  status: OpsPointShopStatus;
+  currentVersion: number;
+  purchaseCount: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type OpsPointShopAuditEntry = {
+  id: string;
+  eventType: "OPS_POINT_SHOP_ITEM_CREATED" | "OPS_POINT_SHOP_ITEM_UPDATED";
+  outcome: "SUCCEEDED" | "FAILED";
+  operator: string;
+  requestId: string | null;
+  metadata: Record<string, unknown>;
+  occurredAt: string;
+};
+
+export type OpsPointShopView = {
+  schemaVersion: 1;
+  generatedAt: string;
+  counts: Record<OpsPointShopStatus, number>;
+  items: OpsPointShopItem[];
+  audit: OpsPointShopAuditEntry[];
+};
+
 export class OpsReviewConflictError extends Error {
   constructor(public readonly current: OpsEditorialDecision | null) {
     super("The Editorial Review decision changed after this screen was loaded.");
     this.name = "OpsReviewConflictError";
+  }
+}
+
+export class OpsPointShopConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "OpsPointShopConflictError";
   }
 }
 
@@ -229,4 +285,26 @@ export interface OpsDashboardService {
     checks: OpsEditorialDecision["checks"];
     requestId?: string;
   }): Promise<OpsEditorialDecision | null>;
+  readPointShop(input: { memberId: string; requestId?: string }): Promise<OpsPointShopView | null>;
+  createPointShopItem(input: {
+    memberId: string;
+    code: string;
+    equipSlot: OpsPointShopEquipSlot;
+    themeFamily: OpsPointShopThemeFamily;
+    name: string;
+    description: string;
+    price: number;
+    status: Exclude<OpsPointShopStatus, "RETIRED">;
+    reason: string;
+    requestId?: string;
+  }): Promise<OpsPointShopItem | null>;
+  updatePointShopItem(input: {
+    memberId: string;
+    itemId: string;
+    expectedUpdatedAt: string;
+    price: number;
+    status: Exclude<OpsPointShopStatus, "RETIRED">;
+    reason: string;
+    requestId?: string;
+  }): Promise<OpsPointShopItem | null>;
 }

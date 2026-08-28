@@ -9,6 +9,8 @@ vi.mock("jose", () => ({
 import { GET as getEditorial } from "@/app/api/ops/editorial/route";
 import { PUT as putDecision } from "@/app/api/ops/editorial/[candidateId]/decision/route";
 import { GET as getMembers } from "@/app/api/ops/members/route";
+import { GET as getPointShop, POST as postPointShopItem } from "@/app/api/ops/point-shop/route";
+import { PATCH as patchPointShopItem } from "@/app/api/ops/point-shop/[itemId]/route";
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -109,5 +111,58 @@ describe("operator management BFF", () => {
     );
     expect(response.status).toBe(409);
     expect(await response.json()).toMatchObject({ code: "REVISION_CONFLICT" });
+  });
+
+  it("forwards Point Shop reads through the protected Ops boundary", async () => {
+    const upstream = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      expect(String(input)).toBe("http://localhost:4000/v1/internal/ops/point-shop");
+      expect(new Headers(init?.headers).get("authorization")).toBe("Bearer member-token");
+      return new Response(JSON.stringify({ schemaVersion: 1, items: [], audit: [] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    });
+    vi.stubGlobal("fetch", upstream);
+    const response = await getPointShop(
+      new NextRequest("https://whichone.site/api/ops/point-shop", {
+        headers: { cookie: "which_member_session=member-token" },
+      }),
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+  });
+
+  it("requires same-origin mutations for Point Shop creation and updates", async () => {
+    const upstream = vi.fn();
+    vi.stubGlobal("fetch", upstream);
+    const createResponse = await postPointShopItem(
+      new NextRequest("https://whichone.site/api/ops/point-shop", {
+        method: "POST",
+        headers: {
+          cookie: "which_member_session=member-token",
+          origin: "https://attacker.example",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({}),
+      }),
+    );
+    const updateResponse = await patchPointShopItem(
+      new NextRequest(
+        "https://whichone.site/api/ops/point-shop/10503719-4d3b-4abf-a1ee-ec0920d72e9a",
+        {
+          method: "PATCH",
+          headers: {
+            cookie: "which_member_session=member-token",
+            origin: "https://attacker.example",
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({}),
+        },
+      ),
+      { params: Promise.resolve({ itemId: "10503719-4d3b-4abf-a1ee-ec0920d72e9a" }) },
+    );
+    expect(createResponse.status).toBe(403);
+    expect(updateResponse.status).toBe(403);
+    expect(upstream).not.toHaveBeenCalled();
   });
 });

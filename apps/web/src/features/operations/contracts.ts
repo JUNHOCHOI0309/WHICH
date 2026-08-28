@@ -169,6 +169,40 @@ export type OpsEditorialPage = {
   nextCursor: string | null;
 };
 
+export type OpsPointShopStatus = "ACTIVE" | "PAUSED" | "RETIRED";
+export type OpsPointShopEquipSlot = "PROFILE_ACCENT" | "AVATAR_FRAME" | "SHARE_BACKGROUND";
+export type OpsPointShopThemeFamily = "SIGNAL_GRID" | "PAPER_VOTE" | "NEON_RIFT" | "SOFT_ORBIT";
+export type OpsPointShopItem = {
+  id: string;
+  code: string;
+  equipSlot: OpsPointShopEquipSlot;
+  themeFamily: OpsPointShopThemeFamily;
+  name: string;
+  description: string;
+  price: number;
+  status: OpsPointShopStatus;
+  currentVersion: number;
+  purchaseCount: number;
+  createdAt: string;
+  updatedAt: string;
+};
+export type OpsPointShopAuditEntry = {
+  id: string;
+  eventType: "OPS_POINT_SHOP_ITEM_CREATED" | "OPS_POINT_SHOP_ITEM_UPDATED";
+  outcome: "SUCCEEDED" | "FAILED";
+  operator: string;
+  requestId: string | null;
+  metadata: Record<string, unknown>;
+  occurredAt: string;
+};
+export type OpsPointShopView = {
+  schemaVersion: 1;
+  generatedAt: string;
+  counts: Record<OpsPointShopStatus, number>;
+  items: OpsPointShopItem[];
+  audit: OpsPointShopAuditEntry[];
+};
+
 export type OpsMediaReviewStatus = "PENDING" | "APPROVED" | "REJECTED" | "HIDDEN" | "DELETED";
 export type OpsMediaReviewDecision = {
   id: string;

@@ -8,12 +8,13 @@ import { OpsEditorialPanel } from "./ops-editorial-panel";
 import { OpsMembersPanel } from "./ops-members-panel";
 import { OpsMediaReviewPanel } from "./ops-media-review-panel";
 import { OpsModerationQueuePanel } from "./ops-moderation-queue-panel";
+import { OpsPointShopPanel } from "./ops-point-shop-panel";
 import { OpsRankingPreviewPanel } from "./ops-ranking-preview-panel";
 import styles from "./ops-dashboard-experience.module.css";
 
 type WindowDays = 1 | 7 | 30;
 type Screen = "loading" | "ready" | "login" | "denied" | "error";
-type Tab = "overview" | "members" | "editorial" | "moderation" | "media" | "ranking";
+type Tab = "overview" | "members" | "editorial" | "moderation" | "media" | "pointShop" | "ranking";
 
 const stageLabels: Array<[keyof OpsDashboardSnapshot["funnel"]["stages"], string]> = [
   ["viewable", "Viewable"],
@@ -163,6 +164,7 @@ export function OpsDashboardExperience() {
                 ["editorial", "Issue Review"],
                 ["moderation", "Moderation Queue"],
                 ["media", "Image Review"],
+                ["pointShop", "Point Shop"],
                 ["ranking", "Ranking Preview"],
               ] as const
             ).map(([value, label]) => (
@@ -443,6 +445,8 @@ export function OpsDashboardExperience() {
             <OpsEditorialPanel />
           ) : tab === "media" ? (
             <OpsMediaReviewPanel />
+          ) : tab === "pointShop" ? (
+            <OpsPointShopPanel />
           ) : (
             <OpsRankingPreviewPanel />
           )}

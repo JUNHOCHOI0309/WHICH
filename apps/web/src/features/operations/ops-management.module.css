@@ -65,6 +65,13 @@
   background: #fff6f1;
   color: #7d3517;
 }
+.successNotice {
+  margin: 0;
+  padding: 16px 18px;
+  border-left: 4px solid #0a93aa;
+  background: #ecfafc;
+  color: #086f80;
+}
 .tableWrap {
   overflow-x: auto;
   border: 1px solid #d6e1e5;
@@ -173,6 +180,198 @@
   display: block;
   margin-top: 5px;
   font-size: 22px;
+}
+.createButton,
+.primaryAction {
+  min-height: 48px;
+  border: 1px solid #082b35;
+  border-radius: 14px;
+  background: #082b35;
+  color: #fff;
+  font: inherit;
+  font-weight: 900;
+  cursor: pointer;
+}
+.createButton {
+  padding: 14px 18px;
+}
+.primaryAction {
+  padding: 0 22px;
+}
+.createButton:disabled,
+.primaryAction:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+.shopCreatePanel,
+.shopDetail,
+.auditPanel {
+  padding: 22px;
+  border: 1px solid #d6e1e5;
+  border-radius: 18px;
+  background: #fff;
+}
+.sectionTitle {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 18px;
+}
+.sectionTitle h2 {
+  margin: 0;
+  font-size: 24px;
+  letter-spacing: -0.7px;
+}
+.sectionTitle span {
+  color: #65737b;
+  font-size: 12px;
+}
+.shopFormGrid,
+.shopEditForm {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.shopFormGrid label,
+.shopEditForm label {
+  display: grid;
+  gap: 7px;
+  color: #53636b;
+  font-size: 12px;
+  font-weight: 800;
+}
+.shopFormGrid input,
+.shopFormGrid select,
+.shopFormGrid textarea,
+.shopEditForm input,
+.shopEditForm select,
+.shopEditForm textarea {
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid #c7d6db;
+  border-radius: 12px;
+  background: #fff;
+  color: #102029;
+  font: inherit;
+}
+.shopFormGrid textarea,
+.shopEditForm textarea {
+  min-height: 88px;
+  resize: vertical;
+}
+.wideField {
+  grid-column: 1 / -1;
+}
+.shopCreatePanel > .primaryAction {
+  margin-top: 16px;
+}
+.shopOpsGrid {
+  display: grid;
+  grid-template-columns: minmax(300px, 0.85fr) minmax(420px, 1.15fr);
+  gap: 18px;
+  align-items: start;
+}
+.shopItemList {
+  max-height: 720px;
+  overflow-y: auto;
+  border: 1px solid #d6e1e5;
+  border-radius: 18px;
+  background: #fff;
+}
+.shopItem {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 18px;
+  border: 0;
+  border-bottom: 1px solid #e5ecef;
+  background: #fff;
+  color: #102029;
+  text-align: left;
+  cursor: pointer;
+}
+.shopItem:last-child {
+  border-bottom: 0;
+}
+.shopItem[aria-pressed="true"] {
+  background: #eaf8fb;
+  box-shadow: inset 4px 0 #08a4bb;
+}
+.shopItem > span {
+  display: grid;
+  gap: 5px;
+}
+.shopItem > span:last-child {
+  justify-items: end;
+}
+.shopItem small {
+  color: #6b7b83;
+}
+.shopItem small[data-status="PAUSED"],
+.shopItem small[data-status="RETIRED"] {
+  color: #c64d20;
+}
+.shopDetail {
+  position: sticky;
+  top: 18px;
+}
+.shopDescription {
+  margin: 0 0 18px;
+  color: #63727a;
+  line-height: 1.65;
+}
+.shopFacts {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin: 0 0 20px;
+}
+.shopFacts div {
+  padding: 12px;
+  border-radius: 12px;
+  background: #f1f6f7;
+}
+.shopFacts dt {
+  color: #64727a;
+  font-size: 10px;
+  font-weight: 800;
+}
+.shopFacts dd {
+  margin: 5px 0 0;
+  font-size: 13px;
+  font-weight: 900;
+}
+.shopEditForm .primaryAction {
+  grid-column: 1 / -1;
+}
+.auditList {
+  display: grid;
+}
+.auditList article {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 14px 0;
+  border-bottom: 1px solid #e5ecef;
+}
+.auditList article:last-child {
+  border-bottom: 0;
+}
+.auditList article > div {
+  display: grid;
+  gap: 5px;
+}
+.auditList article > div:last-child {
+  justify-items: end;
+  text-align: right;
+}
+.auditList span {
+  color: #68777e;
+  font-size: 12px;
 }
 .candidate {
   width: 100%;
@@ -395,6 +594,12 @@
   .counts {
     grid-template-columns: repeat(2, 1fr);
   }
+  .shopOpsGrid {
+    grid-template-columns: 1fr;
+  }
+  .shopDetail {
+    position: static;
+  }
 }
 @media (max-width: 560px) {
   .detail {
@@ -402,5 +607,23 @@
   }
   .decisionActions {
     grid-template-columns: 1fr;
+  }
+  .shopFormGrid,
+  .shopEditForm,
+  .shopFacts {
+    grid-template-columns: 1fr;
+  }
+  .wideField,
+  .shopEditForm .primaryAction {
+    grid-column: auto;
+  }
+  .sectionTitle,
+  .auditList article {
+    align-items: start;
+    flex-direction: column;
+  }
+  .auditList article > div:last-child {
+    justify-items: start;
+    text-align: left;
   }
 }
