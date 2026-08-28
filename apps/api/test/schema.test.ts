@@ -14,6 +14,8 @@ import {
   commentReportAttempts,
   commentReportReasonEnum,
   commentReports,
+  contentReportAttempts,
+  contentReports,
   guestMemberLinks,
   interestProfiles,
   issueChoices,
@@ -32,6 +34,10 @@ import {
   pointLedgerEntries,
   pointLedgerEntryTypeEnum,
   resultSnapshots,
+  reportCases,
+  reportClusters,
+  reporterSignalSnapshots,
+  reportSignalSnapshots,
   subjectInterests,
   voteAggregates,
   voteAttempts,
@@ -133,6 +139,32 @@ describe("data architecture v1 schema", () => {
       "REJECTED_ABUSE",
       "INVALIDATED",
     ]);
+  });
+
+  it("keeps report cases, clusters, and reporter Signals explicit and shadow-only", () => {
+    expect(
+      [
+        reportCases,
+        reportClusters,
+        contentReports,
+        contentReportAttempts,
+        reportSignalSnapshots,
+        reporterSignalSnapshots,
+      ].map((table) => getTableConfig(table).name),
+    ).toEqual([
+      "report_cases",
+      "report_clusters",
+      "content_reports",
+      "content_report_attempts",
+      "report_signal_snapshots",
+      "reporter_signal_snapshots",
+    ]);
+    expect(getTableConfig(reportSignalSnapshots).checks.map((check) => check.name)).toContain(
+      "report_signal_snapshots_shadow_check",
+    );
+    expect(getTableConfig(reporterSignalSnapshots).checks.map((check) => check.name)).toContain(
+      "reporter_signal_snapshots_shadow_check",
+    );
   });
 
   it("keeps the point ledger source of truth constrained and auditable", () => {

@@ -11,6 +11,7 @@ import {
   comments,
   commentReactions,
   commentReports,
+  contentReports,
   interestProfiles,
   issueChoices,
   issueAuthors,
@@ -1047,6 +1048,47 @@ export function createMemberIdentityService(
                   .update(commentReports)
                   .set({ subjectId: memberSubject.id, updatedAt: now })
                   .where(eq(commentReports.id, guestReport.id));
+                migratedReports += 1;
+              }
+            }
+
+            const guestContentReports = await transaction
+              .select()
+              .from(contentReports)
+              .where(
+                and(
+                  eq(contentReports.subjectId, guestSubject.id),
+                  eq(contentReports.counted, true),
+                ),
+              );
+            for (const guestReport of guestContentReports) {
+              const [memberReport] = await transaction
+                .select({ id: contentReports.id })
+                .from(contentReports)
+                .where(
+                  and(
+                    eq(contentReports.targetType, guestReport.targetType),
+                    eq(contentReports.targetId, guestReport.targetId),
+                    eq(contentReports.subjectId, memberSubject.id),
+                    eq(contentReports.counted, true),
+                  ),
+                )
+                .limit(1);
+              if (memberReport) {
+                await transaction
+                  .update(contentReports)
+                  .set({
+                    counted: false,
+                    mergedIntoReportId: memberReport.id,
+                    updatedAt: now,
+                  })
+                  .where(eq(contentReports.id, guestReport.id));
+                mergedDuplicateReports += 1;
+              } else {
+                await transaction
+                  .update(contentReports)
+                  .set({ subjectId: memberSubject.id, updatedAt: now })
+                  .where(eq(contentReports.id, guestReport.id));
                 migratedReports += 1;
               }
             }

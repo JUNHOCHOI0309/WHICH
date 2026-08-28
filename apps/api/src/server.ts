@@ -23,6 +23,7 @@ import {
 import { createPointIntegrityService } from "./modules/points/integrity.js";
 import { createMemberPointService } from "./modules/points/member-service.js";
 import { createPointShopService } from "./modules/point-shop/service.js";
+import { createContentReportService } from "./modules/reports/service.js";
 
 loadEnvironment({
   path: [resolve(process.cwd(), "../../.env.local"), resolve(process.cwd(), "../../.env")],
@@ -83,6 +84,7 @@ const app = await buildApp(config, {
   }),
   memberPoints: createMemberPointService(database.db),
   pointShop: createPointShopService(database.db),
+  contentReports: createContentReportService(database.db),
 });
 
 try {

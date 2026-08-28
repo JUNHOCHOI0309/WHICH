@@ -33,6 +33,8 @@ import type { MemberPointService } from "./modules/points/member-contracts.js";
 import { registerMemberPointRoutes } from "./modules/points/member-routes.js";
 import type { PointShopService } from "./modules/point-shop/contracts.js";
 import { registerPointShopMemberRoutes } from "./modules/point-shop/member-routes.js";
+import type { ContentReportService } from "./modules/reports/contracts.js";
+import { registerContentReportRoutes } from "./modules/reports/routes.js";
 
 export type AppDependencies = Pick<Database, "ping" | "close"> & {
   issueReader: IssueReadService;
@@ -49,6 +51,7 @@ export type AppDependencies = Pick<Database, "ping" | "close"> & {
   pointIntegrity?: PointIntegrityService;
   memberPoints?: MemberPointService;
   pointShop?: PointShopService;
+  contentReports?: ContentReportService;
 };
 
 const statusSchema = Type.Object({
@@ -128,6 +131,9 @@ export async function buildApp(config: AppConfig, database: AppDependencies) {
   await registerVotingRoutes(app, database.guestVotes, config.auth.internalSecret);
   await registerCommentRoutes(app, database.commentReader, config.auth.moderationInternalSecret);
   await registerMemberIdentityRoutes(app, database.memberIdentity, config.auth.internalSecret);
+  if (database.contentReports) {
+    await registerContentReportRoutes(app, database.contentReports);
+  }
   if (database.memberPoints) {
     registerMemberPointRoutes(app, database.memberPoints, database.memberIdentity);
   }
