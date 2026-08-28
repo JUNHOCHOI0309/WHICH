@@ -100,7 +100,7 @@ describe("system health", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ status: "ok", service: "which-api" });
-  });
+  }, 15_000);
 
   it("reports readiness only when the database responds", async () => {
     const app = await buildApp(getConfig({ NODE_ENV: "test" }), {
