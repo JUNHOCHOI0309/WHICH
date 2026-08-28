@@ -17,7 +17,15 @@ export type MemberModerationNotice = {
   nextStep: string;
   effectiveAt: string;
   expiresAt: string | null;
+  readAt: string | null;
   createdAt: string;
+};
+
+export type MemberNotificationCenter = {
+  schemaVersion: 1;
+  generatedAt: string;
+  unreadCount: number;
+  items: MemberModerationNotice[];
 };
 
 export type MemberModerationAppeal = {
@@ -80,6 +88,8 @@ export type MemberModerationCenter = {
 
 export interface MemberModerationService {
   readCenter(memberId: string): Promise<MemberModerationCenter>;
+  readNotifications(memberId: string): Promise<MemberNotificationCenter>;
+  markNotificationsRead(memberId: string, noticeIds: string[]): Promise<{ updated: number }>;
   createAppeal(input: {
     memberId: string;
     targetType: MemberModerationTargetType;

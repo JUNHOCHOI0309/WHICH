@@ -246,13 +246,7 @@ export function MemberModerationExperience({
               </div>
               <strong>{pendingCount}건 검수 대기</strong>
             </header>
-            <nav className={styles.tabs} aria-label="내 기록 메뉴">
-              <Link href="/me">프로필</Link>
-              <Link href="/me/votes">투표 기록</Link>
-              <Link aria-current="page" className={styles.active} href="/me/moderation">
-                Moderation
-              </Link>
-            </nav>
+            <Link href="/me">← 내 기록으로</Link>
             <section className={styles.section}>
               <div className={styles.heading}>
                 <div>

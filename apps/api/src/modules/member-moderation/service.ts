@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 
-import { and, desc, eq, inArray, or } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, or } from "drizzle-orm";
 
 import type { Database } from "../../database/client.js";
 import {
@@ -25,6 +25,7 @@ import type {
   MemberModerationAppeal,
   MemberModerationAsset,
   MemberModerationCenter,
+  MemberModerationNotice,
   MemberModerationRightsCase,
   MemberModerationService,
   MemberModerationTargetType,
@@ -69,6 +70,23 @@ function rightsView(row: typeof moderationRightsCases.$inferSelect): MemberModer
     submittedAt: row.submittedAt.toISOString(),
     resolvedAt: row.resolvedAt?.toISOString() ?? null,
     updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
+function noticeView(row: typeof memberModerationNotices.$inferSelect): MemberModerationNotice {
+  return {
+    id: row.id,
+    targetType: row.targetType as MemberModerationTargetType,
+    targetId: row.targetId,
+    policyVersion: row.policyVersion,
+    reasonCode: row.reasonCode,
+    actionType: row.actionType,
+    summary: row.summary,
+    nextStep: row.nextStep,
+    effectiveAt: row.effectiveAt.toISOString(),
+    expiresAt: row.expiresAt?.toISOString() ?? null,
+    readAt: row.readAt?.toISOString() ?? null,
+    createdAt: row.createdAt.toISOString(),
   };
 }
 
@@ -380,22 +398,42 @@ export function createMemberModerationService(
             ? [{ assetId: asset.id, url: options.publicUrl(asset.objectKey) }]
             : [],
         ),
-        notices: notices.map((notice) => ({
-          id: notice.id,
-          targetType: notice.targetType as MemberModerationTargetType,
-          targetId: notice.targetId,
-          policyVersion: notice.policyVersion,
-          reasonCode: notice.reasonCode,
-          actionType: notice.actionType,
-          summary: notice.summary,
-          nextStep: notice.nextStep,
-          effectiveAt: notice.effectiveAt.toISOString(),
-          expiresAt: notice.expiresAt?.toISOString() ?? null,
-          createdAt: notice.createdAt.toISOString(),
-        })),
+        notices: notices.map(noticeView),
         appeals: appeals.map(appealView),
         rightsCases: rightsCases.map(rightsView),
       };
+    },
+
+    async readNotifications(memberId) {
+      const notices = await database
+        .select()
+        .from(memberModerationNotices)
+        .where(eq(memberModerationNotices.memberId, memberId))
+        .orderBy(desc(memberModerationNotices.createdAt))
+        .limit(30);
+      return {
+        schemaVersion: 1,
+        generatedAt: new Date().toISOString(),
+        unreadCount: notices.filter((notice) => !notice.readAt).length,
+        items: notices.map(noticeView),
+      };
+    },
+
+    async markNotificationsRead(memberId, noticeIds) {
+      const uniqueIds = [...new Set(noticeIds)];
+      if (uniqueIds.length === 0) return { updated: 0 };
+      const updated = await database
+        .update(memberModerationNotices)
+        .set({ readAt: new Date() })
+        .where(
+          and(
+            eq(memberModerationNotices.memberId, memberId),
+            inArray(memberModerationNotices.id, uniqueIds),
+            isNull(memberModerationNotices.readAt),
+          ),
+        )
+        .returning({ id: memberModerationNotices.id });
+      return { updated: updated.length };
     },
 
     async createAppeal(input) {

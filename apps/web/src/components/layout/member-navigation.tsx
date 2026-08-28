@@ -1,14 +1,19 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import {
+  useCallback,
   createContext,
   type ReactNode,
   useContext,
   useEffect,
+  useRef,
   useState,
   useSyncExternalStore,
 } from "react";
+
+import type { MemberNotificationCenter } from "@/lib/contracts";
 
 import styles from "./which-shell.module.css";
 import { useQuestionComposer } from "../question-composer/question-composer";
@@ -141,6 +146,189 @@ export function HeaderMemberNavigation() {
         "로그인"
       )}
     </Link>
+  );
+}
+
+function relativeTime(value: string) {
+  const seconds = Math.round((new Date(value).getTime() - Date.now()) / 1_000);
+  const absolute = Math.abs(seconds);
+  const formatter = new Intl.RelativeTimeFormat("ko", { numeric: "auto" });
+  if (absolute < 60) return formatter.format(seconds, "second");
+  if (absolute < 3_600) return formatter.format(Math.round(seconds / 60), "minute");
+  if (absolute < 86_400) return formatter.format(Math.round(seconds / 3_600), "hour");
+  if (absolute < 604_800) return formatter.format(Math.round(seconds / 86_400), "day");
+  return new Intl.DateTimeFormat("ko-KR", { month: "short", day: "numeric" }).format(
+    new Date(value),
+  );
+}
+
+async function readNotificationCenter() {
+  const response = await fetch("/api/me/notifications", {
+    cache: "no-store",
+    credentials: "same-origin",
+  });
+  if (!response.ok) throw new Error("notifications unavailable");
+  return (await response.json()) as MemberNotificationCenter;
+}
+
+export function HeaderMemberNotifications() {
+  const { member, state } = useContext(MemberNavigationContext);
+  const [open, setOpen] = useState(false);
+  const [center, setCenter] = useState<MemberNotificationCenter | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
+
+  const load = useCallback(async (markRead = false) => {
+    setLoading(true);
+    setError(false);
+    try {
+      const next = await readNotificationCenter();
+      setCenter(next);
+      const unreadIds = markRead
+        ? next.items.filter((notice) => !notice.readAt).map((notice) => notice.id)
+        : [];
+      if (unreadIds.length) {
+        const readResponse = await fetch("/api/me/notifications", {
+          method: "PATCH",
+          credentials: "same-origin",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ noticeIds: unreadIds }),
+        });
+        if (readResponse.ok) {
+          const readAt = new Date().toISOString();
+          setCenter((current) =>
+            current
+              ? {
+                  ...current,
+                  unreadCount: 0,
+                  items: current.items.map((notice) =>
+                    unreadIds.includes(notice.id) ? { ...notice, readAt } : notice,
+                  ),
+                }
+              : current,
+          );
+        }
+      }
+    } catch {
+      setError(true);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (state !== "member") return;
+    let active = true;
+    void (async () => {
+      try {
+        const next = await readNotificationCenter();
+        if (!active) return;
+        setCenter(next);
+        setError(false);
+      } catch {
+        if (active) setError(true);
+      } finally {
+        if (active) setLoading(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [state, member?.id]);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (event: MouseEvent | TouchEvent) => {
+      if (!root.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("touchstart", close);
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("touchstart", close);
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [open]);
+
+  if (state !== "member" || !member) return null;
+
+  const unreadCount = center?.unreadCount ?? 0;
+  return (
+    <div className={styles.notificationRoot} ref={root}>
+      <button
+        type="button"
+        className={styles.notificationButton}
+        aria-label={unreadCount ? `알림 ${unreadCount}개` : "알림"}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-controls="member-notification-panel"
+        onClick={() => {
+          const nextOpen = !open;
+          setOpen(nextOpen);
+          if (nextOpen) void load(true);
+        }}
+      >
+        <Image src="/icons/bell.png" alt="" aria-hidden="true" width={21} height={21} />
+        {unreadCount ? (
+          <span className={styles.notificationBadge} aria-hidden="true">
+            {unreadCount > 99 ? "99+" : unreadCount}
+          </span>
+        ) : null}
+      </button>
+
+      {open ? (
+        <section
+          className={styles.notificationPanel}
+          id="member-notification-panel"
+          role="dialog"
+          aria-label="알림"
+        >
+          <header>
+            <div>
+              <strong>알림</strong>
+              <span>검수와 조치 내용을 알려드려요.</span>
+            </div>
+            <button type="button" aria-label="알림 닫기" onClick={() => setOpen(false)}>
+              ×
+            </button>
+          </header>
+          <div className={styles.notificationList} aria-live="polite">
+            {loading && !center ? <p className={styles.notificationState}>불러오는 중...</p> : null}
+            {error ? (
+              <div className={styles.notificationState} role="alert">
+                <p>알림을 불러오지 못했어요.</p>
+                <button type="button" onClick={() => void load(true)}>
+                  다시 시도
+                </button>
+              </div>
+            ) : null}
+            {!loading && !error && center?.items.length === 0 ? (
+              <p className={styles.notificationState}>새 알림이 없습니다.</p>
+            ) : null}
+            {!error
+              ? center?.items.map((notice) => (
+                  <article
+                    className={styles.notificationItem}
+                    data-unread={!notice.readAt ? "true" : undefined}
+                    key={notice.id}
+                  >
+                    <div>
+                      <strong>{notice.summary}</strong>
+                      <time dateTime={notice.effectiveAt}>{relativeTime(notice.effectiveAt)}</time>
+                    </div>
+                    <p>{notice.nextStep}</p>
+                  </article>
+                ))
+              : null}
+          </div>
+        </section>
+      ) : null}
+    </div>
   );
 }
 

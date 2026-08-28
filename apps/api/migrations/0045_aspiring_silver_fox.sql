@@ -1,0 +1,1 @@
+ALTER TABLE "member_moderation_notices" ADD COLUMN "read_at" timestamp with time zone;

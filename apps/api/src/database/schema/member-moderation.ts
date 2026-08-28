@@ -19,6 +19,7 @@ export const memberModerationNotices = pgTable(
     nextStep: text("next_step").notNull(),
     effectiveAt: timestamp("effective_at", { withTimezone: true }).notNull(),
     expiresAt: timestamp("expires_at", { withTimezone: true }),
+    readAt: timestamp("read_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [

@@ -14,6 +14,11 @@ const targetTypeSchema = Type.Union(
   MEMBER_MODERATION_TARGET_TYPES.map((value) => Type.Literal(value)),
 );
 const evidenceSchema = Type.Optional(Type.Record(Type.String(), Type.Unknown()));
+const noticeIdsSchema = Type.Array(Type.String({ format: "uuid" }), {
+  minItems: 1,
+  maxItems: 30,
+  uniqueItems: true,
+});
 type Headers = { authorization?: string };
 
 export async function registerMemberModerationRoutes(
@@ -66,6 +71,35 @@ export async function registerMemberModerationRoutes(
         const memberId = await authenticate(request, reply);
         if (!memberId) return;
         return reply.send(await service.readCenter(memberId));
+      },
+    );
+
+    memberApp.get<{ Headers: Headers }>(
+      "/v1/me/notifications",
+      { schema: { tags: ["identity"], headers: headersSchema } },
+      async (request, reply) => {
+        const memberId = await authenticate(request, reply);
+        if (!memberId) return;
+        return reply.send(await service.readNotifications(memberId));
+      },
+    );
+
+    memberApp.patch<{
+      Headers: Headers;
+      Body: { noticeIds: string[] };
+    }>(
+      "/v1/me/notifications",
+      {
+        schema: {
+          tags: ["identity"],
+          headers: headersSchema,
+          body: Type.Object({ noticeIds: noticeIdsSchema }, { additionalProperties: false }),
+        },
+      },
+      async (request, reply) => {
+        const memberId = await authenticate(request, reply);
+        if (!memberId) return;
+        return reply.send(await service.markNotificationsRead(memberId, request.body.noticeIds));
       },
     );
 

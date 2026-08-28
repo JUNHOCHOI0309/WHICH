@@ -8,6 +8,7 @@ import type { PublicIssueFeed } from "@/lib/contracts";
 
 import {
   HeaderMemberNavigation,
+  HeaderMemberNotifications,
   MemberNavigationLink,
   MemberQuestionComposerButton,
   MemberNavigationProvider,
@@ -109,7 +110,10 @@ export function WhichShell({
                 <span>W</span>HICH
               </Link>
               <p className={styles.productLine}>고르고, 결과를 확인하세요.</p>
-              <HeaderMemberNavigation />
+              <div className={styles.headerActions}>
+                <HeaderMemberNotifications />
+                <HeaderMemberNavigation />
+              </div>
             </div>
           </header>
 
