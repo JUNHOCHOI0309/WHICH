@@ -77,7 +77,6 @@ export function MemberPointShopModal({
   onAction,
   onClose,
   onPreview,
-  onRefresh,
   pending,
   previewItem,
   shop,
@@ -86,7 +85,6 @@ export function MemberPointShopModal({
   onAction: (item: PointShopCatalogItem) => void;
   onClose: () => void;
   onPreview: (item: PointShopCatalogItem) => void;
-  onRefresh: () => void;
   pending: boolean;
   previewItem: PointShopCatalogItem | null;
   shop: MemberPointShopView | null;
@@ -156,9 +154,6 @@ export function MemberPointShopModal({
                 <p className={styles.shopSectionLabel}>CATALOG</p>
                 <strong>꾸미기 상품</strong>
               </div>
-              <button disabled={pending} onClick={onRefresh} type="button">
-                새로고침
-              </button>
             </div>
 
             {pending && !shop ? <p className={styles.shopLoading}>상품을 불러오는 중…</p> : null}

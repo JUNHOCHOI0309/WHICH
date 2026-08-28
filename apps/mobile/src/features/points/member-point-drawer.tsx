@@ -291,7 +291,6 @@ export function MemberPointDrawer({
           onAction={(item) => void mutateItem(item)}
           onClose={() => setShopOpen(false)}
           onPreview={setPreviewItem}
-          onRefresh={() => void loadShop()}
           pending={shopPending}
           previewItem={previewItem}
           shop={shop}
