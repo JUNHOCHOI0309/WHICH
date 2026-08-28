@@ -7,6 +7,7 @@ import { getConfig } from "./config.js";
 import { createDatabase, type Database } from "./database/client.js";
 import {
   memberCredentials,
+  memberModerationNotices,
   members,
   operatorAccessGrants,
   operatorAuditLogs,
@@ -139,6 +140,57 @@ async function listOperators(database: Database["db"]) {
     .orderBy(desc(operatorAccessGrants.grantedAt));
 }
 
+async function notifyMember(
+  database: Database["db"],
+  identifier: string,
+  summary: string,
+  nextStep: string,
+  actor: string,
+) {
+  const memberId = await resolveMemberId(database, identifier);
+  if (!memberId) throw new Error("An active Member matching the identifier was not found.");
+  const normalizedSummary = summary.trim();
+  const normalizedNextStep = nextStep.trim();
+  if (normalizedSummary.length < 2) {
+    throw new Error("Notification summary must be at least 2 characters.");
+  }
+  if (normalizedNextStep.length < 2) {
+    throw new Error("Notification next step must be at least 2 characters.");
+  }
+  const effectiveAt = new Date();
+  const notice = await database.transaction(async (transaction) => {
+    const inserted = await transaction
+      .insert(memberModerationNotices)
+      .values({
+        memberId,
+        targetType: "PROFILE_VERSION",
+        targetId: memberId,
+        policyVersion: "operator-notice-v1",
+        reasonCode: "OPERATOR_NOTICE",
+        actionType: "INFORMATION",
+        summary: normalizedSummary,
+        nextStep: normalizedNextStep,
+        effectiveAt,
+      })
+      .returning({
+        id: memberModerationNotices.id,
+        createdAt: memberModerationNotices.createdAt,
+      });
+    await transaction.insert(operatorAuditLogs).values({
+      memberId,
+      eventType: "MEMBER_NOTIFICATION_CREATED",
+      outcome: "SUCCEEDED",
+      metadata: {
+        actor,
+        noticeId: inserted[0]!.id,
+        reasonCode: "OPERATOR_NOTICE",
+      },
+    });
+    return inserted[0]!;
+  });
+  return { memberId, summary: normalizedSummary, ...notice };
+}
+
 async function importEditorialDecisions(input: {
   database: Database["db"];
   identifier: string;
@@ -191,6 +243,16 @@ async function main() {
       console.log(JSON.stringify(await listOperators(database.db), null, 2));
       return;
     }
+    if (command === "notify-member" && identifier && value && rest.length) {
+      console.log(
+        JSON.stringify(
+          await notifyMember(database.db, identifier, value, rest.join(" "), actor),
+          null,
+          2,
+        ),
+      );
+      return;
+    }
     if (command === "import-editorial" && identifier) {
       const decisionsPath = resolve(
         value && value !== "--confirm"
@@ -221,7 +283,7 @@ async function main() {
       return;
     }
     throw new Error(
-      "Usage: ops-operator <grant|revoke> <member-id-or-email> | list | confirm-backup <member-id-or-email> <reference> [notes] | import-editorial <member-id-or-email> [decisions-path] [--confirm <token>]",
+      "Usage: ops-operator <grant|revoke> <member-id-or-email> | list | notify-member <member-id-or-email> <summary> <next-step> | confirm-backup <member-id-or-email> <reference> [notes] | import-editorial <member-id-or-email> [decisions-path] [--confirm <token>]",
     );
   } finally {
     await database.close();
