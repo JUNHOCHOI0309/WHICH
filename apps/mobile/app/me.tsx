@@ -303,6 +303,7 @@ export default function MeScreen() {
         onLoadMore={() => void loadMorePoints()}
         onRetry={() => void reloadPoints()}
         points={points}
+        sessionToken={session.token}
         visible={pointDrawerOpen}
       />
       <BottomNav />

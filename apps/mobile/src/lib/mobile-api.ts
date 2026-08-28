@@ -6,6 +6,8 @@ import type {
   InterestCardRegistry,
   InterestProfile,
   MemberPointView,
+  MemberPointShopView,
+  PointShopEquipSlot,
   PointRewardClaimResponse,
   MemberAccountDeletionResult,
   MemberAvatarUpdate,
@@ -83,6 +85,42 @@ export function createMobileApiClient(
   const request = options.request ?? ((input: string, init?: RequestInit) => fetch(input, init));
 
   return {
+    async loadPointShop(sessionToken: string) {
+      const response = await request(`${baseUrl}/api/mobile/v1/me/point-shop`, {
+        headers: { accept: "application/json", authorization: `Bearer ${sessionToken}` },
+      });
+      return bodyOrError<MemberPointShopView>(response);
+    },
+
+    async purchasePointShopItem(sessionToken: string, itemId: string, idempotencyKey: string) {
+      const response = await request(`${baseUrl}/api/mobile/v1/me/point-shop/purchases`, {
+        method: "POST",
+        headers: {
+          accept: "application/json",
+          authorization: `Bearer ${sessionToken}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ itemId, idempotencyKey }),
+      });
+      return bodyOrError<{ purchaseId: string; balance: number; idempotent: boolean }>(response);
+    },
+
+    async equipPointShopItem(sessionToken: string, equipSlot: PointShopEquipSlot, itemId: string) {
+      const response = await request(
+        `${baseUrl}/api/mobile/v1/me/point-shop/equipment/${encodeURIComponent(equipSlot)}`,
+        {
+          method: "PUT",
+          headers: {
+            accept: "application/json",
+            authorization: `Bearer ${sessionToken}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ itemId }),
+        },
+      );
+      return bodyOrError<{ equipSlot: PointShopEquipSlot; itemId: string }>(response);
+    },
+
     async submitMemberIssue(
       sessionToken: string,
       idempotencyKey: string,

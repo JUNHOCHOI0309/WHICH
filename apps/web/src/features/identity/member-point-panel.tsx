@@ -4,7 +4,12 @@ import Image from "next/image";
 import { useCallback, useEffect, useState } from "react";
 
 import { toast } from "@/components/feedback/toast-provider";
-import type { MemberPointLedgerItem, MemberPointView } from "@/lib/contracts";
+import type {
+  MemberPointLedgerItem,
+  MemberPointShopView,
+  MemberPointView,
+  PointShopCatalogItem,
+} from "@/lib/contracts";
 
 import styles from "./member-profile-experience.module.css";
 
@@ -62,6 +67,9 @@ export function MemberPointPanel() {
   const [points, setPoints] = useState<MemberPointView | null>(null);
   const [screen, setScreen] = useState<PointScreen>("loading");
   const [morePending, setMorePending] = useState(false);
+  const [shop, setShop] = useState<MemberPointShopView | null>(null);
+  const [shopOpen, setShopOpen] = useState(false);
+  const [shopPending, setShopPending] = useState(false);
 
   const load = useCallback(async () => {
     setScreen("loading");
@@ -113,6 +121,53 @@ export function MemberPointPanel() {
       .finally(() => setMorePending(false));
   }, [morePending, points]);
 
+  const openShop = useCallback(async () => {
+    setShopOpen(true);
+    setShopPending(true);
+    try {
+      const response = await fetch("/api/me/point-shop", { cache: "no-store" });
+      if (!response.ok) throw new Error("shop unavailable");
+      setShop((await response.json()) as MemberPointShopView);
+    } catch {
+      toast.error("W Point 상점을 불러오지 못했어요.");
+    } finally {
+      setShopPending(false);
+    }
+  }, []);
+
+  const mutateItem = useCallback(async (item: PointShopCatalogItem) => {
+    setShopPending(true);
+    try {
+      const response = await fetch(
+        item.owned
+          ? `/api/me/point-shop/equipment/${encodeURIComponent(item.equipSlot)}`
+          : "/api/me/point-shop/purchases",
+        {
+          method: item.owned ? "PUT" : "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(
+            item.owned
+              ? { itemId: item.id }
+              : { itemId: item.id, idempotencyKey: crypto.randomUUID() },
+          ),
+        },
+      );
+      const body = (await response.json()) as { message?: string };
+      if (!response.ok) throw new Error(body.message ?? "상점 요청 실패");
+      toast.success(item.owned ? "상품을 장착했습니다." : "상품을 구매했습니다.");
+      const [nextShop, nextPoints] = await Promise.all([
+        fetch("/api/me/point-shop", { cache: "no-store" }),
+        readPoints(),
+      ]);
+      if (nextShop.ok) setShop((await nextShop.json()) as MemberPointShopView);
+      if (nextPoints) setPoints(nextPoints);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "상점 요청에 실패했습니다.");
+    } finally {
+      setShopPending(false);
+    }
+  }, []);
+
   return (
     <section
       className={`${styles.pointPanel} ${styles.pointPanelRail}`}
@@ -146,6 +201,30 @@ export function MemberPointPanel() {
       ) : null}
       {screen === "ready" && points ? (
         <>
+          <button type="button" className={styles.pointMore} onClick={() => void openShop()}>
+            {shopOpen ? "상점 새로고침" : "W Point 상점"}
+          </button>
+          {shopOpen ? (
+            <div className={styles.pointEmpty} aria-live="polite">
+              <strong>꾸미기 상품</strong>
+              <span>
+                초기 카탈로그는 프로필 강조색·아바타 프레임·공유 카드 배경으로 구성됩니다.
+              </span>
+              {shopPending && !shop ? <span>상품을 불러오는 중…</span> : null}
+              {shop?.catalog.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={styles.pointMore}
+                  disabled={shopPending || item.equipped}
+                  onClick={() => void mutateItem(item)}
+                >
+                  {item.name} · {item.price.toLocaleString("ko-KR")}P ·{" "}
+                  {item.equipped ? "장착 중" : item.owned ? "장착" : "구매"}
+                </button>
+              ))}
+            </div>
+          ) : null}
           {points.account.hasPendingRecovery ? (
             <p className={styles.pointRecovery}>
               일부 기록을 다시 확인하고 있어 현재 사용할 수 있는 잔액만 표시합니다.

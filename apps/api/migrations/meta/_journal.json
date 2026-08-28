@@ -274,6 +274,13 @@
       "when": 1787920260000,
       "tag": "0038_point_badge_policy",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1787928697604,
+      "tag": "0039_point_shop_foundation",
+      "breakpoints": true
     }
   ]
 }

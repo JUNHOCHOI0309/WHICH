@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import {
+  Alert,
   Animated,
   Easing,
   Image,
@@ -12,7 +13,13 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import type { MemberPointLedgerItem, MemberPointView } from "@/contracts";
+import type {
+  MemberPointLedgerItem,
+  MemberPointShopView,
+  MemberPointView,
+  PointShopCatalogItem,
+} from "@/contracts";
+import { mobileApi } from "@/lib/runtime";
 import { colors } from "@/theme";
 
 const badgeImages = {
@@ -46,6 +53,7 @@ export function MemberPointDrawer({
   onLoadMore,
   onRetry,
   points,
+  sessionToken,
   visible,
 }: {
   error: string | null;
@@ -55,12 +63,16 @@ export function MemberPointDrawer({
   onLoadMore: () => void;
   onRetry: () => void;
   points: MemberPointView | null;
+  sessionToken: string;
   visible: boolean;
 }) {
   const [translateX] = useState(() => new Animated.Value(HIDDEN_TRANSLATE_X));
   const badge = points?.badge.current ?? null;
   const nextBadge = points?.badge.next ?? null;
   const progress = points?.badge.progress ?? 0;
+  const [shopOpen, setShopOpen] = useState(false);
+  const [shop, setShop] = useState<MemberPointShopView | null>(null);
+  const [shopPending, setShopPending] = useState(false);
 
   useEffect(() => {
     if (!visible) return;
@@ -83,6 +95,46 @@ export function MemberPointDrawer({
       if (finished) onClose();
     });
   }, [onClose, translateX]);
+
+  const loadShop = useCallback(async () => {
+    setShopOpen(true);
+    setShopPending(true);
+    try {
+      setShop(await mobileApi.loadPointShop(sessionToken));
+    } catch {
+      Alert.alert("W Point 상점", "상품을 불러오지 못했습니다.");
+    } finally {
+      setShopPending(false);
+    }
+  }, [sessionToken]);
+
+  const mutateItem = useCallback(
+    async (item: PointShopCatalogItem) => {
+      setShopPending(true);
+      try {
+        if (item.owned) {
+          await mobileApi.equipPointShopItem(sessionToken, item.equipSlot, item.id);
+        } else {
+          await mobileApi.purchasePointShopItem(
+            sessionToken,
+            item.id,
+            `mobile-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          );
+        }
+        setShop(await mobileApi.loadPointShop(sessionToken));
+        onRetry();
+        Alert.alert("W Point 상점", item.owned ? "상품을 장착했습니다." : "상품을 구매했습니다.");
+      } catch (error) {
+        Alert.alert(
+          "W Point 상점",
+          error instanceof Error ? error.message : "요청을 처리하지 못했습니다.",
+        );
+      } finally {
+        setShopPending(false);
+      }
+    },
+    [onRetry, sessionToken],
+  );
 
   return (
     <Modal
@@ -173,6 +225,46 @@ export function MemberPointDrawer({
                     />
                   </View>
                 </View>
+
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => void loadShop()}
+                  style={styles.shopButton}
+                >
+                  <Text style={styles.shopButtonText}>
+                    {shopOpen ? "상점 새로고침" : "W Point 상점"}
+                  </Text>
+                </Pressable>
+                {shopOpen ? (
+                  <View style={styles.shopList}>
+                    <Text style={styles.sectionTitle}>꾸미기 상품</Text>
+                    {shopPending && !shop ? (
+                      <Text style={styles.emptyCopy}>상품을 불러오는 중…</Text>
+                    ) : null}
+                    {shop?.catalog.map((item) => (
+                      <View key={item.id} style={styles.shopItem}>
+                        <View style={styles.ledgerCopy}>
+                          <Text style={styles.ledgerReason}>{item.name}</Text>
+                          <Text style={styles.ledgerDate}>{item.description}</Text>
+                        </View>
+                        <Pressable
+                          accessibilityRole="button"
+                          disabled={shopPending || item.equipped}
+                          onPress={() => void mutateItem(item)}
+                          style={styles.shopAction}
+                        >
+                          <Text style={styles.shopActionText}>
+                            {item.equipped
+                              ? "장착 중"
+                              : item.owned
+                                ? "장착"
+                                : `${item.price.toLocaleString("ko-KR")}P`}
+                          </Text>
+                        </Pressable>
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
 
                 <Text style={styles.sectionTitle}>최근 적립 내역</Text>
                 {points.ledger.items.length === 0 ? (
@@ -312,6 +404,33 @@ const styles = StyleSheet.create({
     minHeight: 46,
   },
   moreText: { color: colors.text, fontSize: 13, fontWeight: "900" },
+  shopButton: {
+    alignItems: "center",
+    backgroundColor: colors.text,
+    borderRadius: 999,
+    justifyContent: "center",
+    minHeight: 48,
+  },
+  shopButtonText: { color: colors.surface, fontSize: 14, fontWeight: "900" },
+  shopList: { gap: 10 },
+  shopItem: {
+    alignItems: "center",
+    borderColor: colors.border,
+    borderRadius: 16,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 10,
+    padding: 12,
+  },
+  shopAction: {
+    alignItems: "center",
+    backgroundColor: colors.cyanSoft,
+    borderRadius: 999,
+    minWidth: 74,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  shopActionText: { color: colors.cyanStrong, fontSize: 11, fontWeight: "900" },
   stateCard: { gap: 12, padding: 20 },
   stateCopy: { color: colors.textSecondary, fontSize: 13, lineHeight: 20, padding: 20 },
   retryButton: {

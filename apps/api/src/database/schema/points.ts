@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  boolean,
   check,
   date,
   foreignKey,
@@ -228,5 +229,152 @@ export const pointEventReceipts = pgTable(
       sql`${table.outcome} in ('AWARDED', 'REVERSED', 'DUPLICATE', 'CAP_REACHED', 'INELIGIBLE', 'DISABLED')`,
     ),
     index("point_event_receipts_processed_idx").on(table.processedAt),
+  ],
+);
+
+export const pointCatalogItems = pgTable(
+  "point_catalog_items",
+  {
+    id: uuid("point_catalog_item_id").defaultRandom().primaryKey(),
+    code: varchar("code", { length: 64 }).notNull(),
+    itemType: varchar("item_type", { length: 32 }).notNull(),
+    surface: varchar("surface", { length: 32 }).notNull(),
+    equipSlot: varchar("equip_slot", { length: 32 }).notNull(),
+    themeFamily: varchar("theme_family", { length: 32 }).notNull(),
+    name: varchar("name", { length: 80 }).notNull(),
+    description: varchar("description", { length: 280 }).notNull(),
+    price: integer("price").notNull(),
+    permanent: boolean("permanent").default(true).notNull(),
+    saleStartAt: timestamp("sale_start_at", { withTimezone: true }),
+    saleEndAt: timestamp("sale_end_at", { withTimezone: true }),
+    usageEndAt: timestamp("usage_end_at", { withTimezone: true }),
+    status: varchar("status", { length: 16 }).default("ACTIVE").notNull(),
+    currentVersion: integer("current_version").default(1).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    unique("point_catalog_items_code_unique").on(table.code),
+    check("point_catalog_items_price_check", sql`${table.price} > 0`),
+    check("point_catalog_items_version_check", sql`${table.currentVersion} > 0`),
+    check(
+      "point_catalog_items_status_check",
+      sql`${table.status} in ('ACTIVE', 'PAUSED', 'RETIRED')`,
+    ),
+    check(
+      "point_catalog_items_sale_period_check",
+      sql`${table.saleEndAt} is null or ${table.saleStartAt} is null or ${table.saleEndAt} > ${table.saleStartAt}`,
+    ),
+    index("point_catalog_items_listing_idx").on(table.status, table.surface, table.themeFamily),
+  ],
+);
+
+export const pointCatalogItemVersions = pgTable(
+  "point_catalog_item_versions",
+  {
+    itemId: uuid("item_id")
+      .notNull()
+      .references(() => pointCatalogItems.id, { onDelete: "restrict" }),
+    version: integer("version").notNull(),
+    assetManifest: jsonb("asset_manifest").$type<Record<string, unknown>>().default({}).notNull(),
+    previewAssets: jsonb("preview_assets").$type<Record<string, unknown>>().default({}).notNull(),
+    accessibilityMetadata: jsonb("accessibility_metadata")
+      .$type<Record<string, unknown>>()
+      .default({})
+      .notNull(),
+    releaseNotes: varchar("release_notes", { length: 500 }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.itemId, table.version], name: "point_catalog_item_versions_pk" }),
+    check("point_catalog_item_versions_version_check", sql`${table.version} > 0`),
+  ],
+);
+
+export const pointPurchases = pgTable(
+  "point_purchases",
+  {
+    id: uuid("point_purchase_id").defaultRandom().primaryKey(),
+    memberId: uuid("member_id")
+      .notNull()
+      .references(() => members.id, { onDelete: "restrict" }),
+    itemId: uuid("item_id")
+      .notNull()
+      .references(() => pointCatalogItems.id, { onDelete: "restrict" }),
+    itemVersion: integer("item_version").notNull(),
+    priceSnapshot: integer("price_snapshot").notNull(),
+    spendLedgerEntryId: uuid("spend_ledger_entry_id")
+      .notNull()
+      .references(() => pointLedgerEntries.id, { onDelete: "restrict" }),
+    refundLedgerEntryId: uuid("refund_ledger_entry_id").references(() => pointLedgerEntries.id, {
+      onDelete: "restrict",
+    }),
+    idempotencyKey: varchar("idempotency_key", { length: 160 }).notNull(),
+    status: varchar("status", { length: 16 }).default("COMPLETED").notNull(),
+    purchasedAt: timestamp("purchased_at", { withTimezone: true }).defaultNow().notNull(),
+    refundedAt: timestamp("refunded_at", { withTimezone: true }),
+  },
+  (table) => [
+    unique("point_purchases_idempotency_unique").on(table.idempotencyKey),
+    unique("point_purchases_spend_ledger_unique").on(table.spendLedgerEntryId),
+    uniqueIndex("point_purchases_refund_ledger_unique")
+      .on(table.refundLedgerEntryId)
+      .where(sql`${table.refundLedgerEntryId} is not null`),
+    uniqueIndex("point_purchases_member_item_active_unique")
+      .on(table.memberId, table.itemId)
+      .where(sql`${table.status} = 'COMPLETED'`),
+    check("point_purchases_price_check", sql`${table.priceSnapshot} > 0`),
+    check("point_purchases_version_check", sql`${table.itemVersion} > 0`),
+    check("point_purchases_status_check", sql`${table.status} in ('COMPLETED', 'REFUNDED')`),
+    index("point_purchases_member_created_idx").on(table.memberId, table.purchasedAt),
+  ],
+);
+
+export const memberInventory = pgTable(
+  "member_inventory",
+  {
+    memberId: uuid("member_id")
+      .notNull()
+      .references(() => members.id, { onDelete: "restrict" }),
+    itemId: uuid("item_id")
+      .notNull()
+      .references(() => pointCatalogItems.id, { onDelete: "restrict" }),
+    purchaseId: uuid("purchase_id")
+      .notNull()
+      .references(() => pointPurchases.id, { onDelete: "restrict" }),
+    acquiredFrom: varchar("acquired_from", { length: 24 }).default("PURCHASE").notNull(),
+    state: varchar("state", { length: 16 }).default("OWNED").notNull(),
+    acquiredAt: timestamp("acquired_at", { withTimezone: true }).defaultNow().notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  },
+  (table) => [
+    primaryKey({ columns: [table.memberId, table.itemId], name: "member_inventory_pk" }),
+    unique("member_inventory_purchase_unique").on(table.purchaseId),
+    check("member_inventory_state_check", sql`${table.state} in ('OWNED', 'EXPIRED', 'REVOKED')`),
+    check(
+      "member_inventory_acquired_from_check",
+      sql`${table.acquiredFrom} in ('PURCHASE', 'GRANT', 'MIGRATION')`,
+    ),
+    index("member_inventory_member_state_idx").on(table.memberId, table.state),
+  ],
+);
+
+export const memberEquipment = pgTable(
+  "member_equipment",
+  {
+    memberId: uuid("member_id").notNull(),
+    equipSlot: varchar("equip_slot", { length: 32 }).notNull(),
+    itemId: uuid("item_id").notNull(),
+    equippedAt: timestamp("equipped_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.memberId, table.equipSlot], name: "member_equipment_pk" }),
+    foreignKey({
+      columns: [table.memberId, table.itemId],
+      foreignColumns: [memberInventory.memberId, memberInventory.itemId],
+      name: "member_equipment_inventory_fk",
+    }).onDelete("restrict"),
+    index("member_equipment_item_idx").on(table.itemId),
   ],
 );
