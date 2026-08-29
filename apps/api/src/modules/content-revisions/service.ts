@@ -12,6 +12,7 @@ import {
   issueVersionSnapshots,
   issueVersions,
   moderationRecheckRequests,
+  outboxEvents,
   type IssueChoiceSnapshot,
   type IssueMediaSnapshot,
 } from "../../database/schema/index.js";
@@ -20,6 +21,7 @@ import type {
   CreateModerationRecheckCommand,
   ModerationRecheckRequest,
 } from "./contracts.js";
+import { createModerationSubmissionEvents } from "../moderation-dispatch/contracts.js";
 
 type RevisionExecutor = Pick<Database["db"], "select" | "insert">;
 
@@ -203,20 +205,40 @@ export function createContentRevisionService(database: Database["db"]): ContentR
         );
       }
 
-      const [created] = await database
-        .insert(moderationRecheckRequests)
-        .values({
-          targetType: command.targetType,
+      const created = await database.transaction(async (transaction) => {
+        const [row] = await transaction
+          .insert(moderationRecheckRequests)
+          .values({
+            targetType: command.targetType,
+            targetId: command.targetId,
+            targetVersion: command.targetVersion,
+            policyVersion: command.policyVersion,
+            inputHash: command.inputHash,
+            normalizedSnapshotRef: command.normalizedSnapshotRef,
+            ocrTranscriptRef: command.ocrTranscriptRef,
+            reason: command.reason,
+          })
+          .onConflictDoNothing()
+          .returning();
+        if (!row) return null;
+        const targetType =
+          command.targetType === "COMMENT_REVISION"
+            ? "COMMENT_VERSION"
+            : command.targetType === "MEDIA_ASSET_VERSION"
+              ? "ISSUE_MEDIA_ASSET"
+              : "ISSUE_VERSION";
+        const events = createModerationSubmissionEvents({
+          targetType,
           targetId: command.targetId,
           targetVersion: command.targetVersion,
+          privateObjectReference: command.normalizedSnapshotRef,
+          normalizedInputHash: command.inputHash,
           policyVersion: command.policyVersion,
-          inputHash: command.inputHash,
-          normalizedSnapshotRef: command.normalizedSnapshotRef,
-          ocrTranscriptRef: command.ocrTranscriptRef,
           reason: command.reason,
-        })
-        .onConflictDoNothing()
-        .returning();
+        });
+        await transaction.insert(outboxEvents).values(events.rows);
+        return row;
+      });
 
       if (created) return { created: true, request: toRecord(created) };
       const [existing] = await database

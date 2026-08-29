@@ -337,6 +337,20 @@
       "when": 1787963716088,
       "tag": "0047_foamy_junta",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1787966074560,
+      "tag": "0048_fast_terror",
+      "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1787966396448,
+      "tag": "0049_vengeful_red_ghost",
+      "breakpoints": true
     }
   ]
 }

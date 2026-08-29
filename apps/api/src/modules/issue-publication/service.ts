@@ -19,6 +19,7 @@ import type {
 } from "./contracts.js";
 import type { IssueManifest, IssueManifestItem, IssuePublicationTarget } from "./manifest.js";
 import { sealIssueVersionSnapshot } from "../content-revisions/service.js";
+import { createModerationSubmissionEvents } from "../moderation-dispatch/contracts.js";
 
 type PublicationQueryExecutor = Pick<Database["db"], "select" | "insert" | "execute">;
 
@@ -413,8 +414,10 @@ export async function publishIssueManifest(
             })),
           ),
         );
+        const sealedSnapshots = new Map<string, { inputHash: string }>();
         for (const issue of createItems) {
-          await sealIssueVersionSnapshot(transaction, issue.id, issue.version);
+          const sealed = await sealIssueVersionSnapshot(transaction, issue.id, issue.version);
+          sealedSnapshots.set(issueVersionKey(issue.id, issue.version), sealed);
         }
         await transaction.insert(issueInterestCards).values(
           createItems.flatMap((issue) =>
@@ -482,6 +485,21 @@ export async function publishIssueManifest(
                 },
               },
             };
+          }),
+        );
+        await transaction.insert(outboxEvents).values(
+          createItems.flatMap((issue) => {
+            const sealed = sealedSnapshots.get(issueVersionKey(issue.id, issue.version));
+            if (!sealed) throw new Error("The sealed Issue snapshot is missing.");
+            return createModerationSubmissionEvents({
+              targetType: "ISSUE_VERSION",
+              targetId: issue.id,
+              targetVersion: issue.version,
+              privateObjectReference: `issue://version/${issue.id}/${issue.version}`,
+              normalizedInputHash: sealed.inputHash,
+              reason: "CREATE",
+              occurredAt,
+            }).rows;
           }),
         );
       }

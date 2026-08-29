@@ -33,6 +33,7 @@ import type {
 } from "./contracts.js";
 import { sealIssueVersionSnapshot } from "../content-revisions/service.js";
 import { evaluateTextRules, normalizeModerationText } from "../moderation/rule-engine.js";
+import { createModerationSubmissionEvents } from "../moderation-dispatch/contracts.js";
 import { IssueWriteError } from "./errors.js";
 
 const DAILY_CREATION_LIMIT = 3;
@@ -323,6 +324,15 @@ export function createIssueWriteService(database: Database["db"]): IssueWriteSer
           interestCardCode: normalized.interestCardCode,
           contentHash,
         });
+        const moderationEvents = createModerationSubmissionEvents({
+          targetType: "ISSUE_VERSION",
+          targetId: submissionId,
+          targetVersion: 1,
+          privateObjectReference: `issue-submission://revision/${submissionId}/1`,
+          normalizedInputHash: contentHash,
+          reason: "CREATE",
+        });
+        await transaction.insert(outboxEvents).values(moderationEvents.rows);
         return { submission: toSubmission(created!), created: true };
       });
     },
@@ -452,6 +462,16 @@ export function createIssueWriteService(database: Database["db"]): IssueWriteSer
           contentHash,
           submittedAt: now,
         });
+        const moderationEvents = createModerationSubmissionEvents({
+          targetType: "ISSUE_VERSION",
+          targetId: current.id,
+          targetVersion: revision,
+          privateObjectReference: `issue-submission://revision/${current.id}/${revision}`,
+          normalizedInputHash: contentHash,
+          reason: "EDIT",
+          occurredAt: now,
+        });
+        await transaction.insert(outboxEvents).values(moderationEvents.rows);
         return { submission: toSubmission(updated!), created: true };
       });
     },
@@ -616,7 +636,21 @@ export function createIssueWriteService(database: Database["db"]): IssueWriteSer
               label: choice.label,
             })),
           );
-          await sealIssueVersionSnapshot(transaction, issueId, ISSUE_VERSION);
+          const sealedSnapshot = await sealIssueVersionSnapshot(
+            transaction,
+            issueId,
+            ISSUE_VERSION,
+          );
+          const moderationEvents = createModerationSubmissionEvents({
+            targetType: "ISSUE_VERSION",
+            targetId: issueId,
+            targetVersion: ISSUE_VERSION,
+            privateObjectReference: `issue://version/${issueId}/${ISSUE_VERSION}`,
+            normalizedInputHash: sealedSnapshot.inputHash,
+            reason: "CREATE",
+            occurredAt: now,
+          });
+          await transaction.insert(outboxEvents).values(moderationEvents.rows);
           await transaction.insert(issueInterestCards).values({
             issueId,
             issueVersion: ISSUE_VERSION,

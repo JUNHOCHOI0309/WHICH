@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { and, asc, desc, eq, inArray, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, lte, ne, sql } from "drizzle-orm";
 
 import type { Database } from "../../database/client.js";
 import { outboxEvents } from "../../database/schema/index.js";
@@ -133,7 +133,13 @@ export function createOutboxPublisherService(
         const candidates = await transaction
           .select({ id: outboxEvents.id })
           .from(outboxEvents)
-          .where(and(eq(outboxEvents.status, "PENDING"), lte(outboxEvents.availableAt, claimedAt)))
+          .where(
+            and(
+              eq(outboxEvents.status, "PENDING"),
+              ne(outboxEvents.eventType, "MODERATION_REQUESTED"),
+              lte(outboxEvents.availableAt, claimedAt),
+            ),
+          )
           .orderBy(asc(outboxEvents.occurredAt), asc(outboxEvents.id))
           .limit(claimLimit)
           .for("update", { skipLocked: true });

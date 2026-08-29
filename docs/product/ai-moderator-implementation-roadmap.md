@@ -253,6 +253,9 @@ WHICH-106·107·110은 Shadow Mode와 실제 운영 데이터가 필요성을 �
 WHICH-109의 avatar 신고·격리·fallback은 현재 공개 공격면이므로 규칙 기반 최소 Gate를 먼저
 진행하고, Profile AI 분류는 후속으로 분리한다.
 
+WHICH-99의 실행 계약과 배포 전환 기준은
+[`moderation-shadow-worker.md`](../operations/moderation-shadow-worker.md)를 기준으로 한다.
+
 ## Go/No-Go 원칙
 
 - Shadow 결과가 사람 판정과 비교 가능하고 Label별 오차가 측정된다.
