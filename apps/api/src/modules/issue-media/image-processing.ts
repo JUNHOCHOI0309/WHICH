@@ -7,6 +7,9 @@ import type { IssueMediaInputMimeType } from "./contracts.js";
 const MAX_INPUT_BYTES = 10 * 1024 * 1024;
 const MAX_INPUT_PIXELS = 40_000_000;
 const MAX_OUTPUT_EDGE = 1600;
+const MAX_PROCESSING_MILLISECONDS = 10_000;
+const MAX_CONCURRENT_PROCESSING = 2;
+let activeProcessing = 0;
 
 export class IssueMediaProcessingError extends Error {
   constructor(
@@ -15,6 +18,8 @@ export class IssueMediaProcessingError extends Error {
       | "MEDIA_TOO_LARGE"
       | "MEDIA_FORMAT_UNSUPPORTED"
       | "MEDIA_MIME_MISMATCH"
+      | "MEDIA_PROCESSING_BUSY"
+      | "MEDIA_PROCESSING_TIMEOUT"
       | "MEDIA_PROCESSING_FAILED",
     message: string,
   ) {
@@ -49,6 +54,38 @@ export async function processIssueMedia(input: Buffer, declaredMimeType: IssueMe
     throw new IssueMediaProcessingError("MEDIA_TOO_LARGE", "Issue media must not exceed 10MB.");
   }
 
+  if (activeProcessing >= MAX_CONCURRENT_PROCESSING) {
+    throw new IssueMediaProcessingError(
+      "MEDIA_PROCESSING_BUSY",
+      "The image processing queue is at capacity. Try again later.",
+    );
+  }
+  activeProcessing += 1;
+  let timeout: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      processBoundedIssueMedia(input, declaredMimeType),
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(
+          () =>
+            reject(
+              new IssueMediaProcessingError(
+                "MEDIA_PROCESSING_TIMEOUT",
+                "The image could not be processed within the safety time limit.",
+              ),
+            ),
+          MAX_PROCESSING_MILLISECONDS,
+        );
+        timeout.unref();
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+    activeProcessing -= 1;
+  }
+}
+
+async function processBoundedIssueMedia(input: Buffer, declaredMimeType: IssueMediaInputMimeType) {
   try {
     const source = sharp(input, { failOn: "warning", limitInputPixels: MAX_INPUT_PIXELS });
     const inputMetadata = await source.metadata();

@@ -27,6 +27,7 @@ import type { OpsModerationQueueService } from "./modules/operations/moderation-
 import { registerOpsModerationQueueRoutes } from "./modules/operations/moderation-queue-routes.js";
 import type { IssueMediaService } from "./modules/issue-media/contracts.js";
 import { registerIssueMediaRoutes } from "./modules/issue-media/routes.js";
+import type { IssueMediaUploadGateService } from "./modules/issue-media/upload-gate-service.js";
 import type { IssueMediaReviewService } from "./modules/issue-media/review-contracts.js";
 import { registerIssueMediaReviewRoutes } from "./modules/issue-media/review-routes.js";
 import type { PointIntegrityService } from "./modules/points/integrity.js";
@@ -54,6 +55,7 @@ export type AppDependencies = Pick<Database, "ping" | "close"> & {
   opsDashboard?: OpsDashboardService;
   opsModerationQueue?: OpsModerationQueueService;
   issueMedia?: IssueMediaService;
+  issueMediaUploadGate?: IssueMediaUploadGateService;
   issueMediaReview?: IssueMediaReviewService;
   pointIntegrity?: PointIntegrityService;
   memberPoints?: MemberPointService;
@@ -190,6 +192,7 @@ export async function buildApp(config: AppConfig, database: AppDependencies) {
       database.issueMedia,
       database.memberIdentity,
       config.auth.internalSecret,
+      database.issueMediaUploadGate,
     );
   }
   if (database.issueMediaReview) {

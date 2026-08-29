@@ -136,7 +136,11 @@ export async function registerIssueMediaReviewRoutes(
           requestId: request.id,
         });
         if (!body) return forbidden(reply);
-        return reply.header("cache-control", "private, no-store").type("image/webp").send(body);
+        return reply
+          .header("cache-control", "private, no-store")
+          .header("x-content-type-options", "nosniff")
+          .type("image/webp")
+          .send(body);
       },
     );
 

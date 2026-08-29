@@ -25,7 +25,11 @@ export async function GET(request: NextRequest, context: { params: Promise<{ ass
     }
     return new NextResponse(await upstream.arrayBuffer(), {
       status: 200,
-      headers: { "content-type": "image/webp", "cache-control": "private, no-store" },
+      headers: {
+        "content-type": "image/webp",
+        "cache-control": "private, no-store",
+        "x-content-type-options": "nosniff",
+      },
     });
   } catch {
     return NextResponse.json({ message: "이미지를 불러오지 못했습니다." }, { status: 502 });

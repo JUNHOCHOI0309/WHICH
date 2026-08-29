@@ -7,6 +7,10 @@ import type { MemberIdentityService } from "../identity/contracts.js";
 
 import { ISSUE_MEDIA_INPUT_MIME_TYPES, type IssueMediaService } from "./contracts.js";
 import { IssueMediaError } from "./service.js";
+import {
+  IssueMediaUploadGateError,
+  type IssueMediaUploadGateService,
+} from "./upload-gate-service.js";
 
 const uuid = Type.String({ format: "uuid" });
 const opsHeaders = Type.Object(
@@ -41,6 +45,7 @@ export async function registerIssueMediaRoutes(
   service: IssueMediaService,
   identity: MemberIdentityService,
   internalSecret: string,
+  uploadGate?: IssueMediaUploadGateService,
 ) {
   await app.register((mediaApp) => {
     async function authenticateMember(
@@ -94,6 +99,13 @@ export async function registerIssueMediaRoutes(
       if (error instanceof IssueMediaError) {
         return reply.code(error.statusCode).send({ code: error.code, message: error.message });
       }
+      if (error instanceof IssueMediaUploadGateError) {
+        return reply.code(error.statusCode).send({
+          code: error.code,
+          message: error.message,
+          reasons: error.reasons,
+        });
+      }
       if (
         typeof error === "object" &&
         error !== null &&
@@ -114,7 +126,49 @@ export async function registerIssueMediaRoutes(
 
     mediaApp.post<{
       Headers: Headers;
+      Body: { submissionId: string; consentVersion: string };
+    }>(
+      "/v1/member/issue-media-upload-sessions",
+      {
+        schema: {
+          tags: ["issues"],
+          summary: "Create a short-lived one-time Member media upload session",
+          headers: memberHeaders,
+          body: Type.Object(
+            {
+              submissionId: uuid,
+              consentVersion: Type.String({ minLength: 1, maxLength: 64 }),
+            },
+            { additionalProperties: false },
+          ),
+        },
+      },
+      async (request, reply) => {
+        const memberId = await authenticateMember(request, reply);
+        if (!memberId) return;
+        if (!uploadGate) {
+          throw new IssueMediaUploadGateError(
+            "MEDIA_UPLOAD_NOT_AVAILABLE",
+            403,
+            "Member image upload is disabled.",
+            ["MODE_DISABLED"],
+          );
+        }
+        const session = await uploadGate.createSession({
+          memberId,
+          submissionId: request.body.submissionId,
+          consentVersion: request.body.consentVersion,
+          ipAddress: request.ip,
+        });
+        return reply.code(201).send({ session });
+      },
+    );
+
+    mediaApp.post<{
+      Headers: Headers;
       Body: {
+        uploadSessionId: string;
+        uploadSessionToken: string;
         rightsAttestation: string;
         declaredMimeType: (typeof ISSUE_MEDIA_INPUT_MIME_TYPES)[number];
         contentBase64: string;
@@ -130,6 +184,8 @@ export async function registerIssueMediaRoutes(
           body: Type.Object(
             {
               rightsAttestation: Type.String({ minLength: 20, maxLength: 2000 }),
+              uploadSessionId: uuid,
+              uploadSessionToken: Type.String({ minLength: 32, maxLength: 128 }),
               declaredMimeType: Type.Union(
                 ISSUE_MEDIA_INPUT_MIME_TYPES.map((value) => Type.Literal(value)),
               ),
@@ -149,6 +205,20 @@ export async function registerIssueMediaRoutes(
             message: "contentBase64 must contain a plain base64-encoded file.",
           });
         }
+        if (!uploadGate) {
+          throw new IssueMediaUploadGateError(
+            "MEDIA_UPLOAD_NOT_AVAILABLE",
+            403,
+            "Member image upload is disabled.",
+            ["MODE_DISABLED"],
+          );
+        }
+        await uploadGate.consumeSession({
+          memberId,
+          sessionId: request.body.uploadSessionId,
+          token: request.body.uploadSessionToken,
+          byteSize: Buffer.byteLength(normalized, "base64"),
+        });
         const asset = await service.stageMemberAsset({
           memberId,
           rightsAttestation: request.body.rightsAttestation,

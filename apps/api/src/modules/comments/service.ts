@@ -48,6 +48,7 @@ import type {
   PublicComment,
 } from "./contracts.js";
 import { sha256 } from "../content-revisions/service.js";
+import { evaluateTextRules } from "../moderation/rule-engine.js";
 import { decodeCommentCursor, encodeCommentCursor } from "./cursor.js";
 import { CommentError } from "./errors.js";
 
@@ -67,7 +68,14 @@ function hashToken(token: string) {
 }
 
 function normalizeCommentBody(value: string) {
-  const body = value.replace(/\r\n?/g, "\n").normalize("NFC").trim();
+  const commonRules = evaluateTextRules({
+    value,
+    minimumLength: 2,
+    maximumLength: 500,
+    allowUrls: false,
+    trustTier: "MEMBER",
+  });
+  const body = commonRules.normalized;
   const length = Array.from(body).length;
 
   if (length < 2) {
@@ -95,7 +103,7 @@ function normalizeCommentBody(value: string) {
       "Comment text contains an unsupported control character.",
     );
   }
-  if (/(?:https?:\/\/|www\.|(?:[a-z0-9-]+\.)+(?:com|net|org|io|kr)\b)/iu.test(body)) {
+  if (commonRules.signals.some((signal) => signal.code === "TEXT_URL_PRESENT")) {
     throw new CommentError("COMMENT_URL_NOT_ALLOWED", 422, "URLs are not allowed in Comments.");
   }
   if (
@@ -110,7 +118,10 @@ function normalizeCommentBody(value: string) {
     );
   }
 
-  return body;
+  return {
+    body,
+    requiresReview: commonRules.signals.some((signal) => signal.severity === "REVIEW"),
+  };
 }
 
 function fingerprint(
@@ -652,7 +663,7 @@ export function createCommentService(database: Database["db"]): CommentService {
     },
 
     async submitMemberComment(command) {
-      const body = normalizeCommentBody(command.body);
+      const { body, requiresReview } = normalizeCommentBody(command.body);
       const now = new Date();
 
       return database.transaction(async (transaction) => {
@@ -855,7 +866,7 @@ export function createCommentService(database: Database["db"]): CommentService {
             authorDisplayName: session.displayName.slice(0, 40),
             body,
             textPolicyVersion: TEXT_POLICY_VERSION,
-            publicationState: "PUBLISHED",
+            publicationState: requiresReview ? "PENDING_HUMAN_REVIEW" : "PUBLISHED",
           })
           .returning();
         if (!comment) throw new Error("Comment insert did not return a row.");
@@ -879,12 +890,12 @@ export function createCommentService(database: Database["db"]): CommentService {
           id: eventId,
           aggregateType: "COMMENT",
           aggregateId: comment.id,
-          eventType: "COMMENT_PUBLISHED",
+          eventType: requiresReview ? "COMMENT_REVIEW_REQUESTED" : "COMMENT_PUBLISHED",
           schemaVersion: EVENT_SCHEMA_VERSION,
           occurredAt: now,
           payload: {
             event_id: eventId,
-            event_type: "COMMENT_PUBLISHED",
+            event_type: requiresReview ? "COMMENT_REVIEW_REQUESTED" : "COMMENT_PUBLISHED",
             schema_version: EVENT_SCHEMA_VERSION,
             occurred_at: now.toISOString(),
             aggregate_type: "COMMENT",
@@ -925,7 +936,7 @@ export function createCommentService(database: Database["db"]): CommentService {
     },
 
     async updateMemberComment(command) {
-      const body = normalizeCommentBody(command.body);
+      const { body, requiresReview } = normalizeCommentBody(command.body);
       const now = new Date();
 
       return database.transaction(async (transaction): Promise<MemberCommentUpdateResult> => {
@@ -981,6 +992,7 @@ export function createCommentService(database: Database["db"]): CommentService {
           .set({
             body,
             textPolicyVersion: TEXT_POLICY_VERSION,
+            publicationState: requiresReview ? "PENDING_HUMAN_REVIEW" : "PUBLISHED",
             editedAt: now,
             bodyRevision: sql`${comments.bodyRevision} + 1`,
             version: sql`${comments.version} + 1`,
@@ -1018,12 +1030,12 @@ export function createCommentService(database: Database["db"]): CommentService {
           id: eventId,
           aggregateType: "COMMENT",
           aggregateId: updated.id,
-          eventType: "COMMENT_EDITED",
+          eventType: requiresReview ? "COMMENT_REVIEW_REQUESTED" : "COMMENT_EDITED",
           schemaVersion: EVENT_SCHEMA_VERSION,
           occurredAt: now,
           payload: {
             event_id: eventId,
-            event_type: "COMMENT_EDITED",
+            event_type: requiresReview ? "COMMENT_REVIEW_REQUESTED" : "COMMENT_EDITED",
             schema_version: EVENT_SCHEMA_VERSION,
             occurred_at: now.toISOString(),
             aggregate_type: "COMMENT",

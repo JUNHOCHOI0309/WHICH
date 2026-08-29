@@ -12,6 +12,8 @@ import {
   issueChoices,
   issueMediaAssets,
   issueMediaAssetVersions,
+  issueMediaKnownBlockHashes,
+  issueMediaRuleFindings,
   issueMediaReviewDecisions,
   issueMediaRightsRequests,
   issues,
@@ -166,6 +168,32 @@ describe("operator Issue media foundation", () => {
       publishedUrl: null,
     });
     expect(storage.operations).toContain(`stage:${asset.id}`);
+    const findings = await database.db
+      .select({ code: issueMediaRuleFindings.code })
+      .from(issueMediaRuleFindings)
+      .where(eq(issueMediaRuleFindings.mediaAssetId, asset.id));
+    expect(findings).toContainEqual({ code: "MEDIA_INSPECTION_INCOMPLETE" });
+  });
+
+  it("rejects a verified exact known-block hash before staging", async () => {
+    const storage = new FakeIssueMediaStorage();
+    const service = createIssueMediaService(database.db, storage);
+    const bytes = await image("png", { r: 190, g: 1, b: 2 });
+    const processed = await processIssueMedia(bytes, "image/png");
+    await database.db.insert(issueMediaKnownBlockHashes).values({
+      sha256: processed.sha256,
+      policyVersion: "known-block-test-v1",
+      reasonCode: "VERIFIED_TEST_BLOCK",
+    });
+    await expect(
+      service.stageMemberAsset({
+        memberId: regularMemberId,
+        rightsAttestation: "I own this blocked test image and request an upload review.",
+        declaredMimeType: "image/png",
+        bytes,
+      }),
+    ).rejects.toMatchObject({ code: "MEDIA_KNOWN_BLOCK" });
+    expect(storage.operations).toEqual([]);
   });
 
   it("fails closed when R2 media storage is missing, shared, or publicly misconfigured", () => {
@@ -277,18 +305,31 @@ describe("operator Issue media foundation", () => {
     };
     const stageMemberAsset = vi.fn(() => Promise.resolve(staged));
     const service = { stageMemberAsset } as unknown as IssueMediaService;
+    const consumeSession = vi.fn(() => Promise.resolve({ objectKey: "private/source" }));
+    const uploadGate = {
+      createSession: vi.fn(),
+      consumeSession,
+    };
     const identity = {
       getSession: vi.fn((token: string) =>
         Promise.resolve(token === "member-token" ? { member: { id: regularMemberId } } : null),
       ),
     };
-    await registerIssueMediaRoutes(app, service, identity as never, "test-internal-secret");
+    await registerIssueMediaRoutes(
+      app,
+      service,
+      identity as never,
+      "test-internal-secret",
+      uploadGate,
+    );
 
     const response = await app.inject({
       method: "POST",
       url: "/v1/member/issue-submission-media",
       headers: { authorization: "Bearer member-token" },
       payload: {
+        uploadSessionId: randomUUID(),
+        uploadSessionToken: "x".repeat(43),
         rightsAttestation: "I own this image and allow editorial review and publication.",
         declaredMimeType: "image/png",
         contentBase64: "aGVsbG8=",
@@ -298,6 +339,9 @@ describe("operator Issue media foundation", () => {
     expect(response.json()).toMatchObject({ asset: { sourceType: "MEMBER_SUBMISSION" } });
     expect(stageMemberAsset).toHaveBeenCalledWith(
       expect.objectContaining({ memberId: regularMemberId, bytes: Buffer.from("hello") }),
+    );
+    expect(consumeSession).toHaveBeenCalledWith(
+      expect.objectContaining({ memberId: regularMemberId, byteSize: 5 }),
     );
     await app.close();
   });
