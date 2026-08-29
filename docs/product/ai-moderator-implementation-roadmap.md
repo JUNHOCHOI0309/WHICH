@@ -255,6 +255,8 @@ WHICH-109의 avatar 신고·격리·fallback은 현재 공개 공격면이므로
 
 WHICH-99의 실행 계약과 배포 전환 기준은
 [`moderation-shadow-worker.md`](../operations/moderation-shadow-worker.md)를 기준으로 한다.
+WHICH-100의 Dataset·평가·회귀 보고 계약은
+[`moderation-golden-set-evaluation.md`](../operations/moderation-golden-set-evaluation.md)를 기준으로 한다.
 
 ## Go/No-Go 원칙
 
