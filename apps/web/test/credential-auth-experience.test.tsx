@@ -51,6 +51,8 @@ describe("Member credential authentication experience", () => {
         .getAllByRole("link", { name: "개인정보 처리방침" })
         .some((link) => link.matches('[href="/legal/privacy"][target="_blank"]')),
     ).toBe(true);
+    expect(screen.getByText(/게시하는 콘텐츠에 필요한 권리를 보유하며/)).toBeVisible();
+    expect(screen.getByText(/자동 안전 검수와 신고·권리 요청 결과/)).toBeVisible();
   });
 
   it("shows and applies the new password requirements during signup", () => {
@@ -71,6 +73,7 @@ describe("Member credential authentication experience", () => {
     render(<SocialSignupExperience provider="KAKAO" suggestedEmail="member@example.com" />);
 
     expect(screen.getByDisplayValue("member@example.com")).toBeVisible();
+    expect(screen.getByText(/게시하는 콘텐츠에 필요한 권리를 보유하며/)).toBeVisible();
     expect(screen.getByRole("button", { name: "가입하고 기록 이어받기" })).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "기존 계정에 연결" }));
     expect(screen.getByRole("heading", { name: "기존 WHICH 계정에 연결해요." })).toBeVisible();

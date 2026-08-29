@@ -1,7 +1,7 @@
 # Image Moderation Operating Strategy v2
 
 - Status: proposed operating contract — production member upload remains disabled
-- Last updated: 2026-08-28
+- Last updated: 2026-08-29
 - Task: `WHICH-140`
 - Notion report: [WHICH 이미지 Moderation 운영 전략 v2](https://app.notion.com/p/3c928b27a5598189aa9bef1335295840)
 - Approved library backlog: [WHICH-141](https://app.notion.com/p/3c928b27a55981ab94abc6322a125bf8)
@@ -28,8 +28,10 @@ member direct upload
   -> risk-stratified audit and post-publication reports
 ```
 
-The first member pilot remains pre-publication human review. A future fast lane is a separate
-release decision that requires substantially more evidence than the pilot smoke test.
+Pre-publication human review is limited to internal validation and exceptional cases. Once member
+upload is enabled, the product default is automatic publication after every required technical,
+privacy, and safety gate passes. Clear high-risk findings are rejected or quarantined automatically;
+uncertain findings, reports, rights requests, and appeals enter the operator queue.
 
 ## What the source proposal gets right
 
@@ -132,8 +134,12 @@ WHICH should obtain legal review before enabling a jurisdiction-specific copyrig
 - Requires `ISSUE_MEMBER_MEDIA_UPLOAD_MODE=PILOT`, an active `ISSUE_IMAGE_UPLOAD` grant, current
   rights/privacy consent, ownership of an unpublished eligible Issue, and server-enforced daily and
   open-asset quotas.
-- Starts with a named cohort and pre-publication human approval.
-- Can move to a provisional lane only after the separate automation gate passes.
+- Uses the rights/privacy terms accepted during account signup instead of asking for a repeated
+  per-image rights checkbox. Accounts created before the current terms version require a one-time
+  terms re-acceptance before their first direct upload.
+- Internal validation may use a named cohort and pre-publication review, but production member UX
+  automatically publishes low-risk assets after all required gates pass.
+- Only high-risk, uncertain, reported, rights-challenged, or appealed assets require human review.
 
 ## Secure upload and processing contract
 
@@ -176,11 +182,11 @@ uncertain result, provider failure, partial OCR, model disagreement, unsupported
 validated low-risk candidate during pre-review pilot
   -> REVIEW_READY + human review
 
-validated low-risk candidate after automation release gate
-  -> PROVISIONAL_PUBLISH + random/targeted audit
+validated low-risk candidate after member-upload release gate
+  -> PUBLISH + random/targeted post-publication audit
 ```
 
-All conditions in a provisional-publish policy must pass. Missing data is not treated as safe.
+All conditions in the publish policy must pass. Missing data is not treated as safe.
 Permanent deletion, long account restriction, appeal, rights resolution, identity inference, minor
 status, defamation truth, and copyright ownership remain human decisions.
 
