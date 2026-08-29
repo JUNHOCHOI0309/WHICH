@@ -176,46 +176,52 @@ export function HeaderMemberNotifications() {
   const [open, setOpen] = useState(false);
   const [center, setCenter] = useState<MemberNotificationCenter | null>(null);
   const [loading, setLoading] = useState(true);
+  const [markingAllRead, setMarkingAllRead] = useState(false);
   const [error, setError] = useState(false);
   const root = useRef<HTMLDivElement>(null);
 
-  const load = useCallback(async (markRead = false) => {
+  const load = useCallback(async () => {
     setLoading(true);
     setError(false);
     try {
       const next = await readNotificationCenter();
       setCenter(next);
-      const unreadIds = markRead
-        ? next.items.filter((notice) => !notice.readAt).map((notice) => notice.id)
-        : [];
-      if (unreadIds.length) {
-        const readResponse = await fetch("/api/me/notifications", {
-          method: "PATCH",
-          credentials: "same-origin",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ noticeIds: unreadIds }),
-        });
-        if (readResponse.ok) {
-          const readAt = new Date().toISOString();
-          setCenter((current) =>
-            current
-              ? {
-                  ...current,
-                  unreadCount: 0,
-                  items: current.items.map((notice) =>
-                    unreadIds.includes(notice.id) ? { ...notice, readAt } : notice,
-                  ),
-                }
-              : current,
-          );
-        }
-      }
     } catch {
       setError(true);
     } finally {
       setLoading(false);
     }
   }, []);
+
+  const markAllRead = useCallback(async () => {
+    const noticeIds = center?.items.map((notice) => notice.id) ?? [];
+    if (!noticeIds.length || markingAllRead) return;
+    setMarkingAllRead(true);
+    setError(false);
+    try {
+      const response = await fetch("/api/me/notifications", {
+        method: "PATCH",
+        credentials: "same-origin",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ noticeIds }),
+      });
+      if (!response.ok) throw new Error("notifications unavailable");
+      setCenter((current) =>
+        current
+          ? {
+              ...current,
+              generatedAt: new Date().toISOString(),
+              unreadCount: 0,
+              items: [],
+            }
+          : current,
+      );
+    } catch {
+      setError(true);
+    } finally {
+      setMarkingAllRead(false);
+    }
+  }, [center?.items, markingAllRead]);
 
   useEffect(() => {
     if (state !== "member") return;
@@ -270,7 +276,7 @@ export function HeaderMemberNotifications() {
         onClick={() => {
           const nextOpen = !open;
           setOpen(nextOpen);
-          if (nextOpen) void load(true);
+          if (nextOpen) void load();
         }}
       >
         <Image src="/icons/bell.png" alt="" aria-hidden="true" width={21} height={21} />
@@ -292,8 +298,12 @@ export function HeaderMemberNotifications() {
             <div>
               <strong>알림</strong>
             </div>
-            <button type="button" aria-label="알림 닫기" onClick={() => setOpen(false)}>
-              ×
+            <button
+              type="button"
+              disabled={loading || markingAllRead || !center?.items.length}
+              onClick={() => void markAllRead()}
+            >
+              {markingAllRead ? "처리 중..." : "모두 읽기"}
             </button>
           </header>
           <div className={styles.notificationList} aria-live="polite">
@@ -301,7 +311,7 @@ export function HeaderMemberNotifications() {
             {error ? (
               <div className={styles.notificationState} role="alert">
                 <p>알림을 불러오지 못했어요.</p>
-                <button type="button" onClick={() => void load(true)}>
+                <button type="button" onClick={() => void load()}>
                   다시 시도
                 </button>
               </div>
