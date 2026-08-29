@@ -10,6 +10,7 @@ import {
   detectModerationDrift,
   toGoldenSetPrediction,
 } from "../src/modules/moderation-providers/evaluation.js";
+import { toImageProviderShadowFindings } from "../src/modules/moderation-providers/image-shadow-findings.js";
 import {
   normalizeProviderImage,
   redactProviderContext,
@@ -87,6 +88,46 @@ describe("OpenAI moderation Shadow adapter", () => {
         input: [{ type: "text", text: "test" }],
       }),
     );
+  });
+
+  it("sends the normalized private derivative as an image data URL", async () => {
+    let capturedBody: string | null = null;
+    const adapter = createOpenAiModerationAdapter({
+      apiKey: "test-key",
+      fetchImpl: (_url, init) => {
+        capturedBody = typeof init?.body === "string" ? init.body : null;
+        return Promise.resolve(providerResponse());
+      },
+      resolveInput: () =>
+        Promise.resolve({
+          targetType: "ISSUE_MEDIA_ASSET",
+          modality: "TEXT_AND_IMAGE",
+          text: "context without direct identifiers",
+          image: {
+            dataUrl: "data:image/webp;base64,V0VCUA==",
+            mimeType: "image/webp",
+            width: 256,
+            height: 256,
+            byteLength: 4,
+            metadataStripped: true,
+            reencoded: true,
+          },
+        }),
+    });
+
+    await adapter.inspect({
+      ...target,
+      targetType: "ISSUE_MEDIA_ASSET",
+      privateObjectReference: "issue-media://asset/8fd72bc6-e431-49cb-b918-b4497563d7f5/version/1",
+    });
+
+    expect(JSON.parse(capturedBody ?? "{}")).toEqual({
+      model: "omni-moderation-2024-09-26",
+      input: [
+        { type: "text", text: "context without direct identifiers" },
+        { type: "image_url", image_url: { url: "data:image/webp;base64,V0VCUA==" } },
+      ],
+    });
   });
 
   it.each([
@@ -276,5 +317,63 @@ describe("Shadow evaluation bridge", () => {
         },
       }),
     ).toMatchObject({ drifted: true, modelChanged: true });
+  });
+
+  it("maps image Shadow output to versioned, non-blocking canonical findings", () => {
+    const findings = toImageProviderShadowFindings({
+      result: {
+        ...result,
+        modality: "TEXT_AND_IMAGE",
+        unsupportedLabels: [...result.unsupportedLabels, "ISSUE_RELEVANCE", "VISUAL_FAIRNESS"],
+        signals: [
+          {
+            ...result.signals[0]!,
+            providerLabel: "violence/graphic",
+            canonicalCode: "CONTENT_GRAPHIC_VIOLENCE",
+            appliedModalities: ["IMAGE"],
+          },
+        ],
+      },
+      policyVersion: "moderation-shadow-v1",
+      cacheHit: false,
+    });
+
+    const graphicFinding = findings.find(
+      ({ code }) => code === "MEDIA_AI_CONTENT_GRAPHIC_VIOLENCE",
+    );
+    expect(graphicFinding).toMatchObject({
+      stage: "PROVIDER_SHADOW",
+      severity: "REVIEW",
+    });
+    expect(graphicFinding?.evidence).toMatchObject({
+      score: 0.82,
+      appliedModalities: ["IMAGE"],
+      publicationChanged: false,
+    });
+    const capabilities = findings.find(({ code }) => code === "MEDIA_AI_PROVIDER_CAPABILITIES");
+    expect(capabilities).toMatchObject({ severity: "INFO" });
+    expect(capabilities?.evidence).toMatchObject({
+      boundingBoxesSupported: false,
+      relevanceSupported: false,
+      visualFairnessSupported: false,
+    });
+    expect(findings.map(({ severity }) => severity)).not.toContain("BLOCK");
+  });
+
+  it("does not create image findings from malformed or text-only results", () => {
+    expect(
+      toImageProviderShadowFindings({
+        result: { unexpected: true },
+        policyVersion: "moderation-shadow-v1",
+        cacheHit: false,
+      }),
+    ).toEqual([]);
+    expect(
+      toImageProviderShadowFindings({
+        result,
+        policyVersion: "moderation-shadow-v1",
+        cacheHit: false,
+      }),
+    ).toEqual([]);
   });
 });
