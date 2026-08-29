@@ -19,6 +19,7 @@ import {
   outboxEvents,
 } from "../../database/schema/index.js";
 import type { IssueMediaObjectStorage } from "../issue-media/contracts.js";
+import { ModerationProviderCallError } from "../moderation-providers/contracts.js";
 import {
   createModerationSubmissionEvents,
   MODERATION_POLICY_VERSION,
@@ -36,8 +37,16 @@ export type ModerationDispatcherOptions = {
   policyVersion?: string;
   ruleVersion?: string;
   now?: () => Date;
-  providerGate?: () => { allowed: boolean; reason: string };
+  providerGate?: ModerationProviderGate;
 };
+
+export type ModerationProviderGate = (input: {
+  targetType: ModerationRequestedEvent["data"]["target_type"];
+  targetId: string;
+  targetVersion: number;
+  normalizedInputHash: string;
+  policyVersion: string;
+}) => Promise<{ allowed: boolean; reason: string }> | { allowed: boolean; reason: string };
 
 const MAX_ERROR_LENGTH = 2_000;
 
@@ -429,7 +438,15 @@ export function createModerationDispatcherService(
         costMicros: 0,
       };
     }
-    const gate = options.providerGate?.() ?? { allowed: false, reason: "PROVIDER_GATE_REQUIRED" };
+    const gate = options.providerGate
+      ? await options.providerGate({
+          targetType: event.data.target_type,
+          targetId: target.targetId,
+          targetVersion: target.targetVersion,
+          normalizedInputHash: run.normalizedInputHash,
+          policyVersion: run.policyVersion,
+        })
+      : { allowed: false, reason: "PROVIDER_GATE_REQUIRED" };
     if (!gate.allowed) {
       return {
         status: "SKIPPED" as const,
@@ -557,7 +574,10 @@ export function createModerationDispatcherService(
         claimToken: null,
         claimedAt: null,
         deadLetteredAt: deadLettered ? failedAt : null,
-        errorCode: "SHADOW_EXECUTION_FAILED",
+        errorCode:
+          error instanceof ModerationProviderCallError
+            ? `PROVIDER_${error.kind}`
+            : "SHADOW_EXECUTION_FAILED",
         errorMessage: errorMessage(error),
         updatedAt: failedAt,
       })
