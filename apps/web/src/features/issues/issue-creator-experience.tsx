@@ -2,19 +2,24 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { toast } from "@/components/feedback/toast-provider";
 import type {
   CreateIssueCommand,
   InterestCardRegistry,
+  IssueMediaUploadAccess,
   IssueMediaLibraryPair,
 } from "@/lib/contracts";
 
 import {
+  acceptIssueMediaConsent,
+  attachIssueSubmissionMedia,
   createMemberIssue,
   loadIssueCreationContext,
   loadIssueMediaLibrary,
+  submitMemberIssue,
+  uploadIssueSubmissionMedia,
 } from "./issue-creator-client";
 import styles from "./issue-creator-experience.module.css";
 
@@ -39,6 +44,16 @@ function initialDraft() {
   }
 }
 
+function useObjectUrl(file: File | null) {
+  const url = useMemo(() => (file ? URL.createObjectURL(file) : null), [file]);
+  useEffect(() => {
+    return () => {
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [url]);
+  return url;
+}
+
 export function IssueCreatorExperience({
   presentation = "page",
 }: {
@@ -48,13 +63,21 @@ export function IssueCreatorExperience({
   const [state, setState] = useState<"loading" | "guest" | "member" | "error">("loading");
   const [registry, setRegistry] = useState<InterestCardRegistry | null>(null);
   const [library, setLibrary] = useState<IssueMediaLibraryPair[]>([]);
+  const [mediaAccess, setMediaAccess] = useState<IssueMediaUploadAccess | null>(null);
   const [libraryState, setLibraryState] = useState<"loading" | "ready" | "error">("loading");
-  const [mediaMode, setMediaMode] = useState<"TEXT_ONLY" | "LIBRARY">(
+  const [mediaMode, setMediaMode] = useState<"TEXT_ONLY" | "LIBRARY" | "DIRECT">(
     initialDraft().libraryPairId ? "LIBRARY" : "TEXT_ONLY",
   );
   const [draft, setDraft] = useState<CreateIssueCommand>(initialDraft);
   const [submitting, setSubmitting] = useState(false);
+  const [acceptingMediaTerms, setAcceptingMediaTerms] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [directFiles, setDirectFiles] = useState<{ A: File | null; B: File | null }>({
+    A: null,
+    B: null,
+  });
+  const directPreviewA = useObjectUrl(directFiles.A);
+  const directPreviewB = useObjectUrl(directFiles.B);
   const pendingKey = useRef<string | null>(null);
 
   useEffect(() => {
@@ -64,6 +87,7 @@ export function IssueCreatorExperience({
           setState("guest");
           return;
         }
+        setMediaAccess(context.mediaAccess);
         const libraryResult = await loadIssueMediaLibrary().catch(() => null);
         if (libraryResult) {
           setLibrary(libraryResult.items);
@@ -134,11 +158,38 @@ export function IssueCreatorExperience({
         setSubmitting(true);
         setError(null);
         pendingKey.current ??= crypto.randomUUID();
-        void createMemberIssue(draft, pendingKey.current)
+        const publish = async () => {
+          if (mediaMode !== "DIRECT") {
+            const result = await createMemberIssue(draft, pendingKey.current!);
+            return { kind: "PUBLISHED" as const, issueId: result.issue.id };
+          }
+          if (!mediaAccess?.allowed || !directFiles.A || !directFiles.B) {
+            throw new Error("A와 B 이미지를 모두 선택해 주세요.");
+          }
+          const base = { ...draft, libraryPairId: null, mediaAssetAId: null, mediaAssetBId: null };
+          const result = await submitMemberIssue(base, pendingKey.current!);
+          const assetA = await uploadIssueSubmissionMedia(result.submission.id, directFiles.A);
+          const assetB = await uploadIssueSubmissionMedia(result.submission.id, directFiles.B);
+          await attachIssueSubmissionMedia(
+            result.submission,
+            base,
+            assetA.asset.id,
+            assetB.asset.id,
+            crypto.randomUUID(),
+          );
+          return { kind: "PENDING" as const };
+        };
+        void publish()
           .then((result) => {
             window.sessionStorage.removeItem(DRAFT_KEY);
-            toast.success("질문을 게시했어요.");
-            router.push(`/issues/${result.issue.id}`);
+            pendingKey.current = null;
+            if (result.kind === "PUBLISHED") {
+              toast.success("질문을 게시했어요.");
+              router.push(`/issues/${result.issueId}`);
+            } else {
+              toast.success("이미지 안전 검사를 요청했어요.");
+              router.push("/me?tab=issues");
+            }
           })
           .catch((reason) => {
             const status =
@@ -223,6 +274,7 @@ export function IssueCreatorExperience({
               onClick={() => {
                 setMediaMode("TEXT_ONLY");
                 update("libraryPairId", null);
+                setDirectFiles({ A: null, B: null });
               }}
             >
               텍스트만
@@ -234,10 +286,53 @@ export function IssueCreatorExperience({
             >
               승인 이미지 Library
             </button>
-            <button type="button" disabled title="신뢰 사용자 Pilot에서 순차 제공됩니다.">
-              직접 업로드 · 준비 중
+            <button
+              type="button"
+              data-active={mediaMode === "DIRECT"}
+              disabled={!mediaAccess?.allowed}
+              title={
+                mediaAccess?.allowed
+                  ? "선택지 이미지를 직접 올립니다."
+                  : "신뢰 사용자 Pilot 대상에게 순차 제공됩니다."
+              }
+              onClick={() => {
+                setMediaMode("DIRECT");
+                update("libraryPairId", null);
+              }}
+            >
+              {mediaAccess?.allowed ? "직접 업로드" : "직접 업로드 · Pilot"}
             </button>
           </div>
+          {mediaAccess?.mode === "PILOT" && mediaAccess.reasons.includes("CONSENT_REQUIRED") ? (
+            <div className={styles.mediaConsent}>
+              <p>
+                기존 회원은 이미지 직접 업로드 전에 현재 <Link href="/legal/terms">이용약관</Link>의
+                콘텐츠 권리·자동 안전 검사 항목을 한 번 확인해 주세요.
+              </p>
+              <button
+                type="button"
+                disabled={acceptingMediaTerms}
+                onClick={() => {
+                  setAcceptingMediaTerms(true);
+                  void acceptIssueMediaConsent()
+                    .then(({ access }) => {
+                      setMediaAccess(access);
+                      toast.success("이미지 업로드 약관에 동의했어요.");
+                    })
+                    .catch((reason) =>
+                      setError(
+                        reason instanceof Error
+                          ? reason.message
+                          : "이미지 업로드 약관 동의를 저장하지 못했습니다.",
+                      ),
+                    )
+                    .finally(() => setAcceptingMediaTerms(false));
+                }}
+              >
+                {acceptingMediaTerms ? "저장 중…" : "확인하고 동의"}
+              </button>
+            </div>
+          ) : null}
           {mediaMode === "LIBRARY" ? (
             <div className={styles.libraryPanel}>
               <p>
@@ -266,6 +361,32 @@ export function IssueCreatorExperience({
                     <b>{pair.title}</b>
                     <small>{pair.topics.slice(0, 3).join(" · ") || pair.categoryCode}</small>
                   </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+          {mediaMode === "DIRECT" && mediaAccess?.allowed ? (
+            <div className={styles.directUploadPanel}>
+              <p>
+                JPG, PNG, WebP 이미지를 A/B 각각 선택하세요. 등록 즉시 비공개 안전 검사를 거치며,
+                통과한 질문만 공개됩니다.
+              </p>
+              <div>
+                {(["A", "B"] as const).map((side) => (
+                  <label key={side} data-side={side}>
+                    <b>{side}</b>
+                    <span>{directFiles[side]?.name ?? `${side} 선택 이미지`}</span>
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      onChange={(event) =>
+                        setDirectFiles((current) => ({
+                          ...current,
+                          [side]: event.target.files?.[0] ?? null,
+                        }))
+                      }
+                    />
+                  </label>
                 ))}
               </div>
             </div>
@@ -304,6 +425,9 @@ export function IssueCreatorExperience({
               src={selectedPair.assets.find((asset) => asset.side === "A")!.url}
               alt={selectedPair.assets.find((asset) => asset.side === "A")!.altText}
             />
+          ) : directPreviewA ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={directPreviewA} alt="A 선택 이미지 미리보기" />
           ) : null}
           <b>A</b>
           <span>{draft.choiceA || "첫 번째 선택"}</span>
@@ -315,6 +439,9 @@ export function IssueCreatorExperience({
               src={selectedPair.assets.find((asset) => asset.side === "B")!.url}
               alt={selectedPair.assets.find((asset) => asset.side === "B")!.altText}
             />
+          ) : directPreviewB ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={directPreviewB} alt="B 선택 이미지 미리보기" />
           ) : null}
           <b>B</b>
           <span>{draft.choiceB || "두 번째 선택"}</span>
@@ -323,16 +450,28 @@ export function IssueCreatorExperience({
 
       <div className={styles.submitBar}>
         <p>
-          {selectedPair
-            ? "승인 Library 이미지와 함께 바로 피드에 표시됩니다."
-            : "공개 후 바로 피드에 표시됩니다."}{" "}
+          {mediaMode === "DIRECT"
+            ? "선택한 이미지는 비공개 안전 검사를 거친 뒤 공개됩니다."
+            : selectedPair
+              ? "승인 Library 이미지와 함께 바로 피드에 표시됩니다."
+              : "공개 후 바로 피드에 표시됩니다."}{" "}
           링크·정치·고위험 주제는 v1에서 게시할 수 없어요.
         </p>
         <button
           type="submit"
-          disabled={submitting || (mediaMode === "LIBRARY" && !draft.libraryPairId)}
+          disabled={
+            submitting ||
+            (mediaMode === "LIBRARY" && !draft.libraryPairId) ||
+            (mediaMode === "DIRECT" && (!directFiles.A || !directFiles.B))
+          }
         >
-          {submitting ? "게시하는 중…" : "질문 게시하기"}
+          {submitting
+            ? mediaMode === "DIRECT"
+              ? "검사 요청 중…"
+              : "게시하는 중…"
+            : mediaMode === "DIRECT"
+              ? "안전 검사 요청하기"
+              : "질문 게시하기"}
         </button>
       </div>
       {error ? (

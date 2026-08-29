@@ -18,15 +18,17 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { toast } from "@/components/feedback/toast";
-import type { InterestCardCode, IssueMediaLibraryPair, MemberIssueSubmission } from "@/contracts";
+import type {
+  InterestCardCode,
+  IssueMediaLibraryPair,
+  IssueMediaUploadAccess,
+  MemberIssueSubmission,
+} from "@/contracts";
 import { memberSessions, mobileApi } from "@/lib/runtime";
 import { subjectStorage } from "@/lib/secure-subject-storage";
 import { colors } from "@/theme";
 
 const DRAFT_KEY = "which_mobile_issue_draft_v1";
-const RIGHTS_ATTESTATION =
-  "본인은 이 이미지를 사용할 권리를 보유했으며 WHICH 운영 검수와 게시에 동의합니다.";
-
 type DraftMedia = {
   uri?: string;
   name?: string;
@@ -46,7 +48,6 @@ type Draft = {
   mediaA?: DraftMedia;
   mediaB?: DraftMedia;
   libraryPairId?: string;
-  rightsConfirmed?: boolean;
   interestCardCode: InterestCardCode | null;
 };
 
@@ -83,6 +84,7 @@ export default function CreateIssueScreen() {
   const [cards, setCards] = useState<{ code: InterestCardCode; label: string }[]>([]);
   const [submissions, setSubmissions] = useState<MemberIssueSubmission[]>([]);
   const [library, setLibrary] = useState<IssueMediaLibraryPair[]>([]);
+  const [mediaAccess, setMediaAccess] = useState<IssueMediaUploadAccess | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
@@ -97,12 +99,14 @@ export default function CreateIssueScreen() {
     setDraft(parseDraft(stored) ?? emptyDraft());
     setCards(registry.cards.map(({ code, label }) => ({ code, label })));
     if (session) {
-      const [submissionResult, libraryResult] = await Promise.all([
+      const [submissionResult, libraryResult, accessResult] = await Promise.all([
         mobileApi.loadMemberIssueSubmissions(session.token).catch(() => null),
         mobileApi.loadIssueMediaLibrary(session.token).catch(() => null),
+        mobileApi.loadIssueMediaUploadAccess(session.token).catch(() => null),
       ]);
       setSubmissions(submissionResult?.items ?? []);
       setLibrary(libraryResult?.items ?? []);
+      setMediaAccess(accessResult?.access ?? null);
     }
     setLoading(false);
   }, []);
@@ -134,9 +138,9 @@ export default function CreateIssueScreen() {
       draft.interestCardCode &&
       hasA === hasB &&
       !(hasLibrary && (hasA || hasB)) &&
-      (!hasA || draft.rightsConfirmed === true)
+      (!hasA || mediaAccess?.allowed === true)
     );
-  }, [draft, sessionToken]);
+  }, [draft, mediaAccess?.allowed, sessionToken]);
 
   async function persistDraft(next: Draft) {
     setDraft(next);
@@ -181,18 +185,18 @@ export default function CreateIssueScreen() {
     });
   }
 
-  async function uploadDraftMedia(current: Draft, side: "A" | "B") {
+  async function uploadDraftMedia(current: Draft, submissionId: string, side: "A" | "B") {
     const key = side === "A" ? "mediaA" : "mediaB";
     const media = current[key];
     if (!media || media.assetId) return current;
     if (!media.uri || !media.name || !media.type) {
       throw new Error(`${side} 선택지 이미지를 다시 선택해 주세요.`);
     }
-    const result = await mobileApi.uploadMemberIssueMedia(
-      sessionToken!,
-      { uri: media.uri, name: media.name, type: media.type },
-      RIGHTS_ATTESTATION,
-    );
+    const result = await mobileApi.uploadMemberIssueMedia(sessionToken!, submissionId, {
+      uri: media.uri,
+      name: media.name,
+      type: media.type,
+    });
     const next = { ...current, [key]: { ...media, assetId: result.asset.id } };
     await persistDraft(next);
     return next;
@@ -217,9 +221,31 @@ export default function CreateIssueScreen() {
         router.replace("/issues/" + result.issue.id);
         return;
       }
+      const hasDirectMedia = Boolean(draft.mediaA || draft.mediaB);
       let prepared = draft;
-      prepared = await uploadDraftMedia(prepared, "A");
-      prepared = await uploadDraftMedia(prepared, "B");
+      if (hasDirectMedia && !prepared.submissionId) {
+        const base = await mobileApi.submitMemberIssue(sessionToken, prepared.idempotencyKey, {
+          question: prepared.question,
+          context: prepared.context.trim() || null,
+          choiceA: prepared.choiceA,
+          choiceB: prepared.choiceB,
+          mediaAssetAId: null,
+          mediaAssetBId: null,
+          interestCardCode: prepared.interestCardCode!,
+        });
+        prepared = {
+          ...prepared,
+          submissionId: base.submission.id,
+          expectedRevision: base.submission.revision,
+          idempotencyKey: randomUUID(),
+        };
+        await persistDraft(prepared);
+      }
+      if (hasDirectMedia && prepared.submissionId) {
+        const submissionId = prepared.submissionId;
+        prepared = await uploadDraftMedia(prepared, submissionId, "A");
+        prepared = await uploadDraftMedia(prepared, submissionId, "B");
+      }
       const content = {
         question: prepared.question,
         context: prepared.context.trim() || null,
@@ -230,14 +256,14 @@ export default function CreateIssueScreen() {
         interestCardCode: prepared.interestCardCode!,
       };
       const result =
-        draft.submissionId && draft.expectedRevision
+        prepared.submissionId && prepared.expectedRevision
           ? await mobileApi.resubmitMemberIssue(
               sessionToken,
-              draft.submissionId,
-              draft.idempotencyKey,
-              { ...content, expectedRevision: draft.expectedRevision },
+              prepared.submissionId,
+              prepared.idempotencyKey,
+              { ...content, expectedRevision: prepared.expectedRevision },
             )
-          : await mobileApi.submitMemberIssue(sessionToken, draft.idempotencyKey, content);
+          : await mobileApi.submitMemberIssue(sessionToken, prepared.idempotencyKey, content);
       await subjectStorage.removeItem(DRAFT_KEY);
       setDraft(emptyDraft());
       setSubmissions((current) => [
@@ -245,7 +271,7 @@ export default function CreateIssueScreen() {
         ...current.filter((item) => item.id !== result.submission.id),
       ]);
       toast.success(
-        draft.submissionId
+        prepared.submissionId
           ? `v${result.submission.revision} 수정본을 다시 제출했어요.`
           : "질문을 운영 검수로 제출했어요.",
       );
@@ -268,7 +294,6 @@ export default function CreateIssueScreen() {
       choiceB: submission.choiceB,
       mediaA: submission.mediaAssetAId ? { assetId: submission.mediaAssetAId } : undefined,
       mediaB: submission.mediaAssetBId ? { assetId: submission.mediaAssetBId } : undefined,
-      rightsConfirmed: Boolean(submission.mediaAssetAId && submission.mediaAssetBId),
       interestCardCode: submission.interestCardCode,
     });
     toast.info(`v${submission.revision} 수정 요청 내용을 편집합니다.`);
@@ -348,20 +373,50 @@ export default function CreateIssueScreen() {
             />
           </View>
 
-          <View style={styles.mediaRow}>
-            <ChoiceMedia
-              label="A 이미지 (선택)"
-              media={draft.mediaA}
-              onPress={() => void chooseMedia("A")}
-            />
-            <ChoiceMedia
-              label="B 이미지 (선택)"
-              media={draft.mediaB}
-              onPress={() => void chooseMedia("B")}
-            />
-          </View>
+          {mediaAccess?.allowed ? (
+            <View style={styles.mediaRow}>
+              <ChoiceMedia
+                label="A 이미지 (선택)"
+                media={draft.mediaA}
+                onPress={() => void chooseMedia("A")}
+              />
+              <ChoiceMedia
+                label="B 이미지 (선택)"
+                media={draft.mediaB}
+                onPress={() => void chooseMedia("B")}
+              />
+            </View>
+          ) : null}
           <View style={styles.section}>
             <Text style={styles.fieldLabel}>이미지 방식</Text>
+            {mediaAccess?.mode === "PILOT" && mediaAccess.reasons.includes("CONSENT_REQUIRED") ? (
+              <View style={styles.consentCard}>
+                <Text style={styles.help}>
+                  기존 회원은 이미지 직접 업로드 전에 콘텐츠 권리·자동 안전 검사 약관을 한 번 확인해
+                  주세요.
+                </Text>
+                <Pressable
+                  onPress={() => {
+                    void mobileApi
+                      .acceptIssueMediaConsent(sessionToken)
+                      .then(({ access }) => {
+                        setMediaAccess(access);
+                        toast.success("이미지 업로드 약관에 동의했어요.");
+                      })
+                      .catch((error) =>
+                        toast.error(
+                          error instanceof Error
+                            ? error.message
+                            : "이미지 업로드 약관 동의를 저장하지 못했습니다.",
+                        ),
+                      );
+                  }}
+                  style={styles.consentButton}
+                >
+                  <Text style={styles.consentButtonText}>확인하고 동의</Text>
+                </Pressable>
+              </View>
+            ) : null}
             <View style={styles.mediaModeRow}>
               <Pressable
                 onPress={() =>
@@ -370,13 +425,12 @@ export default function CreateIssueScreen() {
                     libraryPairId: undefined,
                     mediaA: undefined,
                     mediaB: undefined,
-                    rightsConfirmed: undefined,
                   }))
                 }
                 style={[styles.chip, !draft.libraryPairId && styles.chipSelected]}
               >
                 <Text style={[styles.chipText, !draft.libraryPairId && styles.chipTextSelected]}>
-                  텍스트 / 직접 업로드
+                  {mediaAccess?.allowed ? "텍스트 / 직접 업로드" : "텍스트만"}
                 </Text>
               </Pressable>
               <Pressable
@@ -387,7 +441,6 @@ export default function CreateIssueScreen() {
                     libraryPairId: current.libraryPairId ?? library[0]?.id,
                     mediaA: undefined,
                     mediaB: undefined,
-                    rightsConfirmed: undefined,
                   }))
                 }
                 style={[styles.chip, library.length === 0 && styles.buttonDisabled]}
@@ -410,7 +463,6 @@ export default function CreateIssueScreen() {
                         libraryPairId: pair.id,
                         mediaA: undefined,
                         mediaB: undefined,
-                        rightsConfirmed: undefined,
                       }))
                     }
                     style={[
@@ -437,26 +489,6 @@ export default function CreateIssueScreen() {
               <Text style={styles.help}>현재 사용할 수 있는 승인 이미지 쌍이 없습니다.</Text>
             )}
           </View>
-          {draft.mediaA || draft.mediaB ? (
-            <Pressable
-              accessibilityRole="checkbox"
-              accessibilityState={{ checked: draft.rightsConfirmed === true }}
-              onPress={() =>
-                setDraft((current) => ({
-                  ...current,
-                  rightsConfirmed: !current.rightsConfirmed,
-                }))
-              }
-              style={styles.rightsRow}
-            >
-              <View style={[styles.checkbox, draft.rightsConfirmed && styles.checkboxChecked]}>
-                <Text style={styles.checkboxText}>{draft.rightsConfirmed ? "✓" : ""}</Text>
-              </View>
-              <Text style={styles.rightsText}>
-                직접 촬영했거나 사용할 권리가 있는 이미지이며 운영 검수에 동의합니다.
-              </Text>
-            </Pressable>
-          ) : null}
 
           <View style={styles.section}>
             <Text style={styles.fieldLabel}>관심 주제</Text>
@@ -592,6 +624,24 @@ const styles = StyleSheet.create({
   choiceRow: { flexDirection: "row", gap: 10 },
   mediaRow: { flexDirection: "row", gap: 10 },
   mediaModeRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  consentCard: {
+    backgroundColor: colors.cyanSoft,
+    borderColor: colors.border,
+    borderRadius: 14,
+    borderWidth: 1,
+    gap: 10,
+    padding: 12,
+  },
+  consentButton: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    backgroundColor: colors.cyan,
+    borderRadius: 999,
+    justifyContent: "center",
+    minHeight: 38,
+    paddingHorizontal: 14,
+  },
+  consentButtonText: { color: "#062A31", fontSize: 12, fontWeight: "900" },
   mediaPicker: {
     alignItems: "center",
     backgroundColor: colors.surface,

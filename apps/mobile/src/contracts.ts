@@ -347,6 +347,18 @@ export type MemberIssueMediaAsset = {
   rightsState: "ASSERTED";
 };
 
+export type IssueMediaUploadAccess = {
+  mode: "OFF" | "PILOT";
+  allowed: boolean;
+  consentVersion: string;
+  reasons: ("MODE_DISABLED" | "CAPABILITY_REQUIRED" | "CONSENT_REQUIRED")[];
+  capability: {
+    state: "ACTIVE" | "SUSPENDED" | "REVOKED" | "EXPIRED";
+    expiresAt: string;
+  } | null;
+  limits: { dailyUploads: number; maximumOpenAssets: number; maximumBytes: number };
+};
+
 export type MemberModerationTargetType =
   "COMMENT_VERSION" | "ISSUE_VERSION" | "ISSUE_MEDIA_ASSET" | "PROFILE_VERSION";
 

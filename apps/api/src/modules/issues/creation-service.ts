@@ -487,11 +487,22 @@ export function createIssueWriteService(database: Database["db"]): IssueWriteSer
             "이미 더 최신 수정본이 제출되었습니다. 상태를 새로 불러와 주세요.",
           );
         }
-        if (current.status !== "NEEDS_CHANGES") {
+        const isPendingMediaAugmentation =
+          current.status === "PENDING" &&
+          current.mediaAssetAId === null &&
+          current.mediaAssetBId === null &&
+          normalized.mediaAssetAId !== null &&
+          normalized.mediaAssetBId !== null &&
+          current.question === normalized.question &&
+          current.context === normalized.context &&
+          current.choiceA === normalized.choiceA &&
+          current.choiceB === normalized.choiceB &&
+          current.interestCardCode === normalized.interestCardCode;
+        if (current.status !== "NEEDS_CHANGES" && !isPendingMediaAugmentation) {
           throw new IssueWriteError(
             "ISSUE_SUBMISSION_NOT_EDITABLE",
             409,
-            "운영자가 수정을 요청한 질문만 다시 제출할 수 있습니다.",
+            "운영자가 수정을 요청했거나 최초 이미지 업로드를 연결하는 질문만 다시 제출할 수 있습니다.",
           );
         }
 

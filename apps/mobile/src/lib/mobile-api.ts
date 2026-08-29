@@ -5,6 +5,7 @@ import type {
   InterestCardCode,
   InterestCardRegistry,
   InterestProfile,
+  IssueMediaUploadAccess,
   IssueMediaLibraryPair,
   MemberPointView,
   MemberPointShopView,
@@ -247,6 +248,21 @@ export function createMobileApiClient(
       return bodyOrError<{ items: IssueMediaLibraryPair[] }>(response);
     },
 
+    async loadIssueMediaUploadAccess(sessionToken: string) {
+      const response = await request(`${baseUrl}/api/mobile/v1/member/issue-media-upload-access`, {
+        headers: { accept: "application/json", authorization: `Bearer ${sessionToken}` },
+      });
+      return bodyOrError<{ access: import("@/contracts").IssueMediaUploadAccess }>(response);
+    },
+
+    async acceptIssueMediaConsent(sessionToken: string) {
+      const response = await request(`${baseUrl}/api/mobile/v1/member/issue-media-consent`, {
+        method: "POST",
+        headers: { accept: "application/json", authorization: `Bearer ${sessionToken}` },
+      });
+      return bodyOrError<{ access: IssueMediaUploadAccess }>(response);
+    },
+
     async createMemberIssue(
       sessionToken: string,
       idempotencyKey: string,
@@ -305,8 +321,8 @@ export function createMobileApiClient(
 
     async uploadMemberIssueMedia(
       sessionToken: string,
+      submissionId: string,
       media: { uri: string; name: string; type: "image/jpeg" | "image/png" | "image/webp" },
-      rightsAttestation: string,
     ) {
       const assetResponse = await request(media.uri);
       if (!assetResponse.ok) {
@@ -320,7 +336,7 @@ export function createMobileApiClient(
       const file = source.type === media.type ? source : source.slice(0, source.size, media.type);
       const form = new FormData();
       form.append("media", file, media.name);
-      form.append("rightsAttestation", rightsAttestation);
+      form.append("submissionId", submissionId);
       const response = await request(`${baseUrl}/api/mobile/v1/member/issue-submission-media`, {
         method: "POST",
         headers: { accept: "application/json", authorization: `Bearer ${sessionToken}` },

@@ -241,12 +241,126 @@
   opacity: 0.48;
 }
 
+.mediaConsent {
+  margin-top: 12px;
+  border: 1px solid var(--which-border);
+  border-radius: 14px;
+  background: var(--which-cyan-soft);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 14px;
+}
+
+.mediaConsent p {
+  margin: 0;
+  color: var(--which-text-secondary);
+  font-size: 0.74rem;
+  line-height: 1.55;
+}
+
+.mediaConsent a {
+  color: var(--which-cyan-strong);
+  font-weight: 850;
+}
+
+.mediaConsent button {
+  min-height: 38px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--which-cyan-strong);
+  color: #03202a;
+  padding: 0 14px;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 900;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.mediaConsent button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
 .libraryPanel {
   margin-top: 14px;
   border: 1px solid var(--which-border);
   border-radius: 16px;
   background: var(--which-surface-soft);
   padding: 14px;
+}
+
+.directUploadPanel {
+  margin-top: 14px;
+  border: 1px solid var(--which-border);
+  border-radius: 16px;
+  background: var(--which-surface-soft);
+  padding: 14px;
+}
+
+.directUploadPanel > p {
+  margin: 0 0 12px;
+  color: var(--which-text-secondary);
+  font-size: 0.74rem;
+  line-height: 1.55;
+}
+
+.directUploadPanel > div {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.directUploadPanel label {
+  min-width: 0;
+  min-height: 72px;
+  border: 1px dashed var(--which-border-strong);
+  border-radius: 13px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  background: #fff;
+  padding: 12px;
+  cursor: pointer;
+}
+
+.directUploadPanel label[data-side="A"] {
+  border-color: var(--which-cyan-strong);
+}
+
+.directUploadPanel label[data-side="B"] {
+  border-color: var(--which-orange-strong);
+}
+
+.directUploadPanel label b {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--which-text);
+  color: #fff;
+  font-size: 0.74rem;
+}
+
+.directUploadPanel label span {
+  overflow: hidden;
+  color: var(--which-text-secondary);
+  font-size: 0.75rem;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.directUploadPanel input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
 }
 
 .libraryPanel > p,
@@ -494,6 +608,11 @@
 
   .choiceGrid {
     grid-template-columns: 1fr;
+  }
+
+  .mediaConsent {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .libraryGrid {

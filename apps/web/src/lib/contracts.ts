@@ -54,7 +54,37 @@ export type CreateIssueCommand = {
   choiceA: string;
   choiceB: string;
   libraryPairId?: string | null;
+  mediaAssetAId?: string | null;
+  mediaAssetBId?: string | null;
   interestCardCode: InterestCardCode;
+};
+
+export type IssueMediaUploadAccess = {
+  mode: "OFF" | "PILOT";
+  allowed: boolean;
+  consentVersion: string;
+  reasons: Array<"MODE_DISABLED" | "CAPABILITY_REQUIRED" | "CONSENT_REQUIRED">;
+  capability: {
+    state: "ACTIVE" | "SUSPENDED" | "REVOKED" | "EXPIRED";
+    expiresAt: string;
+  } | null;
+  limits: { dailyUploads: number; maximumOpenAssets: number; maximumBytes: number };
+};
+
+export type MemberIssueSubmission = {
+  id: string;
+  revision: number;
+  status: "PENDING" | "APPROVED" | "NEEDS_CHANGES" | "REJECTED";
+  question: string;
+  context: string | null;
+  choiceA: string;
+  choiceB: string;
+  mediaAssetAId: string | null;
+  mediaAssetBId: string | null;
+  interestCardCode: InterestCardCode;
+  reviewNote: string | null;
+  submittedAt: string;
+  updatedAt: string;
 };
 
 export type IssueMediaLibraryPair = {

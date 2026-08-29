@@ -265,6 +265,142 @@ export async function registerIssueMediaRoutes(
       },
     );
 
+    mediaApp.get<{ Headers: Headers }>(
+      "/v1/member/issue-media-upload-access",
+      {
+        schema: {
+          tags: ["issues"],
+          summary: "Read the current Member Issue image upload capability",
+          headers: memberHeaders,
+        },
+      },
+      async (request, reply) => {
+        const memberId = await authenticateMember(request, reply);
+        if (!memberId) return;
+        if (!uploadGate) {
+          return reply.send({
+            access: {
+              mode: "OFF",
+              allowed: false,
+              consentVersion: "",
+              reasons: ["MODE_DISABLED"],
+              capability: null,
+              limits: {
+                dailyUploads: 0,
+                maximumOpenAssets: 0,
+                maximumBytes: 0,
+              },
+            },
+          });
+        }
+        return reply.send({ access: await uploadGate.readAccess(memberId) });
+      },
+    );
+
+    mediaApp.post<{ Headers: Headers }>(
+      "/v1/member/issue-media-consent",
+      {
+        schema: {
+          tags: ["issues"],
+          summary: "Accept the current Issue image rights and safety terms once",
+          headers: memberHeaders,
+        },
+      },
+      async (request, reply) => {
+        const memberId = await authenticateMember(request, reply);
+        if (!memberId) return;
+        if (!uploadGate) {
+          throw new IssueMediaUploadGateError(
+            "MEDIA_UPLOAD_NOT_AVAILABLE",
+            403,
+            "Member image upload is disabled.",
+            ["MODE_DISABLED"],
+          );
+        }
+        return reply.send({ access: await uploadGate.acceptConsent(memberId) });
+      },
+    );
+
+    mediaApp.get<{
+      Headers: Headers;
+      Querystring: { query?: string; limit?: number };
+    }>(
+      "/v1/internal/ops/media-upload-pilot",
+      {
+        schema: {
+          hide: true,
+          headers: opsHeaders,
+          querystring: Type.Object({
+            query: Type.Optional(Type.String({ maxLength: 160 })),
+            limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100, default: 50 })),
+          }),
+        },
+      },
+      async (request, reply) => {
+        const memberId = await authenticate(request, reply);
+        if (!memberId) return;
+        if (!uploadGate) return reply.send({ items: [] });
+        const result = await uploadGate.listPilotMembers({
+          operatorMemberId: memberId,
+          query: request.query.query,
+          limit: request.query.limit ?? 50,
+        });
+        if (!result) return operatorRequired(reply);
+        return reply.send(result);
+      },
+    );
+
+    mediaApp.post<{
+      Headers: Headers;
+      Params: { memberId: string };
+      Body: {
+        action: "GRANT" | "SUSPEND" | "REVOKE" | "RESTORE";
+        rationale: string;
+      };
+    }>(
+      "/v1/internal/ops/media-upload-pilot/:memberId/decision",
+      {
+        schema: {
+          hide: true,
+          headers: opsHeaders,
+          params: Type.Object({ memberId: uuid }),
+          body: Type.Object(
+            {
+              action: Type.Union([
+                Type.Literal("GRANT"),
+                Type.Literal("SUSPEND"),
+                Type.Literal("REVOKE"),
+                Type.Literal("RESTORE"),
+              ]),
+              rationale: Type.String({ minLength: 10, maxLength: 2000 }),
+            },
+            { additionalProperties: false },
+          ),
+        },
+      },
+      async (request, reply) => {
+        const memberId = await authenticate(request, reply);
+        if (!memberId) return;
+        if (!uploadGate) {
+          throw new IssueMediaUploadGateError(
+            "MEDIA_UPLOAD_NOT_AVAILABLE",
+            403,
+            "Member image upload is disabled.",
+            ["MODE_DISABLED"],
+          );
+        }
+        const target = await uploadGate.decidePilotCapability({
+          operatorMemberId: memberId,
+          targetMemberId: request.params.memberId,
+          action: request.body.action,
+          rationale: request.body.rationale,
+          requestId: request.id,
+        });
+        if (!target) return operatorRequired(reply);
+        return reply.send({ member: target });
+      },
+    );
+
     mediaApp.post<{
       Headers: Headers;
       Body: { submissionId: string; consentVersion: string };

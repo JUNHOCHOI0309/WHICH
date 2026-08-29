@@ -162,4 +162,80 @@ describe("IssueCreatorExperience", () => {
     expect(submissions[0]).not.toHaveProperty("mediaAssetBId");
     expect(navigation.push).toHaveBeenCalledWith("/issues/library-issue-id");
   });
+
+  it("uploads a trusted Member A/B pair sequentially and attaches it to one pending submission", async () => {
+    const requests: string[] = [];
+    let uploadCount = 0;
+    vi.stubGlobal("URL", {
+      ...URL,
+      createObjectURL: vi.fn((file: File) => `blob:${file.name}`),
+      revokeObjectURL: vi.fn(),
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = String(input);
+        requests.push(url);
+        if (url === "/api/member-session") return jsonResponse({ member: { status: "ACTIVE" } });
+        if (url === "/api/interests/cards") return jsonResponse(registry);
+        if (url === "/api/issue-media-upload-access") {
+          return jsonResponse({
+            access: {
+              mode: "PILOT",
+              allowed: true,
+              consentVersion: "which-media-consent-v1",
+              reasons: [],
+              capability: { state: "ACTIVE", expiresAt: "2026-09-28T00:00:00.000Z" },
+              limits: {
+                dailyUploads: 3,
+                maximumOpenAssets: 10,
+                maximumBytes: 10 * 1024 * 1024,
+              },
+            },
+          });
+        }
+        if (url.startsWith("/api/issue-media-library?")) return jsonResponse({ items: [] });
+        if (url === "/api/issue-submissions") {
+          return jsonResponse({
+            created: true,
+            submission: { id: "submission-1", revision: 1, status: "PENDING" },
+          });
+        }
+        if (url === "/api/issue-submission-media") {
+          uploadCount += 1;
+          return jsonResponse({ asset: { id: `asset-${uploadCount}` } }, 201);
+        }
+        if (url === "/api/issue-submissions/submission-1") {
+          return jsonResponse({
+            created: false,
+            submission: { id: "submission-1", revision: 2, status: "PENDING" },
+          });
+        }
+        throw new Error(`unexpected request: ${url}`);
+      }),
+    );
+    const { container } = render(<IssueCreatorExperience />);
+
+    fireEvent.change(await screen.findByPlaceholderText("예: 퇴근 후 바로 잘까, 조금 더 놀까?"), {
+      target: { value: "휴일에는 어디서 시간을 보낼까" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("바로 자기"), { target: { value: "도시" } });
+    fireEvent.change(screen.getByPlaceholderText("조금 더 놀기"), { target: { value: "자연" } });
+    fireEvent.click(await screen.findByRole("button", { name: "직접 업로드" }));
+    const inputs = container.querySelectorAll<HTMLInputElement>('input[type="file"]');
+    fireEvent.change(inputs[0]!, {
+      target: { files: [new File(["a"], "a.png", { type: "image/png" })] },
+    });
+    fireEvent.change(inputs[1]!, {
+      target: { files: [new File(["b"], "b.png", { type: "image/png" })] },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "안전 검사 요청하기" }));
+
+    await waitFor(() => expect(navigation.push).toHaveBeenCalledWith("/me?tab=issues"));
+    expect(requests.filter((url) => url === "/api/issue-submission-media")).toHaveLength(2);
+    expect(requests.indexOf("/api/issue-submission-media")).toBeLessThan(
+      requests.lastIndexOf("/api/issue-submission-media"),
+    );
+    expect(requests.at(-1)).toBe("/api/issue-submissions/submission-1");
+  });
 });
