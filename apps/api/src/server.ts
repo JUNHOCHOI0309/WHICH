@@ -28,6 +28,11 @@ import { createPointShopService } from "./modules/point-shop/service.js";
 import { createContentReportService } from "./modules/reports/service.js";
 import { createContentRevisionService } from "./modules/content-revisions/service.js";
 import { createMemberModerationService } from "./modules/member-moderation/service.js";
+import {
+  moderationProviderRuntimeConfig,
+  providerRuntimeDiagnostic,
+} from "./modules/moderation-providers/runtime-gate.js";
+import { readModerationOperationalHealth } from "./modules/moderation-operations/operational-health.js";
 
 loadEnvironment({
   path: [resolve(process.cwd(), "../../.env.local"), resolve(process.cwd(), "../../.env")],
@@ -36,6 +41,8 @@ loadEnvironment({
 
 const config = getConfig();
 const database = createDatabase(config.databaseUrl);
+const moderationProviderConfig = moderationProviderRuntimeConfig();
+const moderationRuntimeDiagnostic = providerRuntimeDiagnostic(moderationProviderConfig);
 const mediaStorageConfig = issueMediaStorageConfig();
 const issueMediaStorage = mediaStorageConfig ? createR2IssueMediaStorage(mediaStorageConfig) : null;
 const issueMediaService = issueMediaStorage
@@ -85,12 +92,18 @@ const app = await buildApp(config, {
           mode: config.featureFlags.issueMemberMediaUploadMode,
           consentVersion: config.featureFlags.issueMediaConsentVersion,
           pseudonymSecret: config.auth.moderationInternalSecret,
+          moderationCapacity: async () => ({
+            allowed: (
+              await readModerationOperationalHealth(database.db, moderationRuntimeDiagnostic)
+            ).directUploadAllowed,
+          }),
         }),
         issueMediaReview: issueMediaReviewService,
         opsModerationQueue: createOpsModerationQueueService(
           database.db,
           issueMediaReviewService,
           commentService,
+          moderationRuntimeDiagnostic,
         ),
       }
     : {}),

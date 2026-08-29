@@ -27,6 +27,10 @@ function formatDuration(value: number | null) {
   return `${(value / 3600).toFixed(1)}시간`;
 }
 
+function formatPercent(value: number) {
+  return `${(value * 100).toFixed(1)}%`;
+}
+
 async function json<T>(response: Response): Promise<T> {
   const body = (await response.json()) as T & { message?: string };
   if (!response.ok) throw new Error(body.message || "운영 요청에 실패했습니다.");
@@ -145,33 +149,106 @@ export function OpsModerationQueuePanel() {
       </div>
 
       {page ? (
-        <div className={styles.counts}>
-          <article>
-            <span>QUEUE</span>
-            <strong>{page.metrics.queueCount}</strong>
-          </article>
-          <article>
-            <span>OLDEST</span>
-            <strong>{formatDuration(page.metrics.oldestAgeSeconds)}</strong>
-          </article>
-          <article>
-            <span>REVIEW P50 / P95</span>
-            <strong>
-              {formatDuration(page.metrics.reviewSecondsP50)} /{" "}
-              {formatDuration(page.metrics.reviewSecondsP95)}
-            </strong>
-          </article>
-          <article>
-            <span>WEEKLY HOURS</span>
-            <strong>{page.metrics.weeklyOperatorHours.toFixed(1)}h</strong>
-          </article>
-          <article>
-            <span>INFLOW / OUTFLOW 7D</span>
-            <strong>
-              {page.metrics.inflow7d} / {page.metrics.outflow7d}
-            </strong>
-          </article>
-        </div>
+        <>
+          <div className={styles.counts}>
+            <article>
+              <span>QUEUE</span>
+              <strong>{page.metrics.queueCount}</strong>
+            </article>
+            <article>
+              <span>OLDEST</span>
+              <strong>{formatDuration(page.metrics.oldestAgeSeconds)}</strong>
+            </article>
+            <article>
+              <span>REVIEW P50 / P95</span>
+              <strong>
+                {formatDuration(page.metrics.reviewSecondsP50)} /{" "}
+                {formatDuration(page.metrics.reviewSecondsP95)}
+              </strong>
+            </article>
+            <article>
+              <span>WEEKLY HOURS</span>
+              <strong>{page.metrics.weeklyOperatorHours.toFixed(1)}h</strong>
+            </article>
+            <article>
+              <span>INFLOW / OUTFLOW 7D</span>
+              <strong>
+                {page.metrics.inflow7d} / {page.metrics.outflow7d}
+              </strong>
+            </article>
+          </div>
+
+          <section className={styles.moderationHealth} aria-label="AI Moderation 운영 안전">
+            <div className={styles.sectionTitle}>
+              <div>
+                <p className={styles.eyebrow}>PROVIDER &amp; WORKER SAFETY</p>
+                <h2>Shadow 운영 상태</h2>
+              </div>
+              <span>
+                직접 업로드 {page.operational.directUploadAllowed ? "허용 가능" : "일시 중지 권고"}
+              </span>
+            </div>
+            <div className={styles.counts}>
+              <article>
+                <span>MODE / CIRCUIT</span>
+                <strong>
+                  {page.operational.provider.mode} · {page.operational.provider.circuitState}
+                </strong>
+              </article>
+              <article>
+                <span>CALLS TODAY / CAP</span>
+                <strong>
+                  {page.operational.provider.callsToday} / {page.operational.provider.dailyCallCap}
+                </strong>
+              </article>
+              <article>
+                <span>ERROR / CACHE HIT 7D</span>
+                <strong>
+                  {formatPercent(page.operational.provider.errorRate7d)} /{" "}
+                  {formatPercent(page.operational.provider.cacheHitRate7d)}
+                </strong>
+              </article>
+              <article>
+                <span>P95 / COVERAGE 7D</span>
+                <strong>
+                  {page.operational.provider.latencyP95Ms === null
+                    ? "기록 없음"
+                    : `${Math.round(page.operational.provider.latencyP95Ms)}ms`}{" "}
+                  {" · "}
+                  {formatPercent(page.operational.provider.automationCoverage7d)}
+                </strong>
+              </article>
+              <article>
+                <span>WORKER PENDING / DEAD</span>
+                <strong>
+                  {page.operational.worker.pending} / {page.operational.worker.deadLettered}
+                </strong>
+              </article>
+              <article>
+                <span>R2·DB·CDN MISMATCH / FAIL</span>
+                <strong>
+                  {page.operational.reconciliation.mismatches} /{" "}
+                  {page.operational.reconciliation.failed}
+                </strong>
+              </article>
+            </div>
+            {page.operational.alerts.length > 0 ? (
+              <ul className={styles.operationalAlerts}>
+                {page.operational.alerts.map((alert) => (
+                  <li key={alert.code} data-severity={alert.severity}>
+                    <strong>{alert.severity}</strong>
+                    <span>{alert.message}</span>
+                    <code>{alert.code}</code>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className={styles.operationalClear}>
+                현재 Queue·비용·저장소 경계 경고가 없습니다.
+              </p>
+            )}
+          </section>
+        </>
       ) : null}
 
       <div className={styles.editorialGrid}>

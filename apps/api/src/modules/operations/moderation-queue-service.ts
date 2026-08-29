@@ -25,6 +25,8 @@ import {
 import type { CommentService } from "../comments/contracts.js";
 import type { IssueMediaReviewService } from "../issue-media/review-contracts.js";
 import { createModerationOperationsService } from "../moderation-operations/service.js";
+import { readModerationOperationalHealth } from "../moderation-operations/operational-health.js";
+import type { ModerationProviderRuntimeDiagnostic } from "../moderation-providers/runtime-gate.js";
 
 import type {
   OpsModerationQueueItem,
@@ -54,6 +56,7 @@ export function createOpsModerationQueueService(
   database: Database["db"],
   mediaReview: IssueMediaReviewService,
   commentsService: CommentService,
+  providerRuntime: ModerationProviderRuntimeDiagnostic,
 ): OpsModerationQueueService {
   const operations = createModerationOperationsService(database);
 
@@ -380,10 +383,13 @@ export function createOpsModerationQueueService(
       const durations = completed.map((row) =>
         Math.max(0, (row.updatedAt.getTime() - row.createdAt.getTime()) / 1000),
       );
-      const [operatorSeconds] = await database
-        .select({ seconds: sql<number>`coalesce(sum(${moderationActions.durationSeconds}), 0)` })
-        .from(moderationActions)
-        .where(gt(moderationActions.createdAt, sevenDaysAgo));
+      const [operatorSeconds, operational] = await Promise.all([
+        database
+          .select({ seconds: sql<number>`coalesce(sum(${moderationActions.durationSeconds}), 0)` })
+          .from(moderationActions)
+          .where(gt(moderationActions.createdAt, sevenDaysAgo)),
+        readModerationOperationalHealth(database, providerRuntime),
+      ]);
       const counts: OpsModerationQueuePage["counts"] = {
         HIGH: 0,
         NORMAL: 0,
@@ -414,11 +420,12 @@ export function createOpsModerationQueueService(
           averageSecondsPerAsset: durations.length
             ? durations.reduce((sum, value) => sum + value, 0) / durations.length
             : null,
-          weeklyOperatorHours: Number(operatorSeconds?.seconds ?? 0) / 3600,
+          weeklyOperatorHours: Number(operatorSeconds[0]?.seconds ?? 0) / 3600,
           inflow7d: rows.filter((row) => row.moderationCase.createdAt > sevenDaysAgo).length,
           outflow7d: completed.length,
         },
         counts,
+        operational,
         items,
       };
     },

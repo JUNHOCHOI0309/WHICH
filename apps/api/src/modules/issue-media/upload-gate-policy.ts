@@ -21,7 +21,8 @@ export type IssueMediaUploadGateReason =
   | "MEMBER_DAILY_LIMIT"
   | "IP_DAILY_LIMIT"
   | "CONCURRENT_SESSION_LIMIT"
-  | "OPEN_ASSET_LIMIT";
+  | "OPEN_ASSET_LIMIT"
+  | "MODERATION_CAPACITY_PAUSED";
 
 export function evaluateIssueMediaUploadGate(input: {
   mode: "OFF" | "PILOT";

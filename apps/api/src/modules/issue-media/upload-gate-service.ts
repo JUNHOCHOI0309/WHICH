@@ -68,10 +68,20 @@ export function createIssueMediaUploadGateService(
     mode: "OFF" | "PILOT";
     consentVersion: string;
     pseudonymSecret: string;
+    moderationCapacity?: () => Promise<{ allowed: boolean }>;
   },
 ): IssueMediaUploadGateService {
   return {
     async createSession(input) {
+      const capacity = await options.moderationCapacity?.();
+      if (capacity && !capacity.allowed) {
+        throw new IssueMediaUploadGateError(
+          "MEDIA_UPLOAD_NOT_AVAILABLE",
+          403,
+          "New image uploads are temporarily paused while moderation capacity recovers.",
+          ["MODERATION_CAPACITY_PAUSED"],
+        );
+      }
       const now = new Date();
       const dayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1_000);
       const memberPseudonym = uploadActorPseudonym(

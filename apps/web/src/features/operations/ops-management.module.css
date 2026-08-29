@@ -181,6 +181,52 @@
   margin-top: 5px;
   font-size: 22px;
 }
+.moderationHealth {
+  display: grid;
+  gap: 16px;
+  padding: 22px;
+  border: 1px solid #d6e1e5;
+  border-radius: 18px;
+  background: #fff;
+}
+.moderationHealth .sectionTitle {
+  margin-bottom: 0;
+}
+.operationalAlerts {
+  display: grid;
+  gap: 8px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+.operationalAlerts li {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 12px 14px;
+  border-left: 4px solid #ef9d19;
+  border-radius: 10px;
+  background: #fff8e8;
+  font-size: 12px;
+}
+.operationalAlerts li[data-severity="CRITICAL"] {
+  border-left-color: #ff5b35;
+  background: #fff0ec;
+}
+.operationalAlerts code {
+  color: #65737b;
+  font-size: 10px;
+}
+.operationalClear {
+  padding: 12px 14px;
+  margin: 0;
+  border-radius: 10px;
+  background: #edf9fb;
+  color: #176371;
+  font-size: 13px;
+  font-weight: 700;
+}
 .createButton,
 .primaryAction {
   min-height: 48px;
