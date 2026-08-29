@@ -118,6 +118,55 @@ function opsRequest(
 }
 
 describe("operator dashboard", () => {
+  it("records verified support email metadata once behind the internal boundary", async () => {
+    const payload = {
+      eventId: "msg_support_webhook_001",
+      emailId: "email_support_001",
+      messageId: "<support-001@example.com>",
+      sender: "sender@example.com",
+      recipient: "support@which.site",
+      subject: "서비스 문의",
+      receivedAt: "2026-08-29T08:00:00.000Z",
+      attachmentCount: 1,
+    };
+    const denied = await app.inject({
+      method: "POST",
+      url: "/v1/internal/ops/support-email-events",
+      payload,
+    });
+    expect(denied.statusCode).toBe(401);
+
+    const first = await app.inject({
+      method: "POST",
+      url: "/v1/internal/ops/support-email-events",
+      headers: { "x-internal-auth-secret": INTERNAL_SECRET },
+      payload,
+    });
+    const replay = await app.inject({
+      method: "POST",
+      url: "/v1/internal/ops/support-email-events",
+      headers: { "x-internal-auth-secret": INTERNAL_SECRET },
+      payload,
+    });
+    expect(first.statusCode, first.body).toBe(200);
+    expect(first.json()).toEqual({ status: "RECORDED" });
+    expect(replay.statusCode, replay.body).toBe(200);
+    expect(replay.json()).toEqual({ status: "REPLAYED" });
+
+    const logs = await database.db
+      .select({ metadata: operatorAuditLogs.metadata })
+      .from(operatorAuditLogs)
+      .where(eq(operatorAuditLogs.requestId, payload.eventId));
+    expect(logs).toHaveLength(1);
+    expect(logs[0]?.metadata).toMatchObject({
+      emailId: payload.emailId,
+      recipient: payload.recipient,
+      attachmentCount: 1,
+      contentStored: false,
+    });
+    expect(JSON.stringify(logs[0]?.metadata)).not.toContain("email body");
+  });
+
   it("denies an ordinary Member and audits the decision", async () => {
     const response = await readDashboard();
     expect(response.statusCode).toBe(403);

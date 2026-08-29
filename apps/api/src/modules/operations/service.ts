@@ -853,6 +853,41 @@ export function createOpsDashboardService(
   return {
     ...createOpsManagementMethods(database, operator, audit),
     ...createOpsPointShopMethods(database, operator, audit),
+    async recordSupportEmailEvent(input) {
+      return database.transaction(async (transaction) => {
+        await transaction.execute(
+          sql`select pg_advisory_xact_lock(hashtextextended(${input.eventId}, 0))`,
+        );
+        const [existing] = await transaction
+          .select({ id: operatorAuditLogs.id })
+          .from(operatorAuditLogs)
+          .where(
+            and(
+              eq(operatorAuditLogs.eventType, "RESEND_SUPPORT_EMAIL_RECEIVED"),
+              eq(operatorAuditLogs.requestId, input.eventId),
+            ),
+          )
+          .limit(1);
+        if (existing) return "REPLAYED" as const;
+
+        await transaction.insert(operatorAuditLogs).values({
+          eventType: "RESEND_SUPPORT_EMAIL_RECEIVED",
+          outcome: "SUCCEEDED",
+          requestId: input.eventId,
+          metadata: {
+            emailId: input.emailId,
+            messageId: input.messageId,
+            sender: input.sender,
+            recipient: input.recipient,
+            subject: input.subject,
+            receivedAt: input.receivedAt,
+            attachmentCount: input.attachmentCount,
+            contentStored: false,
+          },
+        });
+        return "RECORDED" as const;
+      });
+    },
     async readRankingPreview(input): Promise<OpsRankingPreview | null> {
       const actor = await operator(input.memberId);
       if (!actor) {

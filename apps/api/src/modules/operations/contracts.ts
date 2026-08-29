@@ -234,6 +234,17 @@ export type OpsPointShopView = {
   audit: OpsPointShopAuditEntry[];
 };
 
+export type SupportEmailEvent = {
+  eventId: string;
+  emailId: string;
+  messageId: string | null;
+  sender: string;
+  recipient: string;
+  subject: string;
+  receivedAt: string;
+  attachmentCount: number;
+};
+
 export class OpsReviewConflictError extends Error {
   constructor(public readonly current: OpsEditorialDecision | null) {
     super("The Editorial Review decision changed after this screen was loaded.");
@@ -249,6 +260,7 @@ export class OpsPointShopConflictError extends Error {
 }
 
 export interface OpsDashboardService {
+  recordSupportEmailEvent(input: SupportEmailEvent): Promise<"RECORDED" | "REPLAYED">;
   readDashboard(input: {
     memberId: string;
     windowDays: OpsDashboardWindow;
