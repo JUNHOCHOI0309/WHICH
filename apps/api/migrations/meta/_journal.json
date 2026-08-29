@@ -351,6 +351,13 @@
       "when": 1787966396448,
       "tag": "0049_vengeful_red_ghost",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1788000429430,
+      "tag": "0050_powerful_jack_flag",
+      "breakpoints": true
     }
   ]
 }
