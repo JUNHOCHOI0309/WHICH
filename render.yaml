@@ -101,6 +101,26 @@ services:
         value: omni-moderation-2024-09-26
       - key: OPENAI_MODERATION_TIMEOUT_MS
         value: "10000"
+      # Decision Engine remains independently fail-closed. WHICH-111 approval is
+      # required before Provisional publication may be enabled.
+      - key: MODERATION_DECISION_MODE
+        value: "OFF"
+      - key: MODERATION_DECISION_KILL_SWITCH
+        value: "true"
+      - key: MODERATION_DECISION_CANARY_PERCENT
+        value: "0"
+      - key: MODERATION_DECISION_CATEGORY_FLAGS
+        value: ""
+      - key: MODERATION_PROVISIONAL_RELEASE_APPROVED
+        value: "false"
+      - key: MODERATION_PROVISIONAL_COHORTS
+        value: ""
+      - key: MODERATION_PROVISIONAL_ASSET_TYPES
+        value: ""
+      - key: MODERATION_QUARANTINE_TTL_SECONDS
+        value: "86400"
+      - key: MODERATION_PROVISIONAL_TTL_SECONDS
+        value: "21600"
       - key: AUTH_FLOW_SECRET
         generateValue: true
       - key: MEMBER_SESSION_TTL_SECONDS
