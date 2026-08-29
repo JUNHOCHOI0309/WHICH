@@ -8,6 +8,8 @@ import type {
   OpsModerationQueueItem,
   OpsModerationQueueLane,
   OpsModerationQueuePage,
+  OpsReviewerAssistEvidence,
+  OpsReviewerAssistLabel,
 } from "./contracts";
 import styles from "./ops-management.module.css";
 
@@ -19,6 +21,34 @@ const lanes: Array<[OpsModerationQueueLane | "", string]> = [
   ["APPEAL", "Appeal"],
   ["RANDOM_AUDIT", "Random Audit"],
 ];
+
+const evidenceSources: Array<[OpsReviewerAssistEvidence["source"], string]> = [
+  ["RULE", "Rule"],
+  ["REPORT", "Report"],
+  ["RIGHTS", "Rights"],
+  ["OCR_QR_PII", "OCR · QR · PII"],
+  ["SAFETY_MODEL", "Safety Model"],
+  ["SIMILAR_IMAGE", "Similar Image"],
+];
+
+const provisionalLabels: OpsReviewerAssistLabel[] = ["ALLOW", "REVIEW", "BLOCK", "ABSTAIN"];
+
+function regionStyle(
+  region: { x: number; y: number; width: number; height: number },
+  input: { width: number; height: number },
+) {
+  const normalized = Math.max(region.x, region.y, region.width, region.height) <= 1;
+  const x = normalized ? region.x * 100 : (region.x / input.width) * 100;
+  const y = normalized ? region.y * 100 : (region.y / input.height) * 100;
+  const width = normalized ? region.width * 100 : (region.width / input.width) * 100;
+  const height = normalized ? region.height * 100 : (region.height / input.height) * 100;
+  return {
+    left: `${Math.max(0, Math.min(100, x))}%`,
+    top: `${Math.max(0, Math.min(100, y))}%`,
+    width: `${Math.max(0, Math.min(100 - x, width))}%`,
+    height: `${Math.max(0, Math.min(100 - y, height))}%`,
+  };
+}
 
 function formatDuration(value: number | null) {
   if (value === null) return "기록 없음";
@@ -32,6 +62,7 @@ function formatPercent(value: number) {
 }
 
 async function json<T>(response: Response): Promise<T> {
+  if (response.status === 204) return undefined as T;
   const body = (await response.json()) as T & { message?: string };
   if (!response.ok) throw new Error(body.message || "운영 요청에 실패했습니다.");
   return body;
@@ -43,12 +74,18 @@ export function OpsModerationQueuePanel() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [revealed, setRevealed] = useState(false);
   const [rationale, setRationale] = useState("");
+  const [provisionalLabel, setProvisionalLabel] = useState<OpsReviewerAssistLabel | "">("");
+  const [provisionalRationale, setProvisionalRationale] = useState("");
+  const [agreement, setAgreement] = useState<"" | "AGREE" | "OVERRIDE">("");
+  const [overrideDirection, setOverrideDirection] = useState("");
   const [busy, setBusy] = useState(false);
 
   const selected = useMemo(
     () => page?.items.find((item) => item.caseId === selectedId) ?? page?.items[0] ?? null,
     [page, selectedId],
   );
+  const selectedImage = selected?.context.kind === "IMAGE" ? selected.context : null;
+  const selectedComment = selected?.context.kind === "COMMENT" ? selected.context : null;
 
   const load = useCallback(async () => {
     const params = new URLSearchParams({ limit: "25" });
@@ -88,9 +125,42 @@ export function OpsModerationQueuePanel() {
     await recordView(item, "ASSET_REVEALED");
   }
 
+  async function submitProvisional() {
+    if (!selected || !provisionalLabel || provisionalRationale.trim().length < 3)
+      return toast.error("선판정과 3자 이상의 근거를 입력해 주세요.");
+    setBusy(true);
+    try {
+      await json(
+        await fetch(`/api/ops/moderation-queue/${selected.caseId}/reviewer-assist/provisional`, {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            label: provisionalLabel,
+            rationale: provisionalRationale.trim(),
+          }),
+        }),
+      );
+      toast.success("선판정을 저장하고 AI 보조 근거를 열었습니다.");
+      await load();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "선판정을 기록하지 못했습니다.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function decide(action: string) {
     if (!selected || rationale.trim().length < 10)
       return toast.error("판단 근거를 10자 이상 입력해 주세요.");
+    if (
+      selected.reviewerAssist.requiresProvisionalLabel &&
+      !selected.reviewerAssist.provisionalLabel
+    )
+      return toast.error("Random Audit 선판정을 먼저 기록해 주세요.");
+    if (selected.reviewerAssist.recommendation && !agreement)
+      return toast.error("AI 추천 동의 또는 Override 여부를 선택해 주세요.");
+    if (agreement === "OVERRIDE" && overrideDirection.trim().length < 2)
+      return toast.error("Override 방향을 입력해 주세요.");
     setBusy(true);
     try {
       await json(
@@ -103,12 +173,18 @@ export function OpsModerationQueuePanel() {
             reasonCode: "OPS_EXCEPTION_REVIEW",
             rationale: rationale.trim(),
             policyVersion: "ops-moderation-queue-v1",
+            reviewerAssist: {
+              agreement: selected.reviewerAssist.recommendation ? agreement : "NO_RECOMMENDATION",
+              ...(agreement === "OVERRIDE" ? { overrideDirection: overrideDirection.trim() } : {}),
+            },
           }),
         }),
       );
       toast.success("예외 Case 판정을 기록했습니다.");
       setRationale("");
       setRevealed(false);
+      setAgreement("");
+      setOverrideDirection("");
       await load();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "판정을 기록하지 못했습니다.");
@@ -263,6 +339,10 @@ export function OpsModerationQueuePanel() {
                 onClick={() => {
                   setSelectedId(item.caseId);
                   setRevealed(false);
+                  setProvisionalLabel(item.reviewerAssist.provisionalLabel ?? "");
+                  setProvisionalRationale(item.reviewerAssist.provisionalRationale ?? "");
+                  setAgreement("");
+                  setOverrideDirection("");
                   void recordView(item, "CASE_VIEWED");
                 }}
               >
@@ -274,6 +354,7 @@ export function OpsModerationQueuePanel() {
                 </span>
                 <strong>{item.summary}</strong>
                 <small>{item.targetType}</small>
+                {item.cluster ? <small>동일 문구 Cluster {item.cluster.size}건</small> : null}
               </button>
             ))
           ) : (
@@ -287,7 +368,34 @@ export function OpsModerationQueuePanel() {
               {selected.lane} · {selected.targetType} · REV {selected.expectedRevision}
             </p>
             <h2>{selected.summary}</h2>
-            {selected.context.kind === "IMAGE" ? (
+            {selected.reviewerAssist.requiresProvisionalLabel &&
+            !selected.reviewerAssist.provisionalLabel ? (
+              <section className={styles.provisionalGate}>
+                <p className={styles.eyebrow}>BLIND HUMAN LABEL FIRST</p>
+                <h3>AI 추천을 보기 전에 선판정을 기록하세요.</h3>
+                <div className={styles.labelChoices}>
+                  {provisionalLabels.map((label) => (
+                    <button
+                      type="button"
+                      key={label}
+                      aria-pressed={provisionalLabel === label}
+                      onClick={() => setProvisionalLabel(label)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <textarea
+                  value={provisionalRationale}
+                  onChange={(event) => setProvisionalRationale(event.target.value)}
+                  placeholder="AI를 보지 않은 현재 판단 근거"
+                />
+                <button type="button" disabled={busy} onClick={() => void submitProvisional()}>
+                  선판정 저장 후 AI 근거 보기
+                </button>
+              </section>
+            ) : null}
+            {selectedImage ? (
               <>
                 <div
                   className={styles.moderationMediaFrame}
@@ -295,13 +403,22 @@ export function OpsModerationQueuePanel() {
                 >
                   <img
                     className={styles.mediaPreview}
-                    src={`/api/ops/media-review/assets/${selected.context.assetId}/content`}
+                    src={`/api/ops/media-review/assets/${selectedImage.assetId}/content`}
                     alt={
-                      selected.context.choices.find(
-                        (choice) => choice.assetId === selected.targetId,
-                      )?.altText ?? "검수 이미지"
+                      selectedImage.choices.find((choice) => choice.assetId === selected.targetId)
+                        ?.altText ?? "검수 이미지"
                     }
                   />
+                  {selectedImage.evidenceGroups.OCR_QR_PII.flatMap((finding) =>
+                    finding.regions.map((region, index) => (
+                      <span
+                        className={styles.evidenceRegion}
+                        style={regionStyle(region, selectedImage.input)}
+                        title={finding.code}
+                        key={`${finding.id}:${index}`}
+                      />
+                    )),
+                  )}
                   {selected.risky && !revealed ? (
                     <button type="button" onClick={() => void reveal(selected)}>
                       민감 이미지 보기
@@ -309,7 +426,7 @@ export function OpsModerationQueuePanel() {
                   ) : null}
                 </div>
                 <div className={styles.choices}>
-                  {selected.context.choices.map((choice) => (
+                  {selectedImage.choices.map((choice) => (
                     <div key={choice.code}>
                       <b>{choice.code}</b>
                       <span>
@@ -320,18 +437,58 @@ export function OpsModerationQueuePanel() {
                   ))}
                 </div>
                 <p className={styles.context}>
-                  권리: {selected.context.rightsState} · {selected.context.rightsAttestation}
+                  권리: {selectedImage.rightsState} · {selectedImage.rightsAttestation}
                 </p>
-                <h3>Rule findings</h3>
-                <ul className={styles.sources}>
-                  {(selected.context.findings ?? []).map((finding) => (
-                    <li key={finding.id}>
-                      <b>{finding.severity}</b> · {finding.stage} · {finding.code}
-                      <br />
-                      {finding.sourceVersion} · {JSON.stringify(finding.evidence)}
-                    </li>
-                  ))}
-                </ul>
+                <div className={styles.signalChecks}>
+                  <span data-supported={selectedImage.relevance.supported}>
+                    질문 연관성 · {selectedImage.relevance.supported ? "근거 있음" : "모델 미지원"}
+                  </span>
+                  <span data-supported={selectedImage.visualAsymmetry.supported}>
+                    A/B 시각 비대칭 ·{" "}
+                    {selectedImage.visualAsymmetry.supported ? "근거 있음" : "모델 미지원"}
+                  </span>
+                </div>
+                {selected.reviewerAssist.recommendationVisible ? (
+                  <section className={styles.recommendationCard}>
+                    <p className={styles.eyebrow}>AI REVIEWER ASSIST</p>
+                    {selected.reviewerAssist.recommendation ? (
+                      <>
+                        <strong>{selected.reviewerAssist.recommendation.label}</strong>
+                        <span>
+                          confidence {selected.reviewerAssist.recommendation.confidence ?? "N/A"} ·
+                          disagreement{" "}
+                          {selected.reviewerAssist.recommendation.disagreement ? "YES" : "NO"} ·
+                          abstain {selected.reviewerAssist.recommendation.abstained ? "YES" : "NO"}
+                        </span>
+                      </>
+                    ) : (
+                      <span>AI 근거가 없어 수동 검수 모드로 진행합니다.</span>
+                    )}
+                  </section>
+                ) : null}
+                <div className={styles.evidenceGrid}>
+                  {evidenceSources.map(([source, label]) => {
+                    const findings = selectedImage.evidenceGroups[source];
+                    return (
+                      <section key={source}>
+                        <h3>{label}</h3>
+                        {findings.length ? (
+                          findings.map((finding) => (
+                            <details key={finding.id}>
+                              <summary>
+                                <b>{finding.severity}</b> · {finding.code}
+                              </summary>
+                              <p>{finding.sourceVersion}</p>
+                              <code>{JSON.stringify(finding.evidence)}</code>
+                            </details>
+                          ))
+                        ) : (
+                          <p>기록 없음</p>
+                        )}
+                      </section>
+                    );
+                  })}
+                </div>
                 <button
                   type="button"
                   className={styles.more}
@@ -341,7 +498,7 @@ export function OpsModerationQueuePanel() {
                 </button>
                 <h3>이전 판단</h3>
                 <ul className={styles.sources}>
-                  {selected.context.priorDecisions.map((decision) => (
+                  {selectedImage.priorDecisions.map((decision) => (
                     <li key={decision.id}>
                       <b>{decision.status}</b> · {decision.reasonCode} · {decision.reviewedBy}
                       <br />
@@ -349,19 +506,62 @@ export function OpsModerationQueuePanel() {
                     </li>
                   ))}
                 </ul>
+                <h3>유사 이미지의 이전 판단</h3>
+                <ul className={styles.sources}>
+                  {selectedImage.similarDecisions.length ? (
+                    selectedImage.similarDecisions.map((decision) => (
+                      <li key={`${decision.assetId}:${decision.createdAt}`}>
+                        <b>{decision.status}</b> · {decision.reasonCode} · {decision.assetId}
+                        <br />
+                        {decision.rationale}
+                      </li>
+                    ))
+                  ) : (
+                    <li>동일 perceptual hash의 이전 판단이 없습니다.</li>
+                  )}
+                </ul>
               </>
-            ) : (
+            ) : selectedComment ? (
               <>
-                <p className={styles.context}>{selected.context.body}</p>
+                <p className={styles.context}>{selectedComment.body}</p>
                 <div className={styles.facts}>
-                  <span>{selected.context.authorDisplayName}</span>
-                  <span>신고 {selected.context.reporterCount}명</span>
-                  <span>점수 {selected.context.reportScore}</span>
-                  <span>{selected.context.visibility}</span>
+                  <span>{selectedComment.authorDisplayName}</span>
+                  <span>신고 {selectedComment.reporterCount}명</span>
+                  <span>점수 {selectedComment.reportScore}</span>
+                  <span>{selectedComment.visibility}</span>
                 </div>
               </>
-            )}
+            ) : null}
             <section className={styles.decision}>
+              {selected.reviewerAssist.recommendation ? (
+                <div className={styles.assistDecision}>
+                  <label>
+                    <input
+                      type="radio"
+                      name="assist-agreement"
+                      checked={agreement === "AGREE"}
+                      onChange={() => setAgreement("AGREE")}
+                    />
+                    AI 추천에 동의
+                  </label>
+                  <label>
+                    <input
+                      type="radio"
+                      name="assist-agreement"
+                      checked={agreement === "OVERRIDE"}
+                      onChange={() => setAgreement("OVERRIDE")}
+                    />
+                    AI 추천 Override
+                  </label>
+                  {agreement === "OVERRIDE" ? (
+                    <input
+                      value={overrideDirection}
+                      onChange={(event) => setOverrideDirection(event.target.value)}
+                      placeholder="예: REVIEW → ALLOW"
+                    />
+                  ) : null}
+                </div>
+              ) : null}
               <textarea
                 value={rationale}
                 onChange={(event) => setRationale(event.target.value)}

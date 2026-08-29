@@ -142,6 +142,47 @@ export async function registerOpsModerationQueueRoutes(
     queueApp.put<{
       Headers: Headers;
       Params: { caseId: string };
+      Body: { label: "ALLOW" | "REVIEW" | "BLOCK" | "ABSTAIN"; rationale: string };
+    }>(
+      "/v1/internal/ops/moderation-queue/:caseId/reviewer-assist/provisional",
+      {
+        schema: {
+          hide: true,
+          headers: headersSchema,
+          params: Type.Object({ caseId: Type.String({ format: "uuid" }) }),
+          body: Type.Object({
+            label: Type.Union([
+              Type.Literal("ALLOW"),
+              Type.Literal("REVIEW"),
+              Type.Literal("BLOCK"),
+              Type.Literal("ABSTAIN"),
+            ]),
+            rationale: Type.String({ minLength: 3, maxLength: 500 }),
+          }),
+        },
+      },
+      async (request, reply) => {
+        const memberId = await authenticate(request, reply);
+        if (!memberId) return;
+        const allowed = await service.recordProvisionalLabel({
+          memberId,
+          caseId: request.params.caseId,
+          label: request.body.label,
+          rationale: request.body.rationale,
+          requestId: request.id,
+        });
+        if (!allowed)
+          return reply.code(403).send({
+            code: "OPERATOR_ROLE_REQUIRED",
+            message: "Active OPERATOR access is required.",
+          });
+        return reply.code(204).send();
+      },
+    );
+
+    queueApp.put<{
+      Headers: Headers;
+      Params: { caseId: string };
       Body: {
         expectedRevision: number;
         action:
@@ -157,6 +198,10 @@ export async function registerOpsModerationQueueRoutes(
         reasonCode: string;
         rationale: string;
         policyVersion: string;
+        reviewerAssist: {
+          agreement: "AGREE" | "OVERRIDE" | "NO_RECOMMENDATION";
+          overrideDirection?: string;
+        };
       };
     }>(
       "/v1/internal/ops/moderation-queue/:caseId/decision",
@@ -181,16 +226,26 @@ export async function registerOpsModerationQueueRoutes(
             reasonCode: Type.String({ minLength: 2, maxLength: 64, pattern: "^[A-Z0-9_]+$" }),
             rationale: Type.String({ minLength: 10, maxLength: 2000 }),
             policyVersion: Type.String({ minLength: 3, maxLength: 64 }),
+            reviewerAssist: Type.Object({
+              agreement: Type.Union([
+                Type.Literal("AGREE"),
+                Type.Literal("OVERRIDE"),
+                Type.Literal("NO_RECOMMENDATION"),
+              ]),
+              overrideDirection: Type.Optional(Type.String({ minLength: 2, maxLength: 64 })),
+            }),
           }),
         },
       },
       async (request, reply) => {
         const memberId = await authenticate(request, reply);
         if (!memberId) return;
+        const { reviewerAssist, ...decision } = request.body;
         const result = await service.decide({
           memberId,
           caseId: request.params.caseId,
-          decision: request.body,
+          decision,
+          reviewerAssist,
           requestId: request.id,
         });
         if (!result)

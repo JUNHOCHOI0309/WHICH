@@ -199,6 +199,59 @@ export const moderationCases = pgTable(
   ],
 );
 
+export const moderationReviewerAssistReviews = pgTable(
+  "moderation_reviewer_assist_reviews",
+  {
+    id: uuid("moderation_reviewer_assist_review_id").defaultRandom().primaryKey(),
+    caseId: uuid("moderation_case_id")
+      .notNull()
+      .references(() => moderationCases.id, { onDelete: "cascade" }),
+    operatorMemberId: uuid("operator_member_id")
+      .notNull()
+      .references(() => members.id, { onDelete: "restrict" }),
+    provisionalLabel: varchar("provisional_label", { length: 24 }),
+    provisionalRationale: text("provisional_rationale"),
+    aiRevealedAt: timestamp("ai_revealed_at", { withTimezone: true }),
+    recommendationSnapshot: jsonb("recommendation_snapshot")
+      .$type<Record<string, unknown>>()
+      .default({})
+      .notNull(),
+    finalAction: varchar("final_action", { length: 48 }),
+    agreement: varchar("agreement", { length: 24 }),
+    overrideDirection: varchar("override_direction", { length: 64 }),
+    reason: text("reason"),
+    reviewDurationSeconds: integer("review_duration_seconds"),
+    startedAt: timestamp("started_at", { withTimezone: true }).defaultNow().notNull(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    unique("moderation_reviewer_assist_case_unique").on(table.caseId),
+    index("moderation_reviewer_assist_operator_started_idx").on(
+      table.operatorMemberId,
+      table.startedAt,
+    ),
+    check(
+      "moderation_reviewer_assist_provisional_label_check",
+      sql`${table.provisionalLabel} is null or ${table.provisionalLabel} in ('ALLOW', 'REVIEW', 'BLOCK', 'ABSTAIN')`,
+    ),
+    check(
+      "moderation_reviewer_assist_agreement_check",
+      sql`${table.agreement} is null or ${table.agreement} in ('AGREE', 'OVERRIDE', 'NO_RECOMMENDATION')`,
+    ),
+    check(
+      "moderation_reviewer_assist_duration_check",
+      sql`${table.reviewDurationSeconds} is null or ${table.reviewDurationSeconds} >= 0`,
+    ),
+    check(
+      "moderation_reviewer_assist_completion_check",
+      sql`(${table.completedAt} is null and ${table.finalAction} is null and ${table.agreement} is null)
+        or (${table.completedAt} is not null and ${table.finalAction} is not null and ${table.agreement} is not null and ${table.reason} is not null)`,
+    ),
+  ],
+);
+
 export const moderationCaseReferences = pgTable(
   "moderation_case_references",
   {

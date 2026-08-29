@@ -276,6 +276,17 @@ export type OpsMediaRightsRequest = {
 };
 
 export type OpsModerationQueueLane = "HIGH" | "NORMAL" | "RIGHTS" | "APPEAL" | "RANDOM_AUDIT";
+export type OpsReviewerAssistLabel = "ALLOW" | "REVIEW" | "BLOCK" | "ABSTAIN";
+export type OpsReviewerAssistEvidence = {
+  id: string;
+  source: "RULE" | "REPORT" | "RIGHTS" | "OCR_QR_PII" | "SAFETY_MODEL" | "SIMILAR_IMAGE";
+  code: string;
+  severity: "INFO" | "REVIEW" | "BLOCK";
+  summary: string;
+  sourceVersion: string;
+  evidence: Record<string, unknown>;
+  regions: Array<{ x: number; y: number; width: number; height: number }>;
+};
 export type OpsModerationQueueItem = {
   caseId: string;
   expectedRevision: number;
@@ -288,6 +299,23 @@ export type OpsModerationQueueItem = {
   updatedAt: string;
   risky: boolean;
   summary: string;
+  cluster: null | { key: string; size: number; targetIds: string[] };
+  reviewerAssist: {
+    reviewId: string | null;
+    requiresProvisionalLabel: boolean;
+    provisionalLabel: OpsReviewerAssistLabel | null;
+    provisionalRationale: string | null;
+    recommendationVisible: boolean;
+    recommendation: null | {
+      label: OpsReviewerAssistLabel;
+      confidence: number | null;
+      abstained: boolean;
+      disagreement: boolean;
+      sources: string[];
+    };
+    startedAt: string | null;
+    aiRevealedAt: string | null;
+  };
   context:
     | {
         kind: "IMAGE";
@@ -306,6 +334,16 @@ export type OpsModerationQueueItem = {
         input: { width: number; height: number; byteSize: number };
         output: { width: number; height: number; byteSize: number };
         findings: OpsMediaRuleFinding[];
+        evidenceGroups: Record<OpsReviewerAssistEvidence["source"], OpsReviewerAssistEvidence[]>;
+        relevance: { supported: boolean; findings: OpsReviewerAssistEvidence[] };
+        visualAsymmetry: { supported: boolean; findings: OpsReviewerAssistEvidence[] };
+        similarDecisions: Array<{
+          assetId: string;
+          status: string;
+          reasonCode: string;
+          rationale: string;
+          createdAt: string;
+        }>;
         priorDecisions: Array<{
           id: string;
           status: string;

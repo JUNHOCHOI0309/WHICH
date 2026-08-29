@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import { and, desc, eq, gt, inArray, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, ne, sql } from "drizzle-orm";
 
 import type { Database } from "../../database/client.js";
 import {
@@ -20,12 +20,16 @@ import {
   moderationCases,
   moderationTargets,
   moderationRightsCases,
+  moderationReviewerAssistReviews,
   operatorAccessGrants,
   operatorAuditLogs,
 } from "../../database/schema/index.js";
 import type { CommentService } from "../comments/contracts.js";
 import type { IssueMediaReviewService } from "../issue-media/review-contracts.js";
-import { createModerationOperationsService } from "../moderation-operations/service.js";
+import {
+  createModerationOperationsService,
+  ModerationOperationsError,
+} from "../moderation-operations/service.js";
 import { readModerationOperationalHealth } from "../moderation-operations/operational-health.js";
 import type { ModerationProviderRuntimeDiagnostic } from "../moderation-providers/runtime-gate.js";
 
@@ -34,6 +38,8 @@ import type {
   OpsModerationQueueLane,
   OpsModerationQueuePage,
   OpsModerationQueueService,
+  OpsReviewerAssistEvidence,
+  OpsReviewerAssistLabel,
 } from "./moderation-queue-contracts.js";
 
 function hash(value: string) {
@@ -53,6 +59,82 @@ function laneForRisk(riskLane: string, references: string[]): OpsModerationQueue
   return riskLane === "HIGH" || riskLane === "CRITICAL" ? "HIGH" : "NORMAL";
 }
 
+function evidenceSource(finding: {
+  stage: string;
+  code: string;
+}): OpsReviewerAssistEvidence["source"] {
+  const key = `${finding.stage}:${finding.code}`.toUpperCase();
+  if (/(OCR|QR|PII)/u.test(key)) return "OCR_QR_PII";
+  if (/(SIMILAR|PERCEPTUAL|HASH_MATCH)/u.test(key)) return "SIMILAR_IMAGE";
+  if (finding.stage === "PROVIDER_SHADOW" || finding.code.startsWith("MEDIA_AI_"))
+    return "SAFETY_MODEL";
+  return "RULE";
+}
+
+function evidenceRegions(evidence: Record<string, unknown>) {
+  const regions = Array.isArray(evidence.regions) ? evidence.regions : [];
+  return regions.flatMap((region) => {
+    if (!region || typeof region !== "object") return [];
+    const candidate = region as Record<string, unknown>;
+    const values = [candidate.x, candidate.y, candidate.width, candidate.height];
+    if (!values.every((value) => typeof value === "number" && Number.isFinite(value))) return [];
+    return [
+      {
+        x: candidate.x as number,
+        y: candidate.y as number,
+        width: candidate.width as number,
+        height: candidate.height as number,
+      },
+    ];
+  });
+}
+
+function reviewerEvidence(finding: {
+  id: string;
+  stage: string;
+  code: string;
+  severity: "INFO" | "REVIEW" | "BLOCK";
+  sourceVersion: string;
+  evidence: Record<string, unknown>;
+}): OpsReviewerAssistEvidence {
+  return {
+    id: finding.id,
+    source: evidenceSource(finding),
+    code: finding.code,
+    severity: finding.severity,
+    summary: `${finding.stage} · ${finding.code}`,
+    sourceVersion: finding.sourceVersion,
+    evidence: finding.evidence,
+    regions: evidenceRegions(finding.evidence),
+  };
+}
+
+function modelRecommendation(findings: OpsReviewerAssistEvidence[]) {
+  const model = findings.filter((finding) => finding.source === "SAFETY_MODEL");
+  if (!model.length) return null;
+  const abstained = model.some((finding) => finding.code === "MEDIA_AI_PROVIDER_ABSTAINED");
+  const disagreement = model.some((finding) => finding.code === "MEDIA_AI_PROVIDER_DISAGREEMENT");
+  const scores = model.flatMap((finding) =>
+    typeof finding.evidence.score === "number" ? [finding.evidence.score] : [],
+  );
+  const concerning = model.some((finding) => {
+    const band = finding.evidence.calibratedBand;
+    return (
+      finding.evidence.flagged === true ||
+      (typeof band === "string" && ["HIGH", "CRITICAL"].includes(band))
+    );
+  });
+  const label: OpsReviewerAssistLabel =
+    abstained || disagreement ? "ABSTAIN" : concerning ? "REVIEW" : "ALLOW";
+  return {
+    label,
+    confidence: scores.length ? Math.max(...scores) : null,
+    abstained,
+    disagreement,
+    sources: [...new Set(model.map((finding) => finding.sourceVersion))],
+  };
+}
+
 export function createOpsModerationQueueService(
   database: Database["db"],
   mediaReview: IssueMediaReviewService,
@@ -60,6 +142,32 @@ export function createOpsModerationQueueService(
   providerRuntime: ModerationProviderRuntimeDiagnostic,
 ): OpsModerationQueueService {
   const operations = createModerationOperationsService(database);
+
+  async function recommendationSnapshot(caseId: string) {
+    const [row] = await database
+      .select({ targetType: moderationTargets.targetType, targetId: moderationTargets.targetId })
+      .from(moderationCases)
+      .innerJoin(moderationTargets, eq(moderationTargets.id, moderationCases.targetId))
+      .where(eq(moderationCases.id, caseId))
+      .limit(1);
+    if (!row || row.targetType !== "ISSUE_MEDIA_ASSET") return null;
+    const context = await imageContext(row.targetId);
+    if (!context) return null;
+    return modelRecommendation(Object.values(context.evidenceGroups).flat());
+  }
+
+  async function beginAssistReview(memberId: string, caseId: string) {
+    await database
+      .insert(moderationReviewerAssistReviews)
+      .values({ caseId, operatorMemberId: memberId })
+      .onConflictDoNothing({ target: moderationReviewerAssistReviews.caseId });
+    const [review] = await database
+      .select()
+      .from(moderationReviewerAssistReviews)
+      .where(eq(moderationReviewerAssistReviews.caseId, caseId))
+      .limit(1);
+    return review ?? null;
+  }
 
   async function operator(memberId: string) {
     const [row] = await database
@@ -306,6 +414,66 @@ export function createOpsModerationQueueService(
       .from(issueMediaRuleFindings)
       .where(eq(issueMediaRuleFindings.mediaAssetId, assetId))
       .orderBy(issueMediaRuleFindings.createdAt, issueMediaRuleFindings.id);
+    const similarDecisions = row.asset.perceptualHash
+      ? await database
+          .select({
+            assetId: issueMediaAssets.id,
+            status: issueMediaReviewDecisions.status,
+            reasonCode: issueMediaReviewDecisions.reasonCode,
+            rationale: issueMediaReviewDecisions.rationale,
+            createdAt: issueMediaReviewDecisions.createdAt,
+          })
+          .from(issueMediaAssets)
+          .innerJoin(
+            issueMediaReviewDecisions,
+            eq(issueMediaReviewDecisions.mediaAssetId, issueMediaAssets.id),
+          )
+          .where(
+            and(
+              eq(issueMediaAssets.perceptualHash, row.asset.perceptualHash),
+              ne(issueMediaAssets.id, assetId),
+            ),
+          )
+          .orderBy(desc(issueMediaReviewDecisions.createdAt))
+          .limit(5)
+      : [];
+    const mappedFindings = findings.map((finding) => ({
+      ...finding,
+      severity: finding.severity as "INFO" | "REVIEW" | "BLOCK",
+      evidence: finding.evidence ?? {},
+      createdAt: finding.createdAt.toISOString(),
+    }));
+    const evidence = mappedFindings.map(reviewerEvidence);
+    const rightsEvidence: OpsReviewerAssistEvidence = {
+      id: `rights:${assetId}`,
+      source: "RIGHTS",
+      code: `RIGHTS_${row.asset.rightsState}`,
+      severity: row.asset.rightsState === "CHALLENGED" ? "BLOCK" : "INFO",
+      summary: `권리 상태 ${row.asset.rightsState}`,
+      sourceVersion: "issue-media-rights-v1",
+      evidence: { attestation: row.asset.rightsAttestation },
+      regions: [],
+    };
+    const evidenceGroups: Record<OpsReviewerAssistEvidence["source"], OpsReviewerAssistEvidence[]> =
+      {
+        RULE: evidence.filter((item) => item.source === "RULE"),
+        REPORT: [],
+        RIGHTS: [rightsEvidence],
+        OCR_QR_PII: evidence.filter((item) => item.source === "OCR_QR_PII"),
+        SAFETY_MODEL: evidence.filter((item) => item.source === "SAFETY_MODEL"),
+        SIMILAR_IMAGE: evidence.filter((item) => item.source === "SIMILAR_IMAGE"),
+      };
+    const relevanceFindings = evidence.filter(
+      (item) =>
+        item.code.includes("RELEVANCE") || item.evidence.canonicalCode === "ISSUE_RELEVANCE",
+    );
+    const visualAsymmetryFindings = evidence.filter(
+      (item) =>
+        item.code.includes("VISUAL_FAIRNESS") || item.evidence.canonicalCode === "VISUAL_FAIRNESS",
+    );
+    const providerCapabilities = evidence.find(
+      (item) => item.code === "MEDIA_AI_PROVIDER_CAPABILITIES",
+    )?.evidence;
     return {
       kind: "IMAGE" as const,
       assetId,
@@ -324,11 +492,22 @@ export function createOpsModerationQueueService(
         height: row.asset.outputHeight,
         byteSize: row.asset.outputByteSize,
       },
-      findings: findings.map((finding) => ({
-        ...finding,
-        severity: finding.severity as "INFO" | "REVIEW" | "BLOCK",
-        evidence: finding.evidence ?? {},
-        createdAt: finding.createdAt.toISOString(),
+      findings: mappedFindings,
+      evidenceGroups,
+      relevance: {
+        supported:
+          providerCapabilities?.relevanceSupported === true || relevanceFindings.length > 0,
+        findings: relevanceFindings,
+      },
+      visualAsymmetry: {
+        supported:
+          providerCapabilities?.visualFairnessSupported === true ||
+          visualAsymmetryFindings.length > 0,
+        findings: visualAsymmetryFindings,
+      },
+      similarDecisions: similarDecisions.map((item) => ({
+        ...item,
+        createdAt: item.createdAt.toISOString(),
       })),
       priorDecisions: decisions.map((item) => ({
         ...item,
@@ -363,8 +542,21 @@ export function createOpsModerationQueueService(
           ...(referenceMap.get(reference.caseId) ?? []),
           reference.type,
         ]);
+      const assistRows = caseIds.length
+        ? await database
+            .select()
+            .from(moderationReviewerAssistReviews)
+            .where(inArray(moderationReviewerAssistReviews.caseId, caseIds))
+        : [];
+      const assistMap = new Map(assistRows.map((review) => [review.caseId, review]));
       const commentCases = await commentsService.listModerationCases(100);
       const commentMap = new Map(commentCases.items.map((item) => [item.commentId, item]));
+      const commentClusters = new Map<string, string[]>();
+      for (const comment of commentCases.items) {
+        const normalized = comment.body.trim().toLocaleLowerCase("ko-KR").replace(/\s+/gu, " ");
+        const key = hash(normalized).slice(0, 16);
+        commentClusters.set(key, [...(commentClusters.get(key) ?? []), comment.commentId]);
+      }
       const items: OpsModerationQueueItem[] = [];
       for (const row of rows) {
         const lane = laneForRisk(
@@ -380,6 +572,46 @@ export function createOpsModerationQueueService(
           if (comment) context = { kind: "COMMENT", ...comment };
         }
         if (!context) continue;
+        const referencesForCase = referenceMap.get(row.moderationCase.id) ?? [];
+        const assist = assistMap.get(row.moderationCase.id) ?? null;
+        const requiresProvisionalLabel = lane === "RANDOM_AUDIT";
+        const recommendationVisible =
+          !requiresProvisionalLabel || Boolean(assist?.provisionalLabel && assist.aiRevealedAt);
+        let recommendation = null;
+        let cluster: OpsModerationQueueItem["cluster"] = null;
+        if (context.kind === "IMAGE") {
+          const reportEvidence: OpsReviewerAssistEvidence[] = referencesForCase
+            .filter((type) => type === "CONTENT_REPORT" || type === "COMMENT_REPORT")
+            .map((type, index) => ({
+              id: `report:${row.moderationCase.id}:${index}`,
+              source: "REPORT",
+              code: type,
+              severity: "REVIEW",
+              summary: `${type} 연결`,
+              sourceVersion: "moderation-case-reference-v1",
+              evidence: {},
+              regions: [],
+            }));
+          context.evidenceGroups.REPORT = reportEvidence;
+          recommendation = modelRecommendation(Object.values(context.evidenceGroups).flat());
+          if (!recommendationVisible) {
+            context = {
+              ...context,
+              findings: context.findings.filter(
+                (finding) =>
+                  finding.stage !== "PROVIDER_SHADOW" && !finding.code.startsWith("MEDIA_AI_"),
+              ),
+              evidenceGroups: { ...context.evidenceGroups, SAFETY_MODEL: [] },
+              relevance: { ...context.relevance, findings: [] },
+              visualAsymmetry: { ...context.visualAsymmetry, findings: [] },
+            };
+          }
+        } else {
+          const normalized = context.body.trim().toLocaleLowerCase("ko-KR").replace(/\s+/gu, " ");
+          const key = hash(normalized).slice(0, 16);
+          const targetIds = commentClusters.get(key) ?? [];
+          if (targetIds.length > 1) cluster = { key, size: targetIds.length, targetIds };
+        }
         items.push({
           caseId: row.moderationCase.id,
           expectedRevision: row.moderationCase.expectedRevision,
@@ -392,6 +624,18 @@ export function createOpsModerationQueueService(
           updatedAt: row.moderationCase.updatedAt.toISOString(),
           risky: ["HIGH", "RIGHTS", "APPEAL"].includes(lane),
           summary: context.kind === "IMAGE" ? (context.question ?? "연결 전 이미지") : context.body,
+          cluster,
+          reviewerAssist: {
+            reviewId: assist?.id ?? null,
+            requiresProvisionalLabel,
+            provisionalLabel:
+              (assist?.provisionalLabel as OpsReviewerAssistLabel | null | undefined) ?? null,
+            provisionalRationale: assist?.provisionalRationale ?? null,
+            recommendationVisible,
+            recommendation: recommendationVisible ? recommendation : null,
+            startedAt: assist?.startedAt.toISOString() ?? null,
+            aiRevealedAt: assist?.aiRevealedAt?.toISOString() ?? null,
+          },
           context,
         });
         if (items.length >= input.limit) break;
@@ -457,7 +701,51 @@ export function createOpsModerationQueueService(
 
     async recordView(input) {
       if (!(await operator(input.memberId))) return false;
+      if (input.eventType === "CASE_VIEWED") {
+        await beginAssistReview(input.memberId, input.caseId);
+      }
       await audit(input.memberId, input.eventType, input.caseId, input.requestId);
+      return true;
+    },
+
+    async recordProvisionalLabel(input) {
+      if (!(await operator(input.memberId))) return false;
+      const [moderationCase] = await database
+        .select({ id: moderationCases.id })
+        .from(moderationCases)
+        .where(
+          and(
+            eq(moderationCases.id, input.caseId),
+            inArray(moderationCases.status, ["OPEN", "TRIAGED", "IN_REVIEW"]),
+          ),
+        )
+        .limit(1);
+      if (!moderationCase) throw new Error("Moderation case not found.");
+      const recommendation = await recommendationSnapshot(input.caseId);
+      const now = new Date();
+      await database
+        .insert(moderationReviewerAssistReviews)
+        .values({
+          caseId: input.caseId,
+          operatorMemberId: input.memberId,
+          provisionalLabel: input.label,
+          provisionalRationale: input.rationale,
+          aiRevealedAt: now,
+          recommendationSnapshot: recommendation ?? {},
+          updatedAt: now,
+        })
+        .onConflictDoUpdate({
+          target: moderationReviewerAssistReviews.caseId,
+          set: {
+            operatorMemberId: input.memberId,
+            provisionalLabel: input.label,
+            provisionalRationale: input.rationale,
+            aiRevealedAt: now,
+            recommendationSnapshot: recommendation ?? {},
+            updatedAt: now,
+          },
+        });
+      await audit(input.memberId, "PROVISIONAL_LABEL_RECORDED", input.caseId, input.requestId);
       return true;
     },
 
@@ -470,6 +758,27 @@ export function createOpsModerationQueueService(
         .where(eq(moderationCases.id, input.caseId))
         .limit(1);
       if (!row) throw new Error("Moderation case not found.");
+      const referencesBeforeDecision = await database
+        .select({ type: moderationCaseReferences.referenceType })
+        .from(moderationCaseReferences)
+        .where(eq(moderationCaseReferences.caseId, input.caseId));
+      const assist = await beginAssistReview(input.memberId, input.caseId);
+      if (
+        referencesBeforeDecision.some((reference) => reference.type === "RANDOM_AUDIT") &&
+        !assist?.provisionalLabel
+      ) {
+        throw new ModerationOperationsError(
+          "REVIEWER_ASSIST_PROVISIONAL_REQUIRED",
+          409,
+          "Random Audit은 AI 추천을 보기 전에 운영자의 선판정을 기록해야 합니다.",
+        );
+      }
+      if (
+        input.reviewerAssist.agreement === "OVERRIDE" &&
+        !input.reviewerAssist.overrideDirection
+      ) {
+        throw new Error("AI override 방향이 필요합니다.");
+      }
       const claimed = await operations.updateCase({
         caseId: input.caseId,
         expectedRevision: input.decision.expectedRevision,
@@ -517,6 +826,23 @@ export function createOpsModerationQueueService(
         durationSeconds: Math.max(1, Math.round((Date.now() - startedAt) / 1000)),
         noticeKey: `ops.moderation.${input.decision.action.toLowerCase()}`,
       });
+      const completedAt = new Date();
+      const reviewStartedAt = assist?.startedAt ?? completedAt;
+      await database
+        .update(moderationReviewerAssistReviews)
+        .set({
+          finalAction: input.decision.action,
+          agreement: input.reviewerAssist.agreement,
+          overrideDirection: input.reviewerAssist.overrideDirection ?? null,
+          reason: input.decision.rationale,
+          reviewDurationSeconds: Math.max(
+            0,
+            Math.round((completedAt.getTime() - reviewStartedAt.getTime()) / 1000),
+          ),
+          completedAt,
+          updatedAt: completedAt,
+        })
+        .where(eq(moderationReviewerAssistReviews.caseId, input.caseId));
       const caseReferences = await database
         .select({
           type: moderationCaseReferences.referenceType,

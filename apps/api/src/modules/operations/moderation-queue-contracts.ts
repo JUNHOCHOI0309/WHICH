@@ -8,6 +8,36 @@ export const OPS_MODERATION_QUEUE_LANES = [
 
 export type OpsModerationQueueLane = (typeof OPS_MODERATION_QUEUE_LANES)[number];
 export type OpsModerationTargetType = "ISSUE_MEDIA_ASSET" | "COMMENT_VERSION";
+export type OpsReviewerAssistLabel = "ALLOW" | "REVIEW" | "BLOCK" | "ABSTAIN";
+export type OpsReviewerAssistAgreement = "AGREE" | "OVERRIDE" | "NO_RECOMMENDATION";
+
+export type OpsReviewerAssistEvidence = {
+  id: string;
+  source: "RULE" | "REPORT" | "RIGHTS" | "OCR_QR_PII" | "SAFETY_MODEL" | "SIMILAR_IMAGE";
+  code: string;
+  severity: "INFO" | "REVIEW" | "BLOCK";
+  summary: string;
+  sourceVersion: string;
+  evidence: Record<string, unknown>;
+  regions: Array<{ x: number; y: number; width: number; height: number }>;
+};
+
+export type OpsReviewerAssistState = {
+  reviewId: string | null;
+  requiresProvisionalLabel: boolean;
+  provisionalLabel: OpsReviewerAssistLabel | null;
+  provisionalRationale: string | null;
+  recommendationVisible: boolean;
+  recommendation: null | {
+    label: OpsReviewerAssistLabel;
+    confidence: number | null;
+    abstained: boolean;
+    disagreement: boolean;
+    sources: string[];
+  };
+  startedAt: string | null;
+  aiRevealedAt: string | null;
+};
 
 export type OpsModerationQueueItem = {
   caseId: string;
@@ -21,6 +51,8 @@ export type OpsModerationQueueItem = {
   updatedAt: string;
   risky: boolean;
   summary: string;
+  cluster: null | { key: string; size: number; targetIds: string[] };
+  reviewerAssist: OpsReviewerAssistState;
   context:
     | {
         kind: "IMAGE";
@@ -45,6 +77,16 @@ export type OpsModerationQueueItem = {
           severity: "INFO" | "REVIEW" | "BLOCK";
           sourceVersion: string;
           evidence: Record<string, unknown>;
+          createdAt: string;
+        }>;
+        evidenceGroups: Record<OpsReviewerAssistEvidence["source"], OpsReviewerAssistEvidence[]>;
+        relevance: { supported: boolean; findings: OpsReviewerAssistEvidence[] };
+        visualAsymmetry: { supported: boolean; findings: OpsReviewerAssistEvidence[] };
+        similarDecisions: Array<{
+          assetId: string;
+          status: string;
+          reasonCode: string;
+          rationale: string;
           createdAt: string;
         }>;
         priorDecisions: Array<{
@@ -118,10 +160,21 @@ export interface OpsModerationQueueService {
     eventType: "CASE_VIEWED" | "ASSET_REVEALED" | "ORIGINAL_VIEWED";
     requestId: string;
   }): Promise<boolean>;
+  recordProvisionalLabel(input: {
+    memberId: string;
+    caseId: string;
+    label: OpsReviewerAssistLabel;
+    rationale: string;
+    requestId: string;
+  }): Promise<boolean>;
   decide(input: {
     memberId: string;
     caseId: string;
     decision: OpsModerationQueueDecision;
+    reviewerAssist: {
+      agreement: OpsReviewerAssistAgreement;
+      overrideDirection?: string;
+    };
     requestId: string;
   }): Promise<{ expectedRevision: number } | null>;
 }

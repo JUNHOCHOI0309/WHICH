@@ -17,7 +17,10 @@ import type { ModerationOperationsService, RecordModerationActionCommand } from 
 export class ModerationOperationsError extends Error {
   constructor(
     public readonly code:
-      "IDEMPOTENCY_CONFLICT" | "CASE_REVISION_CONFLICT" | "DOMAIN_DECISION_NOT_FOUND",
+      | "IDEMPOTENCY_CONFLICT"
+      | "CASE_REVISION_CONFLICT"
+      | "DOMAIN_DECISION_NOT_FOUND"
+      | "REVIEWER_ASSIST_PROVISIONAL_REQUIRED",
     public readonly statusCode: 404 | 409,
     message: string,
   ) {
