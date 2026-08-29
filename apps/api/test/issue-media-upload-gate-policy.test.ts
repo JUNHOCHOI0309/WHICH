@@ -1,0 +1,86 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  dHashDistance,
+  evaluateIssueMediaUploadGate,
+  evaluateLocalMediaInspection,
+  uploadActorPseudonym,
+} from "../src/modules/issue-media/upload-gate-policy.js";
+
+const eligibleGate = {
+  mode: "PILOT" as const,
+  hasActiveCapability: true,
+  hasCurrentConsent: true,
+  ownsSubmission: true,
+  submissionStatus: "PENDING",
+  memberSessionsToday: 0,
+  ipSessionsToday: 0,
+  activeSessions: 0,
+  openAssets: 0,
+};
+
+describe("Member Issue media upload gate", () => {
+  it("fails closed unless every mode, capability, consent, ownership, and quota check passes", () => {
+    expect(evaluateIssueMediaUploadGate(eligibleGate)).toEqual({ allowed: true, reasons: [] });
+    expect(
+      evaluateIssueMediaUploadGate({
+        ...eligibleGate,
+        mode: "OFF",
+        hasActiveCapability: false,
+        hasCurrentConsent: false,
+        ownsSubmission: false,
+        memberSessionsToday: 3,
+        activeSessions: 1,
+        openAssets: 10,
+      }),
+    ).toMatchObject({
+      allowed: false,
+      reasons: [
+        "MODE_DISABLED",
+        "CAPABILITY_REQUIRED",
+        "CONSENT_REQUIRED",
+        "SUBMISSION_OWNERSHIP_REQUIRED",
+        "MEMBER_DAILY_LIMIT",
+        "CONCURRENT_SESSION_LIMIT",
+        "OPEN_ASSET_LIMIT",
+      ],
+    });
+  });
+
+  it("pseudonymizes Member and IP buckets without retaining raw identifiers", () => {
+    const member = uploadActorPseudonym("member", "member-id", "secret-secret-secret");
+    const ip = uploadActorPseudonym("ip", "203.0.113.10", "secret-secret-secret");
+    expect(member).toMatch(/^[a-f0-9]{64}$/);
+    expect(ip).toMatch(/^[a-f0-9]{64}$/);
+    expect(member).not.toBe(ip);
+  });
+
+  it("auto-rejects only exact known blocks and routes similarity or partial inspection to review", () => {
+    const blocked = evaluateLocalMediaInspection({
+      sha256: "a".repeat(64),
+      perceptualHash: "0".repeat(16),
+      knownBlockedSha256: new Set(["a".repeat(64)]),
+      inspectionComplete: true,
+    });
+    expect(blocked.decision).toBe("AUTO_REJECT_PRIVATE");
+
+    const review = evaluateLocalMediaInspection({
+      sha256: "b".repeat(64),
+      perceptualHash: "0000000000000000",
+      similarPerceptualHashes: ["0000000000000001"],
+      qrDetected: true,
+      ocrText: "연락처 010-1234-5678",
+      inspectionComplete: false,
+    });
+    expect(review.decision).toBe("REVIEW_REQUIRED");
+    expect(review.signals.map((signal) => signal.code)).toEqual(
+      expect.arrayContaining([
+        "MEDIA_PERCEPTUAL_SIMILARITY",
+        "MEDIA_QR_DETECTED",
+        "MEDIA_OCR_PII_DETECTED",
+        "MEDIA_INSPECTION_INCOMPLETE",
+      ]),
+    );
+    expect(dHashDistance("0000000000000000", "0000000000000001")).toBe(1);
+  });
+});

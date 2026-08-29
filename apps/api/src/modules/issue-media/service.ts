@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { and, eq, isNull, lt, sql } from "drizzle-orm";
+import { and, eq, isNull, lt, ne, sql } from "drizzle-orm";
 
 import type { Database } from "../../database/client.js";
 import {
@@ -9,6 +9,8 @@ import {
   issueChoices,
   issueMediaAssets,
   issueMediaAssetVersions,
+  issueMediaKnownBlockHashes,
+  issueMediaRuleFindings,
   issueVersions,
   members,
   operatorAccessGrants,
@@ -22,12 +24,14 @@ import type {
 } from "./contracts.js";
 import { sha256 } from "../content-revisions/service.js";
 import { IssueMediaProcessingError, processIssueMedia } from "./image-processing.js";
+import { evaluateLocalMediaInspection } from "./upload-gate-policy.js";
 
 export class IssueMediaError extends Error {
   constructor(
     public readonly code:
       | IssueMediaProcessingError["code"]
       | "MEDIA_DUPLICATE"
+      | "MEDIA_KNOWN_BLOCK"
       | "MEDIA_NOT_FOUND"
       | "MEDIA_STATE_CONFLICT"
       | "MEDIA_RIGHTS_BLOCKED"
@@ -212,6 +216,38 @@ export function createIssueMediaService(
     const processed = await processIssueMedia(input.bytes, input.declaredMimeType).catch(
       mediaError,
     );
+    const [knownBlock, similarAssets] = await Promise.all([
+      database
+        .select({ sha256: issueMediaKnownBlockHashes.sha256 })
+        .from(issueMediaKnownBlockHashes)
+        .where(
+          and(
+            eq(issueMediaKnownBlockHashes.sha256, processed.sha256),
+            eq(issueMediaKnownBlockHashes.active, true),
+          ),
+        )
+        .limit(1),
+      database
+        .select({ perceptualHash: issueMediaAssets.perceptualHash })
+        .from(issueMediaAssets)
+        .where(ne(issueMediaAssets.storageState, "PURGED"))
+        .orderBy(sql`${issueMediaAssets.createdAt} desc`)
+        .limit(50),
+    ]);
+    const inspection = evaluateLocalMediaInspection({
+      sha256: processed.sha256,
+      perceptualHash: processed.perceptualHash,
+      knownBlockedSha256: new Set(knownBlock.map((row) => row.sha256)),
+      similarPerceptualHashes: similarAssets.map((row) => row.perceptualHash),
+      inspectionComplete: input.sourceType !== "MEMBER_SUBMISSION",
+    });
+    if (inspection.decision === "AUTO_REJECT_PRIVATE") {
+      throw new IssueMediaError(
+        "MEDIA_KNOWN_BLOCK",
+        422,
+        "This image matches a verified private block entry and cannot be uploaded.",
+      );
+    }
     const [duplicate] = await database
       .select()
       .from(issueMediaAssets)
@@ -278,6 +314,18 @@ export function createIssueMediaService(
           normalizedObjectRef: `issue-media://asset/${id}/version/1`,
           inputHash: sha256(processed.body),
         });
+        if (inspection.signals.length > 0) {
+          await transaction.insert(issueMediaRuleFindings).values(
+            inspection.signals.map((signal) => ({
+              mediaAssetId: id,
+              stage: "LOCAL_RULES",
+              code: signal.code,
+              severity: signal.severity,
+              sourceVersion: signal.ruleVersion,
+              evidence: signal.metadata ?? {},
+            })),
+          );
+        }
         return assetRow;
       });
       return mapAsset(created, storage);

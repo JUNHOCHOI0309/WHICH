@@ -16,6 +16,7 @@ export type MemberIdentityErrorCode =
   | "PASSWORD_INVALID"
   | "AVATAR_INVALID"
   | "AVATAR_SOURCE_INVALID"
+  | "PROFILE_CONTENT_REVIEW_REQUIRED"
   | "GUEST_SUBJECT_NOT_FOUND"
   | "GUEST_ALREADY_LINKED"
   | "IDENTITY_ALREADY_LINKED"
@@ -26,7 +27,7 @@ export type MemberIdentityErrorCode =
 export class MemberIdentityError extends Error {
   constructor(
     public readonly code: MemberIdentityErrorCode,
-    public readonly statusCode: 400 | 401 | 403 | 404 | 409 | 429,
+    public readonly statusCode: 400 | 401 | 403 | 404 | 409 | 422 | 429,
     message: string,
   ) {
     super(message);

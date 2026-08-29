@@ -45,6 +45,7 @@ import { encodeMemberVoteHistoryCursor } from "./cursor.js";
 import { MemberIdentityError } from "./errors.js";
 import { publicProfileInitials } from "./profile.js";
 import { operationDayAt } from "../points/policy.js";
+import { evaluateTextRules, normalizeModerationText } from "../moderation/rule-engine.js";
 
 const LINK_POLICY_VERSION = "guest-member-link-v1";
 const EVENT_SCHEMA_VERSION = 1;
@@ -125,7 +126,7 @@ function privateAvatarSource(member: typeof members.$inferSelect) {
 }
 
 function normalizedDisplayName(value: string) {
-  const normalized = value.trim().replace(/\s+/g, " ");
+  const normalized = normalizeModerationText(value, "INLINE");
   return normalized.length > 0 ? normalized.slice(0, 80) : "WHICH 회원";
 }
 
@@ -225,7 +226,7 @@ function normalizeBio(value: string | null) {
     const code = character.charCodeAt(0);
     return code <= 31 || code === 127 ? " " : character;
   }).join("");
-  const bio = withoutControls.replace(/\s+/g, " ");
+  const bio = normalizeModerationText(withoutControls, "INLINE");
   return bio.length > 0 ? bio.slice(0, 160) : null;
 }
 
@@ -1866,6 +1867,31 @@ export function createMemberIdentityService(
       const handle = normalizeHandle(command.handle);
       const bio = normalizeBio(command.bio);
       const displayName = normalizedDisplayName(command.displayName ?? session.member.displayName);
+      const profileRuleSignals = [
+        ...evaluateTextRules({
+          value: displayName,
+          minimumLength: 1,
+          maximumLength: 80,
+          allowUrls: false,
+          trustTier: "MEMBER",
+        }).signals,
+        ...(bio
+          ? evaluateTextRules({
+              value: bio,
+              minimumLength: 1,
+              maximumLength: 160,
+              allowUrls: false,
+              trustTier: "MEMBER",
+            }).signals
+          : []),
+      ];
+      if (profileRuleSignals.some((signal) => signal.severity !== "INFO")) {
+        throw new MemberIdentityError(
+          "PROFILE_CONTENT_REVIEW_REQUIRED",
+          422,
+          "The public profile contains a link, personal information, or an unsupported pattern.",
+        );
+      }
       const now = new Date();
 
       return database.transaction(async (transaction) => {

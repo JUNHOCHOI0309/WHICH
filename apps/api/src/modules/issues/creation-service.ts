@@ -32,6 +32,7 @@ import type {
   ResubmitMemberIssueCommand,
 } from "./contracts.js";
 import { sealIssueVersionSnapshot } from "../content-revisions/service.js";
+import { evaluateTextRules, normalizeModerationText } from "../moderation/rule-engine.js";
 import { IssueWriteError } from "./errors.js";
 
 const DAILY_CREATION_LIMIT = 3;
@@ -74,7 +75,7 @@ function deterministicUuid(scope: string) {
 }
 
 function normalizeInline(value: string) {
-  return value.normalize("NFC").trim().replace(/\s+/gu, " ");
+  return normalizeModerationText(value, "INLINE");
 }
 
 function characterLength(value: string) {
@@ -123,7 +124,18 @@ function normalizeCommand(command: CreateMemberIssueCommand) {
   }
 
   const combined = [question, context, choiceA, choiceB].filter(Boolean).join(" ");
-  if (URL_PATTERN.test(combined) || RESTRICTED_TOPIC_PATTERN.test(combined)) {
+  const commonRules = evaluateTextRules({
+    value: combined,
+    minimumLength: 1,
+    maximumLength: 320,
+    allowUrls: false,
+    trustTier: "MEMBER",
+  });
+  if (
+    URL_PATTERN.test(combined) ||
+    RESTRICTED_TOPIC_PATTERN.test(combined) ||
+    commonRules.signals.some((signal) => signal.severity !== "INFO")
+  ) {
     throw new IssueWriteError(
       "UNSAFE_ISSUE_CONTENT",
       422,

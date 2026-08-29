@@ -16,6 +16,7 @@ import { createShareCardService } from "./modules/shares/service.js";
 import { createOpsDashboardService } from "./modules/operations/service.js";
 import { createOpsModerationQueueService } from "./modules/operations/moderation-queue-service.js";
 import { createIssueMediaService } from "./modules/issue-media/service.js";
+import { createIssueMediaUploadGateService } from "./modules/issue-media/upload-gate-service.js";
 import { createIssueMediaReviewService } from "./modules/issue-media/review-service.js";
 import {
   createR2IssueMediaStorage,
@@ -80,6 +81,11 @@ const app = await buildApp(config, {
   ...(issueMediaStorage && issueMediaService && issueMediaReviewService
     ? {
         issueMedia: issueMediaService,
+        issueMediaUploadGate: createIssueMediaUploadGateService(database.db, {
+          mode: config.featureFlags.issueMemberMediaUploadMode,
+          consentVersion: config.featureFlags.issueMediaConsentVersion,
+          pseudonymSecret: config.auth.moderationInternalSecret,
+        }),
         issueMediaReview: issueMediaReviewService,
         opsModerationQueue: createOpsModerationQueueService(
           database.db,
