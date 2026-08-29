@@ -56,6 +56,26 @@ afterAll(async () => {
 });
 
 describe("Issue media upload session service", () => {
+  it("pauses new sessions when Moderation capacity is fail-closed", async () => {
+    const service = createIssueMediaUploadGateService(database.db, {
+      mode: "PILOT",
+      consentVersion: "which-media-consent-v1",
+      pseudonymSecret: "test-pseudonym-secret-long-enough",
+      moderationCapacity: () => Promise.resolve({ allowed: false }),
+    });
+    await expect(
+      service.createSession({
+        memberId,
+        submissionId,
+        consentVersion: "which-media-consent-v1",
+        ipAddress: "203.0.113.4",
+      }),
+    ).rejects.toMatchObject({
+      code: "MEDIA_UPLOAD_NOT_AVAILABLE",
+      reasons: ["MODERATION_CAPACITY_PAUSED"],
+    } satisfies Partial<IssueMediaUploadGateError>);
+  });
+
   it("fails closed while the server mode is OFF", async () => {
     const service = createIssueMediaUploadGateService(database.db, {
       mode: "OFF",

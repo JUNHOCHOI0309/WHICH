@@ -51,6 +51,38 @@ Recommended rollout is 1% → 5% → 25%, with a fixed daily cap. Stop by settin
 switch to `true`; already stored Shadow observations remain auditable. The worker is still an
 operator-run one-shot/loop and is not executed in the user request path.
 
+Provider safety controls additionally use:
+
+```text
+MODERATION_PROVIDER_DAILY_COST_MICROS_CAP=0
+MODERATION_PROVIDER_CIRCUIT_WINDOW_MINUTES=5
+MODERATION_PROVIDER_CIRCUIT_MIN_CALLS=5
+MODERATION_PROVIDER_CIRCUIT_FAILURE_PERCENT=50
+```
+
+The cost cap defaults to zero micros. Zero-cost Moderation calls remain possible, but any recorded
+positive provider cost stops subsequent calls. Five or more calls in the rolling five-minute
+window open the circuit when at least half fail. The circuit closes automatically after the bad
+samples leave the window; the global kill switch remains the immediate manual stop.
+
+## Ops safety panel and upload pressure
+
+`/ops` → `Moderation Queue` shows calls and cap, seven-day error/cache-hit/automation coverage,
+provider p95, Worker pending/dead-letter counts, and R2·DB·CDN reconciliation failures. The panel
+never exposes the API key or raw provider payload.
+
+New Member image upload sessions fail closed while a critical operational condition remains:
+
+- a dead-lettered Moderation Run exists;
+- the oldest pending Run exceeds 48 hours;
+- an R2·DB·CDN reconciliation mismatch/failure remains;
+- the enabled Shadow provider circuit is open; or
+- the enabled provider exceeds its daily cost cap.
+
+Text-only Issues, approved Library media, Votes, Comments, existing drafts, and already staged
+private assets continue to work. A 15-minute Worker delay is warning-only; operators should move
+from one-shot execution to a scheduled/dedicated Worker before it becomes a 48-hour pause.
+
 ## Failure and disagreement contract
 
 Failures are separated as `TIMEOUT`, `RATE_LIMITED`, `REFUSAL`, `MALFORMED_OUTPUT`,

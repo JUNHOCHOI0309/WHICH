@@ -194,6 +194,23 @@ describe("moderation provider privacy controls", () => {
         callsToday: 10,
       }),
     ).toEqual({ allowed: false, reason: "DAILY_CALL_CAP_REACHED" });
+    expect(
+      evaluateModerationRuntimeGate({
+        config,
+        normalizedInputHash: "0".repeat(64),
+        callsToday: 9,
+        costMicrosToday: 1,
+      }),
+    ).toEqual({ allowed: false, reason: "DAILY_COST_CAP_REACHED" });
+    expect(
+      evaluateModerationRuntimeGate({
+        config,
+        normalizedInputHash: "0".repeat(64),
+        callsToday: 9,
+        recentCalls: 6,
+        recentFailures: 3,
+      }),
+    ).toEqual({ allowed: false, reason: "PROVIDER_CIRCUIT_OPEN" });
   });
 });
 

@@ -75,6 +75,7 @@ export type OpsModerationQueuePage = {
     outflow7d: number;
   };
   counts: Record<OpsModerationQueueLane, number>;
+  operational: ModerationOperationalHealth;
   items: OpsModerationQueueItem[];
 };
 
@@ -115,3 +116,4 @@ export interface OpsModerationQueueService {
     requestId: string;
   }): Promise<{ expectedRevision: number } | null>;
 }
+import type { ModerationOperationalHealth } from "../moderation-operations/operational-health.js";

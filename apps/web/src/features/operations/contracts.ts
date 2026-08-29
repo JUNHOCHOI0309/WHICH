@@ -331,5 +331,45 @@ export type OpsModerationQueuePage = {
     outflow7d: number;
   };
   counts: Record<OpsModerationQueueLane, number>;
+  operational: {
+    provider: {
+      mode: "OFF" | "SHADOW";
+      provider: "NONE" | "OPENAI_MODERATION";
+      killSwitch: boolean;
+      canaryPercent: number;
+      dailyCallCap: number;
+      dailyCostMicrosCap: number;
+      modelSnapshot: string;
+      privacyGateAllowed: boolean;
+      privacyGateReason: string;
+      missingEvidence: string[];
+      apiKeyConfigured: boolean;
+      circuitWindowMinutes: number;
+      circuitMinimumCalls: number;
+      circuitFailurePercent: number;
+      callsToday: number;
+      calls7d: number;
+      succeeded7d: number;
+      failed7d: number;
+      skipped7d: number;
+      costMicrosToday: number;
+      costMicros7d: number;
+      latencyP95Ms: number | null;
+      errorRate7d: number;
+      cacheHitRate7d: number;
+      automationCoverage7d: number;
+      circuitState: "CLOSED" | "OPEN";
+    };
+    worker: {
+      pending: number;
+      running: number;
+      failed: number;
+      deadLettered: number;
+      oldestPendingAgeSeconds: number | null;
+    };
+    reconciliation: { mismatches: number; failed: number; repaired7d: number };
+    directUploadAllowed: boolean;
+    alerts: Array<{ code: string; severity: "WARNING" | "CRITICAL"; message: string }>;
+  };
   items: OpsModerationQueueItem[];
 };
