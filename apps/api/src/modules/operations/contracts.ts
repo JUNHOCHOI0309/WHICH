@@ -211,6 +211,7 @@ export type OpsPointShopItem = {
   price: number;
   status: OpsPointShopStatus;
   currentVersion: number;
+  opsRevision: number;
   purchaseCount: number;
   createdAt: string;
   updatedAt: string;
@@ -301,7 +302,7 @@ export interface OpsDashboardService {
   updatePointShopItem(input: {
     memberId: string;
     itemId: string;
-    expectedUpdatedAt: string;
+    expectedRevision: number;
     price: number;
     status: Exclude<OpsPointShopStatus, "RETIRED">;
     reason: string;

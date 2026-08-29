@@ -167,7 +167,7 @@ export function OpsPointShopPanel() {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          expectedUpdatedAt: selected.updatedAt,
+          expectedRevision: selected.opsRevision,
           price,
           status: editStatus,
           reason,

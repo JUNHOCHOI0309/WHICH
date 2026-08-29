@@ -457,7 +457,7 @@ export async function registerOpsRoutes(
       Headers: OpsHeaders;
       Params: { itemId: string };
       Body: {
-        expectedUpdatedAt: string;
+        expectedRevision: number;
         price: number;
         status: "ACTIVE" | "PAUSED";
         reason: string;
@@ -470,7 +470,7 @@ export async function registerOpsRoutes(
           headers: opsHeadersSchema,
           params: Type.Object({ itemId: Type.String({ format: "uuid" }) }),
           body: Type.Object({
-            expectedUpdatedAt: Type.String({ format: "date-time" }),
+            expectedRevision: Type.Integer({ minimum: 1 }),
             price: Type.Integer({ minimum: 1, maximum: 1_000_000 }),
             status: Type.Union([Type.Literal("ACTIVE"), Type.Literal("PAUSED")]),
             reason: Type.String({ minLength: 8, maxLength: 500 }),

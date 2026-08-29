@@ -250,6 +250,7 @@ export const pointCatalogItems = pgTable(
     usageEndAt: timestamp("usage_end_at", { withTimezone: true }),
     status: varchar("status", { length: 16 }).default("ACTIVE").notNull(),
     currentVersion: integer("current_version").default(1).notNull(),
+    opsRevision: integer("ops_revision").default(1).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
@@ -257,6 +258,7 @@ export const pointCatalogItems = pgTable(
     unique("point_catalog_items_code_unique").on(table.code),
     check("point_catalog_items_price_check", sql`${table.price} > 0`),
     check("point_catalog_items_version_check", sql`${table.currentVersion} > 0`),
+    check("point_catalog_items_ops_revision_check", sql`${table.opsRevision} > 0`),
     check(
       "point_catalog_items_status_check",
       sql`${table.status} in ('ACTIVE', 'PAUSED', 'RETIRED')`,

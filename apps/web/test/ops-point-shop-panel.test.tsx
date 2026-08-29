@@ -13,6 +13,7 @@ const item = {
   price: 500,
   status: "ACTIVE" as "ACTIVE" | "PAUSED",
   currentVersion: 1,
+  opsRevision: 1,
   purchaseCount: 0,
   createdAt: "2026-08-29T00:00:00.000Z",
   updatedAt: "2026-08-29T00:00:00.000Z",
@@ -45,12 +46,18 @@ describe("Ops Point Shop status controls", () => {
   it("saves a status-only change with an automatic audit reason", async () => {
     const request = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
       if (init?.method === "PATCH") {
-        const body = JSON.parse(String(init.body)) as { status: string; reason: string };
+        const body = JSON.parse(String(init.body)) as {
+          expectedRevision: number;
+          status: string;
+          reason: string;
+        };
         expect(body).toMatchObject({
+          expectedRevision: 1,
           status: "PAUSED",
           reason: "판매 상태 변경: 판매 중 → 판매 중지",
         });
         item.status = "PAUSED";
+        item.opsRevision = 2;
         item.updatedAt = "2026-08-29T00:01:00.000Z";
         return jsonResponse({ ...item });
       }

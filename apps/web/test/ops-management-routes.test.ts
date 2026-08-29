@@ -195,7 +195,7 @@ describe("operator management BFF", () => {
             "content-type": "application/json",
           },
           body: JSON.stringify({
-            expectedUpdatedAt: "2026-08-29T00:00:00.000Z",
+            expectedRevision: 1,
             price: 500,
             status: "PAUSED",
             reason: "판매 상태 변경: 판매 중 → 판매 중지",

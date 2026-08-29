@@ -255,6 +255,7 @@ describe("operator dashboard", () => {
       code: string;
       price: number;
       status: string;
+      opsRevision: number;
       updatedAt: string;
     }>();
     expect(created).toMatchObject({
@@ -267,20 +268,24 @@ describe("operator dashboard", () => {
       "PATCH",
       `/v1/internal/ops/point-shop/items/${created.id}`,
       {
-        expectedUpdatedAt: created.updatedAt,
+        expectedRevision: created.opsRevision,
         price: 950,
         status: "ACTIVE",
         reason: "출시 가격 확정 및 판매 시작",
       },
     );
     expect(updatedResponse.statusCode, updatedResponse.body).toBe(200);
-    expect(updatedResponse.json()).toMatchObject({ price: 950, status: "ACTIVE" });
+    expect(updatedResponse.json()).toMatchObject({
+      price: 950,
+      status: "ACTIVE",
+      opsRevision: created.opsRevision + 1,
+    });
 
     const staleResponse = await opsRequest(
       "PATCH",
       `/v1/internal/ops/point-shop/items/${created.id}`,
       {
-        expectedUpdatedAt: created.updatedAt,
+        expectedRevision: created.opsRevision,
         price: 1000,
         status: "PAUSED",
         reason: "오래된 화면의 변경 충돌 검증",

@@ -1,0 +1,2 @@
+ALTER TABLE "point_catalog_items" ADD COLUMN "ops_revision" integer DEFAULT 1 NOT NULL;--> statement-breakpoint
+ALTER TABLE "point_catalog_items" ADD CONSTRAINT "point_catalog_items_ops_revision_check" CHECK ("point_catalog_items"."ops_revision" > 0);

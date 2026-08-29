@@ -171,6 +171,7 @@ function mapPointShopItem(row: {
   price: number;
   status: string;
   currentVersion: number;
+  opsRevision: number;
   purchaseCount: number | string;
   createdAt: Date;
   updatedAt: Date;
@@ -197,6 +198,7 @@ function pointShopItemSelection() {
     price: pointCatalogItems.price,
     status: pointCatalogItems.status,
     currentVersion: pointCatalogItems.currentVersion,
+    opsRevision: pointCatalogItems.opsRevision,
     purchaseCount: sql<number>`(
       select count(*)::int from ${pointPurchases}
       where ${pointPurchases.itemId} = ${pointCatalogItems.id}
@@ -755,17 +757,13 @@ function createOpsPointShopMethods(
       const actor = await requireOperator(input);
       if (!actor) return null;
 
-      const expectedUpdatedAt = new Date(input.expectedUpdatedAt);
-      if (Number.isNaN(expectedUpdatedAt.getTime())) {
-        throw new OpsPointShopConflictError("상품 수정 기준 시각이 올바르지 않습니다.");
-      }
       await database.transaction(async (transaction) => {
         const [before] = await transaction
           .select({
             code: pointCatalogItems.code,
             price: pointCatalogItems.price,
             status: pointCatalogItems.status,
-            updatedAt: pointCatalogItems.updatedAt,
+            opsRevision: pointCatalogItems.opsRevision,
           })
           .from(pointCatalogItems)
           .where(eq(pointCatalogItems.id, input.itemId))
@@ -778,11 +776,16 @@ function createOpsPointShopMethods(
         const changedAt = new Date();
         const [updated] = await transaction
           .update(pointCatalogItems)
-          .set({ price: input.price, status: input.status, updatedAt: changedAt })
+          .set({
+            price: input.price,
+            status: input.status,
+            opsRevision: input.expectedRevision + 1,
+            updatedAt: changedAt,
+          })
           .where(
             and(
               eq(pointCatalogItems.id, input.itemId),
-              eq(pointCatalogItems.updatedAt, expectedUpdatedAt),
+              eq(pointCatalogItems.opsRevision, input.expectedRevision),
             ),
           )
           .returning({ id: pointCatalogItems.id });

@@ -182,6 +182,7 @@ export type OpsPointShopItem = {
   price: number;
   status: OpsPointShopStatus;
   currentVersion: number;
+  opsRevision: number;
   purchaseCount: number;
   createdAt: string;
   updatedAt: string;
