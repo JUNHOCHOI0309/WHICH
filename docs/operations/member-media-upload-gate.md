@@ -1,5 +1,7 @@
 # Member media upload gate
 
+> The post-normalization rule, signal, and routing layer is documented in [issue-media-rule-signal-gate.md](./issue-media-rule-signal-gate.md).
+
 Task: WHICH-98
 
 일반 Member 이미지 업로드는 기본적으로 비활성화되어 있습니다. 기존 운영자 검수 R2 기반이 있어도 로그인만으로 사용자 업로드를 허용하지 않습니다.

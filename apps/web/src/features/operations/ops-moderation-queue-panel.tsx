@@ -322,6 +322,16 @@ export function OpsModerationQueuePanel() {
                 <p className={styles.context}>
                   권리: {selected.context.rightsState} · {selected.context.rightsAttestation}
                 </p>
+                <h3>Rule findings</h3>
+                <ul className={styles.sources}>
+                  {(selected.context.findings ?? []).map((finding) => (
+                    <li key={finding.id}>
+                      <b>{finding.severity}</b> · {finding.stage} · {finding.code}
+                      <br />
+                      {finding.sourceVersion} · {JSON.stringify(finding.evidence)}
+                    </li>
+                  ))}
+                </ul>
                 <button
                   type="button"
                   className={styles.more}

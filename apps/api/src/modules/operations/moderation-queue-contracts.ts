@@ -38,6 +38,15 @@ export type OpsModerationQueueItem = {
         uploadedBy: string;
         input: { width: number; height: number; byteSize: number };
         output: { width: number; height: number; byteSize: number };
+        findings: Array<{
+          id: string;
+          stage: string;
+          code: string;
+          severity: "INFO" | "REVIEW" | "BLOCK";
+          sourceVersion: string;
+          evidence: Record<string, unknown>;
+          createdAt: string;
+        }>;
         priorDecisions: Array<{
           id: string;
           status: string;

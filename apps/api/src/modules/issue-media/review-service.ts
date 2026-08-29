@@ -8,6 +8,7 @@ import {
   issueMediaAssets,
   issueMediaReviewDecisions,
   issueMediaRightsRequests,
+  issueMediaRuleFindings,
   issueVersions,
   members,
   memberModerationNotices,
@@ -331,6 +332,19 @@ export function createIssueMediaReviewService(
       .limit(1);
     if (!joined) throw new IssueMediaError("MEDIA_NOT_FOUND", 404, "Media asset not found.");
     const history = (await decisionRows([assetId])).map(mapDecision);
+    const findings = await database
+      .select({
+        id: issueMediaRuleFindings.id,
+        stage: issueMediaRuleFindings.stage,
+        code: issueMediaRuleFindings.code,
+        severity: issueMediaRuleFindings.severity,
+        sourceVersion: issueMediaRuleFindings.sourceVersion,
+        evidence: issueMediaRuleFindings.evidence,
+        createdAt: issueMediaRuleFindings.createdAt,
+      })
+      .from(issueMediaRuleFindings)
+      .where(eq(issueMediaRuleFindings.mediaAssetId, assetId))
+      .orderBy(issueMediaRuleFindings.createdAt, issueMediaRuleFindings.id);
     return {
       ...publicAsset(joined.asset, storage),
       effectiveStatus: effectiveStatus(joined.asset),
@@ -357,6 +371,12 @@ export function createIssueMediaReviewService(
           : null,
       latestDecision: history[0] ?? null,
       history,
+      findings: findings.map((finding) => ({
+        ...finding,
+        severity: finding.severity as "INFO" | "REVIEW" | "BLOCK",
+        evidence: finding.evidence ?? {},
+        createdAt: finding.createdAt.toISOString(),
+      })),
     };
   }
 

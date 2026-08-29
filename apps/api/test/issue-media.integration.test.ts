@@ -172,7 +172,15 @@ describe("operator Issue media foundation", () => {
       .select({ code: issueMediaRuleFindings.code })
       .from(issueMediaRuleFindings)
       .where(eq(issueMediaRuleFindings.mediaAssetId, asset.id));
-    expect(findings).toContainEqual({ code: "MEDIA_INSPECTION_INCOMPLETE" });
+    expect(findings).toEqual(
+      expect.arrayContaining([
+        { code: "MEDIA_NORMALIZED_WEBP_READY" },
+        { code: "MEDIA_HASHES_COMPUTED" },
+        { code: "MEDIA_QR_SCAN_INCOMPLETE" },
+        { code: "MEDIA_OCR_SCAN_INCOMPLETE" },
+        { code: "MEDIA_ROUTE_REVIEW_REQUIRED" },
+      ]),
+    );
   });
 
   it("rejects a verified exact known-block hash before staging", async () => {
@@ -323,12 +331,13 @@ describe("operator Issue media foundation", () => {
       uploadGate,
     );
 
+    const uploadSessionId = randomUUID();
     const response = await app.inject({
       method: "POST",
       url: "/v1/member/issue-submission-media",
       headers: { authorization: "Bearer member-token" },
       payload: {
-        uploadSessionId: randomUUID(),
+        uploadSessionId,
         uploadSessionToken: "x".repeat(43),
         rightsAttestation: "I own this image and allow editorial review and publication.",
         declaredMimeType: "image/png",
@@ -338,7 +347,11 @@ describe("operator Issue media foundation", () => {
     expect(response.statusCode).toBe(201);
     expect(response.json()).toMatchObject({ asset: { sourceType: "MEMBER_SUBMISSION" } });
     expect(stageMemberAsset).toHaveBeenCalledWith(
-      expect.objectContaining({ memberId: regularMemberId, bytes: Buffer.from("hello") }),
+      expect.objectContaining({
+        memberId: regularMemberId,
+        uploadSessionId,
+        bytes: Buffer.from("hello"),
+      }),
     );
     expect(consumeSession).toHaveBeenCalledWith(
       expect.objectContaining({ memberId: regularMemberId, byteSize: 5 }),
@@ -634,6 +647,12 @@ describe("operator Issue media foundation", () => {
       requestId: "list-pending",
     });
     expect(pending?.items.find((item) => item.id === staged.id)?.publishedUrl).toBeNull();
+    expect(pending?.items.find((item) => item.id === staged.id)?.findings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: "MEDIA_NORMALIZED_WEBP_READY", severity: "INFO" }),
+        expect.objectContaining({ stage: "ROUTING" }),
+      ]),
+    );
     expect(await review.readAssetContent({ memberId: operatorId, assetId: staged.id })).toEqual(
       storage.objects.get(`issue-media/staging/${staged.id}.webp`),
     );
