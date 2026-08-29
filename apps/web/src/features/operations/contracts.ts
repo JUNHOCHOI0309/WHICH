@@ -100,6 +100,28 @@ export type OpsMemberPage = {
   nextCursor: string | null;
 };
 
+export type OpsTrustedImagePilotMember = {
+  memberId: string;
+  displayName: string;
+  status: OpsMemberStatus;
+  email: string | null;
+  createdAt: string;
+  metrics: {
+    accountAgeDays: number;
+    acceptedVotes: number;
+    publishedLowRiskIssues: number;
+    confirmedViolations90d: number;
+  };
+  consentCurrent: boolean;
+  eligible: boolean;
+  eligibilityReasons: string[];
+  capability: {
+    state: "ACTIVE" | "SUSPENDED" | "REVOKED" | "EXPIRED";
+    expiresAt: string;
+    reason: string;
+  } | null;
+};
+
 export type OpsRankingPreview = {
   schemaVersion: 1;
   generatedAt: string;

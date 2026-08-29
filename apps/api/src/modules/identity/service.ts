@@ -18,6 +18,7 @@ import {
   memberCredentials,
   memberAuthTokens,
   memberIdentityLinks,
+  memberMediaConsents,
   mobileAuthExchangeTickets,
   memberDailyAttendances,
   memberProfiles,
@@ -446,6 +447,7 @@ export function createMemberIdentityService(
     mobileAuthTicketTtlSeconds?: number;
     allowDevelopmentProvider: boolean;
     requireVerifiedEmail?: boolean;
+    mediaConsentVersion?: string;
     authSecurity?: Partial<AuthSecurityOptions>;
   },
 ): MemberIdentityService {
@@ -644,6 +646,14 @@ export function createMemberIdentityService(
             })
             .returning();
           if (!member) throw new Error("Member insert did not return a row.");
+
+          if (options.mediaConsentVersion) {
+            await transaction.insert(memberMediaConsents).values({
+              memberId: member.id,
+              consentVersion: options.mediaConsentVersion,
+              acceptedAt: now,
+            });
+          }
 
           const [link] = await transaction
             .insert(memberIdentityLinks)

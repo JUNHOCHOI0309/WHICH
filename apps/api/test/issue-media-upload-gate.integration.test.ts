@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 
+import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import type { Database } from "../src/database/client.js";
@@ -56,6 +57,41 @@ afterAll(async () => {
 });
 
 describe("Issue media upload session service", () => {
+  it("exposes Pilot access without leaking the grant rationale", async () => {
+    const service = createIssueMediaUploadGateService(database.db, {
+      mode: "PILOT",
+      consentVersion: "which-media-consent-v1",
+      pseudonymSecret: "test-pseudonym-secret-long-enough",
+    });
+    await expect(service.readAccess(memberId)).resolves.toMatchObject({
+      mode: "PILOT",
+      allowed: true,
+      reasons: [],
+      capability: { state: "ACTIVE" },
+      limits: { dailyUploads: 3, maximumOpenAssets: 10, maximumBytes: 10 * 1024 * 1024 },
+    });
+  });
+
+  it("records the current consent once and restores a previously revoked consent", async () => {
+    await database.db
+      .update(memberMediaConsents)
+      .set({ revokedAt: new Date(Date.now() + 1_000) })
+      .where(eq(memberMediaConsents.memberId, memberId));
+    const service = createIssueMediaUploadGateService(database.db, {
+      mode: "PILOT",
+      consentVersion: "which-media-consent-v1",
+      pseudonymSecret: "test-pseudonym-secret-long-enough",
+    });
+    await expect(service.readAccess(memberId)).resolves.toMatchObject({
+      allowed: false,
+      reasons: ["CONSENT_REQUIRED"],
+    });
+    await expect(service.acceptConsent(memberId)).resolves.toMatchObject({
+      allowed: true,
+      reasons: [],
+    });
+  });
+
   it("pauses new sessions when Moderation capacity is fail-closed", async () => {
     const service = createIssueMediaUploadGateService(database.db, {
       mode: "PILOT",

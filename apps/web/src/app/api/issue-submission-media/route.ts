@@ -1,17 +1,18 @@
-import type { NextRequest } from "next/server";
-import { NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 
-import { fetchWhichApi } from "@/lib/server/which-api";
+import { fetchWhichApi, MEMBER_SESSION_COOKIE } from "@/lib/server/which-api";
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const MAX_REQUEST_BYTES = 11 * 1024 * 1024;
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+const RIGHTS_ATTESTATION =
+  "회원가입 시 동의한 WHICH 이미지 정책에 따라 이 이미지를 게시할 권리가 있음을 확인합니다.";
 
 export async function POST(request: NextRequest) {
-  const authorization = request.headers.get("authorization");
-  if (!authorization?.startsWith("Bearer ")) {
+  const token = request.cookies.get(MEMBER_SESSION_COOKIE)?.value;
+  if (!token) {
     return NextResponse.json(
-      { code: "SESSION_INVALID", message: "이미지를 등록하려면 로그인이 필요합니다." },
+      { code: "SESSION_REQUIRED", message: "이미지를 등록하려면 로그인이 필요합니다." },
       { status: 401 },
     );
   }
@@ -42,11 +43,12 @@ export async function POST(request: NextRequest) {
         { status: 400 },
       );
     }
+
     const sessionResponse = await fetchWhichApi("/v1/member/issue-media-upload-sessions", {
       method: "POST",
       headers: {
         accept: "application/json",
-        authorization,
+        authorization: `Bearer ${token}`,
         "content-type": "application/json",
       },
       body: JSON.stringify({
@@ -67,14 +69,13 @@ export async function POST(request: NextRequest) {
       method: "POST",
       headers: {
         accept: "application/json",
-        authorization,
+        authorization: `Bearer ${token}`,
         "content-type": "application/json",
       },
       body: JSON.stringify({
         uploadSessionId: sessionPayload.session.id,
         uploadSessionToken: sessionPayload.session.token,
-        rightsAttestation:
-          "회원가입 시 동의한 WHICH 이미지 정책에 따라 이 이미지를 게시할 권리가 있음을 확인합니다.",
+        rightsAttestation: RIGHTS_ATTESTATION,
         declaredMimeType: file.type,
         contentBase64: Buffer.from(await file.arrayBuffer()).toString("base64"),
       }),

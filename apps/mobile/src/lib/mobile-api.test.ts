@@ -208,11 +208,11 @@ describe("mobile API client", () => {
     });
     const api = createMobileApiClient({ baseUrl: "https://whichone.site", request });
 
-    await api.uploadMemberIssueMedia(
-      "member-session",
-      { uri: "file:///choice-a.png", name: "choice-a.png", type: "image/png" },
-      "I own this image and permit editorial review and publication.",
-    );
+    await api.uploadMemberIssueMedia("member-session", "submission-1", {
+      uri: "file:///choice-a.png",
+      name: "choice-a.png",
+      type: "image/png",
+    });
 
     expect(requests.map(({ input }) => input)).toEqual([
       "file:///choice-a.png",
@@ -220,7 +220,39 @@ describe("mobile API client", () => {
     ]);
     const form = requests[1]?.init?.body as FormData;
     expect((form.get("media") as File).name).toBe("choice-a.png");
-    expect(form.get("rightsAttestation")).toContain("editorial review");
+    expect(form.get("submissionId")).toBe("submission-1");
+  });
+
+  it("reads and accepts the one-time image upload consent through authenticated routes", async () => {
+    const access = {
+      mode: "PILOT" as const,
+      allowed: false,
+      consentVersion: "which-media-consent-v1",
+      reasons: ["CONSENT_REQUIRED" as const],
+      capability: { state: "ACTIVE" as const, expiresAt: "2026-09-28T00:00:00.000Z" },
+      limits: { dailyUploads: 3, maximumOpenAssets: 10, maximumBytes: 10 * 1024 * 1024 },
+    };
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ access }))
+      .mockResolvedValueOnce(jsonResponse({ access: { ...access, allowed: true, reasons: [] } }));
+    const api = createMobileApiClient({ baseUrl: "https://whichone.site", request });
+
+    await api.loadIssueMediaUploadAccess("member-session");
+    await api.acceptIssueMediaConsent("member-session");
+
+    expect(request).toHaveBeenNthCalledWith(
+      1,
+      "https://whichone.site/api/mobile/v1/member/issue-media-upload-access",
+      expect.objectContaining({
+        headers: expect.objectContaining({ authorization: "Bearer member-session" }),
+      }),
+    );
+    expect(request).toHaveBeenNthCalledWith(
+      2,
+      "https://whichone.site/api/mobile/v1/member/issue-media-consent",
+      expect.objectContaining({ method: "POST" }),
+    );
   });
 
   it("updates profile settings and deletes the authenticated Member through mobile BFF routes", async () => {

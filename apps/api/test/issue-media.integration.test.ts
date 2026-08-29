@@ -454,6 +454,10 @@ describe("operator Issue media foundation", () => {
     const service = { stageMemberAsset } as unknown as IssueMediaService;
     const consumeSession = vi.fn(() => Promise.resolve({ objectKey: "private/source" }));
     const uploadGate = {
+      readAccess: vi.fn(),
+      acceptConsent: vi.fn(),
+      listPilotMembers: vi.fn(),
+      decidePilotCapability: vi.fn(),
       createSession: vi.fn(),
       consumeSession,
     };

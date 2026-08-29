@@ -24,6 +24,7 @@ import {
 } from "../src/database/schema/index.js";
 import { createCommentReadService } from "../src/modules/comments/service.js";
 import { createIssueWriteService } from "../src/modules/issues/creation-service.js";
+import type { MemberIssueSubmission } from "../src/modules/issues/contracts.js";
 import { createIssueReadService } from "../src/modules/issues/service.js";
 import { createMemberIdentityService } from "../src/modules/identity/service.js";
 import { createGuestVoteService } from "../src/modules/voting/service.js";
@@ -215,6 +216,74 @@ describe("Member Issue creation v1", () => {
     });
     expect(oneSided.statusCode).toBe(422);
     expect(oneSided.json()).toMatchObject({ code: "ISSUE_SUBMISSION_MEDIA_INVALID" });
+  });
+
+  it("attaches the first A/B media pair to an unchanged pending submission", async () => {
+    const session = await createSession("Pilot 이미지 회원");
+    const submitted = await app.inject({
+      method: "POST",
+      url: "/v1/member/issue-submissions",
+      headers: { authorization: `Bearer ${session.token}`, "idempotency-key": randomUUID() },
+      payload: createPayload("사진으로 비교하면 더 쉬울까"),
+    });
+    expect(submitted.statusCode).toBe(201);
+    const first = submitted.json<{ submission: MemberIssueSubmission }>().submission;
+    const mediaIds = [randomUUID(), randomUUID()];
+    await database.db.insert(issueMediaAssets).values(
+      mediaIds.map((id, index) => ({
+        id,
+        uploadedByMemberId: session.member.id,
+        sourceType: "MEMBER_SUBMISSION",
+        rightsAttestation: "Signup image policy consent applies to this private staged asset.",
+        rightsAttestedAt: new Date(),
+        sha256: String(index + 6).repeat(64),
+        perceptualHash: String(index + 6).repeat(16),
+        inputMimeType: "image/png",
+        inputByteSize: 100,
+        inputWidth: 10,
+        inputHeight: 10,
+        outputByteSize: 80,
+        outputWidth: 10,
+        outputHeight: 10,
+        stagingObjectKey: `issue-media/staging/${id}.webp`,
+        stagedAt: new Date(),
+      })),
+    );
+    const augmented = await app.inject({
+      method: "PUT",
+      url: `/v1/member/issue-submissions/${first.id}`,
+      headers: { authorization: `Bearer ${session.token}`, "idempotency-key": randomUUID() },
+      payload: {
+        ...createPayload("사진으로 비교하면 더 쉬울까"),
+        expectedRevision: first.revision,
+        mediaAssetAId: mediaIds[0],
+        mediaAssetBId: mediaIds[1],
+      },
+    });
+    expect(augmented.statusCode).toBe(200);
+    expect(augmented.json()).toMatchObject({
+      submission: {
+        id: first.id,
+        revision: 2,
+        status: "PENDING",
+        mediaAssetAId: mediaIds[0],
+        mediaAssetBId: mediaIds[1],
+      },
+    });
+
+    const hiddenEdit = await app.inject({
+      method: "PUT",
+      url: `/v1/member/issue-submissions/${first.id}`,
+      headers: { authorization: `Bearer ${session.token}`, "idempotency-key": randomUUID() },
+      payload: {
+        ...createPayload("내용까지 몰래 바꾸면 안 될까"),
+        expectedRevision: 2,
+        mediaAssetAId: mediaIds[0],
+        mediaAssetBId: mediaIds[1],
+      },
+    });
+    expect(hiddenEdit.statusCode).toBe(409);
+    expect(hiddenEdit.json()).toMatchObject({ code: "ISSUE_SUBMISSION_NOT_EDITABLE" });
   });
 
   it("preserves revisions when a requested change is resubmitted", async () => {

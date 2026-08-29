@@ -83,6 +83,7 @@ const app = await buildApp(config, {
     mobileAuthTicketTtlSeconds: config.auth.mobileAuthTicketTtlSeconds,
     allowDevelopmentProvider: config.auth.allowDevelopmentProvider,
     requireVerifiedEmail: config.auth.requireVerifiedEmail,
+    mediaConsentVersion: config.featureFlags.issueMediaConsentVersion,
     authSecurity: config.auth.security,
   }),
   interestProfiles: createInterestProfileService(database.db),

@@ -1,7 +1,8 @@
 # Trusted image uploader Pilot runbook
 
-WHICH-89는 신뢰 사용자 이미지 업로드 Pilot의 운영 계약을 정의한다. 이 문서는 운영자가 실제
-Pilot을 시작하기 전 확인할 체크리스트이며, 현재 Production Member/Guest 업로드를 활성화하지
+WHICH-89는 신뢰 사용자 이미지 업로드 Pilot의 운영 계약을 정의했고, WHICH-120은 실제
+capability 관리와 Web·Mobile 업로드 Vertical Slice를 구현한다. 이 문서는 운영자가 실제 Pilot을
+시작하기 전 확인할 체크리스트이며, 배포만으로 Production Member/Guest 업로드를 활성화하지
 않는다.
 
 이 Pilot의 `14일·10명·30개` 최소 표본은 UX, Queue, R2 수명주기와 운영 시간을 확인하는 Smoke
@@ -21,15 +22,16 @@ Gate다. 심각한 누락이 없더라도 자동 공개 안전성을 입증하�
 - mode, active capability, consent version, 하루 3개, open asset 10개와 Issue 소유권이 모든
   Member 업로드 Route에서 서버 측으로 강제된다.
 - 자산 신고, 사용자 통지·소명, legal hold와 삭제 차단이 준비되어 있다.
-- 질문·A/B 선택지·두 이미지·alt text·권리 근거를 함께 볼 수 있는 검수 문맥이 준비되어 있다.
+- 질문·A/B 선택지와 두 이미지, 계정 동의 버전을 함께 볼 수 있는 검수 문맥이 준비되어 있다.
 
 하나라도 충족하지 못하면 Pilot을 시작하지 않는다.
 
 ## Cohort 등록
 
 1. 후보 Member에 대해 `evaluateTrustedUploaderEligibility`와 원장 수치를 확인한다.
-2. 운영자가 콘텐츠 이력과 권리 동의 버전을 최종 검토한다.
-3. `ISSUE_IMAGE_UPLOAD` grant를 30일 만료로 생성한다.
+2. 신규 가입자의 통합 동의 또는 기존 가입자의 1회 이미지 약관 동의를 확인한다.
+3. `/ops`의 `Upload Pilot`에서 10자 이상의 근거와 함께 `ISSUE_IMAGE_UPLOAD` grant를 30일
+   만료로 생성한다.
 4. grant action과 운영자, reason, policy version, request ID를 audit event에 남긴다.
 5. 한 번에 10명부터 시작하며 cohort를 늘릴 때도 Pilot Gate를 다시 평가한다.
 
@@ -39,20 +41,24 @@ Gate다. 심각한 누락이 없더라도 자동 공개 안전성을 입증하�
 ## 제출과 자동 검사
 
 - 하루 3개, open asset 10개를 서버에서 강제한다.
+- 사용자는 이미지마다 출처·alt text·crop을 반복 입력하지 않는다. 가입 시 또는 기존 회원 최초
+  1회 동의한 권리·안전 검사 계약을 서버가 현재 동의 버전으로 검증한다.
+- A/B 이미지는 먼저 텍스트 질문의 비공개 제출을 만든 뒤 각각 일회성 업로드 세션으로 순차
+  전송하고, 같은 제출 revision에 한 번만 연결한다.
 - 본인의 미게시·미잠금 LOW-risk VS Issue 외에는 거절한다.
 - 외부 URL, GIF, SVG, 영상은 받지 않는다.
 - 기술 실패는 비공개 `AUTO_REJECT`; 불확실한 안전 신호는 `REVIEW_REQUIRED`; clean은
   `REVIEW_READY`로 기록한다.
 - rule/model version, OCR·QR·유해성 finding, hashes와 처리 시간을 저장한다.
-- 자동 판정만으로 공개 승인하거나 binary를 영구 삭제하지 않는다.
+- WHICH-120 배포 시점에는 자동 판정만으로 공개 승인하거나 binary를 영구 삭제하지 않는다.
 - Provider, OCR 또는 일부 검사가 실패하면 비공개 `REVIEW_REQUIRED`로 보내고 자동 허용하지 않는다.
 - Text-only 또는 승인 Library 경로는 이미지 검사 장애와 무관하게 계속 사용할 수 있어야 한다.
 
 ## 사람 검수
 
-운영자는 권리 근거, 질문과 이미지의 관련성, 선택지 간 시각적 대칭, alt text, 개인정보·QR,
-유해성과 중복을 확인한다. 모든 승인·반려에는 reason code, 10자 이상 근거, policy version과
-request ID를 남긴다.
+운영자는 계정의 현재 동의 버전, 질문과 이미지의 관련성, 선택지 간 시각적 대칭, 개인정보·QR,
+유해성과 중복을 확인한다. 별도 권리 분쟁이 있으면 Rights Desk 근거를 함께 확인한다. 모든
+승인·반려에는 reason code, 10자 이상 근거, policy version과 request ID를 남긴다.
 
 - 승인: normalized WebP를 published bucket으로 이동하고 Issue 연결 가능 상태로 만든다.
 - 반려: staging에서 비공개 유지하고 작성자에게 사유와 소명 기한을 알린다.
@@ -86,6 +92,17 @@ request ID를 남긴다.
 - 신고, 권리 요청, 열린 소명
 - 정지·만료 예정 grant
 - 실제 검수 분과 운영 시간
+
+## 배포와 활성화 순서
+
+1. 코드와 기존 media gate DB migration 배포 후 API와 Web BFF가 같은 동의 버전을 사용하는지
+   확인한다.
+2. `ISSUE_MEMBER_MEDIA_UPLOAD_MODE=OFF` 상태에서 `/ops`의 후보·권한 UI와 access API를 QA한다.
+3. staging과 Provider capacity, Queue, Kill Switch를 확인한다.
+4. API 환경에 `ISSUE_MEMBER_MEDIA_UPLOAD_MODE=PILOT`을 설정한다.
+5. 기존 Pilot 후보는 작성 화면에서 현재 약관을 한 번 동의하고 운영자는 eligibility를 다시 조회한다.
+6. 최초 소수 Member에게만 grant하고 업로드가 비공개 staging과 제출 상태로 남는지 확인한다.
+7. 자동 공개는 WHICH-111의 별도 Release Gate 전에는 활성화하지 않는다.
 
 oldest pending 48시간 또는 review p95 24시간을 넘으면 신규 제출을 멈추고 원인을 기록한다.
 

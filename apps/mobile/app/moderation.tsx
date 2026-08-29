@@ -74,7 +74,6 @@ export default function ModerationScreen() {
   const [replacementTarget, setReplacementTarget] = useState<string | null>(null);
   const [replacementA, setReplacementA] = useState<PickedMedia | null>(null);
   const [replacementB, setReplacementB] = useState<PickedMedia | null>(null);
-  const [attestation, setAttestation] = useState("");
 
   const load = useCallback(async () => {
     setScreen("loading");
@@ -181,15 +180,21 @@ export default function ModerationScreen() {
   }
 
   async function replaceImages(submissionId: string) {
-    if (!session || !replacementA || !replacementB || attestation.trim().length < 20) {
-      Alert.alert("이미지 변경", "A/B 이미지와 20자 이상의 권리 확인을 입력해 주세요.");
+    if (!session || !replacementA || !replacementB) {
+      Alert.alert("이미지 변경", "A/B 이미지를 모두 선택해 주세요.");
       return;
     }
     await run(async () => {
-      const [assetA, assetB] = await Promise.all([
-        mobileApi.uploadMemberIssueMedia(session.token, replacementA, attestation.trim()),
-        mobileApi.uploadMemberIssueMedia(session.token, replacementB, attestation.trim()),
-      ]);
+      const assetA = await mobileApi.uploadMemberIssueMedia(
+        session.token,
+        submissionId,
+        replacementA,
+      );
+      const assetB = await mobileApi.uploadMemberIssueMedia(
+        session.token,
+        submissionId,
+        replacementB,
+      );
       await mobileApi.chooseModerationAssetAlternative(session.token, submissionId, {
         action: "REPLACE_IMAGE",
         replacementAssetAId: assetA.asset.id,
@@ -198,7 +203,6 @@ export default function ModerationScreen() {
       setReplacementTarget(null);
       setReplacementA(null);
       setReplacementB(null);
-      setAttestation("");
       toast.success("새 이미지를 검수 대상으로 제출했어요.");
     }, "이미지 교체에 실패했습니다.");
   }
@@ -346,14 +350,6 @@ export default function ModerationScreen() {
                         onPress={() => void pickReplacement("B")}
                       />
                     </View>
-                    <TextInput
-                      multiline
-                      onChangeText={setAttestation}
-                      placeholder="직접 촬영했거나 게시 권리를 보유한 이미지임을 확인합니다."
-                      placeholderTextColor={colors.textTertiary}
-                      style={styles.textarea}
-                      value={attestation}
-                    />
                     <ActionButton
                       emphasis
                       disabled={busy}
