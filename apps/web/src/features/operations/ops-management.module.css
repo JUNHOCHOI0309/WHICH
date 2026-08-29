@@ -263,6 +263,11 @@
 .wideField {
   grid-column: 1 / -1;
 }
+.shopEditForm > .notice,
+.shopEditForm > .successNotice {
+  grid-column: 1 / -1;
+  margin: 0;
+}
 .shopCreatePanel > .primaryAction {
   margin-top: 16px;
 }

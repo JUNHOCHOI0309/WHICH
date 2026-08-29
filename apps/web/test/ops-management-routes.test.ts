@@ -165,4 +165,47 @@ describe("operator management BFF", () => {
     expect(updateResponse.status).toBe(403);
     expect(upstream).not.toHaveBeenCalled();
   });
+
+  it("forwards same-origin Point Shop status updates", async () => {
+    const upstream = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      expect(String(input)).toBe(
+        "http://localhost:4000/v1/internal/ops/point-shop/items/10503719-4d3b-4abf-a1ee-ec0920d72e9a",
+      );
+      expect(init?.method).toBe("PATCH");
+      expect(new Headers(init?.headers).get("authorization")).toBe("Bearer member-token");
+      expect(JSON.parse(String(init?.body))).toMatchObject({
+        status: "PAUSED",
+        reason: "판매 상태 변경: 판매 중 → 판매 중지",
+      });
+      return new Response(JSON.stringify({ id: "10503719-4d3b-4abf-a1ee-ec0920d72e9a" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    });
+    vi.stubGlobal("fetch", upstream);
+
+    const response = await patchPointShopItem(
+      new NextRequest(
+        "https://whichone.site/api/ops/point-shop/10503719-4d3b-4abf-a1ee-ec0920d72e9a",
+        {
+          method: "PATCH",
+          headers: {
+            cookie: "which_member_session=member-token",
+            origin: "https://whichone.site",
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            expectedUpdatedAt: "2026-08-29T00:00:00.000Z",
+            price: 500,
+            status: "PAUSED",
+            reason: "판매 상태 변경: 판매 중 → 판매 중지",
+          }),
+        },
+      ),
+      { params: Promise.resolve({ itemId: "10503719-4d3b-4abf-a1ee-ec0920d72e9a" }) },
+    );
+
+    expect(response.status).toBe(200);
+    expect(upstream).toHaveBeenCalledOnce();
+  });
 });

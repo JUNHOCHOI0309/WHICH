@@ -86,6 +86,10 @@ export function OpsPointShopPanel() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [editFeedback, setEditFeedback] = useState<{
+    kind: "success" | "error";
+    message: string;
+  } | null>(null);
 
   const selected = useMemo(
     () => view?.items.find((item) => item.id === selectedId) ?? null,
@@ -130,16 +134,34 @@ export function OpsPointShopPanel() {
   async function updateItem() {
     if (!selected) return;
     const price = Number(editPrice);
+    const priceChanged = price !== selected.price;
+    const statusChanged = editStatus !== selected.status;
     if (!Number.isInteger(price) || price < 1) {
-      setError("가격은 1P 이상의 정수여야 합니다.");
+      setEditFeedback({ kind: "error", message: "가격은 1P 이상의 정수여야 합니다." });
       return;
     }
-    if (editReason.trim().length < 8) {
-      setError("변경 사유를 8자 이상 입력해 주세요.");
+    if (!priceChanged && !statusChanged) {
+      setEditFeedback({ kind: "error", message: "변경된 가격이나 판매 상태가 없습니다." });
+      return;
+    }
+    const explicitReason = editReason.trim();
+    const reason =
+      explicitReason ||
+      (statusChanged && !priceChanged
+        ? `판매 상태 변경: ${statusLabels[selected.status]} → ${statusLabels[editStatus]}`
+        : "");
+    if (reason.length < 8) {
+      setEditFeedback({
+        kind: "error",
+        message: priceChanged
+          ? "가격 변경 사유를 8자 이상 입력해 주세요."
+          : "변경 사유를 8자 이상 입력해 주세요.",
+      });
       return;
     }
     setSaving(true);
     setMessage("");
+    setEditFeedback(null);
     try {
       const response = await fetch(`/api/ops/point-shop/${encodeURIComponent(selected.id)}`, {
         method: "PATCH",
@@ -148,16 +170,22 @@ export function OpsPointShopPanel() {
           expectedUpdatedAt: selected.updatedAt,
           price,
           status: editStatus,
-          reason: editReason.trim(),
+          reason,
         }),
       });
       const body = (await response.json()) as OpsPointShopItem & { message?: string };
       if (!response.ok) throw new Error(body.message || "상품을 변경하지 못했습니다.");
-      setMessage(`${body.name}의 판매 설정을 변경했습니다.`);
+      setEditFeedback({
+        kind: "success",
+        message: `${body.name}의 ${statusChanged ? "판매 상태" : "가격"}를 저장했습니다.`,
+      });
       setError("");
       await load();
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "상품을 변경하지 못했습니다.");
+      setEditFeedback({
+        kind: "error",
+        message: saveError instanceof Error ? saveError.message : "상품을 변경하지 못했습니다.",
+      });
     } finally {
       setSaving(false);
     }
@@ -362,7 +390,10 @@ export function OpsPointShopPanel() {
               key={item.id}
               className={styles.shopItem}
               aria-pressed={selectedId === item.id}
-              onClick={() => setSelectedId(item.id)}
+              onClick={() => {
+                setSelectedId(item.id);
+                setEditFeedback(null);
+              }}
             >
               <span>
                 <strong>{item.name}</strong>
@@ -427,17 +458,31 @@ export function OpsPointShopPanel() {
                     변경 사유
                     <textarea
                       value={editReason}
-                      placeholder="가격 또는 판매 상태를 변경하는 이유를 기록해 주세요."
+                      placeholder="가격 변경 시 8자 이상 입력해 주세요. 상태만 변경하면 자동 기록됩니다."
                       onChange={(event) => setEditReason(event.target.value)}
                     />
                   </label>
+                  {editFeedback ? (
+                    <p
+                      className={
+                        editFeedback.kind === "success" ? styles.successNotice : styles.notice
+                      }
+                      role={editFeedback.kind === "error" ? "alert" : "status"}
+                    >
+                      {editFeedback.message}
+                    </p>
+                  ) : null}
                   <button
                     type="button"
                     className={styles.primaryAction}
                     onClick={updateItem}
                     disabled={saving}
                   >
-                    {saving ? "저장 중" : "변경 저장"}
+                    {saving
+                      ? "저장 중"
+                      : editStatus !== selected.status && Number(editPrice) === selected.price
+                        ? "판매 상태 저장"
+                        : "변경 저장"}
                   </button>
                 </div>
               )}
