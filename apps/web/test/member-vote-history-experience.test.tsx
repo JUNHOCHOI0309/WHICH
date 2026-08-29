@@ -120,11 +120,7 @@ describe("Member vote history experience", () => {
     render(<MemberVoteHistoryExperience />);
 
     expect(
-      await screen.findByRole(
-        "heading",
-        { name: "기록 회원님의 선택 기록" },
-        { timeout: 5_000 },
-      ),
+      await screen.findByRole("heading", { name: "기록 회원님의 선택 기록" }, { timeout: 5_000 }),
     ).toBeVisible();
     expect(screen.getByRole("heading", { name: "2026년 8월" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "2026년 7월" })).toBeVisible();
