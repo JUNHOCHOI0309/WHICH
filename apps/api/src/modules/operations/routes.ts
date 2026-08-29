@@ -104,6 +104,55 @@ export async function registerOpsRoutes(
       });
     });
 
+    opsApp.post<{
+      Headers: OpsHeaders;
+      Body: {
+        eventId: string;
+        emailId: string;
+        messageId: string | null;
+        sender: string;
+        recipient: string;
+        subject: string;
+        receivedAt: string;
+        attachmentCount: number;
+      };
+    }>(
+      "/v1/internal/ops/support-email-events",
+      {
+        schema: {
+          hide: true,
+          headers: opsHeadersSchema,
+          body: Type.Object({
+            eventId: Type.String({ minLength: 1, maxLength: 128 }),
+            emailId: Type.String({ minLength: 1, maxLength: 128 }),
+            messageId: Type.Union([Type.String({ maxLength: 500 }), Type.Null()]),
+            sender: Type.String({ minLength: 3, maxLength: 320 }),
+            recipient: Type.String({ minLength: 3, maxLength: 320 }),
+            subject: Type.String({ maxLength: 300 }),
+            receivedAt: Type.String({ format: "date-time" }),
+            attachmentCount: Type.Integer({ minimum: 0, maximum: 100 }),
+          }),
+          response: {
+            200: Type.Object({
+              status: Type.Union([Type.Literal("RECORDED"), Type.Literal("REPLAYED")]),
+            }),
+            400: Type.Object({ code: Type.String(), message: Type.String() }),
+            401: Type.Object({ code: Type.String(), message: Type.String() }),
+            500: Type.Object({ code: Type.String(), message: Type.String() }),
+          },
+        },
+      },
+      async (request, reply) => {
+        if (!secretMatches(request.headers["x-internal-auth-secret"], internalSecret)) {
+          return reply
+            .code(401)
+            .send({ code: "UNAUTHORIZED", message: "Internal authentication failed." });
+        }
+        const status = await service.recordSupportEmailEvent(request.body);
+        return reply.send({ status });
+      },
+    );
+
     opsApp.get<{
       Headers: { authorization?: string; "x-internal-auth-secret"?: string };
       Querystring: { days?: number };
