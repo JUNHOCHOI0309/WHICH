@@ -90,7 +90,9 @@ describe("IssueExperience", () => {
 
     render(<IssueExperience issueId={ISSUE_ID} initialIssue={issue} />);
 
-    expect(await screen.findByRole("button", { name: "A 선택, 아침형 인간" })).toBeEnabled();
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "A 선택, 아침형 인간" })).toBeEnabled();
+    });
     expect(request.mock.calls.some(([input]) => String(input) === `/api/issues/${ISSUE_ID}`)).toBe(
       false,
     );
