@@ -16,7 +16,7 @@ afterEach(() => {
 
 describe("Creator public profile experience", () => {
   it("keeps a server-provided profile without an immediate duplicate request", () => {
-    const request = vi.fn(async (_input: string | URL | Request) => jsonResponse({}, 500));
+    const request = vi.fn(async () => jsonResponse({}, 500));
     vi.stubGlobal("fetch", request);
 
     render(
