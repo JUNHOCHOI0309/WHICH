@@ -85,6 +85,14 @@ services:
         value: "0"
       - key: MODERATION_PROVIDER_DAILY_CALL_CAP
         value: "0"
+      - key: MODERATION_PROVIDER_DAILY_COST_MICROS_CAP
+        value: "0"
+      - key: MODERATION_PROVIDER_CIRCUIT_WINDOW_MINUTES
+        value: "5"
+      - key: MODERATION_PROVIDER_CIRCUIT_MIN_CALLS
+        value: "5"
+      - key: MODERATION_PROVIDER_CIRCUIT_FAILURE_PERCENT
+        value: "50"
       - key: MODERATION_PROVIDER_APPROVAL_EVIDENCE
         sync: false
       - key: OPENAI_API_KEY
