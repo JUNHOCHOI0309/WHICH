@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -7,6 +7,10 @@ import {
   issueVersionSnapshots,
   issues,
   issueVersions,
+  issueMediaAssets,
+  issueMediaAssetVersions,
+  issueMediaRuleFindings,
+  members,
   moderationProviderCallCache,
   moderationRuns,
   outboxEvents,
@@ -72,6 +76,63 @@ describe("Moderation Outbox Dispatcher and Shadow Worker", () => {
     });
     await testDatabase.database.db.insert(outboxEvents).values(events.rows);
     return { issueId, events };
+  }
+
+  async function insertImageTarget(inputHash = "f".repeat(64)) {
+    const [member] = await testDatabase.database.db
+      .insert(members)
+      .values({ displayName: `WHICH-108 ${randomUUID().slice(0, 8)}` })
+      .returning();
+    const marker = createHash("sha256").update(randomUUID()).digest("hex");
+    const [asset] = await testDatabase.database.db
+      .insert(issueMediaAssets)
+      .values({
+        uploadedByMemberId: member!.id,
+        sourceType: "MEMBER_SUBMISSION",
+        rightsAttestation: "I own the publication rights for this provider shadow fixture.",
+        rightsAttestedAt: new Date(),
+        sha256: marker,
+        perceptualHash: marker.slice(0, 16),
+        inputMimeType: "image/png",
+        inputByteSize: 512,
+        inputWidth: 256,
+        inputHeight: 256,
+        outputByteSize: 256,
+        outputWidth: 256,
+        outputHeight: 256,
+        stagingObjectKey: `member/${marker}.webp`,
+        stagedAt: new Date(),
+      })
+      .returning();
+    await testDatabase.database.db.insert(issueMediaAssetVersions).values({
+      assetId: asset!.id,
+      version: 1,
+      sourceType: asset!.sourceType,
+      rightsAttestation: asset!.rightsAttestation,
+      rightsAttestedAt: asset!.rightsAttestedAt,
+      sha256: asset!.sha256,
+      perceptualHash: asset!.perceptualHash,
+      inputMimeType: asset!.inputMimeType,
+      inputByteSize: asset!.inputByteSize,
+      inputWidth: asset!.inputWidth,
+      inputHeight: asset!.inputHeight,
+      outputMimeType: asset!.outputMimeType,
+      outputByteSize: asset!.outputByteSize,
+      outputWidth: asset!.outputWidth,
+      outputHeight: asset!.outputHeight,
+      normalizedObjectRef: `issue-media://asset/${asset!.id}/version/1`,
+      inputHash,
+    });
+    const events = createModerationSubmissionEvents({
+      targetType: "ISSUE_MEDIA_ASSET",
+      targetId: asset!.id,
+      targetVersion: 1,
+      privateObjectReference: `issue-media://asset/${asset!.id}/version/1`,
+      normalizedInputHash: inputHash,
+      reason: "CREATE",
+    });
+    await testDatabase.database.db.insert(outboxEvents).values(events.rows);
+    return { asset: asset!, events };
   }
 
   it("defines private, versioned events without binary data or public URLs", () => {
@@ -164,6 +225,79 @@ describe("Moderation Outbox Dispatcher and Shadow Worker", () => {
       .where(eq(moderationProviderCallCache.normalizedInputHash, sharedHash));
     expect(cache).toHaveLength(1);
     expect(cache[0]).toMatchObject({ costMicros: 23, latencyMs: 17 });
+  });
+
+  it("appends image provider findings without changing publication or asset state", async () => {
+    const { asset } = await insertImageTarget();
+    const adapter: ModerationShadowAdapter = {
+      provider: "OPENAI_MODERATION",
+      modelName: "omni-moderation",
+      modelVersion: "omni-moderation-2024-09-26",
+      cacheTtlMilliseconds: 60_000,
+      inspect: () =>
+        Promise.resolve({
+          status: "SUCCEEDED",
+          latencyMs: 21,
+          costMicros: 0,
+          result: {
+            schemaVersion: 1,
+            provider: "OPENAI_MODERATION",
+            modality: "IMAGE",
+            modelSnapshot: "omni-moderation-2024-09-26",
+            supportedLabels: ["CONTENT_GRAPHIC_VIOLENCE"],
+            unsupportedLabels: ["ISSUE_RELEVANCE", "VISUAL_FAIRNESS"],
+            signals: [
+              {
+                providerLabel: "violence/graphic",
+                canonicalCode: "CONTENT_GRAPHIC_VIOLENCE",
+                rawScore: 0.94,
+                calibratedBand: "CRITICAL",
+                flagged: true,
+                appliedModalities: ["IMAGE"],
+                regions: [],
+              },
+            ],
+            abstained: false,
+            providerDisagreement: null,
+            capabilities: { boundingBoxes: false },
+            publicationChanged: false,
+          },
+        }),
+    };
+    const worker = createModerationDispatcherService(testDatabase.database.db, adapter, {
+      ...options,
+      providerGate: () => ({ allowed: true, reason: "TEST_GATE" }),
+    });
+
+    await worker.dispatchBatch();
+    expect(await worker.processBatch()).toMatchObject({ succeeded: 1 });
+
+    const findings = await testDatabase.database.db
+      .select()
+      .from(issueMediaRuleFindings)
+      .where(eq(issueMediaRuleFindings.mediaAssetId, asset.id));
+    expect(findings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          stage: "PROVIDER_SHADOW",
+          code: "MEDIA_AI_CONTENT_GRAPHIC_VIOLENCE",
+          severity: "REVIEW",
+        }),
+        expect.objectContaining({
+          stage: "PROVIDER_SHADOW",
+          code: "MEDIA_AI_PROVIDER_CAPABILITIES",
+          severity: "INFO",
+        }),
+      ]),
+    );
+    const [unchangedAsset] = await testDatabase.database.db
+      .select()
+      .from(issueMediaAssets)
+      .where(eq(issueMediaAssets.id, asset.id));
+    expect(unchangedAsset).toMatchObject({
+      storageState: "STAGED",
+      moderationState: "PENDING",
+    });
   });
 
   it("moves repeatedly failing executions to the Moderation dead letter queue", async () => {

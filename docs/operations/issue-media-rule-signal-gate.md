@@ -38,4 +38,4 @@ Image Review and the Moderation Queue display the same canonical findings, inclu
 
 ## Phase boundary
 
-Phase A does not call an AI moderation provider. Phase B may consume the normalized derivative in `SHADOW` mode only after privacy/retention evidence, canary limits, cost caps, and the provider kill switch are approved. Provider results must append new findings; they must not overwrite Phase A evidence.
+Phase A does not call an AI moderation provider. Phase B may consume the normalized derivative in `SHADOW` mode only after privacy/retention evidence, canary limits, cost caps, and the provider kill switch are approved. Provider results append new findings and never overwrite Phase A evidence. The Phase B contract and activation sequence are documented in [`issue-media-provider-shadow.md`](./issue-media-provider-shadow.md).

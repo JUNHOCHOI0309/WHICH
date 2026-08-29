@@ -12,6 +12,7 @@ import {
   memberIssueSubmissionRevisions,
   memberIssueSubmissions,
   moderationAuditEvents,
+  issueMediaRuleFindings,
   moderationProviderCallCache,
   moderationReconciliations,
   moderationRuns,
@@ -20,6 +21,7 @@ import {
 } from "../../database/schema/index.js";
 import type { IssueMediaObjectStorage } from "../issue-media/contracts.js";
 import { ModerationProviderCallError } from "../moderation-providers/contracts.js";
+import { toImageProviderShadowFindings } from "../moderation-providers/image-shadow-findings.js";
 import {
   createModerationSubmissionEvents,
   MODERATION_POLICY_VERSION,
@@ -545,6 +547,29 @@ export function createModerationDispatcherService(
         )
         .returning({ id: moderationRuns.id });
       if (updated) {
+        const [target] = await transaction
+          .select({
+            targetType: moderationTargets.targetType,
+            targetId: moderationTargets.targetId,
+          })
+          .from(moderationTargets)
+          .where(eq(moderationTargets.id, run.targetId))
+          .limit(1);
+        if (target?.targetType === "ISSUE_MEDIA_ASSET" && result.status === "SUCCEEDED") {
+          const findings = toImageProviderShadowFindings({
+            result: result.result,
+            policyVersion: run.policyVersion,
+            cacheHit: result.result.cacheHit === true,
+          });
+          if (findings.length > 0) {
+            await transaction.insert(issueMediaRuleFindings).values(
+              findings.map((finding) => ({
+                mediaAssetId: target.targetId,
+                ...finding,
+              })),
+            );
+          }
+        }
         await transaction.insert(moderationAuditEvents).values({
           eventType: `SHADOW_RUN_${result.status}`,
           entityType: "RUN",
