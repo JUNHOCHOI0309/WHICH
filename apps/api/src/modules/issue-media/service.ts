@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { and, eq, isNull, lt, ne, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
 
 import type { Database } from "../../database/client.js";
 import {
@@ -9,6 +9,9 @@ import {
   issueChoices,
   issueMediaAssets,
   issueMediaAssetVersions,
+  issueMediaLibraryAssets,
+  issueMediaLibraryPairs,
+  issueMediaLibraryUsages,
   issueMediaKnownBlockHashes,
   issueMediaRuleFindings,
   issueMediaUploadSessions,
@@ -21,8 +24,10 @@ import {
 
 import type {
   IssueMediaAssetRecord,
+  IssueMediaLibraryPair,
   IssueMediaObjectStorage,
   IssueMediaService,
+  RegisterIssueMediaLibraryPair,
 } from "./contracts.js";
 import { sha256 } from "../content-revisions/service.js";
 import { IssueMediaProcessingError, processIssueMedia } from "./image-processing.js";
@@ -213,6 +218,129 @@ export function createIssueMediaService(
       .limit(1);
     if (!row) throw new IssueMediaError("MEDIA_NOT_FOUND", 404, "The media asset was not found.");
     return row;
+  }
+
+  function validateLibraryPair(input: RegisterIssueMediaLibraryPair) {
+    const sides = input.assets
+      .map((candidate) => candidate.side)
+      .sort()
+      .join("");
+    const mediaIds = new Set(input.assets.map((candidate) => candidate.mediaAssetId));
+    if (
+      input.title.trim().length < 2 ||
+      input.title.trim().length > 160 ||
+      !input.categoryCode.trim() ||
+      input.topics.length > 20 ||
+      sides !== "AB" ||
+      mediaIds.size !== 2
+    ) {
+      throw new IssueMediaError(
+        "MEDIA_STATE_CONFLICT",
+        422,
+        "Library에는 서로 다른 A/B 승인 이미지를 한 쌍으로 등록해야 합니다.",
+      );
+    }
+    for (const candidate of input.assets) {
+      const acquiredAt = new Date(candidate.acquiredAt);
+      const expiresAt = candidate.expiresAt ? new Date(candidate.expiresAt) : null;
+      if (
+        candidate.altText.trim().length < 2 ||
+        candidate.evidenceReference.trim().length < 8 ||
+        candidate.sourceUrl.trim().length < 8 ||
+        !Number.isFinite(acquiredAt.getTime()) ||
+        (expiresAt !== null &&
+          (!Number.isFinite(expiresAt.getTime()) || expiresAt <= new Date())) ||
+        !candidate.commercialAllowed ||
+        !candidate.redistributionAllowed
+      ) {
+        throw new IssueMediaError(
+          "MEDIA_RIGHTS_BLOCKED",
+          422,
+          "출처·라이선스 증빙과 상업적 이용·재배포 권한을 확인해 주세요.",
+        );
+      }
+    }
+  }
+
+  async function loadLibraryPairs(input: {
+    query?: string;
+    categoryCode?: string;
+    limit: number;
+    pairId?: string;
+  }): Promise<IssueMediaLibraryPair[]> {
+    const now = new Date();
+    const filters = [
+      eq(issueMediaLibraryPairs.status, "PUBLISHED"),
+      eq(issueMediaAssets.processingState, "READY"),
+      eq(issueMediaAssets.moderationState, "APPROVED"),
+      eq(issueMediaAssets.storageState, "PUBLISHED"),
+      inArray(issueMediaAssets.rightsState, ["ASSERTED", "CLEARED"]),
+      sql`${issueMediaAssets.publishedObjectKey} is not null`,
+      or(
+        isNull(issueMediaLibraryAssets.expiresAt),
+        sql`${issueMediaLibraryAssets.expiresAt} > ${now}`,
+      )!,
+    ];
+    if (input.pairId) filters.push(eq(issueMediaLibraryPairs.id, input.pairId));
+    if (input.categoryCode)
+      filters.push(eq(issueMediaLibraryPairs.categoryCode, input.categoryCode));
+    if (input.query?.trim()) {
+      const query = `%${input.query.trim()}%`;
+      filters.push(
+        or(
+          ilike(issueMediaLibraryPairs.title, query),
+          sql`${issueMediaLibraryPairs.topics}::text ilike ${query}`,
+        )!,
+      );
+    }
+    const rows = await database
+      .select({
+        pair: issueMediaLibraryPairs,
+        libraryAsset: issueMediaLibraryAssets,
+        mediaAsset: issueMediaAssets,
+        usageCount: sql<number>`(
+          select count(*)::int from issue_media_library_usages usage
+          where usage.library_pair_id = ${issueMediaLibraryPairs.id}
+            and usage.status = 'ACTIVE'
+        )`,
+      })
+      .from(issueMediaLibraryPairs)
+      .innerJoin(
+        issueMediaLibraryAssets,
+        eq(issueMediaLibraryAssets.pairId, issueMediaLibraryPairs.id),
+      )
+      .innerJoin(issueMediaAssets, eq(issueMediaAssets.id, issueMediaLibraryAssets.mediaAssetId))
+      .where(and(...filters))
+      .orderBy(desc(issueMediaLibraryPairs.createdAt), issueMediaLibraryAssets.side)
+      .limit(Math.max(2, Math.min(input.limit, 100)) * 2);
+    const pairs = new Map<string, IssueMediaLibraryPair>();
+    for (const row of rows) {
+      const current = pairs.get(row.pair.id) ?? {
+        id: row.pair.id,
+        title: row.pair.title,
+        categoryCode: row.pair.categoryCode,
+        topics: row.pair.topics,
+        status: row.pair.status as IssueMediaLibraryPair["status"],
+        assets: [],
+        usageCount: row.usageCount,
+        createdAt: row.pair.createdAt.toISOString(),
+      };
+      current.assets.push({
+        id: row.libraryAsset.id,
+        side: row.libraryAsset.side as "A" | "B",
+        mediaAssetId: row.mediaAsset.id,
+        url: storage.publicUrl(row.mediaAsset.publishedObjectKey!),
+        altText: row.libraryAsset.altText,
+        cropMode: row.libraryAsset.cropMode as "COVER" | "CONTAIN",
+        width: row.mediaAsset.outputWidth,
+        height: row.mediaAsset.outputHeight,
+        attributionText: row.libraryAsset.attributionText,
+      });
+      pairs.set(row.pair.id, current);
+    }
+    return [...pairs.values()]
+      .filter((pair) => pair.assets.length === 2)
+      .slice(0, Math.max(1, Math.min(input.limit, 50)));
   }
 
   async function stageStoredAsset(input: {
@@ -573,6 +701,166 @@ export function createIssueMediaService(
   }
 
   return {
+    async listLibraryPairs(input) {
+      return { items: await loadLibraryPairs(input) };
+    },
+
+    async registerLibraryPair(input) {
+      const eventType = "OPS_ISSUE_MEDIA_LIBRARY_REGISTER";
+      if (!(await requireOperator(input.memberId, eventType, input.requestId))) return null;
+      validateLibraryPair(input.pair);
+      const mediaIds = input.pair.assets.map((candidate) => candidate.mediaAssetId);
+      const media = await database
+        .select()
+        .from(issueMediaAssets)
+        .where(inArray(issueMediaAssets.id, mediaIds));
+      if (
+        media.length !== 2 ||
+        media.some(
+          (candidate) =>
+            candidate.sourceType !== "OPERATOR_UPLOAD" ||
+            candidate.processingState !== "READY" ||
+            candidate.moderationState !== "APPROVED" ||
+            candidate.storageState !== "PUBLISHED" ||
+            !["ASSERTED", "CLEARED"].includes(candidate.rightsState),
+        )
+      ) {
+        throw new IssueMediaError(
+          "MEDIA_STATE_CONFLICT",
+          409,
+          "검수 승인되어 공개 저장소에 있는 운영 이미지 두 장만 Library에 등록할 수 있습니다.",
+        );
+      }
+      const pairId = randomUUID();
+      await database.transaction(async (transaction) => {
+        await transaction.insert(issueMediaLibraryPairs).values({
+          id: pairId,
+          title: input.pair.title.trim(),
+          categoryCode: input.pair.categoryCode.trim(),
+          topics: [...new Set(input.pair.topics.map((topic) => topic.trim()).filter(Boolean))],
+          createdByMemberId: input.memberId,
+        });
+        await transaction.insert(issueMediaLibraryAssets).values(
+          input.pair.assets.map((candidate) => ({
+            pairId,
+            side: candidate.side,
+            mediaAssetId: candidate.mediaAssetId,
+            altText: candidate.altText.trim(),
+            cropMode: candidate.cropMode,
+            sourceUrl: candidate.sourceUrl.trim(),
+            authorName: candidate.authorName.trim(),
+            licenseName: candidate.licenseName.trim(),
+            licenseVersion: candidate.licenseVersion.trim(),
+            acquiredAt: new Date(candidate.acquiredAt),
+            commercialAllowed: candidate.commercialAllowed,
+            derivativeAllowed: candidate.derivativeAllowed,
+            redistributionAllowed: candidate.redistributionAllowed,
+            attributionText: candidate.attributionText?.trim() || null,
+            evidenceReference: candidate.evidenceReference.trim(),
+            expiresAt: candidate.expiresAt ? new Date(candidate.expiresAt) : null,
+          })),
+        );
+      });
+      await audit({
+        memberId: input.memberId,
+        eventType,
+        outcome: "SUCCEEDED",
+        requestId: input.requestId,
+        metadata: { pairId, mediaAssetIds: mediaIds },
+      });
+      return (await loadLibraryPairs({ pairId, limit: 1 }))[0]!;
+    },
+
+    async revokeLibraryPair(input) {
+      const eventType = "OPS_ISSUE_MEDIA_LIBRARY_REVOKE";
+      if (!(await requireOperator(input.memberId, eventType, input.requestId))) return null;
+      const reason = input.reason.trim();
+      if (reason.length < 10 || reason.length > 2000) {
+        throw new IssueMediaError(
+          "MEDIA_RIGHTS_BLOCKED",
+          422,
+          "Library 회수 근거를 10자 이상 입력해 주세요.",
+        );
+      }
+      const [pair] = await database
+        .select()
+        .from(issueMediaLibraryPairs)
+        .where(eq(issueMediaLibraryPairs.id, input.pairId))
+        .limit(1);
+      if (!pair) throw new IssueMediaError("MEDIA_NOT_FOUND", 404, "Library pair not found.");
+      const linkedAssets = await database
+        .select({ asset: issueMediaAssets })
+        .from(issueMediaLibraryAssets)
+        .innerJoin(issueMediaAssets, eq(issueMediaAssets.id, issueMediaLibraryAssets.mediaAssetId))
+        .where(eq(issueMediaLibraryAssets.pairId, input.pairId));
+      const [usageCount] = await database
+        .select({ value: sql<number>`count(distinct ${issueMediaLibraryUsages.issueId})::int` })
+        .from(issueMediaLibraryUsages)
+        .where(
+          and(
+            eq(issueMediaLibraryUsages.pairId, input.pairId),
+            eq(issueMediaLibraryUsages.status, "ACTIVE"),
+          ),
+        );
+      if (pair.status !== "REVOKED") {
+        await database.transaction(async (transaction) => {
+          await transaction.execute(
+            sql`delete from issue_choice_media choice_media
+              where exists (
+                select 1 from issue_media_library_usages usage
+                where usage.library_pair_id = ${input.pairId}
+                  and usage.status = 'ACTIVE'
+                  and usage.issue_id = choice_media.issue_id
+                  and usage.issue_version = choice_media.issue_version
+              )`,
+          );
+          await transaction.execute(
+            sql`update issue_versions version
+              set media_mode = 'TEXT_ONLY'
+              where exists (
+                select 1 from issue_media_library_usages usage
+                where usage.library_pair_id = ${input.pairId}
+                  and usage.status = 'ACTIVE'
+                  and usage.issue_id = version.issue_id
+                  and usage.issue_version = version.issue_version
+              )`,
+          );
+          await transaction
+            .update(issueMediaLibraryUsages)
+            .set({ status: "TEXT_FALLBACK", fallbackReason: reason, updatedAt: new Date() })
+            .where(
+              and(
+                eq(issueMediaLibraryUsages.pairId, input.pairId),
+                eq(issueMediaLibraryUsages.status, "ACTIVE"),
+              ),
+            );
+          await transaction
+            .update(issueMediaLibraryPairs)
+            .set({
+              status: "REVOKED",
+              revokedByMemberId: input.memberId,
+              revokeReason: reason,
+              revokedAt: new Date(),
+              updatedAt: new Date(),
+            })
+            .where(eq(issueMediaLibraryPairs.id, input.pairId));
+        });
+        for (const { asset: candidate } of linkedAssets) {
+          if (candidate.storageState === "PUBLISHED") {
+            await quarantineStoredAsset(candidate, "RIGHTS_CHALLENGED");
+          }
+        }
+      }
+      await audit({
+        memberId: input.memberId,
+        eventType,
+        outcome: "SUCCEEDED",
+        requestId: input.requestId,
+        metadata: { pairId: input.pairId, fallbackIssueCount: usageCount?.value ?? 0 },
+      });
+      return { pairId: input.pairId, fallbackIssueCount: usageCount?.value ?? 0 };
+    },
+
     async stageAsset(input) {
       const eventType = "OPS_ISSUE_MEDIA_STAGE";
       if (!(await requireOperator(input.memberId, eventType, input.requestId))) return null;

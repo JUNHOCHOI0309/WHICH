@@ -53,7 +53,26 @@ export type CreateIssueCommand = {
   context?: string | null;
   choiceA: string;
   choiceB: string;
+  libraryPairId?: string | null;
   interestCardCode: InterestCardCode;
+};
+
+export type IssueMediaLibraryPair = {
+  id: string;
+  title: string;
+  categoryCode: string;
+  topics: string[];
+  assets: Array<{
+    id: string;
+    side: "A" | "B";
+    url: string;
+    altText: string;
+    cropMode: "COVER" | "CONTAIN";
+    width: number;
+    height: number;
+    attributionText: string | null;
+  }>;
+  usageCount: number;
 };
 
 export type CreateIssueResponse = {

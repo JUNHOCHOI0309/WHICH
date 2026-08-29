@@ -17,6 +17,50 @@ export type IssueMediaAssetRecord = {
   updatedAt: string;
 };
 
+export type IssueMediaLibraryPair = {
+  id: string;
+  title: string;
+  categoryCode: string;
+  topics: string[];
+  status: "PUBLISHED" | "REVOKED";
+  assets: Array<{
+    id: string;
+    side: "A" | "B";
+    mediaAssetId: string;
+    url: string;
+    altText: string;
+    cropMode: "COVER" | "CONTAIN";
+    width: number;
+    height: number;
+    attributionText: string | null;
+  }>;
+  usageCount: number;
+  createdAt: string;
+};
+
+export type RegisterIssueMediaLibraryPair = {
+  title: string;
+  categoryCode: string;
+  topics: string[];
+  assets: Array<{
+    side: "A" | "B";
+    mediaAssetId: string;
+    altText: string;
+    cropMode: "COVER" | "CONTAIN";
+    sourceUrl: string;
+    authorName: string;
+    licenseName: string;
+    licenseVersion: string;
+    acquiredAt: string;
+    commercialAllowed: boolean;
+    derivativeAllowed: boolean;
+    redistributionAllowed: boolean;
+    attributionText?: string | null;
+    evidenceReference: string;
+    expiresAt?: string | null;
+  }>;
+};
+
 export type IssueMediaObjectStorage = {
   stage(assetId: string, body: Buffer): Promise<{ objectKey: string }>;
   publish(assetId: string, stagingObjectKey: string): Promise<{ objectKey: string; url: string }>;
@@ -33,6 +77,22 @@ export type IssueMediaObjectStorage = {
 };
 
 export interface IssueMediaService {
+  listLibraryPairs(input: {
+    query?: string;
+    categoryCode?: string;
+    limit: number;
+  }): Promise<{ items: IssueMediaLibraryPair[] }>;
+  registerLibraryPair(input: {
+    memberId: string;
+    pair: RegisterIssueMediaLibraryPair;
+    requestId?: string;
+  }): Promise<IssueMediaLibraryPair | null>;
+  revokeLibraryPair(input: {
+    memberId: string;
+    pairId: string;
+    reason: string;
+    requestId?: string;
+  }): Promise<{ pairId: string; fallbackIssueCount: number } | null>;
   stageAsset(input: {
     memberId: string;
     sourceType: "OPERATOR_UPLOAD";

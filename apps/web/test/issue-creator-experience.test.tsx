@@ -81,4 +81,85 @@ describe("IssueCreatorExperience", () => {
     expect(navigation.push).toHaveBeenCalledWith("/issues/new-issue-id");
     expect(window.sessionStorage.getItem("which_issue_draft_v1")).toBeNull();
   });
+
+  it("publishes with one approved Library pair without requesting another review", async () => {
+    const submissions: Array<Record<string, unknown>> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = String(input);
+        if (url === "/api/member-session") return jsonResponse({ member: { status: "ACTIVE" } });
+        if (url === "/api/interests/cards") return jsonResponse(registry);
+        if (url.startsWith("/api/issue-media-library?")) {
+          return jsonResponse({
+            items: [
+              {
+                id: "1dcb8f5b-d722-45a6-a9d9-0bfb793af24e",
+                title: "도시와 자연",
+                categoryCode: "LIFE",
+                topics: ["일상", "공간"],
+                status: "PUBLISHED",
+                usageCount: 0,
+                createdAt: "2026-08-29T00:00:00.000Z",
+                assets: [
+                  {
+                    id: "a4c3de16-c9d2-43d5-a11a-f3a9b7fdfb78",
+                    side: "A",
+                    mediaAssetId: "4132956e-8291-4793-97b7-1cb4fef82669",
+                    url: "https://media.whichone.site/library/city.webp",
+                    altText: "도시 야경",
+                    cropMode: "COVER",
+                    width: 1200,
+                    height: 800,
+                    attributionText: null,
+                  },
+                  {
+                    id: "d521347b-a87c-4565-9a46-bd38274db0c4",
+                    side: "B",
+                    mediaAssetId: "cce1cf7b-b44c-4650-b873-d9433a281282",
+                    url: "https://media.whichone.site/library/forest.webp",
+                    altText: "숲길",
+                    cropMode: "COVER",
+                    width: 1200,
+                    height: 800,
+                    attributionText: null,
+                  },
+                ],
+              },
+            ],
+          });
+        }
+        if (url === "/api/issues") {
+          submissions.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+          return jsonResponse({ created: true, issue: { id: "library-issue-id" } }, 201);
+        }
+        throw new Error(`unexpected request: ${url}`);
+      }),
+    );
+    render(<IssueCreatorExperience />);
+
+    fireEvent.change(await screen.findByPlaceholderText("예: 퇴근 후 바로 잘까, 조금 더 놀까?"), {
+      target: { value: "쉬는 날에는 어디로 갈까" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("바로 자기"), {
+      target: { value: "도시" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("조금 더 놀기"), {
+      target: { value: "자연" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "승인 이미지 Library" }));
+    fireEvent.click(await screen.findByRole("button", { name: /도시와 자연/ }));
+    fireEvent.click(screen.getByRole("button", { name: "질문 게시하기" }));
+
+    await waitFor(() => expect(submissions).toHaveLength(1));
+    expect(submissions[0]).toMatchObject({
+      question: "쉬는 날에는 어디로 갈까",
+      choiceA: "도시",
+      choiceB: "자연",
+      libraryPairId: "1dcb8f5b-d722-45a6-a9d9-0bfb793af24e",
+    });
+    expect(submissions[0]).not.toHaveProperty("mediaAssetAId");
+    expect(submissions[0]).not.toHaveProperty("mediaAssetBId");
+    expect(navigation.push).toHaveBeenCalledWith("/issues/library-issue-id");
+  });
 });

@@ -768,6 +768,87 @@
   background: #fff0ea;
   color: #b84218;
 }
+.libraryOps {
+  display: grid;
+  gap: 18px;
+  margin-top: 24px;
+}
+.libraryForm {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  padding: 18px;
+  border: 1px solid #d2e0e4;
+  border-radius: 16px;
+  background: #fff;
+}
+.libraryForm input {
+  min-width: 0;
+  min-height: 44px;
+  border: 1px solid #c8d7dc;
+  border-radius: 10px;
+  padding: 0 11px;
+}
+.libraryConsent {
+  grid-column: span 2;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #53646c;
+  font-size: 13px;
+  font-weight: 750;
+}
+.libraryForm > button,
+.libraryCards button {
+  min-height: 44px;
+  border: 0;
+  border-radius: 10px;
+  background: #0798ae;
+  color: #fff;
+  font-weight: 900;
+  cursor: pointer;
+}
+.libraryCards {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+.libraryCards article {
+  min-width: 0;
+  display: grid;
+  gap: 9px;
+  padding: 10px;
+  border: 1px solid #d2e0e4;
+  border-radius: 14px;
+  background: #fff;
+}
+.libraryCards article > div {
+  height: 112px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  overflow: hidden;
+  border-radius: 9px;
+}
+.libraryCards img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.libraryCards strong,
+.libraryCards small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.libraryCards small {
+  color: #687980;
+}
+.libraryCards button {
+  border: 1px solid #ff7040;
+  background: #fff;
+  color: #c8481b;
+}
 @media (max-width: 880px) {
   .intro {
     align-items: start;
@@ -794,6 +875,10 @@
   .shopDetail {
     position: static;
   }
+  .libraryForm,
+  .libraryCards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 @media (max-width: 560px) {
   .detail {
@@ -819,5 +904,12 @@
   .auditList article > div:last-child {
     justify-items: start;
     text-align: left;
+  }
+  .libraryForm,
+  .libraryCards {
+    grid-template-columns: 1fr;
+  }
+  .libraryConsent {
+    grid-column: auto;
   }
 }

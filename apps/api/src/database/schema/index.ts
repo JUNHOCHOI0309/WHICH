@@ -8,6 +8,7 @@ export * from "./issues.js";
 export * from "./moderation-operations.js";
 export * from "./member-moderation.js";
 export * from "./issue-media.js";
+export * from "./issue-media-library.js";
 export * from "./media-upload-gate.js";
 export * from "./issue-submissions.js";
 export * from "./outbox.js";

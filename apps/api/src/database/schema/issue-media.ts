@@ -128,7 +128,6 @@ export const issueChoiceMedia = pgTable(
       foreignColumns: [issueChoices.issueId, issueChoices.issueVersion, issueChoices.id],
       name: "issue_choice_media_choice_fk",
     }).onDelete("cascade"),
-    unique("issue_choice_media_asset_unique").on(table.mediaAssetId),
     unique("issue_choice_media_position_unique").on(
       table.issueId,
       table.issueVersion,

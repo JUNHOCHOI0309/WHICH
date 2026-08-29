@@ -275,6 +275,27 @@ export type OpsMediaRightsRequest = {
   resolvedAt: string | null;
 };
 
+export type OpsMediaLibraryPair = {
+  id: string;
+  title: string;
+  categoryCode: string;
+  topics: string[];
+  status: "PUBLISHED" | "REVOKED";
+  assets: Array<{
+    id: string;
+    side: "A" | "B";
+    mediaAssetId: string;
+    url: string;
+    altText: string;
+    cropMode: "COVER" | "CONTAIN";
+    width: number;
+    height: number;
+    attributionText: string | null;
+  }>;
+  usageCount: number;
+  createdAt: string;
+};
+
 export type OpsModerationQueueLane = "HIGH" | "NORMAL" | "RIGHTS" | "APPEAL" | "RANDOM_AUDIT";
 export type OpsReviewerAssistLabel = "ALLOW" | "REVIEW" | "BLOCK" | "ABSTAIN";
 export type OpsReviewerAssistEvidence = {

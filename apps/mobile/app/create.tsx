@@ -18,7 +18,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { toast } from "@/components/feedback/toast";
-import type { InterestCardCode, MemberIssueSubmission } from "@/contracts";
+import type { InterestCardCode, IssueMediaLibraryPair, MemberIssueSubmission } from "@/contracts";
 import { memberSessions, mobileApi } from "@/lib/runtime";
 import { subjectStorage } from "@/lib/secure-subject-storage";
 import { colors } from "@/theme";
@@ -45,6 +45,7 @@ type Draft = {
   choiceB: string;
   mediaA?: DraftMedia;
   mediaB?: DraftMedia;
+  libraryPairId?: string;
   rightsConfirmed?: boolean;
   interestCardCode: InterestCardCode | null;
 };
@@ -81,6 +82,7 @@ export default function CreateIssueScreen() {
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [cards, setCards] = useState<{ code: InterestCardCode; label: string }[]>([]);
   const [submissions, setSubmissions] = useState<MemberIssueSubmission[]>([]);
+  const [library, setLibrary] = useState<IssueMediaLibraryPair[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
@@ -95,8 +97,12 @@ export default function CreateIssueScreen() {
     setDraft(parseDraft(stored) ?? emptyDraft());
     setCards(registry.cards.map(({ code, label }) => ({ code, label })));
     if (session) {
-      const result = await mobileApi.loadMemberIssueSubmissions(session.token).catch(() => null);
-      setSubmissions(result?.items ?? []);
+      const [submissionResult, libraryResult] = await Promise.all([
+        mobileApi.loadMemberIssueSubmissions(session.token).catch(() => null),
+        mobileApi.loadIssueMediaLibrary(session.token).catch(() => null),
+      ]);
+      setSubmissions(submissionResult?.items ?? []);
+      setLibrary(libraryResult?.items ?? []);
     }
     setLoading(false);
   }, []);
@@ -118,6 +124,7 @@ export default function CreateIssueScreen() {
   const canSubmit = useMemo(() => {
     const hasA = Boolean(draft.mediaA?.uri || draft.mediaA?.assetId);
     const hasB = Boolean(draft.mediaB?.uri || draft.mediaB?.assetId);
+    const hasLibrary = Boolean(draft.libraryPairId);
     return (
       sessionToken &&
       draft.question.trim().length >= 5 &&
@@ -126,6 +133,7 @@ export default function CreateIssueScreen() {
       draft.choiceA.trim() !== draft.choiceB.trim() &&
       draft.interestCardCode &&
       hasA === hasB &&
+      !(hasLibrary && (hasA || hasB)) &&
       (!hasA || draft.rightsConfirmed === true)
     );
   }, [draft, sessionToken]);
@@ -166,7 +174,11 @@ export default function CreateIssueScreen() {
         `which-choice-${side.toLowerCase()}.${type === "image/png" ? "png" : type === "image/webp" ? "webp" : "jpg"}`,
       type,
     };
-    await persistDraft({ ...draft, [side === "A" ? "mediaA" : "mediaB"]: media });
+    await persistDraft({
+      ...draft,
+      libraryPairId: undefined,
+      [side === "A" ? "mediaA" : "mediaB"]: media,
+    });
   }
 
   async function uploadDraftMedia(current: Draft, side: "A" | "B") {
@@ -190,6 +202,21 @@ export default function CreateIssueScreen() {
     if (!sessionToken || !draft.interestCardCode || !canSubmit || submitting) return;
     setSubmitting(true);
     try {
+      if (draft.libraryPairId) {
+        const result = await mobileApi.createMemberIssue(sessionToken, draft.idempotencyKey, {
+          question: draft.question,
+          context: draft.context.trim() || null,
+          choiceA: draft.choiceA,
+          choiceB: draft.choiceB,
+          libraryPairId: draft.libraryPairId,
+          interestCardCode: draft.interestCardCode,
+        });
+        await subjectStorage.removeItem(DRAFT_KEY);
+        setDraft(emptyDraft());
+        toast.success("승인 Library 이미지와 함께 질문을 게시했어요.");
+        router.replace("/issues/" + result.issue.id);
+        return;
+      }
       let prepared = draft;
       prepared = await uploadDraftMedia(prepared, "A");
       prepared = await uploadDraftMedia(prepared, "B");
@@ -332,6 +359,83 @@ export default function CreateIssueScreen() {
               media={draft.mediaB}
               onPress={() => void chooseMedia("B")}
             />
+          </View>
+          <View style={styles.section}>
+            <Text style={styles.fieldLabel}>이미지 방식</Text>
+            <View style={styles.mediaModeRow}>
+              <Pressable
+                onPress={() =>
+                  setDraft((current) => ({
+                    ...current,
+                    libraryPairId: undefined,
+                    mediaA: undefined,
+                    mediaB: undefined,
+                    rightsConfirmed: undefined,
+                  }))
+                }
+                style={[styles.chip, !draft.libraryPairId && styles.chipSelected]}
+              >
+                <Text style={[styles.chipText, !draft.libraryPairId && styles.chipTextSelected]}>
+                  텍스트 / 직접 업로드
+                </Text>
+              </Pressable>
+              <Pressable
+                disabled={library.length === 0}
+                onPress={() =>
+                  setDraft((current) => ({
+                    ...current,
+                    libraryPairId: current.libraryPairId ?? library[0]?.id,
+                    mediaA: undefined,
+                    mediaB: undefined,
+                    rightsConfirmed: undefined,
+                  }))
+                }
+                style={[styles.chip, library.length === 0 && styles.buttonDisabled]}
+              >
+                <Text style={styles.chipText}>승인 이미지 Library</Text>
+              </Pressable>
+            </View>
+            {library.length ? (
+              <ScrollView
+                horizontal
+                contentContainerStyle={styles.libraryList}
+                showsHorizontalScrollIndicator={false}
+              >
+                {library.map((pair) => (
+                  <Pressable
+                    key={pair.id}
+                    onPress={() =>
+                      setDraft((current) => ({
+                        ...current,
+                        libraryPairId: pair.id,
+                        mediaA: undefined,
+                        mediaB: undefined,
+                        rightsConfirmed: undefined,
+                      }))
+                    }
+                    style={[
+                      styles.libraryCard,
+                      draft.libraryPairId === pair.id && styles.libraryCardSelected,
+                    ]}
+                  >
+                    <View style={styles.libraryImages}>
+                      {pair.assets.map((asset) => (
+                        <Image
+                          key={asset.id}
+                          source={{ uri: asset.url }}
+                          style={styles.libraryImage}
+                        />
+                      ))}
+                    </View>
+                    <Text numberOfLines={1} style={styles.libraryTitle}>
+                      {pair.title}
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            ) : (
+              <Text style={styles.help}>현재 사용할 수 있는 승인 이미지 쌍이 없습니다.</Text>
+            )}
           </View>
           {draft.mediaA || draft.mediaB ? (
             <Pressable
@@ -487,6 +591,7 @@ const styles = StyleSheet.create({
   inputMultiline: { minHeight: 92, textAlignVertical: "top" },
   choiceRow: { flexDirection: "row", gap: 10 },
   mediaRow: { flexDirection: "row", gap: 10 },
+  mediaModeRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   mediaPicker: {
     alignItems: "center",
     backgroundColor: colors.surface,
@@ -504,6 +609,25 @@ const styles = StyleSheet.create({
   mediaPreview: { height: 104, width: "120%" },
   mediaLabel: { color: colors.text, fontSize: 12, fontWeight: "900" },
   mediaState: { color: colors.cyanStrong, fontSize: 11, fontWeight: "800" },
+  libraryList: { gap: 10, paddingVertical: 2 },
+  libraryCard: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: 14,
+    borderWidth: 1,
+    gap: 8,
+    padding: 8,
+    width: 180,
+  },
+  libraryCardSelected: { borderColor: colors.cyan, borderWidth: 2 },
+  libraryImages: {
+    borderRadius: 9,
+    flexDirection: "row",
+    height: 92,
+    overflow: "hidden",
+  },
+  libraryImage: { flex: 1, height: 92 },
+  libraryTitle: { color: colors.text, fontSize: 13, fontWeight: "900" },
   rightsRow: { alignItems: "center", flexDirection: "row", gap: 10 },
   checkbox: {
     alignItems: "center",

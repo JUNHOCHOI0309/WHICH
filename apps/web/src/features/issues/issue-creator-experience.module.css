@@ -198,6 +198,120 @@
   font-size: 0.74rem;
 }
 
+.mediaPicker {
+  min-width: 0;
+  margin: 26px 0 0;
+  border: 0;
+  padding: 0;
+}
+
+.mediaPicker > legend {
+  font-size: 0.84rem;
+  font-weight: 850;
+}
+
+.mediaModes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.mediaModes button {
+  min-height: 38px;
+  border: 1px solid var(--which-border-strong);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--which-text-secondary);
+  padding: 0 14px;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.mediaModes button[data-active="true"] {
+  border-color: var(--which-cyan-strong);
+  background: var(--which-cyan-strong);
+  color: #03202a;
+}
+
+.mediaModes button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.libraryPanel {
+  margin-top: 14px;
+  border: 1px solid var(--which-border);
+  border-radius: 16px;
+  background: var(--which-surface-soft);
+  padding: 14px;
+}
+
+.libraryPanel > p,
+.libraryPanel > span {
+  margin: 0 0 12px;
+  color: var(--which-text-secondary);
+  font-size: 0.74rem;
+  line-height: 1.55;
+}
+
+.libraryGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.libraryGrid > button {
+  min-width: 0;
+  border: 1px solid var(--which-border);
+  border-radius: 13px;
+  background: #fff;
+  display: grid;
+  gap: 7px;
+  padding: 8px;
+  color: var(--which-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.libraryGrid > button[data-selected="true"] {
+  border-color: var(--which-cyan-strong);
+  box-shadow: 0 0 0 3px var(--which-cyan-soft);
+}
+
+.libraryImages {
+  height: 84px;
+  border-radius: 9px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  overflow: hidden;
+}
+
+.libraryImages img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.libraryGrid b,
+.libraryGrid small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.libraryGrid b {
+  font-size: 0.78rem;
+}
+
+.libraryGrid small {
+  color: var(--which-text-tertiary);
+  font-size: 0.68rem;
+}
+
 .categories {
   min-width: 0;
   margin: 26px 0 0;
@@ -276,6 +390,14 @@
   align-items: center;
   padding: 10px 14px;
   font-weight: 800;
+}
+
+.previewChoice > img {
+  width: 72px;
+  height: 52px;
+  border-radius: 9px;
+  margin-right: 10px;
+  object-fit: cover;
 }
 
 .previewChoice + .previewChoice {
@@ -372,6 +494,14 @@
 
   .choiceGrid {
     grid-template-columns: 1fr;
+  }
+
+  .libraryGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .libraryImages {
+    height: 72px;
   }
 
   .submitBar button {
