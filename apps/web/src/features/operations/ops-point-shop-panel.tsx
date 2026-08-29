@@ -113,11 +113,15 @@ export function OpsPointShopPanel() {
   }, []);
 
   useEffect(() => {
+    // State updates happen only after the remote request settles.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
 
   useEffect(() => {
     if (!selected || selected.status === "RETIRED") return;
+    // A catalog selection resets the controlled edit draft to its persisted values.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setEditPrice(String(selected.price));
     setEditStatus(selected.status);
     setEditReason("");
