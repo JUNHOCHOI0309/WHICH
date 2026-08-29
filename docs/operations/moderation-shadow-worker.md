@@ -42,6 +42,7 @@ pnpm --filter @which/api moderation:worker
 pnpm --filter @which/api moderation:dead-letters
 pnpm --filter @which/api moderation:requeue -- <run-id>
 pnpm --filter @which/api moderation:reconcile-media
+pnpm --filter @which/api moderation:diagnose-provider
 ```
 
 Production build equivalents use `node apps/api/dist/moderation-worker.js <command>`.
@@ -69,8 +70,10 @@ Move from cron to a dedicated worker when any of these holds for three consecuti
 windows: oldest request exceeds 15 minutes, pending count exceeds 500, processing consumes more than
 10% of the API database pool, or the API p95 latency regresses by more than 10% while the worker runs.
 
-No provider spend is authorized by WHICH-99. WHICH-101 must add the adapter, approved privacy-gate
-evidence, timeout/circuit breaker, and an explicit daily cost ceiling before a non-zero call.
+WHICH-101 adds the replaceable OpenAI Moderation adapter, minimized input resolver, approval gate,
+global kill switch, deterministic canary, daily call cap, failure taxonomy, and Golden Set export.
+All defaults remain OFF. The activation and rollback contract is documented in
+[`moderation-safety-provider-shadow.md`](./moderation-safety-provider-shadow.md).
 
 ## Retry and dead letter
 

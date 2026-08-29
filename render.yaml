@@ -73,6 +73,26 @@ services:
         generateValue: true
       - key: MODERATION_INTERNAL_SECRET
         generateValue: true
+      # Safety provider is wired in Shadow mode but remains fail-closed until all
+      # approval evidence is recorded and an operator deliberately opens a canary.
+      - key: MODERATION_PROVIDER_MODE
+        value: "OFF"
+      - key: MODERATION_PROVIDER
+        value: OPENAI_MODERATION
+      - key: MODERATION_PROVIDER_KILL_SWITCH
+        value: "true"
+      - key: MODERATION_PROVIDER_CANARY_PERCENT
+        value: "0"
+      - key: MODERATION_PROVIDER_DAILY_CALL_CAP
+        value: "0"
+      - key: MODERATION_PROVIDER_APPROVAL_EVIDENCE
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODERATION_MODEL
+        value: omni-moderation-2024-09-26
+      - key: OPENAI_MODERATION_TIMEOUT_MS
+        value: "10000"
       - key: AUTH_FLOW_SECRET
         generateValue: true
       - key: MEMBER_SESSION_TTL_SECONDS

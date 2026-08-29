@@ -203,30 +203,30 @@ Worker만 별도 Render Service로 분리한다.
 `policy_event`로 누적한다. `WHICH-91`–`WHICH-103`, `WHICH-110`, `WHICH-111`은 AI 모델 도입
 Task이기 전에 신고 방어·Case·Appeal·가역 제재 기반을 완성하는 Workstream이다.
 
-| Task      | Priority | 목적                                                 |
-| --------- | -------- | ---------------------------------------------------- |
-| WHICH-91  | P0       | 정책 Taxonomy·Severity·Enforcement Matrix 확정       |
-| WHICH-92  | P0       | 신고 Cluster·Brigading 방어와 신고자 신뢰도 Shadow   |
-| WHICH-93  | P0       | 수정 가능한 콘텐츠 Version·재검수 계약               |
-| WHICH-94  | P0       | Moderation Case·Policy Event·Enforcement 데이터 모델 |
-| WHICH-95  | P0       | Ops Queue·SLA·Actor Identity·Decision Audit          |
-| WHICH-96  | P0       | 사용자 통지·이의 제기·완전 복원·권리 처리            |
-| WHICH-97  | P0       | AI Privacy·Provider·Retention 정책                   |
-| WHICH-98  | P0       | 규칙·Rate Limit·로컬 PII Screening                   |
-| WHICH-99  | P1       | Outbox 기반 Shadow Moderation Worker                 |
-| WHICH-100 | P1       | 한국어 Golden Set·Slice·Evaluation Harness           |
-| WHICH-101 | P1       | Generic Safety Classifier Shadow Mode                |
-| WHICH-102 | P1       | Ops Reviewer Assist UI와 Decision Capture            |
-| WHICH-103 | P1       | Decision Engine과 가역적 E1–E3 제한 자동화           |
-| WHICH-104 | P1       | Fallback·Cost Budget·Observability                   |
-| WHICH-105 | P1       | 사용자 Issue 3경로와 비동기 검수 UX                  |
-| WHICH-106 | P3       | Policy LLM·Fine-tuning 도입 평가                     |
-| WHICH-107 | P2       | Vote Fraud 보조 신호와 검증                          |
-| WHICH-108 | P1       | 이미지 Rule·OCR/QR·Safety Shadow Gate                |
-| WHICH-109 | P1       | 프로필 최소 안전 Gate와 후속 AI 확장                 |
-| WHICH-110 | P2       | Capability 제한·Policy Event 만료·Risk Decay         |
-| WHICH-111 | P1       | Side·신규 사용자·Reply Slice Random Audit와 Go/No-Go |
-| WHICH-141 | P1       | 승인 이미지 Library·라이선스 원장                    |
+| Task      | Priority | 목적                                                                          |
+| --------- | -------- | ----------------------------------------------------------------------------- |
+| WHICH-91  | P0       | 정책 Taxonomy·Severity·Enforcement Matrix 확정                                |
+| WHICH-92  | P0       | 신고 Cluster·Brigading 방어와 신고자 신뢰도 Shadow                            |
+| WHICH-93  | P0       | 수정 가능한 콘텐츠 Version·재검수 계약                                        |
+| WHICH-94  | P0       | Moderation Case·Policy Event·Enforcement 데이터 모델                          |
+| WHICH-95  | P0       | Ops Queue·SLA·Actor Identity·Decision Audit                                   |
+| WHICH-96  | P0       | 사용자 통지·이의 제기·완전 복원·권리 처리                                     |
+| WHICH-97  | P0       | AI Privacy·Provider·Retention 정책                                            |
+| WHICH-98  | P0       | 규칙·Rate Limit·로컬 PII Screening                                            |
+| WHICH-99  | P1       | Outbox 기반 Shadow Moderation Worker                                          |
+| WHICH-100 | P1       | 한국어 Golden Set·Slice·Evaluation Harness                                    |
+| WHICH-101 | P1       | Generic Safety Classifier Shadow Mode — adapter/gate implemented, rollout OFF |
+| WHICH-102 | P1       | Ops Reviewer Assist UI와 Decision Capture                                     |
+| WHICH-103 | P1       | Decision Engine과 가역적 E1–E3 제한 자동화                                    |
+| WHICH-104 | P1       | Fallback·Cost Budget·Observability                                            |
+| WHICH-105 | P1       | 사용자 Issue 3경로와 비동기 검수 UX                                           |
+| WHICH-106 | P3       | Policy LLM·Fine-tuning 도입 평가                                              |
+| WHICH-107 | P2       | Vote Fraud 보조 신호와 검증                                                   |
+| WHICH-108 | P1       | 이미지 Rule·OCR/QR·Safety Shadow Gate                                         |
+| WHICH-109 | P1       | 프로필 최소 안전 Gate와 후속 AI 확장                                          |
+| WHICH-110 | P2       | Capability 제한·Policy Event 만료·Risk Decay                                  |
+| WHICH-111 | P1       | Side·신규 사용자·Reply Slice Random Audit와 Go/No-Go                          |
+| WHICH-141 | P1       | 승인 이미지 Library·라이선스 원장                                             |
 
 WHICH-97의 확정 계약은
 [`ai-image-provider-privacy-retention-gate-v1.md`](../operations/ai-image-provider-privacy-retention-gate-v1.md)에

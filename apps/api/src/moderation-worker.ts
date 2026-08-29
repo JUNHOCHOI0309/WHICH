@@ -8,6 +8,13 @@ import {
   issueMediaStorageConfig,
 } from "./modules/issue-media/storage.js";
 import { createModerationDispatcherService } from "./modules/moderation-dispatch/service.js";
+import { createModerationProviderInputResolver } from "./modules/moderation-providers/input-resolver.js";
+import { createOpenAiModerationAdapter } from "./modules/moderation-providers/openai-moderation-adapter.js";
+import {
+  createModerationProviderGate,
+  moderationProviderRuntimeConfig,
+  providerRuntimeDiagnostic,
+} from "./modules/moderation-providers/runtime-gate.js";
 
 const environmentSchema = z.object({
   DATABASE_URL: z.string().min(1),
@@ -25,12 +32,29 @@ if (config.MODERATION_WORKER_RETRY_MAX_MS < config.MODERATION_WORKER_RETRY_BASE_
 }
 
 const database = createDatabase(config.DATABASE_URL);
-const worker = createModerationDispatcherService(database.db, null, {
+const providerConfig = moderationProviderRuntimeConfig();
+const mediaConfig = issueMediaStorageConfig();
+const mediaStorage = mediaConfig ? createR2IssueMediaStorage(mediaConfig) : null;
+const resolveProviderInput = createModerationProviderInputResolver({
+  database: database.db,
+  storage: mediaStorage,
+});
+const adapter =
+  providerConfig.MODERATION_PROVIDER === "OPENAI_MODERATION" && providerConfig.OPENAI_API_KEY
+    ? createOpenAiModerationAdapter({
+        apiKey: providerConfig.OPENAI_API_KEY,
+        model: providerConfig.OPENAI_MODERATION_MODEL,
+        timeoutMs: providerConfig.OPENAI_MODERATION_TIMEOUT_MS,
+        resolveInput: resolveProviderInput,
+      })
+    : null;
+const worker = createModerationDispatcherService(database.db, adapter, {
   batchSize: config.MODERATION_WORKER_BATCH_SIZE,
   leaseMilliseconds: config.MODERATION_WORKER_LEASE_MS,
   maxAttempts: config.MODERATION_WORKER_MAX_ATTEMPTS,
   retryBaseMilliseconds: config.MODERATION_WORKER_RETRY_BASE_MS,
   retryMaxMilliseconds: config.MODERATION_WORKER_RETRY_MAX_MS,
+  providerGate: createModerationProviderGate({ database: database.db, config: providerConfig }),
 });
 
 async function once() {
@@ -41,6 +65,10 @@ async function once() {
 
 async function main() {
   const command = process.argv[2] ?? "once";
+  if (command === "diagnose-provider") {
+    console.log(JSON.stringify(providerRuntimeDiagnostic(providerConfig), null, 2));
+    return;
+  }
   if (command === "once") {
     console.log(JSON.stringify(await once(), null, 2));
     return;
