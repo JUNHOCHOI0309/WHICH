@@ -15,6 +15,7 @@ import {
   members,
   operatorAccessGrants,
   operatorAuditLogs,
+  outboxEvents,
 } from "../../database/schema/index.js";
 
 import type {
@@ -25,6 +26,7 @@ import type {
 import { sha256 } from "../content-revisions/service.js";
 import { IssueMediaProcessingError, processIssueMedia } from "./image-processing.js";
 import { evaluateLocalMediaInspection } from "./upload-gate-policy.js";
+import { createModerationSubmissionEvents } from "../moderation-dispatch/contracts.js";
 
 export class IssueMediaError extends Error {
   constructor(
@@ -314,6 +316,16 @@ export function createIssueMediaService(
           normalizedObjectRef: `issue-media://asset/${id}/version/1`,
           inputHash: sha256(processed.body),
         });
+        const moderationEvents = createModerationSubmissionEvents({
+          targetType: "ISSUE_MEDIA_ASSET",
+          targetId: id,
+          targetVersion: 1,
+          privateObjectReference: `issue-media://asset/${id}/version/1`,
+          normalizedInputHash: sha256(processed.body),
+          reason: "CREATE",
+          occurredAt: rightsAttestedAt,
+        });
+        await transaction.insert(outboxEvents).values(moderationEvents.rows);
         if (inspection.signals.length > 0) {
           await transaction.insert(issueMediaRuleFindings).values(
             inspection.signals.map((signal) => ({

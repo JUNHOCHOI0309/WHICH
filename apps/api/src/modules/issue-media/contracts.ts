@@ -27,6 +27,7 @@ export type IssueMediaObjectStorage = {
   }): Promise<{ objectKey: string }>;
   restorePublished(assetId: string, quarantinedObjectKey: string): Promise<{ objectKey: string }>;
   read(objectKey: string): Promise<Buffer>;
+  exists?(objectKey: string): Promise<boolean>;
   purge(objectKeys: Array<string | null | undefined>): Promise<void>;
   publicUrl(objectKey: string): string;
 };

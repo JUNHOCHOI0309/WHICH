@@ -2,6 +2,7 @@ import {
   CopyObjectCommand,
   DeleteObjectCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
@@ -133,6 +134,20 @@ export function createR2IssueMediaStorage(
       const response = await client.send(new GetObjectCommand({ Bucket: bucket, Key: objectKey }));
       if (!response.Body) throw new Error("The Issue media object body is unavailable.");
       return Buffer.from(await response.Body.transformToByteArray());
+    },
+    async exists(objectKey) {
+      const bucket = objectKey.startsWith("issue-media/published/")
+        ? config.publishedBucket
+        : config.stagingBucket;
+      try {
+        await client.send(new HeadObjectCommand({ Bucket: bucket, Key: objectKey }));
+        return true;
+      } catch (error) {
+        const statusCode = (error as { $metadata?: { httpStatusCode?: number } }).$metadata
+          ?.httpStatusCode;
+        if (statusCode === 404) return false;
+        throw error;
+      }
     },
     async purge(objectKeys) {
       await Promise.all(

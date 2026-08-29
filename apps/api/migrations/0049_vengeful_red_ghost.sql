@@ -1,0 +1,2 @@
+DROP INDEX "moderation_runs_source_event_unique";--> statement-breakpoint
+CREATE UNIQUE INDEX "moderation_runs_source_event_unique" ON "moderation_runs" USING btree ("source_event_id","stage") WHERE "moderation_runs"."source_event_id" is not null;

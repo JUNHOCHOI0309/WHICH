@@ -8,6 +8,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
@@ -56,8 +57,10 @@ export const moderationRuns = pgTable(
     recheckRequestId: uuid("recheck_request_id").references(() => moderationRecheckRequests.id, {
       onDelete: "set null",
     }),
+    sourceEventId: uuid("source_event_id"),
     policyVersion: varchar("policy_version", { length: 64 }).notNull(),
     stage: varchar("stage", { length: 32 }).notNull(),
+    mode: varchar("mode", { length: 16 }).default("SHADOW").notNull(),
     normalizedInputHash: varchar("normalized_input_hash", { length: 64 }).notNull(),
     modelProvider: varchar("model_provider", { length: 48 }),
     modelName: varchar("model_name", { length: 96 }),
@@ -70,9 +73,16 @@ export const moderationRuns = pgTable(
     costMicros: integer("cost_micros").default(0).notNull(),
     errorCode: varchar("error_code", { length: 96 }),
     errorMessage: text("error_message"),
+    attemptCount: integer("attempt_count").default(0).notNull(),
+    totalAttemptCount: integer("total_attempt_count").default(0).notNull(),
+    availableAt: timestamp("available_at", { withTimezone: true }).defaultNow().notNull(),
+    claimToken: uuid("claim_token"),
+    claimedAt: timestamp("claimed_at", { withTimezone: true }),
+    deadLetteredAt: timestamp("dead_lettered_at", { withTimezone: true }),
     startedAt: timestamp("started_at", { withTimezone: true }).defaultNow().notNull(),
     completedAt: timestamp("completed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
     unique("moderation_runs_deduplication_unique").on(
@@ -82,20 +92,73 @@ export const moderationRuns = pgTable(
       table.normalizedInputHash,
     ),
     index("moderation_runs_status_created_idx").on(table.status, table.createdAt),
+    uniqueIndex("moderation_runs_source_event_unique")
+      .on(table.sourceEventId, table.stage)
+      .where(sql`${table.sourceEventId} is not null`),
+    index("moderation_runs_pending_available_idx")
+      .on(table.availableAt, table.createdAt)
+      .where(sql`${table.status} = 'PENDING'`),
     check("moderation_runs_input_hash_check", sql`${table.normalizedInputHash} ~ '^[a-f0-9]{64}$'`),
     check(
       "moderation_runs_latency_check",
       sql`${table.latencyMs} is null or ${table.latencyMs} >= 0`,
     ),
     check("moderation_runs_cost_check", sql`${table.costMicros} >= 0`),
+    check("moderation_runs_attempt_count_check", sql`${table.attemptCount} >= 0`),
+    check("moderation_runs_total_attempt_count_check", sql`${table.totalAttemptCount} >= 0`),
+    check("moderation_runs_mode_check", sql`${table.mode} = 'SHADOW'`),
     check(
       "moderation_runs_status_check",
-      sql`${table.status} in ('PENDING', 'RUNNING', 'SUCCEEDED', 'FAILED', 'SKIPPED')`,
+      sql`${table.status} in ('PENDING', 'RUNNING', 'SUCCEEDED', 'FAILED', 'SKIPPED', 'CANCELLED', 'DEAD_LETTERED')`,
     ),
     check(
       "moderation_runs_source_check",
       sql`${table.decisionSource} in ('RULE', 'MODEL', 'OPERATOR', 'SYSTEM')`,
     ),
+    check(
+      "moderation_runs_claim_check",
+      sql`(${table.status} = 'RUNNING' and ${table.claimToken} is not null and ${table.claimedAt} is not null)
+        or (${table.status} <> 'RUNNING' and ${table.claimToken} is null and ${table.claimedAt} is null)`,
+    ),
+  ],
+);
+
+export const moderationProviderCallCache = pgTable(
+  "moderation_provider_call_cache",
+  {
+    id: uuid("provider_call_cache_id").defaultRandom().primaryKey(),
+    provider: varchar("provider", { length: 48 }).notNull(),
+    modelName: varchar("model_name", { length: 96 }).notNull(),
+    modelVersion: varchar("model_version", { length: 64 }).notNull(),
+    policyVersion: varchar("policy_version", { length: 64 }).notNull(),
+    normalizedInputHash: varchar("normalized_input_hash", { length: 64 }).notNull(),
+    status: varchar("status", { length: 24 }).notNull(),
+    result: jsonb("result").$type<Record<string, unknown>>().default({}).notNull(),
+    latencyMs: integer("latency_ms").notNull(),
+    costMicros: integer("cost_micros").default(0).notNull(),
+    errorCode: varchar("error_code", { length: 96 }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    unique("moderation_provider_call_cache_execution_unique").on(
+      table.provider,
+      table.modelName,
+      table.modelVersion,
+      table.policyVersion,
+      table.normalizedInputHash,
+    ),
+    index("moderation_provider_call_cache_expiry_idx").on(table.expiresAt),
+    check(
+      "moderation_provider_call_cache_hash_check",
+      sql`${table.normalizedInputHash} ~ '^[a-f0-9]{64}$'`,
+    ),
+    check(
+      "moderation_provider_call_cache_status_check",
+      sql`${table.status} in ('SUCCEEDED', 'FAILED', 'SKIPPED')`,
+    ),
+    check("moderation_provider_call_cache_latency_check", sql`${table.latencyMs} >= 0`),
+    check("moderation_provider_call_cache_cost_check", sql`${table.costMicros} >= 0`),
   ],
 );
 

@@ -58,6 +58,25 @@ afterAll(async () => {
 });
 
 describe("Outbox Publisher", () => {
+  it("leaves internal Moderation requests for the dedicated dispatcher", async () => {
+    const currentTime = new Date("2026-08-18T23:00:00.000Z");
+    const event = await insertEvent(currentTime, "MODERATION_REQUESTED");
+    const deliver = vi.fn(() => Promise.resolve());
+    const transport: OutboxTransport = { deliver };
+    const publisher = createOutboxPublisherService(database.db, transport, {
+      ...baseOptions,
+      now: () => currentTime,
+    });
+
+    expect(await publisher.processBatch()).toMatchObject({ claimed: 0, published: 0 });
+    const [stored] = await database.db
+      .select()
+      .from(outboxEvents)
+      .where(eq(outboxEvents.id, event.id));
+    expect(stored).toMatchObject({ status: "PENDING", attemptCount: 0 });
+    expect(deliver).not.toHaveBeenCalled();
+  });
+
   it("claims one Event only once while another Worker is delivering it", async () => {
     const currentTime = new Date("2026-08-19T00:00:00.000Z");
     const event = await insertEvent(currentTime, "CONCURRENT_EVENT");

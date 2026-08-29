@@ -48,6 +48,7 @@ import type {
   PublicComment,
 } from "./contracts.js";
 import { sha256 } from "../content-revisions/service.js";
+import { createModerationSubmissionEvents } from "../moderation-dispatch/contracts.js";
 import { evaluateTextRules } from "../moderation/rule-engine.js";
 import { decodeCommentCursor, encodeCommentCursor } from "./cursor.js";
 import { CommentError } from "./errors.js";
@@ -885,6 +886,17 @@ export function createCommentService(database: Database["db"]): CommentService {
           createdAt: now,
         });
 
+        const moderationEvents = createModerationSubmissionEvents({
+          targetType: "COMMENT_VERSION",
+          targetId: comment.id,
+          targetVersion: 1,
+          privateObjectReference: `comment://revision/${comment.id}/1`,
+          normalizedInputHash: sha256(comment.body),
+          reason: "CREATE",
+          occurredAt: now,
+        });
+        await transaction.insert(outboxEvents).values(moderationEvents.rows);
+
         const eventId = randomUUID();
         await transaction.insert(outboxEvents).values({
           id: eventId,
@@ -1024,6 +1036,17 @@ export function createCommentService(database: Database["db"]): CommentService {
           integrityState: updated.integrityState,
           createdAt: now,
         });
+
+        const moderationEvents = createModerationSubmissionEvents({
+          targetType: "COMMENT_VERSION",
+          targetId: updated.id,
+          targetVersion: updated.bodyRevision,
+          privateObjectReference: `comment://revision/${updated.id}/${updated.bodyRevision}`,
+          normalizedInputHash: sha256(updated.body),
+          reason: "EDIT",
+          occurredAt: now,
+        });
+        await transaction.insert(outboxEvents).values(moderationEvents.rows);
 
         const eventId = randomUUID();
         await transaction.insert(outboxEvents).values({
