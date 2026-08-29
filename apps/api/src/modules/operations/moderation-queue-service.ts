@@ -9,6 +9,7 @@ import {
   issueChoices,
   issueMediaAssets,
   issueMediaReviewDecisions,
+  issueMediaRuleFindings,
   issueVersions,
   members,
   moderationActions,
@@ -152,6 +153,7 @@ export function createOpsModerationQueueService(
       rights.filter((item) => item.assetId).map((item) => [item.assetId!, item]),
     );
     for (const asset of media.items) {
+      const hasBlockingFinding = asset.findings.some((finding) => finding.severity === "BLOCK");
       const randomAudit =
         asset.effectiveStatus === "APPROVED" && /^0[0-7]/.test(asset.sha256.slice(0, 2));
       if (
@@ -162,26 +164,30 @@ export function createOpsModerationQueueService(
       )
         continue;
       const rightsRequest = rightsByAsset.get(asset.id);
+      const riskLane = rightsRequest
+        ? "RIGHTS"
+        : asset.effectiveStatus === "HIDDEN" || hasBlockingFinding
+          ? "HIGH"
+          : randomAudit
+            ? "LOW"
+            : "MEDIUM";
+      const priority = rightsRequest
+        ? "P0"
+        : asset.effectiveStatus === "HIDDEN" || hasBlockingFinding
+          ? "P1"
+          : randomAudit
+            ? "P3"
+            : "P2";
       const moderationCase = await ensureCase({
         type: "ISSUE_MEDIA_ASSET",
         id: asset.id,
         version: 1,
-        evidence: `${asset.sha256}:${asset.rightsState}:${asset.effectiveStatus}`,
+        evidence: `${asset.sha256}:${asset.rightsState}:${asset.effectiveStatus}:${asset.findings
+          .map((finding) => `${finding.code}:${finding.sourceVersion}`)
+          .join(",")}`,
         snapshotReference: `issue-media://${asset.id}`,
-        riskLane: rightsRequest
-          ? "RIGHTS"
-          : asset.effectiveStatus === "HIDDEN"
-            ? "HIGH"
-            : randomAudit
-              ? "LOW"
-              : "MEDIUM",
-        priority: rightsRequest
-          ? "P0"
-          : asset.effectiveStatus === "HIDDEN"
-            ? "P1"
-            : randomAudit
-              ? "P3"
-              : "P2",
+        riskLane,
+        priority,
       });
       if (rightsRequest) {
         await operations.linkCaseReference({
@@ -287,6 +293,19 @@ export function createOpsModerationQueueService(
       .innerJoin(members, eq(members.id, issueMediaReviewDecisions.reviewedByMemberId))
       .where(eq(issueMediaReviewDecisions.mediaAssetId, assetId))
       .orderBy(desc(issueMediaReviewDecisions.createdAt));
+    const findings = await database
+      .select({
+        id: issueMediaRuleFindings.id,
+        stage: issueMediaRuleFindings.stage,
+        code: issueMediaRuleFindings.code,
+        severity: issueMediaRuleFindings.severity,
+        sourceVersion: issueMediaRuleFindings.sourceVersion,
+        evidence: issueMediaRuleFindings.evidence,
+        createdAt: issueMediaRuleFindings.createdAt,
+      })
+      .from(issueMediaRuleFindings)
+      .where(eq(issueMediaRuleFindings.mediaAssetId, assetId))
+      .orderBy(issueMediaRuleFindings.createdAt, issueMediaRuleFindings.id);
     return {
       kind: "IMAGE" as const,
       assetId,
@@ -305,6 +324,12 @@ export function createOpsModerationQueueService(
         height: row.asset.outputHeight,
         byteSize: row.asset.outputByteSize,
       },
+      findings: findings.map((finding) => ({
+        ...finding,
+        severity: finding.severity as "INFO" | "REVIEW" | "BLOCK",
+        evidence: finding.evidence ?? {},
+        createdAt: finding.createdAt.toISOString(),
+      })),
       priorDecisions: decisions.map((item) => ({
         ...item,
         createdAt: item.createdAt.toISOString(),

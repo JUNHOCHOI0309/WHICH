@@ -11,6 +11,7 @@ import {
   issueMediaAssetVersions,
   issueMediaKnownBlockHashes,
   issueMediaRuleFindings,
+  issueMediaUploadSessions,
   issueVersions,
   members,
   operatorAccessGrants,
@@ -25,7 +26,14 @@ import type {
 } from "./contracts.js";
 import { sha256 } from "../content-revisions/service.js";
 import { IssueMediaProcessingError, processIssueMedia } from "./image-processing.js";
-import { evaluateLocalMediaInspection } from "./upload-gate-policy.js";
+import {
+  evaluateLocalMediaInspection,
+  ISSUE_MEDIA_RULE_POLICY_VERSION,
+  unavailableLocalMediaSignalDetector,
+  type IssueMediaRuleGateMode,
+  type LocalMediaSignalDetector,
+  type LocalMediaSignalDetectorResult,
+} from "./upload-gate-policy.js";
 import { createModerationSubmissionEvents } from "../moderation-dispatch/contracts.js";
 
 export class IssueMediaError extends Error {
@@ -95,7 +103,14 @@ function mapAsset(
 export function createIssueMediaService(
   database: Database["db"],
   storage: IssueMediaObjectStorage,
+  options: {
+    ruleGateMode?: IssueMediaRuleGateMode;
+    localSignalDetector?: LocalMediaSignalDetector;
+  } = {},
 ): IssueMediaService {
+  const ruleGateMode = options.ruleGateMode ?? "ENFORCE";
+  const localSignalDetector = options.localSignalDetector ?? unavailableLocalMediaSignalDetector;
+
   async function appendChoiceMediaRevision(
     transaction: Parameters<Parameters<typeof database.transaction>[0]>[0],
     input: {
@@ -202,6 +217,7 @@ export function createIssueMediaService(
 
   async function stageStoredAsset(input: {
     memberId: string;
+    uploadSessionId?: string;
     sourceType: IssueMediaAssetRecord["sourceType"];
     rightsAttestation: string;
     declaredMimeType: IssueMediaAssetRecord["input"]["mimeType"];
@@ -218,9 +234,29 @@ export function createIssueMediaService(
     const processed = await processIssueMedia(input.bytes, input.declaredMimeType).catch(
       mediaError,
     );
+    const normalizedSha256 = sha256(processed.body);
+    let detector: LocalMediaSignalDetectorResult | undefined;
+    if (input.sourceType === "MEMBER_SUBMISSION" && ruleGateMode !== "OFF") {
+      detector = await localSignalDetector.inspect(processed.body).catch(() => ({
+        detectorVersion: "which-local-signal-error-v1",
+        qr: { status: "PARTIAL" as const, detected: false },
+        barcode: { status: "PARTIAL" as const, detected: false },
+        ocr: { status: "PARTIAL" as const },
+        visual: {
+          status: "PARTIAL" as const,
+          faceDetected: false,
+          identityDocumentDetected: false,
+          screenshotDetected: false,
+        },
+      }));
+    }
     const [knownBlock, similarAssets] = await Promise.all([
       database
-        .select({ sha256: issueMediaKnownBlockHashes.sha256 })
+        .select({
+          sha256: issueMediaKnownBlockHashes.sha256,
+          policyVersion: issueMediaKnownBlockHashes.policyVersion,
+          reasonCode: issueMediaKnownBlockHashes.reasonCode,
+        })
         .from(issueMediaKnownBlockHashes)
         .where(
           and(
@@ -241,9 +277,111 @@ export function createIssueMediaService(
       perceptualHash: processed.perceptualHash,
       knownBlockedSha256: new Set(knownBlock.map((row) => row.sha256)),
       similarPerceptualHashes: similarAssets.map((row) => row.perceptualHash),
-      inspectionComplete: input.sourceType !== "MEMBER_SUBMISSION",
+      detector,
+      inspectionComplete:
+        input.sourceType !== "MEMBER_SUBMISSION" ||
+        Boolean(
+          detector &&
+          detector.qr.status === "COMPLETE" &&
+          detector.barcode.status === "COMPLETE" &&
+          detector.ocr.status === "COMPLETE" &&
+          detector.visual.status === "COMPLETE",
+        ),
     });
-    if (inspection.decision === "AUTO_REJECT_PRIVATE") {
+    const routeDecision =
+      ruleGateMode === "ENFORCE"
+        ? inspection.decision
+        : input.sourceType === "MEMBER_SUBMISSION" && inspection.decision !== "REVIEW_READY"
+          ? "REVIEW_REQUIRED"
+          : inspection.decision;
+    const findingEvidence = {
+      sourceSha256: processed.sha256,
+      normalizedSha256,
+      policyVersion: ISSUE_MEDIA_RULE_POLICY_VERSION,
+      ruleGateMode,
+      detectorVersion: detector?.detectorVersion ?? null,
+      processingRegion: "LOCAL",
+    };
+    const canonicalFindings = [
+      {
+        stage: "NORMALIZATION",
+        code: "MEDIA_SOURCE_SIGNATURE_DECODE_VERIFIED",
+        severity: "INFO" as const,
+        sourceVersion: ISSUE_MEDIA_RULE_POLICY_VERSION,
+        evidence: {
+          ...findingEvidence,
+          mimeType: processed.input.mimeType,
+          byteSize: processed.input.byteSize,
+          width: processed.input.width,
+          height: processed.input.height,
+        },
+      },
+      {
+        stage: "NORMALIZATION",
+        code: "MEDIA_NORMALIZED_WEBP_READY",
+        severity: "INFO" as const,
+        sourceVersion: ISSUE_MEDIA_RULE_POLICY_VERSION,
+        evidence: {
+          ...findingEvidence,
+          mimeType: processed.output.mimeType,
+          byteSize: processed.output.byteSize,
+          width: processed.output.width,
+          height: processed.output.height,
+          exifRetained: false,
+        },
+      },
+      {
+        stage: "HASH",
+        code: "MEDIA_HASHES_COMPUTED",
+        severity: "INFO" as const,
+        sourceVersion: ISSUE_MEDIA_RULE_POLICY_VERSION,
+        evidence: { ...findingEvidence, perceptualHash: processed.perceptualHash },
+      },
+      ...inspection.signals.map((signal) => ({
+        stage: "LOCAL_RULES",
+        code: signal.code,
+        severity: signal.severity,
+        sourceVersion: signal.ruleVersion,
+        evidence: {
+          ...findingEvidence,
+          ...(signal.code === "MEDIA_KNOWN_BLOCK_EXACT_HASH" && knownBlock[0]
+            ? {
+                knownBlockPolicyVersion: knownBlock[0].policyVersion,
+                knownBlockReasonCode: knownBlock[0].reasonCode,
+              }
+            : {}),
+          ...(signal.metadata ?? {}),
+        },
+      })),
+      {
+        stage: "ROUTING",
+        code: `MEDIA_ROUTE_${routeDecision}`,
+        severity:
+          routeDecision === "AUTO_REJECT_PRIVATE"
+            ? ("BLOCK" as const)
+            : routeDecision === "REVIEW_REQUIRED"
+              ? ("REVIEW" as const)
+              : ("INFO" as const),
+        sourceVersion: ISSUE_MEDIA_RULE_POLICY_VERSION,
+        evidence: findingEvidence,
+      },
+    ];
+    if (routeDecision === "AUTO_REJECT_PRIVATE") {
+      if (input.uploadSessionId) {
+        const uploadSessionId = input.uploadSessionId;
+        await database.transaction(async (transaction) => {
+          await transaction.insert(issueMediaRuleFindings).values(
+            canonicalFindings.map((finding) => ({
+              uploadSessionId,
+              ...finding,
+            })),
+          );
+          await transaction
+            .update(issueMediaUploadSessions)
+            .set({ state: "REJECTED", updatedAt: new Date() })
+            .where(eq(issueMediaUploadSessions.id, uploadSessionId));
+        });
+      }
       throw new IssueMediaError(
         "MEDIA_KNOWN_BLOCK",
         422,
@@ -314,30 +452,21 @@ export function createIssueMediaService(
           outputWidth: processed.output.width,
           outputHeight: processed.output.height,
           normalizedObjectRef: `issue-media://asset/${id}/version/1`,
-          inputHash: sha256(processed.body),
+          inputHash: normalizedSha256,
         });
         const moderationEvents = createModerationSubmissionEvents({
           targetType: "ISSUE_MEDIA_ASSET",
           targetId: id,
           targetVersion: 1,
           privateObjectReference: `issue-media://asset/${id}/version/1`,
-          normalizedInputHash: sha256(processed.body),
+          normalizedInputHash: normalizedSha256,
           reason: "CREATE",
           occurredAt: rightsAttestedAt,
         });
         await transaction.insert(outboxEvents).values(moderationEvents.rows);
-        if (inspection.signals.length > 0) {
-          await transaction.insert(issueMediaRuleFindings).values(
-            inspection.signals.map((signal) => ({
-              mediaAssetId: id,
-              stage: "LOCAL_RULES",
-              code: signal.code,
-              severity: signal.severity,
-              sourceVersion: signal.ruleVersion,
-              evidence: signal.metadata ?? {},
-            })),
-          );
-        }
+        await transaction
+          .insert(issueMediaRuleFindings)
+          .values(canonicalFindings.map((finding) => ({ mediaAssetId: id, ...finding })));
         return assetRow;
       });
       return mapAsset(created, storage);

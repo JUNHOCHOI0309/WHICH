@@ -33,6 +33,16 @@ export type IssueMediaReviewDecision = {
   createdAt: string;
 };
 
+export type IssueMediaRuleFinding = {
+  id: string;
+  stage: string;
+  code: string;
+  severity: "INFO" | "REVIEW" | "BLOCK";
+  sourceVersion: string;
+  evidence: Record<string, unknown>;
+  createdAt: string;
+};
+
 export type IssueMediaReviewAsset = IssueMediaAssetRecord & {
   effectiveStatus: IssueMediaReviewStatus;
   rightsAttestation: string;
@@ -49,6 +59,7 @@ export type IssueMediaReviewAsset = IssueMediaAssetRecord & {
   } | null;
   latestDecision: IssueMediaReviewDecision | null;
   history: IssueMediaReviewDecision[];
+  findings: IssueMediaRuleFinding[];
 };
 
 export type IssueMediaReviewPage = {

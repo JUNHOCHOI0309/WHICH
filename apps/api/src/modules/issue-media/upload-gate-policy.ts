@@ -3,6 +3,42 @@ import { createHmac } from "node:crypto";
 import type { RuleSignal } from "../moderation/rule-engine.js";
 
 export const ISSUE_MEDIA_UPLOAD_POLICY_VERSION = "which-member-media-upload-v1";
+export const ISSUE_MEDIA_RULE_POLICY_VERSION = "which-issue-media-rules-v1";
+export type IssueMediaRuleGateMode = "OFF" | "SHADOW" | "ENFORCE";
+export type LocalMediaScanStatus = "COMPLETE" | "PARTIAL" | "UNAVAILABLE";
+
+export type LocalMediaSignalDetectorResult = {
+  detectorVersion: string;
+  qr: { status: LocalMediaScanStatus; detected: boolean };
+  barcode: { status: LocalMediaScanStatus; detected: boolean };
+  ocr: { status: LocalMediaScanStatus; text?: string };
+  visual: {
+    status: LocalMediaScanStatus;
+    faceDetected: boolean;
+    identityDocumentDetected: boolean;
+    screenshotDetected: boolean;
+  };
+};
+
+export interface LocalMediaSignalDetector {
+  inspect(normalizedWebp: Buffer): Promise<LocalMediaSignalDetectorResult>;
+}
+
+export const unavailableLocalMediaSignalDetector: LocalMediaSignalDetector = {
+  inspect: () =>
+    Promise.resolve({
+      detectorVersion: "which-local-signal-unavailable-v1",
+      qr: { status: "UNAVAILABLE", detected: false },
+      barcode: { status: "UNAVAILABLE", detected: false },
+      ocr: { status: "UNAVAILABLE" },
+      visual: {
+        status: "UNAVAILABLE",
+        faceDetected: false,
+        identityDocumentDetected: false,
+        screenshotDetected: false,
+      },
+    }),
+};
 export const ISSUE_MEDIA_UPLOAD_LIMITS = {
   sessionTtlSeconds: 600,
   maximumBytes: 10 * 1024 * 1024,
@@ -73,6 +109,7 @@ export type LocalMediaInspection = {
   faceDetected?: boolean;
   identityDocumentDetected?: boolean;
   screenshotDetected?: boolean;
+  detector?: LocalMediaSignalDetectorResult;
   inspectionComplete: boolean;
 };
 
@@ -113,17 +150,41 @@ export function evaluateLocalMediaInspection(input: LocalMediaInspection): {
   if (distance !== undefined && distance <= 8) {
     add("MEDIA_PERCEPTUAL_SIMILARITY", "REVIEW", { distance });
   }
-  if (input.qrDetected) add("MEDIA_QR_DETECTED", "REVIEW");
-  if (input.barcodeDetected) add("MEDIA_BARCODE_DETECTED", "REVIEW");
-  if (input.faceDetected) add("MEDIA_FACE_PRESENT", "REVIEW");
-  if (input.identityDocumentDetected) add("MEDIA_IDENTITY_DOCUMENT_PRESENT", "REVIEW");
-  if (input.screenshotDetected) add("MEDIA_SCREENSHOT_PRESENT", "REVIEW");
-  if (input.ocrText) {
-    const pii =
-      /(?:\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b|(?<!\d)01[016789][- .]?\d{3,4}[- .]?\d{4}(?!\d))/iu;
-    if (pii.test(input.ocrText)) add("MEDIA_OCR_PII_DETECTED", "REVIEW");
+  const detector = input.detector;
+  const qrDetected = detector?.qr.detected ?? input.qrDetected;
+  const barcodeDetected = detector?.barcode.detected ?? input.barcodeDetected;
+  const faceDetected = detector?.visual.faceDetected ?? input.faceDetected;
+  const identityDocumentDetected =
+    detector?.visual.identityDocumentDetected ?? input.identityDocumentDetected;
+  const screenshotDetected = detector?.visual.screenshotDetected ?? input.screenshotDetected;
+  const ocrText = detector?.ocr.text ?? input.ocrText;
+  if (qrDetected) add("MEDIA_QR_DETECTED", "REVIEW");
+  if (barcodeDetected) add("MEDIA_BARCODE_DETECTED", "REVIEW");
+  if (faceDetected) add("MEDIA_FACE_PRESENT", "REVIEW");
+  if (identityDocumentDetected) add("MEDIA_IDENTITY_DOCUMENT_PRESENT", "REVIEW");
+  if (screenshotDetected) add("MEDIA_SCREENSHOT_PRESENT", "REVIEW");
+  if (ocrText) {
+    const kinds = [
+      /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/iu.test(ocrText) ? "EMAIL" : null,
+      /(?<!\d)01[016789][- .]?\d{3,4}[- .]?\d{4}(?!\d)/u.test(ocrText) ? "PHONE" : null,
+      /(?<!\d)\d{6}[- ]?[1-4]\d{6}(?!\d)/u.test(ocrText) ? "NATIONAL_ID" : null,
+      /(?<!\d)\d{2,6}[- ]\d{2,6}[- ]\d{2,6}(?!\d)/u.test(ocrText) ? "ACCOUNT_LIKE" : null,
+    ].filter((kind): kind is string => kind !== null);
+    if (kinds.length) add("MEDIA_OCR_PII_DETECTED", "REVIEW", { kinds: kinds.join(",") });
   }
-  if (!input.inspectionComplete) add("MEDIA_INSPECTION_INCOMPLETE", "REVIEW");
+  if (detector) {
+    for (const [scan, status] of [
+      ["QR", detector.qr.status],
+      ["BARCODE", detector.barcode.status],
+      ["OCR", detector.ocr.status],
+      ["VISUAL", detector.visual.status],
+    ] as const) {
+      if (status !== "COMPLETE") {
+        add(`MEDIA_${scan}_SCAN_INCOMPLETE`, "REVIEW", { status });
+      }
+    }
+  }
+  if (!input.inspectionComplete && !detector) add("MEDIA_INSPECTION_INCOMPLETE", "REVIEW");
 
   return {
     decision: signals.some((signal) => signal.severity === "BLOCK")

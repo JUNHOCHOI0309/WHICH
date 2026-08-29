@@ -218,6 +218,15 @@ export type OpsMediaReviewDecision = {
   requestId: string;
   createdAt: string;
 };
+export type OpsMediaRuleFinding = {
+  id: string;
+  stage: string;
+  code: string;
+  severity: "INFO" | "REVIEW" | "BLOCK";
+  sourceVersion: string;
+  evidence: Record<string, unknown>;
+  createdAt: string;
+};
 export type OpsMediaReviewAsset = {
   id: string;
   sha256: string;
@@ -241,6 +250,7 @@ export type OpsMediaReviewAsset = {
   };
   latestDecision: OpsMediaReviewDecision | null;
   history: OpsMediaReviewDecision[];
+  findings: OpsMediaRuleFinding[];
   createdAt: string;
   updatedAt: string;
 };
@@ -295,6 +305,7 @@ export type OpsModerationQueueItem = {
         uploadedBy: string;
         input: { width: number; height: number; byteSize: number };
         output: { width: number; height: number; byteSize: number };
+        findings: OpsMediaRuleFinding[];
         priorDecisions: Array<{
           id: string;
           status: string;

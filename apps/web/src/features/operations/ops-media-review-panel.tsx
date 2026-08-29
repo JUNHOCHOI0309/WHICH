@@ -293,6 +293,16 @@ export function OpsMediaReviewPanel() {
               <span>{Math.round(selected.output.byteSize / 1024)} KB</span>
               <span>{policyVersion}</span>
             </div>
+            <h3>Rule findings</h3>
+            <ul className={styles.sources}>
+              {(selected.findings ?? []).map((finding) => (
+                <li key={finding.id}>
+                  <b>{finding.severity}</b> · {finding.stage} · {finding.code}
+                  <br />
+                  {finding.sourceVersion} · {JSON.stringify(finding.evidence)}
+                </li>
+              ))}
+            </ul>
             <section className={styles.decision}>
               {selected.effectiveStatus === "DELETED" ? (
                 <p className={styles.terminalNotice}>

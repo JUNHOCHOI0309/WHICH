@@ -16,6 +16,7 @@ import { createShareCardService } from "./modules/shares/service.js";
 import { createOpsDashboardService } from "./modules/operations/service.js";
 import { createOpsModerationQueueService } from "./modules/operations/moderation-queue-service.js";
 import { createIssueMediaService } from "./modules/issue-media/service.js";
+import type { IssueMediaRuleGateMode } from "./modules/issue-media/upload-gate-policy.js";
 import { createIssueMediaUploadGateService } from "./modules/issue-media/upload-gate-service.js";
 import { createIssueMediaReviewService } from "./modules/issue-media/review-service.js";
 import {
@@ -45,8 +46,16 @@ const moderationProviderConfig = moderationProviderRuntimeConfig();
 const moderationRuntimeDiagnostic = providerRuntimeDiagnostic(moderationProviderConfig);
 const mediaStorageConfig = issueMediaStorageConfig();
 const issueMediaStorage = mediaStorageConfig ? createR2IssueMediaStorage(mediaStorageConfig) : null;
+const configuredIssueMediaRuleGateMode = process.env.ISSUE_MEDIA_RULE_GATE_MODE?.toUpperCase();
+const issueMediaRuleGateMode: IssueMediaRuleGateMode = ["OFF", "SHADOW", "ENFORCE"].includes(
+  configuredIssueMediaRuleGateMode ?? "",
+)
+  ? (configuredIssueMediaRuleGateMode as IssueMediaRuleGateMode)
+  : "ENFORCE";
 const issueMediaService = issueMediaStorage
-  ? createIssueMediaService(database.db, issueMediaStorage)
+  ? createIssueMediaService(database.db, issueMediaStorage, {
+      ruleGateMode: issueMediaRuleGateMode,
+    })
   : null;
 const commentService = createCommentService(database.db);
 const issueMediaReviewService =

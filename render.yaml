@@ -164,6 +164,8 @@ services:
         value: "false"
       - key: ISSUE_MEDIA_EXPERIMENT_PERCENT
         value: "0"
+      - key: ISSUE_MEDIA_RULE_GATE_MODE
+        value: "ENFORCE"
       - key: QUALITY_RANKER_MODE
         value: "SHADOW"
       - key: FEATURE_POINTS_ENABLED

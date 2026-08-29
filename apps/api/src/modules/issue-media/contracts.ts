@@ -43,6 +43,7 @@ export interface IssueMediaService {
   }): Promise<IssueMediaAssetRecord | null>;
   stageMemberAsset(input: {
     memberId: string;
+    uploadSessionId?: string;
     rightsAttestation: string;
     declaredMimeType: IssueMediaInputMimeType;
     bytes: Buffer;

@@ -83,4 +83,35 @@ describe("Member Issue media upload gate", () => {
     );
     expect(dHashDistance("0000000000000000", "0000000000000001")).toBe(1);
   });
+
+  it("turns detector results into review findings without retaining raw OCR text", () => {
+    const review = evaluateLocalMediaInspection({
+      sha256: "c".repeat(64),
+      perceptualHash: "f".repeat(16),
+      detector: {
+        detectorVersion: "test-local-detector-v1",
+        qr: { status: "COMPLETE", detected: true },
+        barcode: { status: "COMPLETE", detected: false },
+        ocr: { status: "COMPLETE", text: "contact tester@example.com" },
+        visual: {
+          status: "PARTIAL",
+          faceDetected: true,
+          identityDocumentDetected: false,
+          screenshotDetected: false,
+        },
+      },
+      inspectionComplete: false,
+    });
+
+    expect(review.decision).toBe("REVIEW_REQUIRED");
+    expect(review.signals.map((signal) => signal.code)).toEqual(
+      expect.arrayContaining([
+        "MEDIA_QR_DETECTED",
+        "MEDIA_FACE_PRESENT",
+        "MEDIA_OCR_PII_DETECTED",
+        "MEDIA_VISUAL_SCAN_INCOMPLETE",
+      ]),
+    );
+    expect(JSON.stringify(review.signals)).not.toContain("tester@example.com");
+  });
 });

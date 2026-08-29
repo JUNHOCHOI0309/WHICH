@@ -221,6 +221,7 @@ export async function registerIssueMediaRoutes(
         });
         const asset = await service.stageMemberAsset({
           memberId,
+          uploadSessionId: request.body.uploadSessionId,
           rightsAttestation: request.body.rightsAttestation,
           declaredMimeType: request.body.declaredMimeType,
           bytes: Buffer.from(normalized, "base64"),
