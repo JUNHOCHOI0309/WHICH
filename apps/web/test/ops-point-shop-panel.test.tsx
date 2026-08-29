@@ -69,7 +69,7 @@ describe("Ops Point Shop status controls", () => {
 
     const status = await screen.findByRole("combobox", { name: "판매 상태" });
     fireEvent.change(status, { target: { value: "PAUSED" } });
-    fireEvent.click(screen.getByRole("button", { name: "판매 상태 저장" }));
+    fireEvent.click(await screen.findByRole("button", { name: "판매 상태 저장" }));
 
     expect(await screen.findByText("Paper Vote Accent의 판매 상태를 저장했습니다.")).toBeVisible();
     await waitFor(() => expect(request).toHaveBeenCalledTimes(3));
