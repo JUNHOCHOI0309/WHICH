@@ -408,13 +408,18 @@ export function createMemberModerationService(
       const notices = await database
         .select()
         .from(memberModerationNotices)
-        .where(eq(memberModerationNotices.memberId, memberId))
+        .where(
+          and(
+            eq(memberModerationNotices.memberId, memberId),
+            isNull(memberModerationNotices.readAt),
+          ),
+        )
         .orderBy(desc(memberModerationNotices.createdAt))
         .limit(30);
       return {
         schemaVersion: 1,
         generatedAt: new Date().toISOString(),
-        unreadCount: notices.filter((notice) => !notice.readAt).length,
+        unreadCount: notices.length,
         items: notices.map(noticeView),
       };
     },

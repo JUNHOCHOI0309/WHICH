@@ -91,7 +91,7 @@ describe("Member navigation", () => {
     expect(links.every((link) => link.getAttribute("href") === "/me")).toBe(true);
   });
 
-  it("shows the Member's moderation notices and marks them read when opened", async () => {
+  it("shows Member notices, marks all read on demand, and toggles the panel from the bell", async () => {
     const noticeId = "05739bff-8463-4474-a0c1-3f67ae75d586";
     const requests: Array<{ url: string; method: string; body: unknown }> = [];
     vi.stubGlobal(
@@ -146,6 +146,10 @@ describe("Member navigation", () => {
     const dialog = await screen.findByRole("dialog", { name: "알림" });
     expect(within(dialog).getByText("이미지 검수가 승인됐어요.")).toBeInTheDocument();
     expect(within(dialog).getByText("질문 공개 상태를 확인해 주세요.")).toBeInTheDocument();
+    expect(requests.some((request) => request.method === "PATCH")).toBe(false);
+    expect(within(dialog).queryByRole("button", { name: "알림 닫기" })).toBeNull();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "모두 읽기" }));
     await waitFor(() => {
       expect(
         requests.some(
@@ -156,7 +160,10 @@ describe("Member navigation", () => {
         ),
       ).toBe(true);
     });
-    fireEvent.keyDown(window, { key: "Escape" });
+    expect(within(dialog).getByText("새 알림이 없습니다.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "알림" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "알림" }));
     expect(screen.queryByRole("dialog", { name: "알림" })).not.toBeInTheDocument();
   });
 

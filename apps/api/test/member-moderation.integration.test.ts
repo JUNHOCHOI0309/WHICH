@@ -165,7 +165,9 @@ describe("WHICH-96 member moderation experience", () => {
         notifications.items.map((notice) => notice.id),
       ),
     ).resolves.toEqual({ updated: 2 });
-    expect((await service.readNotifications(member!.id)).unreadCount).toBe(0);
+    const clearedNotifications = await service.readNotifications(member!.id);
+    expect(clearedNotifications.unreadCount).toBe(0);
+    expect(clearedNotifications.items).toEqual([]);
     const [unaffected] = await database.db
       .select()
       .from(memberModerationNotices)
