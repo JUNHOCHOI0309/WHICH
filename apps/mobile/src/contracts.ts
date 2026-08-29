@@ -44,6 +44,24 @@ export type PublicIssue = PublicFeedIssue & {
   };
 };
 
+export type IssueMediaLibraryPair = {
+  id: string;
+  title: string;
+  categoryCode: string;
+  topics: string[];
+  assets: {
+    id: string;
+    side: "A" | "B";
+    url: string;
+    altText: string;
+    cropMode: "COVER" | "CONTAIN";
+    width: number;
+    height: number;
+    attributionText: string | null;
+  }[];
+  usageCount: number;
+};
+
 export type PublicIssueFeed = {
   items: PublicFeedIssue[];
   nextCursor: string | null;

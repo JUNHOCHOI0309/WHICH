@@ -124,6 +124,147 @@ export async function registerIssueMediaRoutes(
       });
     });
 
+    mediaApp.get<{
+      Headers: Headers;
+      Querystring: { q?: string; categoryCode?: string; limit?: number };
+    }>(
+      "/v1/member/issue-media-library",
+      {
+        schema: {
+          tags: ["issues"],
+          summary: "Search approved reusable A/B image pairs",
+          headers: memberHeaders,
+          querystring: Type.Object({
+            q: Type.Optional(Type.String({ maxLength: 120 })),
+            categoryCode: Type.Optional(Type.String({ maxLength: 64 })),
+            limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 50, default: 20 })),
+          }),
+        },
+      },
+      async (request, reply) => {
+        const memberId = await authenticateMember(request, reply);
+        if (!memberId) return;
+        return service.listLibraryPairs({
+          query: request.query.q,
+          categoryCode: request.query.categoryCode,
+          limit: request.query.limit ?? 20,
+        });
+      },
+    );
+
+    mediaApp.post<{
+      Headers: Headers;
+      Body: {
+        title: string;
+        categoryCode: string;
+        topics: string[];
+        assets: Array<{
+          side: "A" | "B";
+          mediaAssetId: string;
+          altText: string;
+          cropMode: "COVER" | "CONTAIN";
+          sourceUrl: string;
+          authorName: string;
+          licenseName: string;
+          licenseVersion: string;
+          acquiredAt: string;
+          commercialAllowed: boolean;
+          derivativeAllowed: boolean;
+          redistributionAllowed: boolean;
+          attributionText?: string | null;
+          evidenceReference: string;
+          expiresAt?: string | null;
+        }>;
+      };
+    }>(
+      "/v1/internal/ops/media-library",
+      {
+        schema: {
+          hide: true,
+          headers: opsHeaders,
+          body: Type.Object(
+            {
+              title: Type.String({ minLength: 2, maxLength: 160 }),
+              categoryCode: Type.String({ minLength: 1, maxLength: 64 }),
+              topics: Type.Array(Type.String({ minLength: 1, maxLength: 64 }), {
+                maxItems: 20,
+              }),
+              assets: Type.Array(
+                Type.Object(
+                  {
+                    side: Type.Union([Type.Literal("A"), Type.Literal("B")]),
+                    mediaAssetId: uuid,
+                    altText: Type.String({ minLength: 2, maxLength: 300 }),
+                    cropMode: Type.Union([Type.Literal("COVER"), Type.Literal("CONTAIN")]),
+                    sourceUrl: Type.String({ minLength: 8, maxLength: 2000 }),
+                    authorName: Type.String({ minLength: 1, maxLength: 200 }),
+                    licenseName: Type.String({ minLength: 1, maxLength: 160 }),
+                    licenseVersion: Type.String({ minLength: 1, maxLength: 80 }),
+                    acquiredAt: Type.String({ format: "date-time" }),
+                    commercialAllowed: Type.Boolean(),
+                    derivativeAllowed: Type.Boolean(),
+                    redistributionAllowed: Type.Boolean(),
+                    attributionText: Type.Optional(
+                      Type.Union([Type.String({ maxLength: 2000 }), Type.Null()]),
+                    ),
+                    evidenceReference: Type.String({ minLength: 8, maxLength: 2000 }),
+                    expiresAt: Type.Optional(
+                      Type.Union([Type.String({ format: "date-time" }), Type.Null()]),
+                    ),
+                  },
+                  { additionalProperties: false },
+                ),
+                { minItems: 2, maxItems: 2 },
+              ),
+            },
+            { additionalProperties: false },
+          ),
+        },
+      },
+      async (request, reply) => {
+        const memberId = await authenticate(request, reply);
+        if (!memberId) return;
+        const pair = await service.registerLibraryPair({
+          memberId,
+          pair: request.body,
+          requestId: request.id,
+        });
+        if (!pair) return operatorRequired(reply);
+        return reply.code(201).send({ pair });
+      },
+    );
+
+    mediaApp.post<{
+      Headers: Headers;
+      Params: { pairId: string };
+      Body: { reason: string };
+    }>(
+      "/v1/internal/ops/media-library/:pairId/revoke",
+      {
+        schema: {
+          hide: true,
+          headers: opsHeaders,
+          params: Type.Object({ pairId: uuid }),
+          body: Type.Object(
+            { reason: Type.String({ minLength: 10, maxLength: 2000 }) },
+            { additionalProperties: false },
+          ),
+        },
+      },
+      async (request, reply) => {
+        const memberId = await authenticate(request, reply);
+        if (!memberId) return;
+        const result = await service.revokeLibraryPair({
+          memberId,
+          pairId: request.params.pairId,
+          reason: request.body.reason,
+          requestId: request.id,
+        });
+        if (!result) return operatorRequired(reply);
+        return reply.send(result);
+      },
+    );
+
     mediaApp.post<{
       Headers: Headers;
       Body: { submissionId: string; consentVersion: string };

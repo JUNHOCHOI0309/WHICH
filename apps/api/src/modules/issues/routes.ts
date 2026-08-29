@@ -174,6 +174,7 @@ type IssueCreateRoute = {
     choiceB: string;
     mediaAssetAId?: string | null;
     mediaAssetBId?: string | null;
+    libraryPairId?: string | null;
     interestCardCode: (typeof INTEREST_CARD_CODES)[number];
   };
 };
@@ -409,6 +410,7 @@ export async function registerIssueRoutes(
               context: Type.Optional(Type.Union([Type.String({ maxLength: 500 }), Type.Null()])),
               choiceA: Type.String({ minLength: 1, maxLength: 100 }),
               choiceB: Type.String({ minLength: 1, maxLength: 100 }),
+              libraryPairId: Type.Optional(Type.Union([uuidSchema, Type.Null()])),
               interestCardCode: Type.Union(INTEREST_CARD_CODES.map((code) => Type.Literal(code))),
             }),
             response: {

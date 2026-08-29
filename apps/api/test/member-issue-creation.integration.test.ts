@@ -8,9 +8,13 @@ import { getConfig } from "../src/config.js";
 import type { Database } from "../src/database/client.js";
 import {
   issueAuthors,
+  issueChoiceMedia,
   issueChoices,
   issueInterestCards,
   issueMediaAssets,
+  issueMediaLibraryAssets,
+  issueMediaLibraryPairs,
+  issueMediaLibraryUsages,
   issueVersions,
   memberIssueSubmissionRevisions,
   memberIssueSubmissions,
@@ -79,6 +83,91 @@ afterAll(async () => {
 });
 
 describe("Member Issue creation v1", () => {
+  it("reuses one approved Library pair across multiple immediately published Issues", async () => {
+    const session = await createSession("Library 질문 회원");
+    const pairId = randomUUID();
+    const mediaIds = [randomUUID(), randomUUID()];
+    await database.db.insert(issueMediaAssets).values(
+      mediaIds.map((id, index) => ({
+        id,
+        uploadedByMemberId: session.member.id,
+        sourceType: "OPERATOR_UPLOAD",
+        rightsAttestation: "Approved reusable Library image with recorded commercial rights.",
+        rightsAttestedAt: new Date(),
+        sha256: String(index + 4).repeat(64),
+        perceptualHash: String(index + 4).repeat(16),
+        inputMimeType: "image/png",
+        inputByteSize: 100,
+        inputWidth: 10,
+        inputHeight: 10,
+        outputByteSize: 80,
+        outputWidth: 10,
+        outputHeight: 10,
+        processingState: "READY",
+        moderationState: "APPROVED",
+        storageState: "PUBLISHED",
+        rightsState: "CLEARED",
+        publishedObjectKey: "issue-media/published/" + id + ".webp",
+        publishedAt: new Date(),
+      })),
+    );
+    await database.db.insert(issueMediaLibraryPairs).values({
+      id: pairId,
+      title: "도시와 자연",
+      categoryCode: "LIFE",
+      topics: ["생활", "환경"],
+      createdByMemberId: session.member.id,
+    });
+    await database.db.insert(issueMediaLibraryAssets).values(
+      mediaIds.map((mediaAssetId, index) => ({
+        pairId,
+        side: index === 0 ? "A" : "B",
+        mediaAssetId,
+        altText: index === 0 ? "도시의 거리" : "숲속 산책로",
+        sourceUrl: "https://source.example/" + String(index),
+        authorName: "Library Author",
+        licenseName: "Commercial reusable license",
+        licenseVersion: "2026-08",
+        acquiredAt: new Date(),
+        commercialAllowed: true,
+        derivativeAllowed: true,
+        redistributionAllowed: true,
+        evidenceReference: "https://evidence.example/" + String(index),
+      })),
+    );
+
+    const issueIds: string[] = [];
+    for (const question of ["주말에는 어디에서 쉬는 게 좋을까", "휴가지는 어디가 더 끌릴까"]) {
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/issues",
+        headers: { authorization: "Bearer " + session.token, "idempotency-key": randomUUID() },
+        payload: { ...createPayload(question), libraryPairId: pairId },
+      });
+      expect(response.statusCode).toBe(201);
+      issueIds.push(response.json<{ issue: { id: string } }>().issue.id);
+    }
+
+    const [links, usages, versions] = await Promise.all([
+      database.db.select().from(issueChoiceMedia),
+      database.db.select().from(issueMediaLibraryUsages),
+      database.db.select().from(issueVersions),
+    ]);
+    expect(links.filter((link) => issueIds.includes(link.issueId))).toHaveLength(4);
+    expect(
+      links
+        .filter((link) => issueIds.includes(link.issueId))
+        .map((link) => link.mediaAssetId)
+        .sort(),
+    ).toEqual([...mediaIds, ...mediaIds].sort());
+    expect(usages.filter((usage) => issueIds.includes(usage.issueId))).toHaveLength(4);
+    expect(
+      versions
+        .filter((version) => issueIds.includes(version.issueId))
+        .map((item) => item.mediaMode),
+    ).toEqual(["OPTION_IMAGES", "OPTION_IMAGES"]);
+  });
+
   it("accepts only paired staged media owned by the submitting Member", async () => {
     const session = await createSession("이미지 질문 회원");
     const mediaIds = [randomUUID(), randomUUID()];

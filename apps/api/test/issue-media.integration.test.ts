@@ -13,6 +13,7 @@ import {
   issueMediaAssets,
   issueMediaAssetVersions,
   issueMediaKnownBlockHashes,
+  issueMediaLibraryUsages,
   issueMediaRuleFindings,
   issueMediaReviewDecisions,
   issueMediaRightsRequests,
@@ -150,6 +151,144 @@ afterAll(async () => {
 });
 
 describe("operator Issue media foundation", () => {
+  it("registers a reusable Library pair and falls every linked Issue back to text on revoke", async () => {
+    const libraryIssueId = randomUUID();
+    const libraryChoiceAId = randomUUID();
+    const libraryChoiceBId = randomUUID();
+    await database.db.insert(issues).values({ id: libraryIssueId });
+    await database.db.insert(issueVersions).values({
+      issueId: libraryIssueId,
+      version: 1,
+      question: "Which reusable image pair?",
+      contentHash: randomUUID().replaceAll("-", "").padEnd(64, "0"),
+      primaryCategoryCode: "LIFE",
+      experienceModeCode: "BINARY",
+      taxonomyVersion: "v1",
+    });
+    await database.db.insert(issueChoices).values([
+      {
+        id: libraryChoiceAId,
+        issueId: libraryIssueId,
+        issueVersion: 1,
+        code: "A",
+        label: "Reusable A",
+      },
+      {
+        id: libraryChoiceBId,
+        issueId: libraryIssueId,
+        issueVersion: 1,
+        code: "B",
+        label: "Reusable B",
+      },
+    ]);
+    const storage = new FakeIssueMediaStorage();
+    const service = createIssueMediaService(database.db, storage);
+    const staged = await Promise.all([
+      service.stageAsset({
+        memberId: operatorId,
+        sourceType: "OPERATOR_UPLOAD",
+        rightsAttestation: "Reusable A image with verified commercial and redistribution rights.",
+        declaredMimeType: "image/png",
+        bytes: await image("png", { r: 2, g: 130, b: 170 }),
+      }),
+      service.stageAsset({
+        memberId: operatorId,
+        sourceType: "OPERATOR_UPLOAD",
+        rightsAttestation: "Reusable B image with verified commercial and redistribution rights.",
+        declaredMimeType: "image/png",
+        bytes: await image("png", { r: 245, g: 108, b: 64 }),
+      }),
+    ]);
+    const published = await Promise.all(
+      staged.map((candidate) =>
+        service.approveAndPublish({ memberId: operatorId, assetId: candidate!.id }),
+      ),
+    );
+    const pair = await service.registerLibraryPair({
+      memberId: operatorId,
+      pair: {
+        title: "Reusable A/B pair",
+        categoryCode: "LIFE",
+        topics: ["daily", "choice"],
+        assets: published.map((candidate, index) => ({
+          side: index === 0 ? ("A" as const) : ("B" as const),
+          mediaAssetId: candidate!.id,
+          altText: index === 0 ? "Cyan reusable scene" : "Orange reusable scene",
+          cropMode: "COVER" as const,
+          sourceUrl: "https://source.example/library/" + String(index),
+          authorName: "Library Author",
+          licenseName: "Commercial reusable license",
+          licenseVersion: "2026-08",
+          acquiredAt: new Date().toISOString(),
+          commercialAllowed: true,
+          derivativeAllowed: true,
+          redistributionAllowed: true,
+          evidenceReference: "https://evidence.example/library/" + String(index),
+        })),
+      },
+    });
+    expect(pair?.assets).toHaveLength(2);
+
+    await service.attachChoice({
+      memberId: operatorId,
+      issueId: libraryIssueId,
+      issueVersion: 1,
+      choiceId: libraryChoiceAId,
+      assetId: published[0]!.id,
+      altText: "Cyan reusable scene",
+      cropMode: "COVER",
+      displayPosition: 0,
+    });
+    await service.attachChoice({
+      memberId: operatorId,
+      issueId: libraryIssueId,
+      issueVersion: 1,
+      choiceId: libraryChoiceBId,
+      assetId: published[1]!.id,
+      altText: "Orange reusable scene",
+      cropMode: "COVER",
+      displayPosition: 1,
+    });
+    await database.db.insert(issueMediaLibraryUsages).values(
+      pair!.assets.map((candidate) => ({
+        pairId: pair!.id,
+        libraryAssetId: candidate.id,
+        issueId: libraryIssueId,
+        issueVersion: 1,
+        choiceId: candidate.side === "A" ? libraryChoiceAId : libraryChoiceBId,
+        side: candidate.side,
+        selectedByMemberId: operatorId,
+      })),
+    );
+
+    const revoked = await service.revokeLibraryPair({
+      memberId: operatorId,
+      pairId: pair!.id,
+      reason: "Rights owner requested immediate withdrawal from the reusable Library.",
+    });
+    expect(revoked).toEqual({ pairId: pair!.id, fallbackIssueCount: 1 });
+    const [links, usages, version] = await Promise.all([
+      database.db
+        .select()
+        .from(issueChoiceMedia)
+        .where(eq(issueChoiceMedia.issueId, libraryIssueId)),
+      database.db
+        .select()
+        .from(issueMediaLibraryUsages)
+        .where(eq(issueMediaLibraryUsages.pairId, pair!.id)),
+      database.db
+        .select({ mediaMode: issueVersions.mediaMode })
+        .from(issueVersions)
+        .where(eq(issueVersions.issueId, libraryIssueId)),
+    ]);
+    expect(links).toEqual([]);
+    expect(usages.every((usage) => usage.status === "TEXT_FALLBACK")).toBe(true);
+    expect(version).toEqual([{ mediaMode: "TEXT_ONLY" }]);
+    expect(
+      storage.operations.filter((operation) => operation.startsWith("quarantine:")),
+    ).toHaveLength(2);
+  });
+
   it("stages Member submission media privately without requiring operator access", async () => {
     const storage = new FakeIssueMediaStorage();
     const service = createIssueMediaService(database.db, storage);

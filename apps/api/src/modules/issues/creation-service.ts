@@ -5,9 +5,13 @@ import { and, desc, eq, gt, isNull, sql } from "drizzle-orm";
 import type { Database } from "../../database/client.js";
 import {
   issueAuthors,
+  issueChoiceMedia,
   issueChoices,
   issueInterestCards,
   issueMediaAssets,
+  issueMediaLibraryAssets,
+  issueMediaLibraryPairs,
+  issueMediaLibraryUsages,
   memberIssueSubmissionRevisions,
   memberIssueSubmissions,
   issues,
@@ -113,6 +117,7 @@ function normalizeCommand(command: CreateMemberIssueCommand) {
 
   const mediaAssetAId = command.mediaAssetAId ?? null;
   const mediaAssetBId = command.mediaAssetBId ?? null;
+  const libraryPairId = command.libraryPairId ?? null;
   if (
     Boolean(mediaAssetAId) !== Boolean(mediaAssetBId) ||
     (mediaAssetAId !== null && mediaAssetAId === mediaAssetBId)
@@ -121,6 +126,13 @@ function normalizeCommand(command: CreateMemberIssueCommand) {
       "ISSUE_SUBMISSION_MEDIA_INVALID",
       422,
       "선택지 이미지는 A와 B를 함께 등록하고 서로 다른 이미지를 사용해 주세요.",
+    );
+  }
+  if (libraryPairId && (mediaAssetAId || mediaAssetBId)) {
+    throw new IssueWriteError(
+      "ISSUE_SUBMISSION_MEDIA_INVALID",
+      422,
+      "Library 이미지와 직접 업로드 이미지는 한 질문에서 함께 사용할 수 없어요.",
     );
   }
 
@@ -151,8 +163,53 @@ function normalizeCommand(command: CreateMemberIssueCommand) {
     choiceB,
     mediaAssetAId,
     mediaAssetBId,
+    libraryPairId,
     interestCardCode: command.interestCardCode,
   };
+}
+
+async function requirePublishedLibraryPair(
+  database: Pick<Database["db"], "select">,
+  pairId: string,
+) {
+  const now = new Date();
+  const rows = await database
+    .select({
+      pair: issueMediaLibraryPairs,
+      libraryAsset: issueMediaLibraryAssets,
+      mediaAsset: issueMediaAssets,
+    })
+    .from(issueMediaLibraryPairs)
+    .innerJoin(
+      issueMediaLibraryAssets,
+      eq(issueMediaLibraryAssets.pairId, issueMediaLibraryPairs.id),
+    )
+    .innerJoin(issueMediaAssets, eq(issueMediaAssets.id, issueMediaLibraryAssets.mediaAssetId))
+    .where(eq(issueMediaLibraryPairs.id, pairId));
+  const sides = rows
+    .map((row) => row.libraryAsset.side)
+    .sort()
+    .join("");
+  if (
+    rows.length !== 2 ||
+    sides !== "AB" ||
+    rows.some(
+      ({ pair, libraryAsset, mediaAsset }) =>
+        pair.status !== "PUBLISHED" ||
+        (libraryAsset.expiresAt !== null && libraryAsset.expiresAt <= now) ||
+        mediaAsset.processingState !== "READY" ||
+        mediaAsset.moderationState !== "APPROVED" ||
+        mediaAsset.storageState !== "PUBLISHED" ||
+        !["ASSERTED", "CLEARED"].includes(mediaAsset.rightsState),
+    )
+  ) {
+    throw new IssueWriteError(
+      "ISSUE_LIBRARY_PAIR_UNAVAILABLE",
+      422,
+      "선택한 Library 이미지 쌍이 만료·회수되었거나 현재 게시할 수 없는 상태예요.",
+    );
+  }
+  return rows.sort((left, right) => left.libraryAsset.side.localeCompare(right.libraryAsset.side));
 }
 
 async function requireActiveMember(database: Pick<Database["db"], "select">, sessionToken: string) {
@@ -238,6 +295,13 @@ async function requireOwnedSubmissionMedia(
 export function createIssueWriteService(database: Database["db"]): IssueWriteService {
   return {
     async submitMemberIssue(command) {
+      if (command.libraryPairId) {
+        throw new IssueWriteError(
+          "ISSUE_SUBMISSION_MEDIA_INVALID",
+          422,
+          "Library 이미지는 별도 검수 없이 즉시 게시 경로로 사용해 주세요.",
+        );
+      }
       const normalized = normalizeCommand(command);
       const session = await requireActiveMember(database, command.sessionToken);
       const contentHash = createHash("sha256").update(JSON.stringify(normalized)).digest("hex");
@@ -338,6 +402,13 @@ export function createIssueWriteService(database: Database["db"]): IssueWriteSer
     },
 
     async resubmitMemberIssue(command: ResubmitMemberIssueCommand) {
+      if (command.libraryPairId) {
+        throw new IssueWriteError(
+          "ISSUE_SUBMISSION_MEDIA_INVALID",
+          422,
+          "Library 이미지는 별도 검수 없이 즉시 게시 경로로 사용해 주세요.",
+        );
+      }
       const normalized = normalizeCommand(command);
       const session = await requireActiveMember(database, command.sessionToken);
       const contentHash = createHash("sha256").update(JSON.stringify(normalized)).digest("hex");
@@ -518,6 +589,10 @@ export function createIssueWriteService(database: Database["db"]): IssueWriteSer
             sql`select pg_advisory_xact_lock(hashtextextended(${`which:member-issue:${session.memberId}`}, 0))`,
           );
 
+          const libraryRows = normalized.libraryPairId
+            ? await requirePublishedLibraryPair(transaction, normalized.libraryPairId)
+            : [];
+
           const issueId = deterministicUuid(`${session.memberId}:${command.idempotencyKey}:issue`);
           const choiceAId = deterministicUuid(
             `${session.memberId}:${command.idempotencyKey}:choice:a`,
@@ -559,10 +634,16 @@ export function createIssueWriteService(database: Database["db"]): IssueWriteSer
             .limit(1);
 
           if (existing) {
+            const [existingLibrary] = await transaction
+              .select({ pairId: issueMediaLibraryUsages.pairId })
+              .from(issueMediaLibraryUsages)
+              .where(eq(issueMediaLibraryUsages.issueId, issueId))
+              .limit(1);
             if (
               existing.memberId !== session.memberId ||
               existing.contentHash !== contentHash ||
-              existing.interestCardCode !== normalized.interestCardCode
+              existing.interestCardCode !== normalized.interestCardCode ||
+              (existingLibrary?.pairId ?? null) !== normalized.libraryPairId
             ) {
               throw new IssueWriteError(
                 "IDEMPOTENCY_CONFLICT",
@@ -624,6 +705,7 @@ export function createIssueWriteService(database: Database["db"]): IssueWriteSer
             contentHash,
             primaryCategoryCode: PRIMARY_CATEGORY_BY_CARD[normalized.interestCardCode],
             experienceModeCode: EXPERIENCE_MODE,
+            mediaMode: libraryRows.length === 2 ? "OPTION_IMAGES" : "TEXT_ONLY",
             taxonomyVersion: INTEREST_TAXONOMY_VERSION,
             publishedAt: now,
           });
@@ -636,6 +718,38 @@ export function createIssueWriteService(database: Database["db"]): IssueWriteSer
               label: choice.label,
             })),
           );
+          if (libraryRows.length === 2) {
+            const choiceBySide = { A: choices[0]!, B: choices[1]! };
+            await transaction.insert(issueChoiceMedia).values(
+              libraryRows.map(({ libraryAsset, mediaAsset }) => {
+                const side = libraryAsset.side as "A" | "B";
+                return {
+                  issueId,
+                  issueVersion: ISSUE_VERSION,
+                  choiceId: choiceBySide[side].id,
+                  mediaAssetId: mediaAsset.id,
+                  altText: libraryAsset.altText,
+                  cropMode: libraryAsset.cropMode,
+                  displayPosition: side === "A" ? 0 : 1,
+                  linkedByMemberId: session.memberId,
+                };
+              }),
+            );
+            await transaction.insert(issueMediaLibraryUsages).values(
+              libraryRows.map(({ libraryAsset }) => {
+                const side = libraryAsset.side as "A" | "B";
+                return {
+                  pairId: normalized.libraryPairId!,
+                  libraryAssetId: libraryAsset.id,
+                  issueId,
+                  issueVersion: ISSUE_VERSION,
+                  choiceId: choiceBySide[side].id,
+                  side,
+                  selectedByMemberId: session.memberId,
+                };
+              }),
+            );
+          }
           const sealedSnapshot = await sealIssueVersionSnapshot(
             transaction,
             issueId,
@@ -693,8 +807,9 @@ export function createIssueWriteService(database: Database["db"]): IssueWriteSer
               data: {
                 issue_id: issueId,
                 issue_version: ISSUE_VERSION,
-                source: "MEMBER_CREATION",
+                source: normalized.libraryPairId ? "MEMBER_LIBRARY_CREATION" : "MEMBER_CREATION",
                 content_hash: contentHash,
+                library_pair_id: normalized.libraryPairId,
               },
             },
           });

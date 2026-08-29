@@ -107,6 +107,7 @@ export type CreateMemberIssueCommand = {
   choiceB: string;
   mediaAssetAId?: string | null;
   mediaAssetBId?: string | null;
+  libraryPairId?: string | null;
   interestCardCode: InterestCardCode;
 };
 

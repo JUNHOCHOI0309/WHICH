@@ -5,6 +5,7 @@ import type {
   InterestCardCode,
   InterestCardRegistry,
   InterestProfile,
+  IssueMediaLibraryPair,
   MemberPointView,
   MemberPointShopView,
   PointShopEquipSlot,
@@ -236,6 +237,39 @@ export function createMobileApiClient(
         { headers: { accept: "application/json", authorization: `Bearer ${sessionToken}` } },
       );
       return bodyOrError<{ items: MemberIssueSubmission[] }>(response);
+    },
+
+    async loadIssueMediaLibrary(sessionToken: string, limit = 24) {
+      const response = await request(
+        baseUrl + "/api/mobile/v1/member/issue-media-library?limit=" + String(limit),
+        { headers: { accept: "application/json", authorization: "Bearer " + sessionToken } },
+      );
+      return bodyOrError<{ items: IssueMediaLibraryPair[] }>(response);
+    },
+
+    async createMemberIssue(
+      sessionToken: string,
+      idempotencyKey: string,
+      command: {
+        question: string;
+        context: string | null;
+        choiceA: string;
+        choiceB: string;
+        libraryPairId?: string | null;
+        interestCardCode: InterestCardCode;
+      },
+    ) {
+      const response = await request(baseUrl + "/api/mobile/v1/issues", {
+        method: "POST",
+        headers: {
+          accept: "application/json",
+          authorization: "Bearer " + sessionToken,
+          "content-type": "application/json",
+          "idempotency-key": idempotencyKey,
+        },
+        body: JSON.stringify(command),
+      });
+      return bodyOrError<{ issue: PublicIssue; created: boolean }>(response);
     },
 
     async resubmitMemberIssue(

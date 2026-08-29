@@ -3,6 +3,7 @@ import type {
   CreateIssueCommand,
   CreateIssueResponse,
   InterestCardRegistry,
+  IssueMediaLibraryPair,
 } from "@/lib/contracts";
 
 async function responseBody<T>(response: Response) {
@@ -40,5 +41,13 @@ export async function createMemberIssue(command: CreateIssueCommand, idempotency
       },
       body: JSON.stringify(command),
     }),
+  );
+}
+
+export async function loadIssueMediaLibrary(query = "") {
+  const search = new URLSearchParams({ limit: "24" });
+  if (query.trim()) search.set("q", query.trim());
+  return responseBody<{ items: IssueMediaLibraryPair[] }>(
+    await fetch(`/api/issue-media-library?${search}`, { cache: "no-store" }),
   );
 }
