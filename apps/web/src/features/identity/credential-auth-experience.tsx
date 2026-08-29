@@ -151,7 +151,8 @@ export function CredentialAuthExperience({
                   <Link href="/legal/privacy" target="_blank">
                     개인정보 처리방침
                   </Link>
-                  에 동의하고 계정을 만듭니다.
+                  에 동의합니다. 게시하는 콘텐츠에 필요한 권리를 보유하며, 자동 안전 검수와
+                  신고·권리 요청 결과에 따라 공개가 제한될 수 있음을 확인합니다.
                 </span>
               </label>
             ) : null}
