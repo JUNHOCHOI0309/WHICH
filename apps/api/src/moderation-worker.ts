@@ -1,6 +1,19 @@
 import { setTimeout as wait } from "node:timers/promises";
 
 import { z } from "zod";
+import { and, eq, isNull, sql } from "drizzle-orm";
+import {
+  members,
+  memberMediaConsents,
+  memberCapabilityGrants,
+  memberIssueSubmissions,
+} from "./database/schema/index.js";
+import {
+  autoPublicationConfig,
+  createAutoPublicationService,
+} from "./modules/issue-media/auto-publication.js";
+import { withModerationWorkerLock } from "./modules/moderation-dispatch/worker-lock.js";
+import { POLICY_JUDGE_CONSENT_VERSION } from "./modules/policy-judge/contracts.js";
 
 import { createPolicyJudgeService } from "./modules/policy-judge/service.js";
 import { judgeDiagnostic, policyJudgeConfig } from "./modules/policy-judge/contracts.js";
@@ -52,6 +65,10 @@ const providerConfig = moderationProviderRuntimeConfig();
 const mediaConfig = issueMediaStorageConfig();
 const mediaStorage = mediaConfig ? createR2IssueMediaStorage(mediaConfig) : null;
 const scannerConfig = localMediaScannerConfig();
+const autoConfig = autoPublicationConfig();
+const pilotRuntime = process.env.MODERATION_WORKER_ENABLED === "true";
+if (pilotRuntime && autoConfig.ISSUE_MEDIA_AUTO_PUBLICATION_MEMBER_IDS.length === 0)
+  throw new Error("MODERATION_WORKER_PILOT_COHORT_REQUIRED");
 if (
   scannerConfig.enabled &&
   config.MODERATION_WORKER_LEASE_MS <
@@ -61,7 +78,7 @@ if (
     "MODERATION_WORKER_LEASE_MS must cover two local scans, the provider timeout, and 5000ms completion margin.",
   );
 }
-const resolveProviderInput = createModerationProviderInputResolver({
+const resolveRawInput = createModerationProviderInputResolver({
   database: database.db,
   storage: mediaStorage,
   extractEmbeddedText: createLocalEmbeddedTextExtractor({
@@ -73,6 +90,58 @@ const resolveProviderInput = createModerationProviderInputResolver({
     execArgv: import.meta.url.endsWith(".ts") ? ["--import", "tsx"] : [],
   }),
 });
+async function requirePilotAccess(target: Parameters<typeof resolveRawInput>[0]) {
+  if (!pilotRuntime) return;
+  if (target.targetType !== "ISSUE_VERSION") throw new Error("PILOT_SUBMISSION_REQUIRED");
+  const [row] = await database.db
+    .select({ memberId: members.id })
+    .from(memberIssueSubmissions)
+    .innerJoin(members, eq(members.id, memberIssueSubmissions.memberId))
+    .innerJoin(
+      memberMediaConsents,
+      and(
+        eq(memberMediaConsents.memberId, members.id),
+        eq(memberMediaConsents.consentVersion, POLICY_JUDGE_CONSENT_VERSION),
+        isNull(memberMediaConsents.revokedAt),
+      ),
+    )
+    .innerJoin(
+      memberCapabilityGrants,
+      and(
+        eq(memberCapabilityGrants.memberId, members.id),
+        eq(memberCapabilityGrants.capabilityCode, "ISSUE_IMAGE_UPLOAD"),
+        eq(memberCapabilityGrants.state, "ACTIVE"),
+        sql`${memberCapabilityGrants.expiresAt} > now()`,
+      ),
+    )
+    .where(
+      and(
+        eq(memberIssueSubmissions.id, target.targetId),
+        eq(memberIssueSubmissions.revision, target.targetVersion),
+        eq(memberIssueSubmissions.contentHash, target.normalizedInputHash),
+        eq(memberIssueSubmissions.status, "PENDING"),
+        isNull(memberIssueSubmissions.publishedIssueId),
+        eq(members.status, "ACTIVE"),
+      ),
+    )
+    .limit(1);
+  if (!row || !autoConfig.ISSUE_MEDIA_AUTO_PUBLICATION_MEMBER_IDS.includes(row.memberId))
+    throw new Error("PILOT_ACCESS_REQUIRED");
+}
+const resolveProviderInput: typeof resolveRawInput = async (target) => {
+  await requirePilotAccess(target);
+  const input = await resolveRawInput(target);
+  if (
+    pilotRuntime &&
+    (input.scope !== "SUBMISSION_REVISION" ||
+      input.images?.length !== 2 ||
+      input.embeddedText?.images.length !== 2 ||
+      input.embeddedText.images.some((image) => image.status !== "COMPLETE"))
+  )
+    throw new Error("COMPLETE_PRIVATE_LOCAL_SCAN_REQUIRED");
+  await requirePilotAccess(target);
+  return input;
+};
 const adapter =
   providerConfig.MODERATION_PROVIDER === "OPENAI_MODERATION" && providerConfig.OPENAI_API_KEY
     ? createOpenAiModerationAdapter({
@@ -81,7 +150,7 @@ const adapter =
         timeoutMs: providerConfig.OPENAI_MODERATION_TIMEOUT_MS,
         resolveInput: resolveProviderInput,
         embeddedTextEnabled: scannerConfig.enabled,
-        cacheProfile: `${EMBEDDED_TEXT_VERSION}:${LOCAL_SCAN_VERSION}:${scannerConfig.enabled ? "LOCAL" : "OFF"}`,
+        cacheProfile: `${EMBEDDED_TEXT_VERSION}:${LOCAL_SCAN_VERSION}:${scannerConfig.enabled ? "LOCAL" : "OFF"}:private-pilot-v1`,
       })
     : null;
 const worker = createModerationDispatcherService(database.db, adapter, {
@@ -92,6 +161,10 @@ const worker = createModerationDispatcherService(database.db, adapter, {
   retryMaxMilliseconds: config.MODERATION_WORKER_RETRY_MAX_MS,
   providerGate: createModerationProviderGate({ database: database.db, config: providerConfig }),
   publicationEvidence,
+  submissionMemberIds: pilotRuntime
+    ? autoConfig.ISSUE_MEDIA_AUTO_PUBLICATION_MEMBER_IDS
+    : undefined,
+  deferProviderGate: true,
 });
 
 const judgeConfig = policyJudgeConfig();
@@ -101,20 +174,55 @@ const policyJudge = createPolicyJudgeService({
   provider: providerConfig,
   resolveInput: resolveProviderInput,
 });
+const autoPublication = createAutoPublicationService({
+  database: database.db,
+  storage: mediaStorage,
+  config: autoConfig,
+  judge: policyJudge,
+  safetyModel: providerConfig.OPENAI_MODERATION_MODEL,
+  resolveInput: resolveProviderInput,
+  runtimeAllowed: () =>
+    pilotRuntime &&
+    scannerConfig.enabled &&
+    process.env.ISSUE_MEMBER_MEDIA_UPLOAD_MODE === "PILOT" &&
+    process.env.FEATURE_ISSUE_MEDIA_ENABLED === "true" &&
+    judgeDiagnostic(judgeConfig, providerConfig).allowed,
+});
 
 async function once() {
-  const dispatched = await worker.dispatchBatch();
-  const processed = await worker.processBatch();
-  const policyJudgeShadow = await policyJudge.runBatch().catch(() => ({
-    status: "ERROR",
-    reason: "POLICY_JUDGE_WORKER_FAILED",
-    publicationChanged: false,
-  }));
-  return { dispatched, processed, policyJudgeShadow };
+  return withModerationWorkerLock(database.db, async () => {
+    const dispatched = await worker.dispatchBatch();
+    const processed = await worker.processBatch();
+    const policyJudgeShadow = await policyJudge.runBatch().catch(() => ({
+      status: "ERROR",
+      reason: "POLICY_JUDGE_WORKER_FAILED",
+      publicationChanged: false,
+    }));
+    const automaticPublication = await autoPublication.runBatch();
+    return { dispatched, processed, policyJudgeShadow, automaticPublication };
+  });
 }
 
 async function main() {
   const command = process.argv[2] ?? "once";
+  if (command === "diagnose-runtime") {
+    console.log(
+      JSON.stringify(
+        {
+          workerEnabled: pilotRuntime,
+          localScannerEnabled: scannerConfig.enabled,
+          cohortSize: autoConfig.ISSUE_MEDIA_AUTO_PUBLICATION_MEMBER_IDS.length,
+          autoPublicationEnabled: autoPublication.enabled(),
+          mode: autoConfig.ISSUE_MEDIA_AUTO_PUBLICATION_MODE,
+          judge: judgeDiagnostic(judgeConfig, providerConfig),
+          provider: providerRuntimeDiagnostic(providerConfig),
+        },
+        null,
+        2,
+      ),
+    );
+    return;
+  }
   if (command === "diagnose-policy-judge") {
     console.log(JSON.stringify(judgeDiagnostic(judgeConfig, providerConfig), null, 2));
     return;
@@ -152,10 +260,20 @@ async function main() {
     return;
   }
   if (command === "run") {
-    while (true) {
-      console.log(JSON.stringify(await once()));
-      await wait(config.MODERATION_WORKER_POLL_MS);
+    const controller = new AbortController();
+    for (const signal of ["SIGINT", "SIGTERM"] as const)
+      process.once(signal, () => controller.abort());
+    while (!controller.signal.aborted) {
+      try {
+        console.log(JSON.stringify(await once()));
+      } catch {
+        console.error(JSON.stringify({ status: "ERROR", reason: "MODERATION_BATCH_FAILED" }));
+      }
+      await wait(config.MODERATION_WORKER_POLL_MS, undefined, { signal: controller.signal }).catch(
+        () => {},
+      );
     }
+    return;
   }
   if (command === "dead-letters") {
     console.log(
@@ -180,8 +298,8 @@ async function main() {
 }
 
 main()
-  .catch((error) => {
-    console.error(error);
+  .catch(() => {
+    console.error("MODERATION_WORKER_FAILED");
     process.exitCode = 1;
   })
   .finally(() => database.close());

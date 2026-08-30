@@ -35,6 +35,8 @@
     "outbox:worker": "tsx src/outbox-worker.ts run",
     "moderation:once": "tsx src/moderation-worker.ts once",
     "moderation:worker": "tsx src/moderation-worker.ts run",
+    "moderation:worker:prod": "node dist/moderation-worker.js run",
+    "moderation:diagnose-runtime": "tsx src/moderation-worker.ts diagnose-runtime",
     "moderation:dead-letters": "tsx src/moderation-worker.ts dead-letters",
     "moderation:requeue": "tsx src/moderation-worker.ts requeue",
     "moderation:reconcile-media": "tsx src/moderation-worker.ts reconcile-media",

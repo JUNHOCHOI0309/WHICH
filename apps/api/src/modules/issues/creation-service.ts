@@ -361,10 +361,12 @@ async function recordSubmissionTransition(
   });
 }
 
-// Reuse only human-approved, public assets. Shadow findings never grant publication authority.
-async function publishReviewedSubmission(
+// Callers must establish separate human or explicit pilot execution authority first.
+// A provider SHADOW result alone is never authorization.
+export async function publishReviewedSubmission(
   transaction: Transaction,
   current: SubmissionRow,
+  action = "REVIEWED_MEDIA_PUBLISHED",
 ): Promise<SubmissionRow> {
   if (
     current.status !== "PENDING" ||
@@ -442,7 +444,7 @@ async function publishReviewedSubmission(
     })
     .where(eq(memberIssueSubmissions.id, current.id))
     .returning();
-  await recordSubmissionTransition(transaction, updated!, "REVIEWED_MEDIA_PUBLISHED");
+  await recordSubmissionTransition(transaction, updated!, action);
   return updated!;
 }
 

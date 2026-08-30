@@ -3,10 +3,10 @@ import { spawn } from "node:child_process";
 const pnpm = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 const apiPort = process.env.API_PORT ?? "4000";
 
-function start(name, args, environment) {
-  const child = spawn(pnpm, args, {
+function start(name, args, environment, executable = pnpm) {
+  const child = spawn(executable, args, {
     env: { ...process.env, ...environment },
-    shell: process.platform === "win32",
+    shell: process.platform === "win32" && executable === pnpm,
     stdio: "inherit",
   });
   child.serviceName = name;
@@ -22,6 +22,10 @@ const services = [
     API_BASE_URL: `http://127.0.0.1:${apiPort}`,
   }),
   start("points", ["--filter", "@which/api", "points:worker:prod"], {}),
+  ...(process.env.MODERATION_WORKER_ENABLED === "true"
+    ? // Avoid another package-manager process; deliver shutdown signals directly to the worker.
+      [start("moderation", ["apps/api/dist/moderation-worker.js", "run"], {}, process.execPath)]
+    : []),
 ];
 
 let shuttingDown = false;

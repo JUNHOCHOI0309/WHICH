@@ -134,7 +134,17 @@ export function createLocalEmbeddedTextExtractor(options: ScannerOptions) {
     if (!("embeddedText" in output))
       return { version: EMBEDDED_TEXT_VERSION, status: "UNAVAILABLE", text: "" };
     const text = output.embeddedText;
+    if (text.status === "UNAVAILABLE") return text;
     if (output.scan.ocr.piiKinds.length) return { ...text, status: "WITHHELD_PII", text: "" };
+    // Codes are an unreviewed external destination; incomplete detection is not a clean scan.
+    if (
+      output.scan.failureCode ||
+      output.scan.qr.status !== "COMPLETE" ||
+      output.scan.barcode.status !== "COMPLETE" ||
+      output.scan.qr.detected ||
+      output.scan.barcode.detected
+    )
+      return { ...text, status: "PARTIAL" };
     if (output.scan.ocr.status !== "COMPLETE" && text.status === "COMPLETE")
       return { ...text, status: "PARTIAL" };
     return text;
