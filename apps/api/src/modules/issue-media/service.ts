@@ -467,6 +467,7 @@ export function createIssueMediaService(
           width: processed.output.width,
           height: processed.output.height,
           exifRetained: false,
+          optimization: processed.optimization,
         },
       },
       {

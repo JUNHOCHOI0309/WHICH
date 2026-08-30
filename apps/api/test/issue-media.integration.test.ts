@@ -348,6 +348,21 @@ describe("operator Issue media foundation", () => {
       publishedUrl: null,
     });
     expect(storage.operations).toContain(`stage:${asset.id}`);
+    const [normalization] = await database.db
+      .select({ evidence: issueMediaRuleFindings.evidence })
+      .from(issueMediaRuleFindings)
+      .where(
+        and(
+          eq(issueMediaRuleFindings.mediaAssetId, asset.id),
+          eq(issueMediaRuleFindings.code, "MEDIA_NORMALIZED_WEBP_READY"),
+        ),
+      );
+    expect(normalization?.evidence.optimization).toMatchObject({
+      policyVersion: "which-issue-media-webp-v2",
+      maxOutputEdge: 1280,
+      encoding: "LOSSLESS",
+      quality: null,
+    });
     const findings = await database.db
       .select({ code: issueMediaRuleFindings.code })
       .from(issueMediaRuleFindings)

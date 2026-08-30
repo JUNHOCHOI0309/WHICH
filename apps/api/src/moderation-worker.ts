@@ -2,6 +2,9 @@ import { setTimeout as wait } from "node:timers/promises";
 
 import { z } from "zod";
 
+import { createPolicyJudgeService } from "./modules/policy-judge/service.js";
+import { judgeDiagnostic, policyJudgeConfig } from "./modules/policy-judge/contracts.js";
+
 import { createDatabase } from "./database/client.js";
 import {
   createLocalEmbeddedTextExtractor,
@@ -91,14 +94,40 @@ const worker = createModerationDispatcherService(database.db, adapter, {
   publicationEvidence,
 });
 
+const judgeConfig = policyJudgeConfig();
+const policyJudge = createPolicyJudgeService({
+  database: database.db,
+  config: judgeConfig,
+  provider: providerConfig,
+  resolveInput: resolveProviderInput,
+  consentVersion: config.ISSUE_MEDIA_CONSENT_VERSION,
+});
+
 async function once() {
   const dispatched = await worker.dispatchBatch();
   const processed = await worker.processBatch();
-  return { dispatched, processed };
+  const policyJudgeShadow = await policyJudge.runBatch().catch(() => ({
+    status: "ERROR",
+    reason: "POLICY_JUDGE_WORKER_FAILED",
+    publicationChanged: false,
+  }));
+  return { dispatched, processed, policyJudgeShadow };
 }
 
 async function main() {
   const command = process.argv[2] ?? "once";
+  if (command === "diagnose-policy-judge") {
+    console.log(JSON.stringify(judgeDiagnostic(judgeConfig, providerConfig), null, 2));
+    return;
+  }
+  if (command === "policy-judge-summary") {
+    console.log(JSON.stringify(await policyJudge.summary(), null, 2));
+    return;
+  }
+  if (command === "policy-judge-once") {
+    console.log(JSON.stringify(await policyJudge.runBatch(), null, 2));
+    return;
+  }
   if (command === "diagnose-publication") {
     const submissionId = z.uuid().parse(process.argv[3]);
     console.log(

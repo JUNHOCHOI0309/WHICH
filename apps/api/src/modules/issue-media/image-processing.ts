@@ -6,7 +6,12 @@ import type { IssueMediaInputMimeType } from "./contracts.js";
 
 const MAX_INPUT_BYTES = 10 * 1024 * 1024;
 const MAX_INPUT_PIXELS = 40_000_000;
-const MAX_OUTPUT_EDGE = 1600;
+export const ISSUE_MEDIA_PROCESSING_POLICY = {
+  version: "which-issue-media-webp-v2",
+  maxOutputEdge: 1280,
+  quality: 82,
+  effort: 5,
+} as const;
 const MAX_PROCESSING_MILLISECONDS = 10_000;
 const MAX_CONCURRENT_PROCESSING = 2;
 let activeProcessing = 0;
@@ -61,10 +66,14 @@ export async function processIssueMedia(input: Buffer, declaredMimeType: IssueMe
     );
   }
   activeProcessing += 1;
+  // A timed-out caller must not release the native processing slot prematurely.
+  const processing = processBoundedIssueMedia(input, declaredMimeType).finally(() => {
+    activeProcessing -= 1;
+  });
   let timeout: NodeJS.Timeout | undefined;
   try {
     return await Promise.race([
-      processBoundedIssueMedia(input, declaredMimeType),
+      processing,
       new Promise<never>((_, reject) => {
         timeout = setTimeout(
           () =>
@@ -81,7 +90,6 @@ export async function processIssueMedia(input: Buffer, declaredMimeType: IssueMe
     ]);
   } finally {
     if (timeout) clearTimeout(timeout);
-    activeProcessing -= 1;
   }
 }
 
@@ -103,27 +111,54 @@ async function processBoundedIssueMedia(input: Buffer, declaredMimeType: IssueMe
       );
     }
 
-    const output = await source
+    // Decode/orient/resize once. Both encoders use the same bounded pixels,
+    // never a lossy intermediate and never a mobile/desktop crop.
+    const normalized = await source
       .rotate()
       .resize({
-        width: MAX_OUTPUT_EDGE,
-        height: MAX_OUTPUT_EDGE,
+        width: ISSUE_MEDIA_PROCESSING_POLICY.maxOutputEdge,
+        height: ISSUE_MEDIA_PROCESSING_POLICY.maxOutputEdge,
         fit: "inside",
         withoutEnlargement: true,
       })
-      .webp({ quality: 84, effort: 5, smartSubsample: true })
+      .toColourspace("srgb")
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    const raw = {
+      width: normalized.info.width,
+      height: normalized.info.height,
+      channels: normalized.info.channels,
+    };
+    let output = await sharp(normalized.data, { raw })
+      .webp({
+        quality: ISSUE_MEDIA_PROCESSING_POLICY.quality,
+        effort: ISSUE_MEDIA_PROCESSING_POLICY.effort,
+        smartSubsample: true,
+        alphaQuality: 100,
+      })
       .toBuffer();
-    const outputMetadata = await sharp(output).metadata();
-    if (!outputMetadata.width || !outputMetadata.height) {
-      throw new IssueMediaProcessingError(
-        "MEDIA_PROCESSING_FAILED",
-        "The normalized image dimensions could not be read.",
-      );
+    let encoding: "LOSSY" | "LOSSLESS" = "LOSSY";
+    // Flat graphics and transparent screenshots can be smaller AND sharper
+    // losslessly. Never spend extra storage when that candidate is larger.
+    if (detectedMimeType !== "image/jpeg") {
+      const lossless = await sharp(normalized.data, { raw })
+        .webp({ lossless: true, effort: ISSUE_MEDIA_PROCESSING_POLICY.effort })
+        .toBuffer();
+      if (lossless.byteLength <= output.byteLength) {
+        output = lossless;
+        encoding = "LOSSLESS";
+      }
     }
     return {
       body: output,
       sha256: createHash("sha256").update(input).digest("hex"),
       perceptualHash: await perceptualDifferenceHash(output),
+      optimization: {
+        policyVersion: ISSUE_MEDIA_PROCESSING_POLICY.version,
+        maxOutputEdge: ISSUE_MEDIA_PROCESSING_POLICY.maxOutputEdge,
+        quality: encoding === "LOSSLESS" ? null : ISSUE_MEDIA_PROCESSING_POLICY.quality,
+        encoding,
+      },
       input: {
         mimeType: detectedMimeType,
         byteSize: input.byteLength,
@@ -133,8 +168,8 @@ async function processBoundedIssueMedia(input: Buffer, declaredMimeType: IssueMe
       output: {
         mimeType: "image/webp" as const,
         byteSize: output.byteLength,
-        width: outputMetadata.width,
-        height: outputMetadata.height,
+        width: normalized.info.width,
+        height: normalized.info.height,
       },
     };
   } catch (error) {
