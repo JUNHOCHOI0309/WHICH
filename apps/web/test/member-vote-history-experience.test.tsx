@@ -117,7 +117,7 @@ describe("Member vote history experience", () => {
       }),
     );
 
-    render(<MemberVoteHistoryExperience />);
+    render(<MemberVoteHistoryExperience creationEnabled />);
 
     expect(
       await screen.findByRole("heading", { name: "기록 회원님의 선택 기록" }, { timeout: 5_000 }),
@@ -127,6 +127,10 @@ describe("Member vote history experience", () => {
     expect(screen.getAllByLabelText("현재 결과 A 60%, B 40%")).toHaveLength(2);
     expect(screen.getByText("A · 바로 하기")).toBeVisible();
     expect(screen.getByRole("link", { name: "투표 기록" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "내 질문" })).toHaveAttribute(
+      "href",
+      "/me/submissions",
+    );
     const pointRail = screen.getByRole("complementary", { name: "WHICH 안내" });
     expect(await screen.findByText("120P")).toBeVisible();
     expect(pointRail).toContainElement(screen.getByRole("heading", { name: "나의 W Point" }));

@@ -1,4 +1,5 @@
 .page {
+  min-width: 0;
   display: grid;
   gap: 22px;
   padding-bottom: 52px;
@@ -84,36 +85,10 @@
   background: var(--which-cyan);
 }
 
-.profileTabs {
-  border: 1px solid var(--which-border);
-  border-radius: 14px;
-  background: var(--which-surface);
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  padding: 6px;
-}
-
-.profileTabs a {
-  min-height: 44px;
-  border-radius: 10px;
-  color: var(--which-text-secondary);
-  display: grid;
-  place-items: center;
-  font-size: 0.82rem;
-  font-weight: 900;
-  text-decoration: none;
-}
-
-.profileTabs a:focus-visible,
 .timelineItem > a:focus-visible,
 .moreButton:focus-visible {
   outline: 3px solid color-mix(in srgb, var(--which-cyan) 40%, transparent);
   outline-offset: 2px;
-}
-
-.profileTabs .profileTabActive {
-  background: var(--which-cyan-soft);
-  color: var(--which-cyan-strong);
 }
 
 .monthList {
@@ -171,6 +146,7 @@
 .voteMeta {
   color: var(--which-text-tertiary);
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
   font-size: 0.64rem;
   font-weight: 850;
@@ -183,6 +159,7 @@
   letter-spacing: -0.025em;
   line-height: 1.45;
   word-break: keep-all;
+  overflow-wrap: anywhere;
 }
 
 .voteCopy p {

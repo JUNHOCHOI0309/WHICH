@@ -6,8 +6,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { WhichShell } from "@/components/layout/which-shell";
 import type { MemberPrivateProfile, MemberPrivateVote } from "@/lib/contracts";
 
-import styles from "./member-vote-history-experience.module.css";
+import styles from "./member-history-layout.module.css";
 import { MemberPointPanel } from "./member-point-panel";
+import { MemberProfileTabs } from "./member-profile-tabs";
 
 type Screen = "loading" | "guest" | "ready" | "error";
 
@@ -176,12 +177,7 @@ export function MemberVoteHistoryExperience({
               </div>
             </header>
 
-            <nav className={styles.profileTabs} aria-label="내 기록 메뉴">
-              <Link href="/me">프로필</Link>
-              <Link aria-current="page" className={styles.profileTabActive} href="/me/votes">
-                투표 기록
-              </Link>
-            </nav>
+            <MemberProfileTabs active="votes" creationEnabled={creationEnabled} />
 
             {groups.length === 0 ? (
               <section className={styles.empty}>

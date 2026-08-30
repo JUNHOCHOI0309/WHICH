@@ -10,6 +10,7 @@ import { logoutMemberSession, MEMBER_LOGOUT_ERROR } from "@/lib/member-session";
 import { avatarFrameStyle, equippedShopItem, profileAccentStyle } from "@/lib/point-shop-cosmetics";
 
 import styles from "./member-profile-experience.module.css";
+import { MemberProfileTabs } from "./member-profile-tabs";
 import { MemberPointPanel } from "./member-point-panel";
 import { MemberPublicProfileSettings } from "./member-public-profile-settings";
 import { MemberAvatarSettings } from "./member-avatar-settings";
@@ -237,13 +238,7 @@ export function MemberProfileExperience({
               </div>
             </section>
 
-            <nav className={styles.profileTabs} aria-label="내 기록 메뉴">
-              <Link aria-current="page" className={styles.profileTabActive} href="/me">
-                프로필
-              </Link>
-              <Link href="/me/votes">투표 기록</Link>
-              {creationEnabled ? <Link href="/me/submissions">내 질문</Link> : null}
-            </nav>
+            <MemberProfileTabs active="profile" creationEnabled={creationEnabled} />
 
             <MemberPublicProfileSettings
               value={profile.publicProfile}
