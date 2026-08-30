@@ -26,7 +26,10 @@ import {
   OPENAI_IMAGE_LABELS,
   OPENAI_TEXT_LABELS,
 } from "../src/modules/moderation-providers/openai-coverage.js";
-import { MODERATION_POLICY_VERSION } from "../src/modules/moderation-dispatch/contracts.js";
+import {
+  MODERATION_POLICY_VERSION,
+  createModerationSubmissionEvents,
+} from "../src/modules/moderation-dispatch/contracts.js";
 import { createModerationDispatcherService } from "../src/modules/moderation-dispatch/service.js";
 import { withModerationWorkerLock } from "../src/modules/moderation-dispatch/worker-lock.js";
 
@@ -404,6 +407,17 @@ describe("explicit image publication pilot", () => {
   });
   it("keeps a capped provider run pending and does not process non-cohort tasks", async () => {
     const f = await fixture();
+    await f.db.insert(schema.outboxEvents).values(
+      createModerationSubmissionEvents({
+        targetType: "ISSUE_VERSION",
+        targetId: f.submission.id,
+        targetVersion: 1,
+        normalizedInputHash: f.submission.contentHash,
+        privateObjectReference: f.target.snapshotReference,
+        reason: "CREATE",
+        occurredAt: new Date(0),
+      }).rows.map((r) => ({ ...r, availableAt: new Date(0) })),
+    );
     await f.db
       .update(schema.moderationRuns)
       .set({ status: "PENDING", availableAt: new Date(0) })
@@ -424,6 +438,18 @@ describe("explicit image publication pilot", () => {
       deferProviderGate: true,
       providerGate: () => ({ allowed: false, reason: "DAILY_CALL_CAP_REACHED" }),
     };
+    expect(
+      await createModerationDispatcherService(f.db, adapter, {
+        ...opts,
+        submissionMemberIds: [],
+      }).dispatchBatch(),
+    ).toMatchObject({ claimed: 0 });
+    expect(
+      await createModerationDispatcherService(f.db, adapter, {
+        ...opts,
+        submissionMemberIds: [f.member.id],
+      }).dispatchBatch(),
+    ).toMatchObject({ claimed: 1 });
     expect(
       await createModerationDispatcherService(f.db, adapter, {
         ...opts,

@@ -408,6 +408,17 @@ export function createModerationDispatcherService(
             eq(outboxEvents.status, "PENDING"),
             eq(outboxEvents.eventType, "MODERATION_REQUESTED"),
             lte(outboxEvents.availableAt, claimedAt),
+            options.submissionMemberIds
+              ? sql`exists (
+              select 1 from ${memberIssueSubmissions} s
+              where s.submission_id::text = ${outboxEvents.payload}->'data'->>'target_id'
+                and ${outboxEvents.payload}->'data'->>'target_type' = 'ISSUE_VERSION'
+                and s.revision::text = ${outboxEvents.payload}->'data'->>'target_version'
+                and s.status = 'PENDING' and s.published_issue_id is null
+                and s.media_asset_a_id is not null and s.media_asset_b_id is not null
+                and ${inArray(sql`s.member_id`, options.submissionMemberIds)}
+            )`
+              : undefined,
           ),
         )
         .orderBy(asc(outboxEvents.occurredAt), asc(outboxEvents.id))
