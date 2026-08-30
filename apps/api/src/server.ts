@@ -17,6 +17,10 @@ import { createOpsDashboardService } from "./modules/operations/service.js";
 import { createOpsModerationQueueService } from "./modules/operations/moderation-queue-service.js";
 import { createIssueMediaService } from "./modules/issue-media/service.js";
 import type { IssueMediaRuleGateMode } from "./modules/issue-media/upload-gate-policy.js";
+import {
+  createLocalMediaSignalDetector,
+  localMediaScannerConfig,
+} from "./modules/issue-media/local-scan-detector.js";
 import { createIssueMediaUploadGateService } from "./modules/issue-media/upload-gate-service.js";
 import { createIssueMediaReviewService } from "./modules/issue-media/review-service.js";
 import {
@@ -55,6 +59,14 @@ const issueMediaRuleGateMode: IssueMediaRuleGateMode = ["OFF", "SHADOW", "ENFORC
 const issueMediaService = issueMediaStorage
   ? createIssueMediaService(database.db, issueMediaStorage, {
       ruleGateMode: issueMediaRuleGateMode,
+      localSignalDetector: createLocalMediaSignalDetector({
+        ...localMediaScannerConfig(),
+        workerUrl: new URL(
+          import.meta.url.endsWith(".ts") ? "./local-media-scanner.ts" : "./local-media-scanner.js",
+          import.meta.url,
+        ),
+        ...(import.meta.url.endsWith(".ts") ? { execArgv: ["--import", "tsx"] } : {}),
+      }),
     })
   : null;
 const commentService = createCommentService(database.db);

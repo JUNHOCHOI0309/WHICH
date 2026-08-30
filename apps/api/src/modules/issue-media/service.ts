@@ -428,6 +428,17 @@ export function createIssueMediaService(
       policyVersion: ISSUE_MEDIA_RULE_POLICY_VERSION,
       ruleGateMode,
       detectorVersion: detector?.detectorVersion ?? null,
+      ...(detector
+        ? {
+            scanStatus: {
+              qr: detector.qr.status,
+              barcode: detector.barcode.status,
+              ocr: detector.ocr.status,
+              visual: detector.visual.status,
+            },
+            scanFailureCode: detector.failureCode ?? null,
+          }
+        : {}),
       processingRegion: "LOCAL",
     };
     const canonicalFindings = [
