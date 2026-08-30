@@ -12,6 +12,10 @@ import {
   type ModerationDecisionRuntime,
 } from "../src/modules/moderation/decision-engine.js";
 import { moderationDecisionRuntime } from "../src/modules/moderation/decision-runtime.js";
+import {
+  PROVISIONAL_EVIDENCE_VERSION,
+  PROVISIONAL_REQUIRED_CHECKS,
+} from "../src/modules/moderation/provisional-evidence.js";
 
 const activeRuntime: ModerationDecisionRuntime = {
   mode: "LIMITED_ACTION",
@@ -53,7 +57,7 @@ const baseRequest: ModerationDecisionRequest = {
       supported: true,
     },
   ],
-  normalizedInputHash: "graphic-violence-fixture",
+  normalizedInputHash: "a".repeat(64),
   previousAction: "ALLOW",
   evaluatedAt: new Date("2026-08-29T00:00:00.000Z"),
 };
@@ -199,11 +203,25 @@ describe("moderation decision engine", () => {
       slice: "LOW_RISK_ISSUE_MEDIA",
       cohort: "trusted-beta",
       assetType: "OPTION_IMAGE",
+      provisionalEvidence: {
+        version: PROVISIONAL_EVIDENCE_VERSION,
+        checks: PROVISIONAL_REQUIRED_CHECKS.map((check) => ({
+          check,
+          status: "PASS",
+          evidenceId: `internal-proof-${check}`,
+          inputHash: baseRequest.normalizedInputHash,
+          policyVersion: "1.0.0",
+          sourceVersion: "synthetic-test-resolver-v1",
+          observedAt: "2026-08-28T23:00:00Z",
+          validUntil: "2026-08-30T00:00:00Z",
+        })),
+      },
       signals: [
         {
           ...baseRequest.signals[0]!,
           label: "NO_POLICY_VIOLATION",
           score: 0.999,
+          evidenceIds: ["independent-test-evidence-a", "independent-test-evidence-b"],
         },
       ],
     };
@@ -225,6 +243,80 @@ describe("moderation decision engine", () => {
       automaticExpiryAction: "PRIVATE_PENDING",
       expiresAt: "2026-08-29T06:00:00.000Z",
     });
+
+    const enabledRuntime = {
+      ...activeRuntime,
+      provisionalReleaseApproved: true,
+      provisionalCohorts: ["trusted-beta"],
+      provisionalAssetTypes: ["OPTION_IMAGE"],
+    };
+    const proof = request.provisionalEvidence!;
+    const invalidProofs: Array<[ModerationDecisionRequest["provisionalEvidence"], string]> = [
+      [undefined, "MISSING_PUBLICATION_CHECKS"],
+      [{ ...proof, checks: proof.checks.slice(1) }, "MISSING_PUBLICATION_CHECKS"],
+      [
+        { ...proof, checks: proof.checks.map(() => proof.checks[0]!) },
+        "MISSING_PUBLICATION_CHECKS",
+      ],
+      ...[
+        { status: "UNAVAILABLE" as const },
+        { status: "REVIEW" as const },
+        { inputHash: "b".repeat(64) },
+        { policyVersion: "old" },
+        { sourceVersion: "" },
+        { validUntil: "2026-08-28T00:00:00Z" },
+        { observedAt: "2026-08-30T00:00:00Z" },
+      ].map((change): [typeof proof, string] => [
+        {
+          ...proof,
+          checks: proof.checks.map((entry, index) => (index ? entry : { ...entry, ...change })),
+        },
+        "INVALID_PUBLICATION_EVIDENCE",
+      ]),
+    ];
+    for (const [provisionalEvidence, code] of invalidProofs) {
+      const result = evaluateModerationDecision({
+        request: { ...request, provisionalEvidence },
+        runtime: enabledRuntime,
+      });
+      expect(result.action).toBe("PRIVATE_PENDING");
+      expect(result.rejectionCodes).toContain(code);
+    }
+    for (const provisionalTtlSeconds of [0, -1, 1.5, Infinity]) {
+      expect(
+        evaluateModerationDecision({
+          request,
+          runtime: { ...enabledRuntime, provisionalTtlSeconds },
+        }).rejectionCodes,
+      ).toContain("INVALID_PUBLICATION_TTL");
+    }
+    expect(
+      evaluateModerationDecision({
+        request: {
+          ...request,
+          provisionalEvidence: {
+            ...proof,
+            checks: proof.checks.map((entry) => ({ ...entry, validUntil: "2026-08-29T01:00:00Z" })),
+          },
+        },
+        runtime: enabledRuntime,
+      }).expiresAt,
+    ).toBe("2026-08-29T01:00:00.000Z");
+    for (const signals of [
+      [{ ...request.signals[0]!, evidenceIds: ["same", "same"] }],
+      [{ ...request.signals[0]!, evidenceIds: [] }],
+    ]) {
+      expect(
+        evaluateModerationDecision({ request: { ...request, signals }, runtime: enabledRuntime })
+          .rejectionCodes,
+      ).toContain("DUPLICATE_PUBLICATION_EVIDENCE");
+    }
+    expect(
+      evaluateModerationDecision({
+        request: { ...request, signals: [...request.signals, baseRequest.signals[0]!] },
+        runtime: enabledRuntime,
+      }).rejectionCodes,
+    ).toContain("CONFLICTING_PUBLICATION_SIGNAL");
   });
 
   it("honors category flags, canary, budgets, human-only boundaries and the kill switch", () => {

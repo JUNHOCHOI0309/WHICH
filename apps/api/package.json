@@ -39,6 +39,7 @@
     "moderation:requeue": "tsx src/moderation-worker.ts requeue",
     "moderation:reconcile-media": "tsx src/moderation-worker.ts reconcile-media",
     "moderation:diagnose-provider": "tsx src/moderation-worker.ts diagnose-provider",
+    "moderation:diagnose-publication": "tsx src/moderation-worker.ts diagnose-publication",
     "moderation:evaluate:seed": "tsx src/moderation-evaluator.ts seed",
     "moderation:evaluate:validate": "tsx src/moderation-evaluator.ts validate",
     "moderation:evaluate:smoke": "tsx src/moderation-evaluator.ts smoke",

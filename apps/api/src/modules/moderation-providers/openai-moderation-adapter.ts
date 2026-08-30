@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { openAiCoverage } from "./openai-coverage.js";
 
 import type { ModerationShadowAdapter } from "../moderation-dispatch/contracts.js";
 import {
@@ -191,6 +192,7 @@ export function createOpenAiModerationAdapter(
           abstained: signals.length === 0,
           providerDisagreement: null,
           capabilities: { boundingBoxes: false },
+          modalityCoverage: openAiCoverage(signals),
           publicationChanged: false,
         },
       };

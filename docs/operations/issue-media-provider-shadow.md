@@ -95,6 +95,18 @@ content requires a separate authorized, current-revision recheck under the norma
 
 ## Verification
 
+### Per-modality coverage and publication readiness (2026-08-30)
+
+Normalized OpenAI results and asset capability findings now include `modalityCoverage`, intersecting
+the pinned model's documented support with observed `category_applied_input_types`. Text-only
+categories are never presented as image coverage. Partial responses remain useful observations
+but cannot count as complete inspection. No calibrated clear score is derived from low risk scores.
+Submission Runs additionally record non-authoritative `publicationReadiness`; see the
+[read-only diagnostic and limitations](./issue-media-publication-readiness.md).
+Neither field enables publication, sanctions, extra Provider calls, or production flags.
+
+### Test coverage
+
 - adapter contract tests assert the exact mixed text/image request shape and model snapshot;
 - mapper tests prove malformed or text-only outputs cannot create image findings;
 - integration tests prove successful Shadow output is appended to the existing Ops finding stream;
