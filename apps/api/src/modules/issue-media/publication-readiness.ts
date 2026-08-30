@@ -18,6 +18,8 @@ export type ReadinessAsset = {
   rightsState: string;
 };
 export type ReadinessFinding = {
+  id?: string;
+  createdAt?: Date;
   mediaAssetId: string | null;
   stage: string;
   code: string;
@@ -30,6 +32,7 @@ export type PublicationReadinessInput = {
   inputHash: string;
   runStatus: string;
   runMode: string;
+  runPolicyVersion?: string;
   providerResult: Record<string, unknown>;
   submission: {
     id: string;

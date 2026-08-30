@@ -10,6 +10,7 @@ import {
 import { LOCAL_SCAN_VERSION } from "./modules/issue-media/local-scan-contract.js";
 import { EMBEDDED_TEXT_VERSION } from "./modules/issue-media/embedded-text.js";
 import { readLatestPublicationReadiness } from "./modules/issue-media/publication-readiness-reader.js";
+import { moderationDecisionRuntime } from "./modules/moderation/decision-runtime.js";
 import {
   createR2IssueMediaStorage,
   issueMediaStorageConfig,
@@ -25,6 +26,7 @@ import {
 
 const environmentSchema = z.object({
   DATABASE_URL: z.string().min(1),
+  ISSUE_MEDIA_CONSENT_VERSION: z.string().min(1).max(64).default("which-media-consent-v1"),
   MODERATION_WORKER_BATCH_SIZE: z.coerce.number().int().min(1).max(500).default(25),
   MODERATION_WORKER_LEASE_MS: z.coerce.number().int().min(5_000).default(60_000),
   MODERATION_WORKER_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(20).default(5),
@@ -39,6 +41,10 @@ if (config.MODERATION_WORKER_RETRY_MAX_MS < config.MODERATION_WORKER_RETRY_BASE_
 }
 
 const database = createDatabase(config.DATABASE_URL);
+const publicationEvidence = {
+  consentVersion: config.ISSUE_MEDIA_CONSENT_VERSION,
+  decisionRuntime: moderationDecisionRuntime(),
+};
 const providerConfig = moderationProviderRuntimeConfig();
 const mediaConfig = issueMediaStorageConfig();
 const mediaStorage = mediaConfig ? createR2IssueMediaStorage(mediaConfig) : null;
@@ -82,6 +88,7 @@ const worker = createModerationDispatcherService(database.db, adapter, {
   retryBaseMilliseconds: config.MODERATION_WORKER_RETRY_BASE_MS,
   retryMaxMilliseconds: config.MODERATION_WORKER_RETRY_MAX_MS,
   providerGate: createModerationProviderGate({ database: database.db, config: providerConfig }),
+  publicationEvidence,
 });
 
 async function once() {
@@ -95,7 +102,16 @@ async function main() {
   if (command === "diagnose-publication") {
     const submissionId = z.uuid().parse(process.argv[3]);
     console.log(
-      JSON.stringify(await readLatestPublicationReadiness(database.db, submissionId), null, 2),
+      JSON.stringify(
+        await readLatestPublicationReadiness(
+          database.db,
+          submissionId,
+          new Date(),
+          publicationEvidence,
+        ),
+        null,
+        2,
+      ),
     );
     return;
   }
