@@ -50,6 +50,9 @@ export type ModerationDispatcherOptions = {
   now?: () => Date;
   providerGate?: ModerationProviderGate;
   publicationEvidence?: PublicationEvidenceOptions;
+  // An explicit cohort limits provider calls, not just eventual publication.
+  submissionMemberIds?: string[];
+  deferProviderGate?: boolean;
 };
 
 export type ModerationProviderGate = (input: {
@@ -439,9 +442,22 @@ export function createModerationDispatcherService(
         .select({ id: moderationRuns.id })
         .from(moderationRuns)
         .where(
-          or(
-            and(eq(moderationRuns.status, "PENDING"), lte(moderationRuns.availableAt, claimedAt)),
-            and(eq(moderationRuns.status, "RUNNING"), lte(moderationRuns.availableAt, claimedAt)),
+          and(
+            options.submissionMemberIds
+              ? sql`exists (
+            select 1 from ${moderationTargets} t
+            join ${memberIssueSubmissions} s on s.submission_id = t.target_id
+            where t.moderation_target_id = ${moderationRuns.targetId}
+              and t.target_type = 'ISSUE_VERSION' and t.target_version = s.revision
+              and s.status = 'PENDING' and s.published_issue_id is null
+              and s.media_asset_a_id is not null and s.media_asset_b_id is not null
+              and ${inArray(sql`s.member_id`, options.submissionMemberIds)}
+          )`
+              : undefined,
+            or(
+              and(eq(moderationRuns.status, "PENDING"), lte(moderationRuns.availableAt, claimedAt)),
+              and(eq(moderationRuns.status, "RUNNING"), lte(moderationRuns.availableAt, claimedAt)),
+            ),
           ),
         )
         .orderBy(asc(moderationRuns.availableAt), asc(moderationRuns.createdAt))
@@ -526,6 +542,7 @@ export function createModerationDispatcherService(
         result: {
           shadow: true,
           reason: gate.reason,
+          deferred: options.deferProviderGate === true,
           signals: [],
           publicationChanged: false,
         },
@@ -868,6 +885,24 @@ export function createModerationDispatcherService(
       for (const run of runs) {
         try {
           const result = await executeRun(run);
+          if (result.result.deferred === true) {
+            await database
+              .update(moderationRuns)
+              .set({
+                status: "PENDING",
+                claimToken: null,
+                claimedAt: null,
+                availableAt: new Date(now().getTime() + 60_000),
+                attemptCount: Math.max(0, run.attemptCount - 1),
+                result: result.result,
+                updatedAt: now(),
+              })
+              .where(
+                and(eq(moderationRuns.id, run.id), eq(moderationRuns.claimToken, run.claimToken!)),
+              );
+            summary.retried += 1;
+            continue;
+          }
           const status = await completeRun(run, result);
           if (status === "SUCCEEDED") summary.succeeded += 1;
           else summary.skipped += 1;

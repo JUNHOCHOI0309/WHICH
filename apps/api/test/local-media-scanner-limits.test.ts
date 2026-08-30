@@ -20,6 +20,30 @@ const detector = (script: string, timeoutMs = 1000) =>
 afterEach(() => vi.unstubAllEnvs());
 
 describe("local scanner isolation and limits", () => {
+  it.each(["qr", "barcode", "incomplete"])("keeps %s evidence in private review", async (kind) => {
+    const scan = incompleteLocalScan("ENGINE_FAILURE");
+    delete scan.failureCode;
+    scan.ocr.status = "COMPLETE";
+    scan.qr = {
+      status: kind === "incomplete" ? "UNAVAILABLE" : "COMPLETE",
+      detected: kind === "qr",
+    };
+    scan.barcode = { status: "COMPLETE", detected: kind === "barcode" };
+    const output = {
+      scan,
+      embeddedText: { version: "which-embedded-text-v1", status: "COMPLETE", text: "" },
+    };
+    const extract = createLocalEmbeddedTextExtractor({
+      enabled: true,
+      timeoutMs: 1000,
+      workerUrl: scriptUrl,
+      execArgv: [
+        "--eval",
+        `process.stdin.resume(); process.stdout.write(${JSON.stringify(JSON.stringify(output))})`,
+      ],
+    });
+    expect(await extract(Buffer.from("x"))).toMatchObject({ status: "PARTIAL" });
+  });
   it("discards malformed or failed text IPC without exposing child output", async () => {
     for (const script of [
       "process.stdin.resume(); process.stdout.write('private text')",

@@ -86,7 +86,7 @@ export function createPolicyJudgeService(options: {
 
   async function readSource(
     sourceRunId: string,
-    reader = database,
+    reader: Pick<Database["db"], "select" | "execute"> = database,
     lock = false,
   ): Promise<{
     run: typeof moderationRuns.$inferSelect;
@@ -350,5 +350,5 @@ export function createPolicyJudgeService(options: {
       circuitOpen: await circuitOpen(),
     };
   }
-  return { process, runBatch, summary };
+  return { process, runBatch, summary, readCurrentSource: readSource };
 }

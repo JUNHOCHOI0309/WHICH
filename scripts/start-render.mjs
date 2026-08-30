@@ -22,6 +22,9 @@ const services = [
     API_BASE_URL: `http://127.0.0.1:${apiPort}`,
   }),
   start("points", ["--filter", "@which/api", "points:worker:prod"], {}),
+  ...(process.env.MODERATION_WORKER_ENABLED === "true"
+    ? [start("moderation", ["--filter", "@which/api", "moderation:worker:prod"], {})]
+    : []),
 ];
 
 let shuttingDown = false;

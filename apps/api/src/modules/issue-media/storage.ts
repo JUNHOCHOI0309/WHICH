@@ -84,6 +84,19 @@ export function createR2IssueMediaStorage(
   };
 
   return {
+    async preparePublication(objectKey, bytes) {
+      if (!/^issue-media\/published\/auto\/[a-f0-9-]{36}\/[a-f0-9-]{36}\.webp$/u.test(objectKey))
+        throw new Error("INVALID_PUBLICATION_KEY");
+      await client.send(
+        new PutObjectCommand({
+          Bucket: config.publishedBucket,
+          Key: objectKey,
+          Body: bytes,
+          ContentType: "image/webp",
+          CacheControl: "no-store",
+        }),
+      );
+    },
     async stage(assetId, body) {
       const objectKey = `issue-media/staging/${assetId}.webp`;
       await client.send(

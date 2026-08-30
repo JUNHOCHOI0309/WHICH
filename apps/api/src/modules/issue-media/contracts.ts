@@ -62,6 +62,8 @@ export type RegisterIssueMediaLibraryPair = {
 };
 
 export type IssueMediaObjectStorage = {
+  // Publish exactly the hash-verified canonical bytes; retain the private source until commit.
+  preparePublication?(objectKey: string, bytes: Buffer): Promise<void>;
   stage(assetId: string, body: Buffer): Promise<{ objectKey: string }>;
   publish(assetId: string, stagingObjectKey: string): Promise<{ objectKey: string; url: string }>;
   quarantine(input: {

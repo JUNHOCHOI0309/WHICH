@@ -77,6 +77,17 @@ services:
       # approval evidence is recorded and an operator deliberately opens a canary.
       - key: MODERATION_PROVIDER_MODE
         value: "OFF"
+      # Deliberately enabled only with an explicit pilot cohort and existing consent/access.
+      - key: MODERATION_WORKER_ENABLED
+        value: "false"
+      - key: MODERATION_WORKER_POLL_MS
+        value: "15000"
+      - key: ISSUE_MEDIA_AUTO_PUBLICATION_MODE
+        value: "OFF"
+      - key: ISSUE_MEDIA_AUTO_PUBLICATION_KILL_SWITCH
+        value: "true"
+      - key: ISSUE_MEDIA_AUTO_PUBLICATION_MEMBER_IDS
+        sync: false
       - key: MODERATION_PROVIDER
         value: OPENAI_MODERATION
       - key: MODERATION_PROVIDER_KILL_SWITCH
