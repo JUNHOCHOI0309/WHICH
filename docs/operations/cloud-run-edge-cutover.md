@@ -17,7 +17,7 @@ The owner approved the Google global external Application Load Balancer and prod
 | Serverless NEG        | `which-web-neg`, Singapore, service `which-web`                                    |
 | Global backend        | `which-web-backend`, `EXTERNAL_MANAGED`                                            |
 | URL map               | `which-web-map`                                                                    |
-| HTTPS proxy           | `which-web-https`                                                                  |
+| HTTPS proxy           | `which-web-map-target-proxy` (console-generated name)                              |
 | HTTPS forwarding rule | `which-web-https-rule`, port 443                                                   |
 | SSL policy            | `which-modern-tls`, MODERN, minimum TLS 1.2                                        |
 | Managed certificates  | `which-site-cert`, verification retry `which-site-cert-retry`; apex and `www` only |
@@ -70,6 +70,18 @@ This is an alert, **not a spending cap or a promise of uninterrupted service**. 
 
 ## Verification record
 
+### Current: user-requested console continuation (2026-08-31 KST)
+
+- The user opened the global external Application Load Balancer form and explicitly asked the agent to continue from that screen. The form is in project `which-505908`, signed in as the existing project owner. The user separately granted `roles/compute.networkViewer` to `cjh3141592@gmail.com`; no additional IAM grant was made by this continuation.
+- The CLI retry `operation-1788112650932-65a476b6090ac-47fc1fe2-b868f596` finished with `INTERNAL_ERROR`, reference `-6810333619241256391`. Before using the console, the backend list and running operation list were both empty. Neither failed attempt left a backend requiring deletion.
+- Completed the user's existing form using HTTPS/443, `which-edge-ip`, `which-site-map`, and `which-modern-tls`. Selected the existing `which-web-neg` in Singapore. Disabled the form's default Cloud CDN and new Cloud Armor policy options, preserving the approved architecture; no existing policy was removed. Left IAP and LB request logging disabled. No new VPC, NEG, IP, firewall, credential, or public Cloud Run invoker permission was added.
+- Submitted the **console-created, NEG-attached** backend request (HTTPS, EXTERNAL_MANAGED), followed by the console's URL-map/proxy/forwarding-rule workflow. Current backend operation: `operation-1788114646658-65a47e254ed2b-d82d771d-c7f3c7ba`, still `RUNNING`, progress 0. This differs from the previous empty-backend CLI inserts; successful completion is **not** yet established. The placeholder includes the correct existing NEG, but that alone is not success.
+- The console now shows `which-web-map` **creating**, not ready. Its intended proxy name is **`which-web-map-target-proxy`**, and the forwarding rule is `which-web-https-rule`. The browser may continue the dependent creation steps when the backend completes: **do not launch parallel CLI creates**. Inventory resources and console workflow status first. The claimed user tab is left open for handoff.
+- **Certificate gate resolved:** `which-site-cert` is `ACTIVE`; both apex/www authorizations and both `which-site-map` entries are `ACTIVE`. Earlier CNAME/CAA errors resolved without DNS/CAA changes or relaxed validation. `which-site-cert-retry` is still pending and unused; remove it only after checking certificate-map references once deployment is settled. No further certificate retry is needed.
+- Cloud Run remains revision `which-web-00002-mbk`, ingress `internal-and-cloud-load-balancing`, points/moderation overrides false, and no public invoker binding. Production DNS, Render web/points, DB firewall, and AI OFF controls remain unchanged. No origin TLS/route smoke or production cutover is claimed.
+
+### Historical snapshot: 03:04 KST
+
 Cutover is **not complete**. At the resumed preparation check on 2026-08-31 03:04 KST:
 
 - The original backend insert `operation-1788110848110-65a46ffebb0b3-54e460e7-417c2d45` finished with **HTTP 503 / `INTERNAL_ERROR`**, Google reference `730389151359505014`, after approximately 21 minutes. The failed backend was absent and no URL maps or pending operations remained when inspected. No cleanup/delete was necessary.
@@ -87,11 +99,11 @@ Retained Cloud Run/NAT/IP resources consume trial credit while waiting. No paid 
 
 ### Resume after Google provisioning
 
-First run the one-shot snapshot below. Require the latest backend operation `DONE` **without error**, a certificate `ACTIVE`, and both certificate map entries referencing that active certificate. Inventory each resource before creating anything; the commands below are only for resources still absent. Always stop on any failed command. If the backend retry fails with another Google internal error, preserve production on Render and use the operation IDs/error reference for Google troubleshooting; do not repeatedly recreate it, switch billing, or expand IAM/firewalls.
+First run the one-shot snapshot below. The certificate gate is now satisfied; require the latest backend operation `DONE` **without error**. Check the open console workflow before any mutation: it may be creating the dependent resources. The commands below are recovery examples only, for resources still absent after that workflow has stopped. Always stop on a failed command. If this console attempt also fails with a Google internal error, preserve production on Render and use all operation IDs/error references for Google troubleshooting; do not repeatedly recreate it, switch billing, or expand IAM/firewalls.
 
 ```powershell
 ./scripts/cloud-run/inspect-edge.ps1
-gcloud compute operations describe operation-1788112650932-65a476b6090ac-47fc1fe2-b868f596 --global --project=which-505908
+gcloud compute operations describe operation-1788114646658-65a47e254ed2b-d82d771d-c7f3c7ba --global --project=which-505908
 gcloud certificate-manager certificates describe which-site-cert --project=which-505908 --format='json(managed)'
 gcloud certificate-manager certificates describe which-site-cert-retry --project=which-505908 --format='json(managed)'
 gcloud certificate-manager maps entries list --map=which-site-map --project=which-505908
@@ -100,8 +112,8 @@ gcloud compute backend-services describe which-web-backend --global --project=wh
 gcloud compute backend-services add-backend which-web-backend --global --network-endpoint-group=which-web-neg --network-endpoint-group-region=asia-southeast1 --project=which-505908
 # Only if absent and certificate/map entries are ACTIVE:
 gcloud compute url-maps create which-web-map --default-service=which-web-backend --global --project=which-505908
-gcloud compute target-https-proxies create which-web-https --certificate-map=which-site-map --url-map=which-web-map --ssl-policy=which-modern-tls --global --project=which-505908
-gcloud compute forwarding-rules create which-web-https-rule --load-balancing-scheme=EXTERNAL_MANAGED --network-tier=PREMIUM --address=which-edge-ip --target-https-proxy=which-web-https --global --ports=443 --project=which-505908
+gcloud compute target-https-proxies create which-web-map-target-proxy --certificate-map=which-site-map --url-map=which-web-map --ssl-policy=which-modern-tls --global --project=which-505908
+gcloud compute forwarding-rules create which-web-https-rule --load-balancing-scheme=EXTERNAL_MANAGED --network-tier=PREMIUM --address=which-edge-ip --target-https-proxy=which-web-map-target-proxy --global --ports=443 --project=which-505908
 ```
 
 Verify Cloud Run ingress is still restricted before granting `roles/run.invoker` to `allUsers` **on this service only** for public LB access. Then follow the ordered cutover and rollback checks above. Do not change DNS before successful certificate/origin validation, and do not enable Cloud Run points before Render suspension has been verified.
