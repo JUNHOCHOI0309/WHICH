@@ -18,8 +18,14 @@ guarded public exposure and leaves it off by default until the experiment is act
 - Maximum input size: 10 MiB
 - Maximum decoded pixel count: 40 million
 - Declared MIME must match the decoded file type.
-- Sharp applies orientation correction, strips metadata through re-encoding, limits the long edge
-  to 1600 px without enlargement, and emits WebP at quality 84.
+- Sharp applies orientation correction, normalizes sRGB pixels, strips metadata through re-encoding,
+  and limits the long edge to 1280 px without enlargement or cropping.
+- Policy `which-issue-media-webp-v2` emits WebP at quality 82 / effort 5. PNG and WebP inputs also
+  receive a lossless candidate from the same resized pixels; it is used only when no larger than
+  the lossy candidate. Only the chosen WebP is stored, not both candidates.
+- The normalization finding records policy version, output bound, selected encoding, and quality.
+  Existing objects are not rewritten. See [responsive optimization](issue-media-responsive-optimization.md)
+  for Web display ratios, validation, and rollout limits.
 - The service records the original SHA-256, a 64-bit perceptual dHash, input/output MIME, byte
   size, width, and height. An exact SHA-256 duplicate is rejected globally, including after purge.
 
