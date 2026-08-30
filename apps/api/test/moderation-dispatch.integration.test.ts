@@ -23,6 +23,7 @@ import {
   type ModerationShadowAdapter,
 } from "../src/modules/moderation-dispatch/contracts.js";
 import { createModerationDispatcherService } from "../src/modules/moderation-dispatch/service.js";
+import { moderationProviderCacheHash } from "../src/modules/moderation-providers/input-binding.js";
 import { createTestDatabase } from "./helpers/test-database.js";
 
 const options = {
@@ -272,7 +273,15 @@ describe("Moderation Outbox Dispatcher and Shadow Worker", () => {
     const cache = await testDatabase.database.db
       .select()
       .from(moderationProviderCallCache)
-      .where(eq(moderationProviderCallCache.normalizedInputHash, sharedHash));
+      .where(
+        eq(
+          moderationProviderCallCache.normalizedInputHash,
+          moderationProviderCacheHash({
+            targetType: "ISSUE_VERSION",
+            normalizedInputHash: sharedHash,
+          }),
+        ),
+      );
     expect(cache).toHaveLength(1);
     expect(cache[0]).toMatchObject({ costMicros: 23, latencyMs: 17 });
   });

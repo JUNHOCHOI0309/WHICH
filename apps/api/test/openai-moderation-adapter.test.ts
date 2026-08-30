@@ -163,6 +163,36 @@ describe("OpenAI moderation Shadow adapter", () => {
       }),
     );
   });
+
+  it.each(["MODEL", "CATEGORY", "MULTIPLE_RESULTS"])(
+    "rejects inconsistent %s evidence",
+    async (scenario) => {
+      const result = {
+        flagged: false,
+        categories: { sexual: false },
+        category_scores: { sexual: 0.01 },
+        category_applied_input_types: { sexual: ["image"] },
+      };
+      const adapter = createOpenAiModerationAdapter({
+        apiKey: "test-key",
+        fetchImpl: () =>
+          Promise.resolve(
+            new Response(
+              JSON.stringify({
+                model: scenario === "MODEL" ? "unexpected-snapshot" : "omni-moderation-2024-09-26",
+                results:
+                  scenario === "MULTIPLE_RESULTS"
+                    ? [result, result]
+                    : [{ ...result, ...(scenario === "CATEGORY" ? { categories: {} } : {}) }],
+              }),
+            ),
+          ),
+        resolveInput: () =>
+          Promise.resolve({ targetType: "COMMENT_VERSION", modality: "TEXT", text: "test" }),
+      });
+      await expect(adapter.inspect(target)).rejects.toMatchObject({ kind: "MALFORMED_OUTPUT" });
+    },
+  );
 });
 
 describe("moderation provider privacy controls", () => {
@@ -189,6 +219,7 @@ describe("moderation provider privacy controls", () => {
   it("defaults to a disabled, killed, zero-canary provider configuration", () => {
     const config = moderationProviderRuntimeConfig({});
     expect(providerRuntimeDiagnostic(config)).toMatchObject({
+      inputContractVersion: "which-provider-input-v2",
       mode: "OFF",
       provider: "NONE",
       killSwitch: true,

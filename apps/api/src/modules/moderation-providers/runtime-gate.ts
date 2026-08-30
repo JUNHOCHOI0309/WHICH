@@ -1,8 +1,9 @@
-import { gte, sql } from "drizzle-orm";
+import { and, gte, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import type { Database } from "../../database/client.js";
-import { moderationProviderCallCache } from "../../database/schema/index.js";
+import { moderationAuditEvents, moderationProviderCallCache } from "../../database/schema/index.js";
+import { MODERATION_PROVIDER_INPUT_VERSION } from "./contracts.js";
 import {
   evaluateImageProviderGate,
   type ProviderGateEvidence,
@@ -68,6 +69,7 @@ export function providerRuntimeDiagnostic(config: ModerationProviderRuntimeConfi
     evidence: config.evidence,
   });
   return {
+    inputContractVersion: MODERATION_PROVIDER_INPUT_VERSION,
     mode: config.MODERATION_PROVIDER_MODE,
     provider: config.MODERATION_PROVIDER,
     killSwitch: config.MODERATION_PROVIDER_KILL_SWITCH,
@@ -108,21 +110,49 @@ export function createModerationProviderGate(input: {
         costMicros: sql<number>`coalesce(sum(${moderationProviderCallCache.costMicros}), 0)::bigint`,
       })
       .from(moderationProviderCallCache)
-      .where(gte(moderationProviderCallCache.createdAt, dayStart));
+      .where(
+        and(
+          gte(moderationProviderCallCache.createdAt, dayStart),
+          sql`${moderationProviderCallCache.result}->>'inputContractVersion' is distinct from ${MODERATION_PROVIDER_INPUT_VERSION}`,
+        ),
+      );
     const [circuit] = await input.database
       .select({
         calls: sql<number>`count(*)::int`,
         failures: sql<number>`count(*) filter (where ${moderationProviderCallCache.status} = 'FAILED')::int`,
       })
       .from(moderationProviderCallCache)
-      .where(gte(moderationProviderCallCache.createdAt, circuitStart));
+      .where(
+        and(
+          gte(moderationProviderCallCache.createdAt, circuitStart),
+          sql`${moderationProviderCallCache.result}->>'inputContractVersion' is distinct from ${MODERATION_PROVIDER_INPUT_VERSION}`,
+        ),
+      );
+    // v2 attempts are counted even if a late response is discarded or the resolver/provider fails.
+    const [attempts] = await input.database
+      .select({
+        calls: sql<number>`count(*) filter (where ${moderationAuditEvents.eventType} = 'PROVIDER_INSPECTION_ATTEMPTED' and ${moderationAuditEvents.occurredAt} >= ${dayStart})::int`,
+        costMicros: sql<number>`coalesce(sum((${moderationAuditEvents.metadata}->>'costMicros')::bigint) filter (where ${moderationAuditEvents.eventType} = 'PROVIDER_INSPECTION_COMPLETED' and ${moderationAuditEvents.occurredAt} >= ${dayStart}), 0)::bigint`,
+        recentCalls: sql<number>`count(*) filter (where ${moderationAuditEvents.eventType} = 'PROVIDER_INSPECTION_ATTEMPTED' and ${moderationAuditEvents.occurredAt} >= ${circuitStart})::int`,
+        recentFailures: sql<number>`count(*) filter (where ${moderationAuditEvents.eventType} = 'PROVIDER_INSPECTION_FAILED' and ${moderationAuditEvents.occurredAt} >= ${circuitStart})::int`,
+      })
+      .from(moderationAuditEvents)
+      .where(
+        and(
+          gte(
+            moderationAuditEvents.occurredAt,
+            new Date(Math.min(dayStart.getTime(), circuitStart.getTime())),
+          ),
+          sql`${moderationAuditEvents.metadata}->>'inputContractVersion' = ${MODERATION_PROVIDER_INPUT_VERSION}`,
+        ),
+      );
     return evaluateModerationRuntimeGate({
       config,
       normalizedInputHash: target.normalizedInputHash,
-      callsToday: usage?.calls ?? 0,
-      costMicrosToday: Number(usage?.costMicros ?? 0),
-      recentCalls: circuit?.calls ?? 0,
-      recentFailures: circuit?.failures ?? 0,
+      callsToday: (usage?.calls ?? 0) + (attempts?.calls ?? 0),
+      costMicrosToday: Number(usage?.costMicros ?? 0) + Number(attempts?.costMicros ?? 0),
+      recentCalls: (circuit?.calls ?? 0) + (attempts?.recentCalls ?? 0),
+      recentFailures: (circuit?.failures ?? 0) + (attempts?.recentFailures ?? 0),
     });
   };
 }
