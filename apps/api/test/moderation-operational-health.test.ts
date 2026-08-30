@@ -4,6 +4,7 @@ import { evaluateModerationOperationalHealth } from "../src/modules/moderation-o
 import type { ModerationProviderRuntimeDiagnostic } from "../src/modules/moderation-providers/runtime-gate.js";
 
 const runtime: ModerationProviderRuntimeDiagnostic = {
+  inputContractVersion: "which-provider-input-v2",
   mode: "SHADOW",
   provider: "OPENAI_MODERATION",
   killSwitch: false,
