@@ -1,6 +1,8 @@
 import { createHmac } from "node:crypto";
 
 import type { RuleSignal } from "../moderation/rule-engine.js";
+import { detectOcrPiiKinds, type OcrPiiKind } from "./ocr-pii.js";
+import type { LocalScanFailure } from "./local-scan-contract.js";
 
 export const ISSUE_MEDIA_UPLOAD_POLICY_VERSION = "which-member-media-upload-v1";
 export const ISSUE_MEDIA_RULE_POLICY_VERSION = "which-issue-media-rules-v1";
@@ -9,9 +11,10 @@ export type LocalMediaScanStatus = "COMPLETE" | "PARTIAL" | "UNAVAILABLE";
 
 export type LocalMediaSignalDetectorResult = {
   detectorVersion: string;
+  failureCode?: LocalScanFailure;
   qr: { status: LocalMediaScanStatus; detected: boolean };
   barcode: { status: LocalMediaScanStatus; detected: boolean };
-  ocr: { status: LocalMediaScanStatus; text?: string };
+  ocr: { status: LocalMediaScanStatus; text?: string; piiKinds?: OcrPiiKind[] };
   visual: {
     status: LocalMediaScanStatus;
     faceDetected: boolean;
@@ -163,13 +166,13 @@ export function evaluateLocalMediaInspection(input: LocalMediaInspection): {
   if (faceDetected) add("MEDIA_FACE_PRESENT", "REVIEW");
   if (identityDocumentDetected) add("MEDIA_IDENTITY_DOCUMENT_PRESENT", "REVIEW");
   if (screenshotDetected) add("MEDIA_SCREENSHOT_PRESENT", "REVIEW");
-  if (ocrText) {
+  if (ocrText || detector?.ocr.piiKinds?.length) {
     const kinds = [
-      /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/iu.test(ocrText) ? "EMAIL" : null,
-      /(?<!\d)01[016789][- .]?\d{3,4}[- .]?\d{4}(?!\d)/u.test(ocrText) ? "PHONE" : null,
-      /(?<!\d)\d{6}[- ]?[1-4]\d{6}(?!\d)/u.test(ocrText) ? "NATIONAL_ID" : null,
-      /(?<!\d)\d{2,6}[- ]\d{2,6}[- ]\d{2,6}(?!\d)/u.test(ocrText) ? "ACCOUNT_LIKE" : null,
-    ].filter((kind): kind is string => kind !== null);
+      ...new Set([
+        ...(ocrText ? detectOcrPiiKinds(ocrText) : []),
+        ...(detector?.ocr.piiKinds ?? []),
+      ]),
+    ];
     if (kinds.length) add("MEDIA_OCR_PII_DETECTED", "REVIEW", { kinds: kinds.join(",") });
   }
   if (detector) {

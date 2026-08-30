@@ -28,6 +28,7 @@ import type { IssueMediaProcessingError } from "../src/modules/issue-media/image
 import { processIssueMedia } from "../src/modules/issue-media/image-processing.js";
 import type { IssueMediaError } from "../src/modules/issue-media/service.js";
 import { createIssueMediaService } from "../src/modules/issue-media/service.js";
+import { createLocalMediaSignalDetector } from "../src/modules/issue-media/local-scan-detector.js";
 import { createIssueMediaReviewService } from "../src/modules/issue-media/review-service.js";
 import { registerIssueMediaRoutes } from "../src/modules/issue-media/routes.js";
 import { issueMediaStorageConfig } from "../src/modules/issue-media/storage.js";
@@ -288,6 +289,46 @@ describe("operator Issue media foundation", () => {
       storage.operations.filter((operation) => operation.startsWith("quarantine:")),
     ).toHaveLength(2);
   });
+
+  it("persists real local OCR categories and scan status without OCR text or automatic publication", async () => {
+    const storage = new FakeIssueMediaStorage();
+    const service = createIssueMediaService(database.db, storage, {
+      localSignalDetector: createLocalMediaSignalDetector({
+        enabled: true,
+        timeoutMs: 30000,
+        workerUrl: new URL("../src/local-media-scanner.ts", import.meta.url),
+        execArgv: ["--import", "tsx"],
+      }),
+    });
+    const bytes = await sharp(
+      Buffer.from(
+        '<svg width="1000" height="200"><rect width="100%" height="100%" fill="white"/><text x="30" y="90" font-size="48" font-family="sans-serif">contact@example.com</text></svg>',
+      ),
+    )
+      .png()
+      .toBuffer();
+    const asset = await service.stageMemberAsset({
+      memberId: regularMemberId,
+      rightsAttestation: "Synthetic fixture owned by the integration test for local scanning.",
+      declaredMimeType: "image/png",
+      bytes,
+    });
+    expect(asset).toMatchObject({
+      moderationState: "PENDING",
+      storageState: "STAGED",
+      publishedUrl: null,
+    });
+    const findings = await database.db
+      .select()
+      .from(issueMediaRuleFindings)
+      .where(eq(issueMediaRuleFindings.mediaAssetId, asset.id));
+    const pii = findings.find((finding) => finding.code === "MEDIA_OCR_PII_DETECTED");
+    expect(pii?.evidence.kinds).toContain("EMAIL");
+    const route = findings.find((finding) => finding.code === "MEDIA_ROUTE_REVIEW_REQUIRED");
+    expect(route?.evidence.scanStatus).toMatchObject({ qr: "COMPLETE", visual: "UNAVAILABLE" });
+    expect(JSON.stringify(findings)).not.toContain("contact@example.com");
+    expect(storage.operations.some((operation) => operation.startsWith("publish:"))).toBe(false);
+  }, 45000);
 
   it("stages Member submission media privately without requiring operator access", async () => {
     const storage = new FakeIssueMediaStorage();
