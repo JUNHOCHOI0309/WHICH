@@ -1,6 +1,6 @@
 # WHICH Cloud Run migration
 
-> **Current state (2026-08-31 KST): production edge preparation approved and in progress.** Cloud Run `which-web-00002-mbk` and its dedicated NAT/router are running, with ingress restricted to internal/load-balancer traffic and all consumers OFF. Production DNS and the active points consumer remain on Render. Load-balancer/certificate provisioning must finish before cutover. See [edge cutover runbook](cloud-run-edge-cutover.md) for current resources, budget alerts, gates, and rollback; older preview/shutdown records below are historical.
+> **Current state (2026-08-31 KST): production edge preparation approved; Google provisioning retry pending.** The first backend insert failed with Google HTTP 503 / INTERNAL_ERROR; one retry is running. The original www certificate authorization reported CNAME_MISMATCH, but current authoritative/public DNS matches; one verification certificate is pending. Cloud Run `which-web-00002-mbk` and its dedicated NAT/router remain running with internal/load-balancer ingress and all consumers OFF. Production DNS and the active points consumer remain on Render. See [edge cutover runbook](cloud-run-edge-cutover.md) for the exact operation IDs, one-shot inspector, gates, and rollback; older preview/shutdown records below are historical.
 
 ## Scope and safety boundary
 

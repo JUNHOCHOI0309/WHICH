@@ -11,18 +11,18 @@ The owner approved the Google global external Application Load Balancer and prod
 
 ## Edge resources
 
-| Resource              | Name / value                                            |
-| --------------------- | ------------------------------------------------------- |
-| Global frontend IPv4  | `which-edge-ip`: `136.68.85.146`                        |
-| Serverless NEG        | `which-web-neg`, Singapore, service `which-web`         |
-| Global backend        | `which-web-backend`, `EXTERNAL_MANAGED`                 |
-| URL map               | `which-web-map`                                         |
-| HTTPS proxy           | `which-web-https`                                       |
-| HTTPS forwarding rule | `which-web-https-rule`, port 443                        |
-| SSL policy            | `which-modern-tls`, MODERN, minimum TLS 1.2             |
-| Managed certificate   | `which-site-cert`, apex and `www` only                  |
-| Certificate map       | `which-site-map`, entries `which-apex` and `which-www`  |
-| DNS authorizations    | `which-apex-auth`, `which-www-auth`, PER_PROJECT_RECORD |
+| Resource              | Name / value                                                                       |
+| --------------------- | ---------------------------------------------------------------------------------- |
+| Global frontend IPv4  | `which-edge-ip`: `136.68.85.146`                                                   |
+| Serverless NEG        | `which-web-neg`, Singapore, service `which-web`                                    |
+| Global backend        | `which-web-backend`, `EXTERNAL_MANAGED`                                            |
+| URL map               | `which-web-map`                                                                    |
+| HTTPS proxy           | `which-web-https`                                                                  |
+| HTTPS forwarding rule | `which-web-https-rule`, port 443                                                   |
+| SSL policy            | `which-modern-tls`, MODERN, minimum TLS 1.2                                        |
+| Managed certificates  | `which-site-cert`, verification retry `which-site-cert-retry`; apex and `www` only |
+| Certificate map       | `which-site-map`, entries `which-apex` and `which-www`                             |
+| DNS authorizations    | `which-apex-auth`, `which-www-auth`, PER_PROJECT_RECORD                            |
 
 Resource names are the intended cutover inventory, not evidence that every resource is ready. Check the verification record before changing traffic.
 
@@ -70,25 +70,30 @@ This is an alert, **not a spending cap or a promise of uninterrupted service**. 
 
 ## Verification record
 
-Cutover is **not complete**. At the final preparation check on 2026-08-31 KST:
+Cutover is **not complete**. At the resumed preparation check on 2026-08-31 03:04 KST:
 
-- Global backend insert operation `operation-1788110848110-65a46ffebb0b3-54e460e7-417c2d45` was still `RUNNING` with progress 0 after more than 15 minutes; no error/warning was reported. The backend resource exists, but no NEG is attached yet. Do not issue a duplicate create while that operation is pending.
-- `which-site-cert` is `PROVISIONING`: apex `AUTHORIZED`, `www` still `AUTHORIZING`. Both DNS-only CNAMEs resolve to their exact expected targets on both Cloudflare authoritative nameservers and the public resolver. Neither hostname returned a CAA restriction. Do not weaken TLS or delete/recreate valid authorizations just because issuance is pending.
-- The waiting local CLI process was stopped so its queued backend-attachment/URL-map commands will not run unattended. This does **not** cancel the already-submitted Google backend operation or certificate issuance.
+- The original backend insert `operation-1788110848110-65a46ffebb0b3-54e460e7-417c2d45` finished with **HTTP 503 / `INTERNAL_ERROR`**, Google reference `730389151359505014`, after approximately 21 minutes. The failed backend was absent and no URL maps or pending operations remained when inspected. No cleanup/delete was necessary.
+- Exactly one backend retry was submitted: `operation-1788112650932-65a476b6090ac-47fc1fe2-b868f596`. It remains `RUNNING`, progress 0; the placeholder backend has no NEG attached. **Resource existence is not completion.** Do not retry again or attach dependent resources while this operation is pending. Billing is enabled on the approved trial account; Compute/Certificate Manager/Cloud Run APIs are enabled; relevant backend/forwarding/proxy quotas have headroom.
+- The original `which-site-cert` is `PROVISIONING`: apex `AUTHORIZED`; `www` now reports `FAILED / CONFIG / CNAME_MISMATCH` for its initial 02:27 KST authorization attempt. Subsequent checks on Google DNS (`8.8.8.8`, `8.8.4.4`), `1.1.1.1`, and both authoritative nameservers resolve the exact expected DNS-only CNAME. No current record mismatch or CAA restriction was found; the initial check may have preceded DNS propagation.
+- Created **one** verification certificate, `which-site-cert-retry`, using the same two domain names and existing DNS authorizations after verifying DNS. It is still `PROVISIONING / AUTHORIZING`. No production certificate, DNS authorization, or DNS record was removed. If the retry becomes ACTIVE first, update both existing certificate-map entries to it, verify readiness, and then remove the unused old pending certificate only after confirming there are no references. Do not accumulate additional retry certificates or weaken TLS.
+- The original waiting CLI process had been stopped before queued attachment/URL-map commands ran. The retry command contained only backend creation, with no queued dependent mutations; its local wait was also stopped after recording the operation ID and pending state. Stopping a CLI wait does **not** cancel the Google operation or certificate issuance. No unattended DNS change, worker switch, or scheduled monitoring was configured.
 - Created resources: global frontend IP, serverless NEG, pending backend, two DNS authorizations, pending certificate, certificate map and two pending map entries, MODERN/TLS1.2 SSL policy, and budget notifications. The URL map, HTTPS proxy, and forwarding rule have not been created. Public Cloud Run invoker access has not been granted.
 - Cloud Run revision `which-web-00002-mbk` is ready with `CLOUD_RUN_PREVIEW=false,POINTS_WORKER_ENABLED=false,MODERATION_WORKER_ENABLED=false` and `internal-and-cloud-load-balancing` ingress. Logs confirm exactly two processes. Imported provider/judge/decision/automatic-publication settings remain OFF. Until the load balancer is ready, the earlier external local-proxy URL is intentionally not a working access path.
 - Production apex/`www` remain proxied CNAMEs to Render. Render remains active, including its original points consumer. Its existing signed-in `/me` and Cloudflare Full (strict) encryption were confirmed. No member content was created or changed by these checks.
-- Runtime tests 5/5, smoke-script syntax, formatting, and whitespace checks passed. The new origin/public smoke script is prepared but has **not** been run against a completed load balancer, so neither end-to-end edge routing nor post-cutover login is claimed as verified.
+- Runtime tests 5/5 and whitespace checks passed again. Added a read-only one-shot `scripts/cloud-run/inspect-edge.ps1` snapshot; parser validation and execution passed, correctly identifying pending backend/certificate gates. It reads no runtime secret and changes no cloud state.
+- A pre-cutover public baseline confirmed home/feed/static assets 200, unauthenticated `/api/me` 401, ops redirected to Access, and all four OAuth starts use the expected providers and callback host. `/api/health` returns **404 on the old Render release**, because this route was introduced by Cloud Run commit `6a85901`; that baseline is **not** a successful Cloud Run smoke. Keep the post-cutover 200 requirement. The origin script has not run against a completed load balancer, and post-cutover login continuity is not yet verified.
 
 Retained Cloud Run/NAT/IP resources consume trial credit while waiting. No paid activation, production DNS change, Render suspension, or AI activation occurred. Remaining work requires Google provisioning to complete, not a second cost approval.
 
 ### Resume after Google provisioning
 
-First describe the existing operation and certificate; require backend operation `DONE` **without error**, certificate `ACTIVE`, and both certificate map entries `ACTIVE`. Inventory each resource before creating anything; the commands below are only for resources still absent. Always stop on any failed command.
+First run the one-shot snapshot below. Require the latest backend operation `DONE` **without error**, a certificate `ACTIVE`, and both certificate map entries referencing that active certificate. Inventory each resource before creating anything; the commands below are only for resources still absent. Always stop on any failed command. If the backend retry fails with another Google internal error, preserve production on Render and use the operation IDs/error reference for Google troubleshooting; do not repeatedly recreate it, switch billing, or expand IAM/firewalls.
 
 ```powershell
-gcloud compute operations describe operation-1788110848110-65a46ffebb0b3-54e460e7-417c2d45 --global --project=which-505908
+./scripts/cloud-run/inspect-edge.ps1
+gcloud compute operations describe operation-1788112650932-65a476b6090ac-47fc1fe2-b868f596 --global --project=which-505908
 gcloud certificate-manager certificates describe which-site-cert --project=which-505908 --format='json(managed)'
+gcloud certificate-manager certificates describe which-site-cert-retry --project=which-505908 --format='json(managed)'
 gcloud certificate-manager maps entries list --map=which-site-map --project=which-505908
 gcloud compute backend-services describe which-web-backend --global --project=which-505908
 # Only if its backend list is still empty:
@@ -106,3 +111,4 @@ Verify Cloud Run ingress is still restricted before granting `roles/run.invoker`
 - [Global load balancer with serverless NEG](https://docs.cloud.google.com/load-balancing/docs/https/setup-global-ext-https-serverless)
 - [Managed certificate with DNS authorization](https://docs.cloud.google.com/certificate-manager/docs/deploy-google-managed-dns-auth)
 - [Cloud Run ingress restrictions](https://docs.cloud.google.com/run/docs/securing/ingress)
+- [Certificate Manager troubleshooting and verification certificate](https://docs.cloud.google.com/certificate-manager/docs/troubleshooting)
