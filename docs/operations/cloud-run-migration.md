@@ -1,6 +1,6 @@
 # WHICH Cloud Run migration
 
-> **Current state (2026-08-31 KST): private preview resumed on verified free-trial billing.** Cloud Run `which-web-00001-rcg`, its dedicated Public NAT/router, and reserved egress IP are active again following the owner's resumption request. Production remains on Render. Preview consumers and AI/automatic-publication flags remain OFF. Load-balancer cost approval and production cutover are still pending; see the latest resumption record below rather than treating earlier shutdown records as current state.
+> **Current state (2026-08-31 KST): production edge preparation approved and in progress.** Cloud Run `which-web-00002-mbk` and its dedicated NAT/router are running, with ingress restricted to internal/load-balancer traffic and all consumers OFF. Production DNS and the active points consumer remain on Render. Load-balancer/certificate provisioning must finish before cutover. See [edge cutover runbook](cloud-run-edge-cutover.md) for current resources, budget alerts, gates, and rollback; older preview/shutdown records below are historical.
 
 ## Scope and safety boundary
 
