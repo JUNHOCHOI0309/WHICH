@@ -1,6 +1,8 @@
 import type { ModerationTargetType } from "../moderation-dispatch/contracts.js";
 
 export const MODERATION_PROVIDER_RESULT_SCHEMA_VERSION = 1;
+// Bump whenever minimized provider inputs change. Older image caches included live context.
+export const MODERATION_PROVIDER_INPUT_VERSION = "which-provider-input-v2";
 
 export type ModerationProviderModality = "TEXT" | "IMAGE" | "TEXT_AND_IMAGE";
 export type ModerationCalibratedBand = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
@@ -26,6 +28,9 @@ export type ModerationProviderInput = {
     metadataStripped: true;
     reencoded: true;
   };
+  // Images are ordered A then B for a submission; an asset-only target has one image.
+  images?: Array<NonNullable<ModerationProviderInput["image"]>>;
+  scope?: "COMMENT_REVISION" | "ISSUE_SNAPSHOT" | "SUBMISSION_REVISION" | "ASSET_ONLY";
   context?: {
     question?: string;
     choices?: string[];

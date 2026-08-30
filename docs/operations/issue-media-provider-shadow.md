@@ -8,10 +8,29 @@ Provider snapshot: `omni-moderation-2024-09-26`
 
 ## Boundary
 
-The existing Moderation Outbox Worker resolves an immutable `ISSUE_MEDIA_ASSET` target, reads the
-private R2 object, rotates and re-encodes it as metadata-free WebP within 1024px, redacts direct
-contact data from the Issue context, and sends a data URL to the configured provider. No public CDN
+The existing Moderation Outbox Worker resolves an immutable `ISSUE_MEDIA_ASSET` target, verifies
+the normalized binary hash, reads the private R2 object, and re-encodes it as metadata-free WebP
+within 1024px. This target sends **image-only** input. It must not look up arbitrary live Issue
+context, because the asset hash does not bind that context. No public CDN
 URL, member identity, session data, IP address, raw EXIF, or original upload is sent.
+
+Member submission `ISSUE_VERSION` targets resolve their exact immutable submission revision and
+send its minimized question/context, A/B labels, and both corresponding images in A/B order in one
+mixed-input request. Direct contact data in submission context is redacted. The submission hash
+binds text and asset identities; each asset's immutable version separately verifies the bytes.
+Changing text, choices or the image pair creates a new revision and new check. Published editorial
+Issue snapshot checks remain text-only; `inputScope` and `imageCount` make that scope explicit.
+
+Input contract `which-provider-input-v2` namespaces reusable cache keys by contract, target type,
+and input hash. Legacy unbound caches are ignored. Completion revalidates target state under row
+locks and discards stale/lease-lost evidence. Uncached attempts, completions and failures have
+separate audit events so discarding a result does not erase its usage accounting. This does not
+replace the separate rollout requirement for atomic multi-worker budget reservation.
+
+Submission-level combined findings remain attached to the versioned Run, not copied onto both
+individual images as if the provider identified which image caused the result. The provider does
+not supply that attribution. `inputBinding` identifies the contract, target type/version and hash;
+no request text or image content is persisted in it.
 
 OpenAI's Moderation endpoint accepts mixed text and `image_url` inputs, including base64 data URLs.
 The pinned `omni-moderation-2024-09-26` snapshot returns category flags, category scores, and the
@@ -68,6 +87,11 @@ canary only after reviewing provider call/failure/abstention rates, queue age, c
 category distribution, Phase A/provider disagreement samples, and false-positive/false-negative
 Golden Set results. Roll back by setting the kill switch to `true` or mode to `OFF`; queued content
 and publication remain unchanged.
+
+After this update, diagnostics include `inputContractVersion: "which-provider-input-v2"`.
+Use that field to verify the worker build without submitting production content. Existing completed
+Runs are not silently re-executed; new submissions/edits use the new contract. Rechecking historical
+content requires a separate authorized, current-revision recheck under the normal provider gates.
 
 ## Verification
 

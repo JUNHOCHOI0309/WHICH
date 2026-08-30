@@ -20,7 +20,11 @@ import {
   outboxEvents,
 } from "../../database/schema/index.js";
 import type { IssueMediaObjectStorage } from "../issue-media/contracts.js";
-import { ModerationProviderCallError } from "../moderation-providers/contracts.js";
+import {
+  MODERATION_PROVIDER_INPUT_VERSION,
+  ModerationProviderCallError,
+} from "../moderation-providers/contracts.js";
+import { moderationProviderCacheHash } from "../moderation-providers/input-binding.js";
 import { toImageProviderShadowFindings } from "../moderation-providers/image-shadow-findings.js";
 import {
   createModerationSubmissionEvents,
@@ -28,6 +32,7 @@ import {
   moderationRequestedEventSchema,
   type ModerationRequestedEvent,
   type ModerationShadowAdapter,
+  type ModerationShadowInspection,
 } from "./contracts.js";
 
 export type ModerationDispatcherOptions = {
@@ -63,6 +68,31 @@ function safeLimit(value: number | undefined, fallback: number) {
   return Math.max(1, Math.min(value ?? fallback, 500));
 }
 
+function eventForRun(
+  run: typeof moderationRuns.$inferSelect,
+  target: typeof moderationTargets.$inferSelect,
+): ModerationRequestedEvent {
+  return {
+    event_id: run.sourceEventId ?? run.id,
+    event_type: "MODERATION_REQUESTED",
+    schema_version: 1,
+    occurred_at: run.createdAt.toISOString(),
+    aggregate_type: "MODERATION_TARGET",
+    aggregate_id: `${target.targetType}:${target.targetId}:${target.targetVersion}`,
+    data: {
+      source_event_id: run.sourceEventId ?? run.id,
+      target_type: target.targetType as ModerationRequestedEvent["data"]["target_type"],
+      target_id: target.targetId,
+      target_version: target.targetVersion,
+      private_object_reference: target.snapshotReference,
+      normalized_input_hash: run.normalizedInputHash,
+      policy_version: run.policyVersion,
+      reason: "CREATE",
+      mode: "SHADOW",
+    },
+  };
+}
+
 export function createModerationDispatcherService(
   database: Database["db"],
   adapter: ModerationShadowAdapter | null,
@@ -79,10 +109,15 @@ export function createModerationDispatcherService(
     );
   }
 
-  async function inspectTarget(event: ModerationRequestedEvent) {
+  async function inspectTarget(
+    event: ModerationRequestedEvent,
+    reader: Pick<Database["db"], "select"> = database,
+  ) {
     const target = event.data;
+    if (target.policy_version !== policyVersion)
+      return { exists: true, staleReason: "POLICY_VERSION_CHANGED" } as const;
     if (target.target_type === "COMMENT_VERSION") {
-      const [row] = await database
+      const [row] = await reader
         .select({
           inputHash: commentRevisions.inputHash,
           currentRevision: comments.bodyRevision,
@@ -107,7 +142,7 @@ export function createModerationDispatcherService(
       return { exists: true, staleReason: null } as const;
     }
     if (target.target_type === "ISSUE_VERSION") {
-      const [row] = await database
+      const [row] = await reader
         .select({ inputHash: issueVersionSnapshots.inputHash })
         .from(issueVersionSnapshots)
         .where(
@@ -118,9 +153,13 @@ export function createModerationDispatcherService(
         )
         .limit(1);
       if (!row) {
-        const [submission] = await database
+        const [submission] = await reader
           .select({
             inputHash: memberIssueSubmissionRevisions.contentHash,
+            memberId: memberIssueSubmissionRevisions.memberId,
+            mediaAssetAId: memberIssueSubmissionRevisions.mediaAssetAId,
+            mediaAssetBId: memberIssueSubmissionRevisions.mediaAssetBId,
+            currentHash: memberIssueSubmissions.contentHash,
             currentRevision: memberIssueSubmissions.revision,
             status: memberIssueSubmissions.status,
             publishedIssueId: memberIssueSubmissions.publishedIssueId,
@@ -140,13 +179,43 @@ export function createModerationDispatcherService(
         if (!submission) {
           return { exists: false, staleReason: "TARGET_VERSION_NOT_FOUND" } as const;
         }
+        if (
+          target.private_object_reference !==
+          `issue-submission://revision/${target.target_id}/${target.target_version}`
+        ) {
+          return { exists: true, staleReason: "TARGET_REFERENCE_MISMATCH" } as const;
+        }
+        const assetIds = [submission.mediaAssetAId, submission.mediaAssetBId].filter(
+          (id): id is string => Boolean(id),
+        );
+        if (assetIds.length) {
+          const assets = await reader
+            .select()
+            .from(issueMediaAssets)
+            .where(inArray(issueMediaAssets.id, assetIds));
+          if (
+            new Set(assetIds).size !== 2 ||
+            assets.length !== 2 ||
+            assets.some(
+              (asset) =>
+                asset.uploadedByMemberId !== submission.memberId ||
+                asset.sourceType !== "MEMBER_SUBMISSION" ||
+                asset.processingState !== "READY" ||
+                !["STAGED", "PUBLISHED"].includes(asset.storageState) ||
+                !["PENDING", "APPROVED"].includes(asset.moderationState) ||
+                !["ASSERTED", "CLEARED"].includes(asset.rightsState),
+            )
+          )
+            return { exists: true, staleReason: "SUBMISSION_MEDIA_UNAVAILABLE" } as const;
+        }
         return {
           exists: true,
           staleReason:
-            submission.inputHash !== target.normalized_input_hash
+            submission.inputHash !== target.normalized_input_hash ||
+            submission.currentHash !== submission.inputHash
               ? "INPUT_HASH_CHANGED"
               : submission.currentRevision !== target.target_version ||
-                  submission.status === "CANCELLED" ||
+                  !["PENDING", "NEEDS_CHANGES"].includes(submission.status) ||
                   Boolean(submission.publishedIssueId)
                 ? "TARGET_REPLACED_OR_REMOVED"
                 : null,
@@ -157,10 +226,13 @@ export function createModerationDispatcherService(
         staleReason: row.inputHash === target.normalized_input_hash ? null : "INPUT_HASH_CHANGED",
       } as const;
     }
-    const [row] = await database
+    const [row] = await reader
       .select({
         inputHash: issueMediaAssetVersions.inputHash,
         storageState: issueMediaAssets.storageState,
+        processingState: issueMediaAssets.processingState,
+        moderationState: issueMediaAssets.moderationState,
+        rightsState: issueMediaAssets.rightsState,
       })
       .from(issueMediaAssetVersions)
       .innerJoin(issueMediaAssets, eq(issueMediaAssets.id, issueMediaAssetVersions.assetId))
@@ -177,7 +249,13 @@ export function createModerationDispatcherService(
     }
     return {
       exists: true,
-      staleReason: row.storageState === "PURGED" ? "TARGET_REMOVED" : null,
+      staleReason:
+        !["STAGED", "PUBLISHED"].includes(row.storageState) ||
+        row.processingState !== "READY" ||
+        !["PENDING", "APPROVED"].includes(row.moderationState) ||
+        !["ASSERTED", "CLEARED"].includes(row.rightsState)
+          ? "TARGET_REMOVED"
+          : null,
     } as const;
   }
 
@@ -388,7 +466,9 @@ export function createModerationDispatcherService(
     });
   }
 
-  async function executeRun(run: typeof moderationRuns.$inferSelect) {
+  async function executeRun(
+    run: typeof moderationRuns.$inferSelect,
+  ): Promise<ModerationShadowInspection> {
     if (!run.claimToken) throw new Error("The moderation Run has no lease token.");
     const [target] = await database
       .select()
@@ -397,25 +477,7 @@ export function createModerationDispatcherService(
       .limit(1);
     if (!target) throw new Error("The moderation target is missing.");
 
-    const event = {
-      event_id: run.sourceEventId ?? randomUUID(),
-      event_type: "MODERATION_REQUESTED" as const,
-      schema_version: 1 as const,
-      occurred_at: run.createdAt.toISOString(),
-      aggregate_type: "MODERATION_TARGET" as const,
-      aggregate_id: `${target.targetType}:${target.targetId}:${target.targetVersion}`,
-      data: {
-        source_event_id: run.sourceEventId ?? randomUUID(),
-        target_type: target.targetType as ModerationRequestedEvent["data"]["target_type"],
-        target_id: target.targetId,
-        target_version: target.targetVersion,
-        private_object_reference: target.snapshotReference,
-        normalized_input_hash: target.inputHash,
-        policy_version: run.policyVersion,
-        reason: "CREATE" as const,
-        mode: "SHADOW" as const,
-      },
-    };
+    const event = eventForRun(run, target);
     const targetState = await inspectTarget(event);
     if (targetState.staleReason) {
       return {
@@ -467,6 +529,10 @@ export function createModerationDispatcherService(
       };
     }
 
+    const cacheHash = moderationProviderCacheHash({
+      targetType: event.data.target_type,
+      normalizedInputHash: run.normalizedInputHash,
+    });
     const [cached] = await database
       .select()
       .from(moderationProviderCallCache)
@@ -476,7 +542,8 @@ export function createModerationDispatcherService(
           eq(moderationProviderCallCache.modelName, adapter.modelName),
           eq(moderationProviderCallCache.modelVersion, adapter.modelVersion),
           eq(moderationProviderCallCache.policyVersion, run.policyVersion),
-          eq(moderationProviderCallCache.normalizedInputHash, run.normalizedInputHash),
+          eq(moderationProviderCallCache.normalizedInputHash, cacheHash),
+          inArray(moderationProviderCallCache.status, ["SUCCEEDED", "SKIPPED"]),
           gt(moderationProviderCallCache.expiresAt, now()),
         ),
       )
@@ -490,32 +557,64 @@ export function createModerationDispatcherService(
       };
     }
 
-    const inspected = await adapter.inspect({
-      targetType: event.data.target_type,
-      targetId: target.targetId,
-      targetVersion: target.targetVersion,
-      privateObjectReference: target.snapshotReference,
-      normalizedInputHash: run.normalizedInputHash,
-      policyVersion: run.policyVersion,
-    });
-    await database
-      .insert(moderationProviderCallCache)
-      .values({
+    // Account for uncached attempts independently of the reusable cache. Stale, failed or
+    // lease-lost results still consumed capacity, even when they cannot become evidence.
+    await database.insert(moderationAuditEvents).values({
+      eventType: "PROVIDER_INSPECTION_ATTEMPTED",
+      entityType: "RUN",
+      entityId: run.id,
+      actorType: "SYSTEM",
+      metadata: {
         provider: adapter.provider,
-        modelName: adapter.modelName,
-        modelVersion: adapter.modelVersion,
-        policyVersion: run.policyVersion,
+        inputContractVersion: MODERATION_PROVIDER_INPUT_VERSION,
+      },
+      occurredAt: now(),
+    });
+    let inspected: ModerationShadowInspection;
+    try {
+      inspected = await adapter.inspect({
+        targetType: event.data.target_type,
+        targetId: target.targetId,
+        targetVersion: target.targetVersion,
+        privateObjectReference: target.snapshotReference,
         normalizedInputHash: run.normalizedInputHash,
-        status: inspected.status,
-        result: inspected.result,
-        latencyMs: inspected.latencyMs,
+        policyVersion: run.policyVersion,
+      });
+    } catch (error) {
+      await database.insert(moderationAuditEvents).values({
+        eventType: "PROVIDER_INSPECTION_FAILED",
+        entityType: "RUN",
+        entityId: run.id,
+        actorType: "SYSTEM",
+        metadata: {
+          provider: adapter.provider,
+          inputContractVersion: MODERATION_PROVIDER_INPUT_VERSION,
+        },
+        occurredAt: now(),
+      });
+      throw error;
+    }
+    await database.insert(moderationAuditEvents).values({
+      eventType: "PROVIDER_INSPECTION_COMPLETED",
+      entityType: "RUN",
+      entityId: run.id,
+      actorType: "SYSTEM",
+      metadata: {
+        provider: adapter.provider,
+        inputContractVersion: MODERATION_PROVIDER_INPUT_VERSION,
         costMicros: inspected.costMicros,
-        expiresAt: new Date(now().getTime() + adapter.cacheTtlMilliseconds),
-      })
-      .onConflictDoNothing();
+      },
+      occurredAt: now(),
+    });
     return {
       ...inspected,
-      result: { ...inspected.result, cacheHit: false, shadow: true, publicationChanged: false },
+      result: {
+        ...inspected.result,
+        inputContractVersion: MODERATION_PROVIDER_INPUT_VERSION,
+        cacheHit: false,
+        shadow: true,
+        publicationChanged: false,
+      },
     };
   }
 
@@ -524,12 +623,67 @@ export function createModerationDispatcherService(
     result: Awaited<ReturnType<typeof executeRun>>,
   ) {
     const completedAt = now();
-    await database.transaction(async (transaction) => {
+    return database.transaction(async (transaction) => {
+      const [target] = await transaction
+        .select()
+        .from(moderationTargets)
+        .where(eq(moderationTargets.id, run.targetId))
+        .limit(1);
+      if (!target) throw new Error("The moderation target is missing.");
+      // Serialize final evidence acceptance with edit/cancel and media deletion, not the network call.
+      if (
+        target.targetType === "ISSUE_VERSION" &&
+        target.snapshotReference.startsWith("issue-submission://")
+      ) {
+        await transaction.execute(
+          sql`select pg_advisory_xact_lock(hashtextextended(${`which:member-issue-submission:${target.targetId}`}, 0))`,
+        );
+        const [submission] = await transaction
+          .select()
+          .from(memberIssueSubmissions)
+          .where(eq(memberIssueSubmissions.id, target.targetId))
+          .for("update");
+        const ids = [submission?.mediaAssetAId, submission?.mediaAssetBId].filter(
+          (id): id is string => Boolean(id),
+        );
+        if (ids.length)
+          await transaction
+            .select({ id: issueMediaAssets.id })
+            .from(issueMediaAssets)
+            .where(inArray(issueMediaAssets.id, ids))
+            .orderBy(asc(issueMediaAssets.id))
+            .for("update");
+      } else if (target.targetType === "COMMENT_VERSION") {
+        await transaction
+          .select({ id: comments.id })
+          .from(comments)
+          .where(eq(comments.id, target.targetId))
+          .for("update");
+      } else if (target.targetType === "ISSUE_MEDIA_ASSET") {
+        await transaction
+          .select({ id: issueMediaAssets.id })
+          .from(issueMediaAssets)
+          .where(eq(issueMediaAssets.id, target.targetId))
+          .for("update");
+      }
+      const state = await inspectTarget(eventForRun(run, target), transaction);
+      const finalStatus = state.staleReason ? "SKIPPED" : result.status;
+      const finalResult = state.staleReason
+        ? { shadow: true, stale: true, reason: state.staleReason, publicationChanged: false }
+        : {
+            ...result.result,
+            inputBinding: {
+              contractVersion: MODERATION_PROVIDER_INPUT_VERSION,
+              targetType: target.targetType,
+              targetVersion: target.targetVersion,
+              inputHash: run.normalizedInputHash,
+            },
+          };
       const [updated] = await transaction
         .update(moderationRuns)
         .set({
-          status: result.status,
-          result: result.result,
+          status: finalStatus,
+          result: finalResult,
           latencyMs: result.latencyMs,
           costMicros: result.costMicros,
           modelProvider: adapter?.provider,
@@ -551,15 +705,39 @@ export function createModerationDispatcherService(
         )
         .returning({ id: moderationRuns.id });
       if (updated) {
-        const [target] = await transaction
-          .select({
-            targetType: moderationTargets.targetType,
-            targetId: moderationTargets.targetId,
-          })
-          .from(moderationTargets)
-          .where(eq(moderationTargets.id, run.targetId))
-          .limit(1);
-        if (target?.targetType === "ISSUE_MEDIA_ASSET" && result.status === "SUCCEEDED") {
+        // An expired lease or stale response must not populate the reusable provider cache.
+        if (adapter && !state.staleReason && result.result.cacheHit === false) {
+          const cacheValue = {
+            provider: adapter.provider,
+            modelName: adapter.modelName,
+            modelVersion: adapter.modelVersion,
+            policyVersion: run.policyVersion,
+            normalizedInputHash: moderationProviderCacheHash({
+              targetType: target.targetType as ModerationRequestedEvent["data"]["target_type"],
+              normalizedInputHash: run.normalizedInputHash,
+            }),
+            status: result.status,
+            result: result.result,
+            latencyMs: result.latencyMs,
+            costMicros: result.costMicros,
+            expiresAt: new Date(completedAt.getTime() + adapter.cacheTtlMilliseconds),
+          };
+          await transaction
+            .insert(moderationProviderCallCache)
+            .values(cacheValue)
+            .onConflictDoUpdate({
+              target: [
+                moderationProviderCallCache.provider,
+                moderationProviderCallCache.modelName,
+                moderationProviderCallCache.modelVersion,
+                moderationProviderCallCache.policyVersion,
+                moderationProviderCallCache.normalizedInputHash,
+              ],
+              set: { ...cacheValue, createdAt: completedAt },
+              setWhere: lte(moderationProviderCallCache.expiresAt, completedAt),
+            });
+        }
+        if (target.targetType === "ISSUE_MEDIA_ASSET" && finalStatus === "SUCCEEDED") {
           const findings = toImageProviderShadowFindings({
             result: result.result,
             policyVersion: run.policyVersion,
@@ -575,7 +753,7 @@ export function createModerationDispatcherService(
           }
         }
         await transaction.insert(moderationAuditEvents).values({
-          eventType: `SHADOW_RUN_${result.status}`,
+          eventType: `SHADOW_RUN_${finalStatus}`,
           entityType: "RUN",
           entityId: run.id,
           actorType: "SYSTEM",
@@ -583,9 +761,11 @@ export function createModerationDispatcherService(
             mode: "SHADOW",
             costMicros: result.costMicros,
             publicationChanged: false,
+            staleReason: state.staleReason,
           },
         });
       }
+      return updated ? finalStatus : "SKIPPED";
     });
   }
 
@@ -656,8 +836,8 @@ export function createModerationDispatcherService(
       for (const run of runs) {
         try {
           const result = await executeRun(run);
-          await completeRun(run, result);
-          if (result.status === "SUCCEEDED") summary.succeeded += 1;
+          const status = await completeRun(run, result);
+          if (status === "SUCCEEDED") summary.succeeded += 1;
           else summary.skipped += 1;
         } catch (error) {
           const outcome = await failRun(run, error);

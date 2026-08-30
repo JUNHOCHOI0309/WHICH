@@ -47,7 +47,7 @@ const resultSchema = z.object({
 
 const responseSchema = z.object({
   model: z.string().min(1),
-  results: z.array(resultSchema).min(1),
+  results: z.array(resultSchema).length(1),
 });
 
 export type OpenAiModerationAdapterOptions = {
@@ -77,10 +77,14 @@ export function createOpenAiModerationAdapter(
     cacheTtlMilliseconds: options.cacheTtlMilliseconds ?? 86_400_000,
     async inspect(target) {
       const input = await options.resolveInput(target);
+      const images = input.images ?? (input.image ? [input.image] : []);
+      if ((input.images && input.image) || images.length > 2) {
+        throw new ModerationProviderCallError("INPUT_UNAVAILABLE", "INVALID_IMAGE_INPUT", false);
+      }
       const requestInput: Array<Record<string, unknown>> = [];
       if (input.text) requestInput.push({ type: "text", text: input.text });
-      if (input.image) {
-        requestInput.push({ type: "image_url", image_url: { url: input.image.dataUrl } });
+      for (const image of images) {
+        requestInput.push({ type: "image_url", image_url: { url: image.dataUrl } });
       }
       if (requestInput.length === 0) {
         throw new ModerationProviderCallError(
@@ -137,6 +141,22 @@ export function createOpenAiModerationAdapter(
       }
 
       const result = parsed.results[0]!;
+      if (/\d{4}-\d{2}-\d{2}$/u.test(model) && parsed.model !== model) {
+        throw new ModerationProviderCallError("MALFORMED_OUTPUT", "MODEL_SNAPSHOT_MISMATCH", false);
+      }
+      if (
+        Object.keys(result.categories).some((label) => !(label in result.category_scores)) ||
+        Object.keys(result.category_scores).some(
+          (label) =>
+            !(label in result.categories) || !(label in result.category_applied_input_types),
+        )
+      ) {
+        throw new ModerationProviderCallError(
+          "MALFORMED_OUTPUT",
+          "INCOMPLETE_CATEGORY_EVIDENCE",
+          false,
+        );
+      }
       const signals: ModerationProviderSignal[] = Object.entries(result.category_scores).map(
         ([providerLabel, rawScore]) => ({
           providerLabel,
@@ -162,6 +182,8 @@ export function createOpenAiModerationAdapter(
           schemaVersion: MODERATION_PROVIDER_RESULT_SCHEMA_VERSION,
           provider: "OPENAI_MODERATION",
           modality: input.modality,
+          inputScope: input.scope ?? "UNSPECIFIED",
+          imageCount: images.length,
           modelSnapshot: parsed.model,
           supportedLabels,
           unsupportedLabels,

@@ -1,10 +1,12 @@
-import { and, eq, or } from "drizzle-orm";
+import { createHash } from "node:crypto";
+
+import { and, eq } from "drizzle-orm";
 import sharp from "sharp";
 
 import type { Database } from "../../database/client.js";
 import {
   commentRevisions,
-  issueChoiceMediaRevisions,
+  issueMediaAssetVersions,
   issueMediaAssets,
   issueVersionSnapshots,
   memberIssueSubmissionRevisions,
@@ -37,16 +39,85 @@ export async function normalizeProviderImage(bytes: Buffer) {
     .toBuffer({ resolveWithObject: true });
 }
 
+function unavailable(code: string): never {
+  throw new ModerationProviderCallError("INPUT_UNAVAILABLE", code, false);
+}
+
 export function createModerationProviderInputResolver(input: {
   database: Database["db"];
   storage: IssueMediaObjectStorage | null;
 }): (
   target: Parameters<ModerationShadowAdapter["inspect"]>[0],
 ) => Promise<ModerationProviderInput> {
+  async function resolveImage(
+    assetId: string,
+    version: number,
+    expectedHash?: string,
+    owner?: string,
+  ) {
+    if (!input.storage) unavailable("ISSUE_MEDIA_STORAGE_DISABLED");
+    const [row] = await input.database
+      .select({ asset: issueMediaAssets, snapshot: issueMediaAssetVersions })
+      .from(issueMediaAssetVersions)
+      .innerJoin(issueMediaAssets, eq(issueMediaAssets.id, issueMediaAssetVersions.assetId))
+      .where(
+        and(
+          eq(issueMediaAssetVersions.assetId, assetId),
+          eq(issueMediaAssetVersions.version, version),
+        ),
+      )
+      .limit(1);
+    if (!row) unavailable("ISSUE_MEDIA_VERSION_NOT_FOUND");
+    const { asset, snapshot } = row;
+    if (
+      snapshot.hashAlgorithm !== "SHA256" ||
+      (expectedHash && snapshot.inputHash !== expectedHash) ||
+      asset.sha256 !== snapshot.sha256 ||
+      asset.processingState !== "READY" ||
+      !["STAGED", "PUBLISHED"].includes(asset.storageState) ||
+      !["PENDING", "APPROVED"].includes(asset.moderationState) ||
+      !["ASSERTED", "CLEARED"].includes(asset.rightsState) ||
+      (owner && (asset.uploadedByMemberId !== owner || asset.sourceType !== "MEMBER_SUBMISSION"))
+    )
+      unavailable("ISSUE_MEDIA_VERSION_UNAVAILABLE");
+    const objectKey =
+      asset.storageState === "PUBLISHED" ? asset.publishedObjectKey : asset.stagingObjectKey;
+    if (!objectKey) unavailable("ISSUE_MEDIA_OBJECT_NOT_FOUND");
+    const bytes = await input.storage
+      .read(objectKey)
+      .catch(() => unavailable("ISSUE_MEDIA_OBJECT_UNAVAILABLE"));
+    if (createHash("sha256").update(bytes).digest("hex") !== snapshot.inputHash) {
+      unavailable("ISSUE_MEDIA_BINARY_HASH_MISMATCH");
+    }
+    const derivative = await normalizeProviderImage(bytes);
+    const envelope = buildExternalImageModerationEnvelope({
+      provider: "OPENAI_MODERATION",
+      opaqueRequestId: snapshot.inputHash.slice(0, 32),
+      derivative: {
+        mimeType: "image/webp",
+        width: derivative.info.width,
+        height: derivative.info.height,
+        byteLength: derivative.data.byteLength,
+        metadataStripped: true,
+        reencoded: true,
+        content: derivative.data.toString("base64"),
+      },
+    });
+    return {
+      dataUrl: `data:${envelope.media.mimeType};base64,${envelope.media.content}`,
+      mimeType: envelope.media.mimeType,
+      width: envelope.media.width,
+      height: envelope.media.height,
+      byteLength: envelope.media.byteLength,
+      metadataStripped: true as const,
+      reencoded: true as const,
+    };
+  }
+
   return async (target) => {
     if (target.targetType === "COMMENT_VERSION") {
       const [row] = await input.database
-        .select({ body: commentRevisions.body })
+        .select({ body: commentRevisions.body, inputHash: commentRevisions.inputHash })
         .from(commentRevisions)
         .where(
           and(
@@ -55,18 +126,67 @@ export function createModerationProviderInputResolver(input: {
           ),
         )
         .limit(1);
-      if (!row)
-        throw new ModerationProviderCallError("INPUT_UNAVAILABLE", "COMMENT_NOT_FOUND", false);
-      return { targetType: target.targetType, modality: "TEXT", text: normalizeText(row.body) };
+      if (!row || row.inputHash !== target.normalizedInputHash)
+        unavailable("COMMENT_VERSION_MISMATCH");
+      return {
+        targetType: target.targetType,
+        scope: "COMMENT_REVISION",
+        modality: "TEXT",
+        text: normalizeText(row.body),
+      };
     }
 
     if (target.targetType === "ISSUE_VERSION") {
+      if (
+        target.privateObjectReference ===
+        `issue-submission://revision/${target.targetId}/${target.targetVersion}`
+      ) {
+        const [submission] = await input.database
+          .select()
+          .from(memberIssueSubmissionRevisions)
+          .where(
+            and(
+              eq(memberIssueSubmissionRevisions.submissionId, target.targetId),
+              eq(memberIssueSubmissionRevisions.revision, target.targetVersion),
+            ),
+          )
+          .limit(1);
+        if (!submission || submission.contentHash !== target.normalizedInputHash)
+          unavailable("SUBMISSION_VERSION_MISMATCH");
+        const ids = [submission.mediaAssetAId, submission.mediaAssetBId];
+        if (ids.some(Boolean) && (!ids.every(Boolean) || ids[0] === ids[1]))
+          unavailable("SUBMISSION_MEDIA_PAIR_INVALID");
+        // Bind both images to this immutable question revision, never an arbitrary linked revision.
+        const images = [];
+        for (const id of ids) {
+          if (id) images.push(await resolveImage(id, 1, undefined, submission.memberId));
+        }
+        const context = {
+          question: redactProviderContext(submission.question),
+          choices: [submission.choiceA, submission.choiceB].map(redactProviderContext),
+          piiRedacted: true as const,
+        };
+        const text = normalizeText(
+          [
+            context.question,
+            redactProviderContext(submission.context ?? ""),
+            ...context.choices.map((choice, index) => `${index === 0 ? "A" : "B"}: ${choice}`),
+          ]
+            .filter(Boolean)
+            .join("\n"),
+          MAX_CONTEXT_CHARACTERS,
+        );
+        return {
+          targetType: target.targetType,
+          scope: "SUBMISSION_REVISION",
+          modality: images.length ? "TEXT_AND_IMAGE" : "TEXT",
+          text,
+          images,
+          context,
+        };
+      }
       const [snapshot] = await input.database
-        .select({
-          question: issueVersionSnapshots.question,
-          context: issueVersionSnapshots.context,
-          choices: issueVersionSnapshots.choicesSnapshot,
-        })
+        .select()
         .from(issueVersionSnapshots)
         .where(
           and(
@@ -75,163 +195,37 @@ export function createModerationProviderInputResolver(input: {
           ),
         )
         .limit(1);
-      if (snapshot) {
-        return {
-          targetType: target.targetType,
-          modality: "TEXT",
-          text: normalizeText(
-            [snapshot.question, snapshot.context, ...snapshot.choices.map(({ label }) => label)]
-              .filter(Boolean)
-              .join("\n"),
-          ),
-        };
-      }
-      const [submission] = await input.database
-        .select({
-          question: memberIssueSubmissionRevisions.question,
-          context: memberIssueSubmissionRevisions.context,
-          choiceA: memberIssueSubmissionRevisions.choiceA,
-          choiceB: memberIssueSubmissionRevisions.choiceB,
-        })
-        .from(memberIssueSubmissionRevisions)
-        .where(
-          and(
-            eq(memberIssueSubmissionRevisions.submissionId, target.targetId),
-            eq(memberIssueSubmissionRevisions.revision, target.targetVersion),
-          ),
-        )
-        .limit(1);
-      if (!submission) {
-        throw new ModerationProviderCallError(
-          "INPUT_UNAVAILABLE",
-          "ISSUE_VERSION_NOT_FOUND",
-          false,
-        );
-      }
+      if (!snapshot || snapshot.inputHash !== target.normalizedInputHash)
+        unavailable("ISSUE_VERSION_MISMATCH");
       return {
         targetType: target.targetType,
+        scope: "ISSUE_SNAPSHOT",
         modality: "TEXT",
         text: normalizeText(
-          [submission.question, submission.context, submission.choiceA, submission.choiceB]
+          [
+            snapshot.question,
+            snapshot.context,
+            ...snapshot.choicesSnapshot.map(({ label }) => label),
+          ]
             .filter(Boolean)
             .join("\n"),
         ),
       };
     }
 
-    if (!input.storage) {
-      throw new ModerationProviderCallError(
-        "INPUT_UNAVAILABLE",
-        "ISSUE_MEDIA_STORAGE_DISABLED",
-        false,
-      );
-    }
-    const [asset] = await input.database
-      .select({
-        stagingObjectKey: issueMediaAssets.stagingObjectKey,
-        publishedObjectKey: issueMediaAssets.publishedObjectKey,
-        quarantinedObjectKey: issueMediaAssets.quarantinedObjectKey,
-      })
-      .from(issueMediaAssets)
-      .where(eq(issueMediaAssets.id, target.targetId))
-      .limit(1);
-    const objectKey =
-      asset?.stagingObjectKey ?? asset?.publishedObjectKey ?? asset?.quarantinedObjectKey ?? null;
-    if (!objectKey) {
-      throw new ModerationProviderCallError(
-        "INPUT_UNAVAILABLE",
-        "ISSUE_MEDIA_OBJECT_NOT_FOUND",
-        false,
-      );
-    }
-
-    const [linked] = await input.database
-      .select({
-        issueId: issueChoiceMediaRevisions.issueId,
-        issueVersion: issueChoiceMediaRevisions.issueVersion,
-        altText: issueChoiceMediaRevisions.altText,
-      })
-      .from(issueChoiceMediaRevisions)
-      .where(eq(issueChoiceMediaRevisions.mediaAssetId, target.targetId))
-      .limit(1);
-    const [snapshot] = linked
-      ? await input.database
-          .select({
-            question: issueVersionSnapshots.question,
-            choices: issueVersionSnapshots.choicesSnapshot,
-          })
-          .from(issueVersionSnapshots)
-          .where(
-            and(
-              eq(issueVersionSnapshots.issueId, linked.issueId),
-              eq(issueVersionSnapshots.issueVersion, linked.issueVersion),
-            ),
-          )
-          .limit(1)
-      : [];
-    const [submission] = !snapshot
-      ? await input.database
-          .select({
-            question: memberIssueSubmissionRevisions.question,
-            choiceA: memberIssueSubmissionRevisions.choiceA,
-            choiceB: memberIssueSubmissionRevisions.choiceB,
-          })
-          .from(memberIssueSubmissionRevisions)
-          .where(
-            or(
-              eq(memberIssueSubmissionRevisions.mediaAssetAId, target.targetId),
-              eq(memberIssueSubmissionRevisions.mediaAssetBId, target.targetId),
-            ),
-          )
-          .limit(1)
-      : [];
-
-    const bytes = await input.storage.read(objectKey);
-    const derivative = await normalizeProviderImage(bytes);
-    const context = {
-      question: redactProviderContext(snapshot?.question ?? submission?.question ?? ""),
-      choices: (
-        snapshot?.choices.map(({ label }) => label) ??
-        [submission?.choiceA, submission?.choiceB].filter((value): value is string =>
-          Boolean(value),
-        )
-      ).map(redactProviderContext),
-      altText: redactProviderContext(linked?.altText ?? ""),
-      piiRedacted: true as const,
-    };
-    const content = derivative.data.toString("base64");
-    const envelope = buildExternalImageModerationEnvelope({
-      provider: "OPENAI_MODERATION",
-      opaqueRequestId: target.normalizedInputHash.slice(0, 32),
-      derivative: {
-        mimeType: "image/webp",
-        width: derivative.info.width,
-        height: derivative.info.height,
-        byteLength: derivative.data.byteLength,
-        metadataStripped: true,
-        reencoded: true,
-        content,
-      },
-      context,
-    });
-    const contextText = normalizeText(
-      [context.question, ...(context.choices ?? []), context.altText].filter(Boolean).join("\n"),
-      MAX_CONTEXT_CHARACTERS,
-    );
+    // Asset hashes cover pixels, not the context of a later submission or published Issue.
+    if (
+      target.privateObjectReference !==
+      `issue-media://asset/${target.targetId}/version/${target.targetVersion}`
+    )
+      unavailable("ISSUE_MEDIA_REFERENCE_MISMATCH");
     return {
       targetType: target.targetType,
-      modality: contextText ? "TEXT_AND_IMAGE" : "IMAGE",
-      ...(contextText ? { text: contextText } : {}),
-      image: {
-        dataUrl: `data:${envelope.media.mimeType};base64,${envelope.media.content}`,
-        mimeType: envelope.media.mimeType,
-        width: envelope.media.width,
-        height: envelope.media.height,
-        byteLength: envelope.media.byteLength,
-        metadataStripped: true,
-        reencoded: true,
-      },
-      context: envelope.context,
+      scope: "ASSET_ONLY",
+      modality: "IMAGE",
+      images: [
+        await resolveImage(target.targetId, target.targetVersion, target.normalizedInputHash),
+      ],
     };
   };
 }
