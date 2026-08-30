@@ -23,8 +23,8 @@ const services = [
   }),
   start("points", ["--filter", "@which/api", "points:worker:prod"], {}),
   ...(process.env.MODERATION_WORKER_ENABLED === "true"
-    // Avoid another package-manager process; deliver shutdown signals directly to the worker.
-    ? [start("moderation", ["apps/api/dist/moderation-worker.js", "run"], {}, process.execPath)]
+    ? // Avoid another package-manager process; deliver shutdown signals directly to the worker.
+      [start("moderation", ["apps/api/dist/moderation-worker.js", "run"], {}, process.execPath)]
     : []),
 ];
 

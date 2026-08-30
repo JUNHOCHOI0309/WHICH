@@ -91,6 +91,16 @@ The public domain belongs to Published only. Existing avatar storage remains unc
 
 ## Verification
 
+### Production activation hold (2026-08-31 KST)
+
+Read-only Render preflight measured `memory.current=498114560` and
+`memory.max=536870912` bytes (approximately 475 / 512 MiB, including the diagnostic process).
+There is insufficient demonstrated headroom for an additional persistent worker plus OCR.
+Do not enable the runtime on this measurement alone. Capacity planning / service separation
+requires the owner's choice before any paid infrastructure change. No runtime flags or keys
+were changed during this preflight. The existing test submission remains private and has
+current v2 consent; no real model call was made as part of activation.
+
 Integration tests cover successful and concurrent publication, one notification, disabled/cohort
 gates, revocation/expiry, revision/cancellation, rights challenges, pixel/model/profile changes,
 incomplete local evidence, conflicting ALLOW fields, R2 partial-write compensation and retry,
