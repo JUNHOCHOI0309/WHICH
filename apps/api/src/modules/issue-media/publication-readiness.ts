@@ -3,6 +3,7 @@ import { MODERATION_PROVIDER_INPUT_VERSION } from "../moderation-providers/contr
 import { openAiCoverage, OPENAI_TEXT_LABELS } from "../moderation-providers/openai-coverage.js";
 import { ISSUE_MEDIA_RULE_POLICY_VERSION } from "./upload-gate-policy.js";
 import { LOCAL_SCAN_VERSION } from "./local-scan-contract.js";
+import { embeddedTextEvidenceSchema } from "./embedded-text.js";
 
 export const PUBLICATION_READINESS_VERSION = "which-publication-readiness-v1";
 export type ReadinessAsset = {
@@ -174,7 +175,19 @@ export function evaluatePublicationReadiness(input: PublicationReadinessInput) {
     if (!coverage || coverage.missingImageLabels.length) blockers.push("IMAGE_COVERAGE_INCOMPLETE");
     if (!coverage || coverage.missingTextLabels.length) blockers.push("TEXT_COVERAGE_INCOMPLETE");
   }
-  blockers.push("EMBEDDED_TEXT_SAFETY_NOT_IMPLEMENTED");
+  const embedded = embeddedTextEvidenceSchema.safeParse(input.providerResult.embeddedText);
+  if (!embedded.success || embedded.data.images.length !== 2)
+    blockers.push("EMBEDDED_TEXT_EVIDENCE_MISSING");
+  else
+    embedded.data.images.forEach((image, index) => {
+      const side = index === 0 ? "A" : "B";
+      const asset = input.assets.find((entry) => entry.id === ids[index]);
+      if (!asset || image.normalizedHash !== asset.normalizedHash)
+        blockers.push(`${side}_EMBEDDED_TEXT_BINDING_MISMATCH`);
+      if (image.status !== "COMPLETE") blockers.push(`${side}_EMBEDDED_TEXT_${image.status}`);
+      if (image.characters > 0 && (!coverage || coverage.missingTextLabels.length))
+        blockers.push(`${side}_EMBEDDED_TEXT_SAFETY_INCOMPLETE`);
+    });
   return {
     version: PUBLICATION_READINESS_VERSION,
     evaluatedAt: input.evaluatedAt.toISOString(),

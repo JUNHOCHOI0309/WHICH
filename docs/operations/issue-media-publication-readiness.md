@@ -27,7 +27,9 @@
 
 공식 API가 `sexual/minors`, harassment, hate, illicit 계열에 제공하는 것은 텍스트 지원이다.
 이미지를 함께 보냈다고 해당 항목을 이미지 검사 완료로 취급하지 않는다.
-얼굴/신분증/권리 판단, 이미지 속 OCR 본문의 유해성 검사 및 보정된 clear 판정도 현재 구현으로 제공되지 않는다.
+얼굴/신분증/권리 판단 및 보정된 clear 판정은 현재 구현으로 제공되지 않는다.
+이미지 속 OCR 본문은 [텍스트 안전 검사 연결](./issue-media-embedded-text-safety.md) 이후 기존 Shadow 입력에 결합한다.
+누락·실패·개인정보 전달 보류·불완전 Provider 텍스트 결과는 이미지별 보류 사유로 남긴다.
 `1 - 최고 위험 점수`를 안전 확률로 변환하지 않는다.
 근거: [OpenAI Moderations API](https://developers.openai.com/api/reference/resources/moderations).
 
@@ -54,7 +56,7 @@ DB 조회만 수행하며 OpenAI/R2 호출, 재검사, 게시, 데이터 변경�
 | `A_…` / `B_…`                                | 해당 선택지 이미지의 소유권·상태·규칙·검사 누락  |
 | `IMAGE_COVERAGE_INCOMPLETE`                  | 필요한 이미지 지원 카테고리 결과가 불완전함      |
 | `VISUAL_ENGINE_NOT_IMPLEMENTED` (A/B 접두사) | 등록된 로컬 엔진에 시각 분류 기능이 없음         |
-| `EMBEDDED_TEXT_SAFETY_NOT_IMPLEMENTED`       | OCR 본문 유해성 검사는 아직 연결되지 않음        |
+| `EMBEDDED_TEXT_EVIDENCE_MISSING`             | OCR 검사 근거가 없거나 구버전 결과임             |
 | `SHADOW_IS_NOT_EXECUTION_AUTHORITY`          | 현재 Run은 관찰용이며 공개 권한이 없음           |
 | `CALIBRATED_CLEAR_EVIDENCE_REQUIRED`         | 저위험 공개를 뒷받침할 보정·검증된 근거가 필요함 |
 
@@ -78,7 +80,7 @@ RIGHTS / CAPABILITY / CONSENT 각각에 정확히 하나의 PASS 근거가 필�
 
 ## 남은 단계
 
-1. 미지원 시각 검사·OCR 본문 안전 검사 보완, 실제 호스트 자원 검증 및 카테고리별 정확도/기권 평가.
+1. 미지원 시각 검사 보완, 연결된 OCR 본문 안전 검사의 실제 호스트 자원 검증 및 카테고리별 정확도/기권 평가.
 2. 검증된 근거를 생성하는 내부 해석기와 현재 capability/consent·privacy·예산·출시 승인 재검증.
 3. WHICH-105에서 판정→가역 공개 실행 연결: DB/R2 부분 실패 복구, TTL/회수/캐시 무효화/알림/감사 및 경합 테스트.
 4. WHICH-111의 대표 샘플·Shadow 증빙·카테고리 승인 후 제한적 활성화.

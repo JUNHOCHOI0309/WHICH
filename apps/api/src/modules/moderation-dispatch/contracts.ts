@@ -178,6 +178,8 @@ export type ModerationShadowAdapter = {
   modelName: string;
   modelVersion: string;
   cacheTtlMilliseconds: number;
+  cacheProfile?: string;
+  canReuseResult?: (result: Record<string, unknown>) => boolean;
   inspect(input: {
     targetType: ModerationTargetType;
     targetId: string;

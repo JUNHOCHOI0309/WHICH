@@ -1,4 +1,5 @@
 import type { ModerationTargetType } from "../moderation-dispatch/contracts.js";
+import type { EmbeddedTextEvidence } from "../issue-media/embedded-text.js";
 
 export const MODERATION_PROVIDER_RESULT_SCHEMA_VERSION = 1;
 // Bump whenever minimized provider inputs change. Older image caches included live context.
@@ -19,6 +20,7 @@ export type ModerationProviderInput = {
   targetType: ModerationTargetType;
   modality: ModerationProviderModality;
   text?: string;
+  embeddedText?: EmbeddedTextEvidence;
   image?: {
     dataUrl: string;
     mimeType: "image/webp";

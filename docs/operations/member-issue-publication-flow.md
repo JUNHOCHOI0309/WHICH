@@ -87,6 +87,13 @@
 - PROVISIONAL 판정은 필수 검사별 hash/정책/버전/유효기한 결합 근거를 요구하며 누락·중복·충돌 근거를 거절한다. 현재 Shadow는 이 근거를 발급하거나 공개를 실행하지 않는다.
 - 추가 유료 Provider·새 키·운영 플래그 변경·DB migration 없음. 상세 한계와 명령은 [공개 준비 진단 문서](./issue-media-publication-readiness.md)를 따른다.
 
+### 2026-08-30 OCR 본문 안전 검사 연결
+
+- 기존 로컬 scanner의 별도 일시 IPC 경로에서 최소화된 OCR을 얻어 질문·A/B 이미지의 기존 단일 Provider 요청에 결합한다. 사용자 입력 폼은 추가하지 않는다.
+- 개인정보 후보는 OCR 전체 전달을 보류하고 실패/부분 추출/잘림은 완전 검사로 인정하지 않는다. Run/캐시에는 hash·상태·글자 수만 남긴다.
+- OCR mode/계약/engine profile로 캐시를 분리하고 LOCAL의 미완료 결과는 재사용하지 않는다. 실제 픽셀·mock Provider·로컬 DB로 검사 결합과 비공개 유지를 검증한다.
+- 새 키·유료 모델·추가 API 호출·migration·운영 설정 변경 없음. 상세 내용과 한계는 [이미지 속 텍스트 안전 검사](./issue-media-embedded-text-safety.md)에 기록한다.
+
 전체 완료까지 다음 항목은 계속 남아 있다.
 
 - WHICH-103 결정 엔진 → 공개 실행부 연결: 최신 revision/hash, 현재 capability/consent, 유효한 신호와 예산·privacy/release gate를 같은 결정에서 확인.

@@ -6,6 +6,7 @@ import { MODERATION_PROVIDER_INPUT_VERSION } from "./contracts.js";
 export function moderationProviderCacheHash(target: {
   targetType: ModerationTargetType;
   normalizedInputHash: string;
+  cacheProfile?: string;
 }) {
   return createHash("sha256")
     .update(
@@ -13,6 +14,7 @@ export function moderationProviderCacheHash(target: {
         MODERATION_PROVIDER_INPUT_VERSION,
         target.targetType,
         target.normalizedInputHash,
+        ...(target.cacheProfile ? [target.cacheProfile] : []),
       ]),
     )
     .digest("hex");

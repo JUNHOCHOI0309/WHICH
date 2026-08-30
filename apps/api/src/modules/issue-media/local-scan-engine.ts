@@ -5,6 +5,7 @@ import sharp from "sharp";
 import { createWorker, OEM, PSM } from "tesseract.js";
 import { prepareZXingModule, readBarcodes } from "zxing-wasm/reader";
 import { detectOcrPiiKinds } from "./ocr-pii.js";
+import { minimizeEmbeddedText, type EmbeddedText } from "./embedded-text.js";
 import {
   incompleteLocalScan,
   LOCAL_SCAN_MAX_BYTES,
@@ -30,8 +31,12 @@ export async function localScanResources() {
 }
 
 // Run only inside the disposable local scanner process. No image, OCR text, decoded URL,
-// or barcode content is returned to the API, saved to disk, logged, or sent to a provider.
-export async function scanLocalImage(bytes: Buffer): Promise<LocalScanResult> {
+// or barcode content is saved to disk or logged. The opt-in callback receives only a bounded,
+// minimized text projection for transient moderation input; ordinary upload scans return none.
+export async function scanLocalImage(
+  bytes: Buffer,
+  receiveText?: (text: EmbeddedText) => void,
+): Promise<LocalScanResult> {
   if (!bytes.length || bytes.length > LOCAL_SCAN_MAX_BYTES)
     return incompleteLocalScan("INPUT_LIMIT");
   const result = incompleteLocalScan("ENGINE_FAILURE");
@@ -79,6 +84,7 @@ export async function scanLocalImage(bytes: Buffer): Promise<LocalScanResult> {
 
   let completedLanguages = 0;
   let partial = false;
+  const extracted: string[] = [];
   for (const code of ["eng", "kor"] as const) {
     let worker: Awaited<ReturnType<typeof createWorker>> | undefined;
     try {
@@ -101,6 +107,7 @@ export async function scanLocalImage(bytes: Buffer): Promise<LocalScanResult> {
         !Number.isFinite(data.confidence) ||
         (data.text.trim().length > 0 && data.confidence < 50);
       result.ocr.piiKinds = [...new Set([...result.ocr.piiKinds, ...detectOcrPiiKinds(data.text)])];
+      if (receiveText) extracted.push(data.text.slice(0, 16_000));
     } catch {
       /* Missing language data and failed scans are not a clean result. */
     } finally {
@@ -113,6 +120,13 @@ export async function scanLocalImage(bytes: Buffer): Promise<LocalScanResult> {
       : completedLanguages < 2 || partial
         ? "PARTIAL"
         : "COMPLETE";
+  if (receiveText) {
+    const minimized = minimizeEmbeddedText([...new Set(extracted)].join("\n"), result.ocr.status);
+    // PII detected anywhere (including text beyond the extraction limit) withholds the entire OCR payload.
+    receiveText(
+      result.ocr.piiKinds.length ? { ...minimized, status: "WITHHELD_PII", text: "" } : minimized,
+    );
+  }
   if (
     result.qr.status === "COMPLETE" &&
     result.barcode.status === "COMPLETE" &&
