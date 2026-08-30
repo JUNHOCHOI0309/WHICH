@@ -42,6 +42,28 @@ Tasks: WHICH-98, WHICH-120
 노출합니다. 화면을 우회해도 세션 생성 단계에서 동일한 mode·capability·consent·quota를 다시
 검증합니다.
 
+## 개별 계정의 업로드 전용 예외
+
+운영자가 명시적으로 승인한 계정은 호스트 관리자 셸에서만 아래 명령으로 30일간 업로드를
+허용할 수 있습니다. 일반 Pilot 자격 기준이나 다른 Member 권한은 변경하지 않습니다.
+
+```sh
+node apps/api/dist/ops-operator.js grant-upload-only '<member-id-or-email>' 'Owner authorized private image upload testing'
+# DRY_RUN에 나온 Member ID를 직접 확인한 뒤:
+node apps/api/dist/ops-operator.js grant-upload-only '<member-id-or-email>' 'Owner authorized private image upload testing' --confirm '<resolved-member-id>'
+# 회수 (정지/탈퇴 후에도 UUID로 가능):
+node apps/api/dist/ops-operator.js revoke-upload-only '<member-id>' 'Private image upload testing completed' --confirm '<member-id>'
+```
+
+- ACTIVE + 이메일 검증은 필수이며, 가입 기간·활동량·기존 반려 이력은 이 명시적 예외에서만 면제합니다.
+- 동의 레코드는 생성하지 않습니다. 사용자가 직접 최신 이미지 이용 동의를 마쳐야 업로드할 수 있습니다.
+- 별도 `which-operator-upload-only-v1` 정책으로 기록하므로 자동 공개의 trusted capability로 인정되지 않습니다.
+- 업로드에는 `ISSUE_MEMBER_MEDIA_UPLOAD_MODE=PILOT`이 필요하지만 `FEATURE_ISSUE_MEDIA_ENABLED`나
+  Provider/Decision 모드를 켤 필요는 없습니다. 수동 검수 또는 별도 승인된 검증 전에는 비공개로 남습니다.
+- 기존 바이트·횟수·동시 세션·소유권·운영 장애 게이트를 유지하고, capability와 운영 감사 이력을 함께 저장합니다.
+- 재실행은 활성 권한의 만료일을 연장하지 않습니다. 다른 정책의 기존 권한은 덮어쓰지 않습니다.
+- 발급된 세션도 실제 업로드 직전에 mode·활성 계정·권한 만료/회수·최신 동의를 다시 확인합니다.
+
 ## Rule pipeline
 
 - 텍스트: NFC, 줄바꿈·공백 정규화 후 길이, URL, 반복 문자·토큰, 혼합 Script, 이메일·전화·계좌형 패턴을 공통 Reason Signal로 만듭니다.

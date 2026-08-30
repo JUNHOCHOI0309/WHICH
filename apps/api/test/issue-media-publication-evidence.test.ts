@@ -16,6 +16,7 @@ import {
 import { moderationDecisionRuntime } from "../src/modules/moderation/decision-runtime.js";
 import { PROVISIONAL_REQUIRED_CHECKS } from "../src/modules/moderation/provisional-evidence.js";
 import { MODERATION_POLICY_VERSION } from "../src/modules/moderation-dispatch/contracts.js";
+import { UPLOAD_ONLY_POLICY_VERSION } from "../src/modules/operations/upload-only-access.js";
 
 function fixture() {
   const now = new Date("2026-08-30T00:00:00Z");
@@ -147,6 +148,14 @@ function fixture() {
 type Fixture = ReturnType<typeof fixture>;
 
 describe("internal publication evidence resolver", () => {
+  it("never treats upload-only access as a trusted publication capability", () => {
+    const f = fixture();
+    f.access.capability!.policyVersion = UPLOAD_ONLY_POLICY_VERSION;
+    const result = resolvePublicationEvidence(f);
+    expect(result.checks.find((check) => check.check === "CAPABILITY")?.status).not.toBe("PASS");
+    expect(JSON.stringify(result)).toContain("CAPABILITY_POLICY_STALE");
+    expect(result.executionAuthorized).toBe(false);
+  });
   it("assembles all nine checks from current sources without granting clear evidence", () => {
     const f = fixture();
     const result = resolvePublicationEvidence(f);
