@@ -104,4 +104,16 @@ While awaiting the network decision, the failed preview service and temporary DB
 - Runtime tests: **5/5** passed again. Network script syntax, repeat execution, Markdown formatting, and diff whitespace checks passed.
 - Render remains the production host. Production DNS, OAuth callbacks, Render consumers, R2 contents, and live moderation flags were not changed. Login/posting/upload/background-worker production acceptance remains a **cutover gate**, not a completed test.
 
-The private preview remains running with minimum 1 and always-allocated CPU. Google compute and NAT/IP charges therefore continue while it is retained; the actual trial-credit balance remains unverified. **Private preview is ready; production migration is not yet complete.**
+The private preview remains running with minimum 1 and always-allocated CPU. Google compute and NAT/IP charges therefore continue while it is retained. **Private preview is ready; production migration is not yet complete.**
+
+### Cutover preflight and cost decision — 2026-08-31 KST
+
+The owner requested proceeding with production migration after the private-preview verification. Read-only preflight found:
+
+- Cloudflare apex `whichone.site` and `www.whichone.site` both remain proxied CNAMEs to `which-web.onrender.com`, TTL Auto. Preserve these values for rollback. Media and email DNS records are out of scope.
+- The imported configuration retains `AUTH_BASE_URL` and `WEB_ORIGIN` as `https://whichone.site`. Social credentials, session secret, and Cloudflare Access configuration are present; secret values were not printed. Actual signed-in callback acceptance is still pending.
+- The imported moderation worker/provider/judge/decision/automatic-publication flags are OFF. Production migration must not silently enable them or expand the upload cohort. Render's existing start script always launches the points consumer: prepare a controlled shutdown before enabling Cloud Run's points consumer.
+- Google Billing for the account linked to `which-505908` displays a paid account and **no issued credits**. Do not assume the earlier-discussed $300 trial is applied. Billing data can lag; an absence here is not an eligibility determination for any other account or promotion.
+- Google currently marks direct Cloud Run domain mappings as Preview and not recommended for production. The recommended global external Application Load Balancer introduces an additional base charge of $0.025/hour, approximately **$18 per 30 days**, plus regional traffic processing and applicable data transfer. This is separate from the existing compute/NAT charges and is not the complete infrastructure bill. [Domain options](https://docs.cloud.google.com/run/docs/mapping-custom-domains), [Load balancing pricing](https://cloud.google.com/vpc/network-pricing#lb).
+
+The owner was asked to confirm the additional load-balancer cost and alerted that trial credits are not shown. Pending that decision, no load balancer, certificate, new public access, DNS change, Render shutdown, or worker activation was performed. The already-approved private preview/NAT remain running and billable; stopping them would be a separate explicit action.
