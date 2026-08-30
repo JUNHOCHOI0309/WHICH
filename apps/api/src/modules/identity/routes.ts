@@ -42,6 +42,7 @@ const identityProviderSchema = Type.Union([
   Type.Literal("X"),
   Type.Literal("NAVER"),
   Type.Literal("KAKAO"),
+  Type.Literal("TIKTOK"),
   Type.Literal("DEVELOPMENT"),
 ]);
 const resultSchema = Type.Object({
@@ -182,7 +183,7 @@ export async function registerMemberIdentityRoutes(
     identityApp.post<{
       Headers: { "x-internal-auth-secret"?: string };
       Body: {
-        provider: "EMAIL" | "GOOGLE" | "X" | "NAVER" | "KAKAO" | "DEVELOPMENT";
+        provider: "EMAIL" | "GOOGLE" | "X" | "NAVER" | "KAKAO" | "TIKTOK" | "DEVELOPMENT";
         providerSubject: string;
         displayName: string;
         avatarUrl?: string;
@@ -207,6 +208,7 @@ export async function registerMemberIdentityRoutes(
               Type.Literal("X"),
               Type.Literal("NAVER"),
               Type.Literal("KAKAO"),
+              Type.Literal("TIKTOK"),
               Type.Literal("DEVELOPMENT"),
             ]),
             providerSubject: Type.String({ minLength: 1, maxLength: 255 }),
@@ -470,7 +472,7 @@ export async function registerMemberIdentityRoutes(
       Headers: { "x-internal-auth-secret"?: string };
       Body: {
         memberId: string;
-        provider: "GOOGLE" | "X" | "NAVER" | "KAKAO" | "DEVELOPMENT";
+        provider: "GOOGLE" | "X" | "NAVER" | "KAKAO" | "TIKTOK" | "DEVELOPMENT";
         providerSubject: string;
         displayName: string;
         avatarUrl?: string;
@@ -526,7 +528,7 @@ export async function registerMemberIdentityRoutes(
       Body: {
         avatarUrl: string;
         objectKey: string;
-        sourceProvider?: "GOOGLE" | "X" | "NAVER" | "KAKAO";
+        sourceProvider?: "GOOGLE" | "X" | "NAVER" | "KAKAO" | "TIKTOK";
         expectedSourceUrl?: string;
       };
     }>(
@@ -550,6 +552,7 @@ export async function registerMemberIdentityRoutes(
                 Type.Literal("X"),
                 Type.Literal("NAVER"),
                 Type.Literal("KAKAO"),
+                Type.Literal("TIKTOK"),
               ]),
             ),
             expectedSourceUrl: Type.Optional(Type.String({ format: "uri", maxLength: 2048 })),

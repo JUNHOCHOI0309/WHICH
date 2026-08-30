@@ -15,7 +15,7 @@ import {
 
 import styles from "./credential-auth-experience.module.css";
 
-type ProviderFlags = { naver: boolean; kakao: boolean };
+type ProviderFlags = { naver: boolean; kakao: boolean; tiktok?: boolean };
 
 async function submitCredential(input: {
   mode: "login" | "signup";
@@ -57,6 +57,7 @@ export function CredentialAuthExperience({
     { id: "naver", label: "네이버로 계속하기", enabled: providers.naver },
     { id: "kakao", label: "카카오로 계속하기", enabled: providers.kakao },
     { id: "x", label: "X로 계속하기", enabled: true },
+    { id: "tiktok", label: "TikTok으로 계속하기", enabled: providers.tiktok === true },
   ] as const;
 
   return (
@@ -185,7 +186,13 @@ export function CredentialAuthExperience({
                   href={loginHref(provider.id, returnTo)}
                   data-provider={provider.id}
                 >
-                  {provider.label}
+                  {provider.id === "tiktok" ? (
+                    <span>
+                      <span className={styles.tiktokWordmark}>TikTok</span>으로 계속하기
+                    </span>
+                  ) : (
+                    provider.label
+                  )}
                 </a>
               ))}
           </div>

@@ -53,6 +53,7 @@ export const identityProviderEnum = pgEnum("identity_provider", [
   "X",
   "NAVER",
   "KAKAO",
+  "TIKTOK",
   "DEVELOPMENT",
 ]);
 export const voteRequestStateEnum = pgEnum("vote_request_state", [

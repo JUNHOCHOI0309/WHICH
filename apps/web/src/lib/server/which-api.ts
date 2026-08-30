@@ -9,6 +9,13 @@ export const MEMBER_SESSION_COOKIE = "which_member_session";
 const anonymousSubjectPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+function secureAuthCookie() {
+  return (
+    process.env.NODE_ENV === "production" ||
+    process.env.AUTH_BASE_URL?.startsWith("https://") === true
+  );
+}
+
 function apiBaseUrl() {
   const configured = process.env.API_BASE_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL;
   const renderPrivateHostport = process.env.WHICH_API_HOSTPORT;
@@ -74,7 +81,7 @@ export function setSocialSignupCookie(response: NextResponse, ticket: string) {
     value: ticket,
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: secureAuthCookie(),
     path: "/",
     maxAge: 10 * 60,
   });
@@ -86,7 +93,7 @@ export function clearSocialSignupCookie(response: NextResponse) {
     value: "",
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: secureAuthCookie(),
     path: "/",
     maxAge: 0,
   });
@@ -98,7 +105,7 @@ export function setMemberSessionCookie(response: NextResponse, token: string, ex
     value: token,
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: secureAuthCookie(),
     path: "/",
     expires: new Date(expiresAt),
   });
@@ -110,7 +117,7 @@ export function clearMemberSessionCookie(response: NextResponse) {
     value: "",
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: secureAuthCookie(),
     path: "/",
     maxAge: 0,
   });

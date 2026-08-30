@@ -197,7 +197,7 @@ export type MemberPrivateProfile = {
     publicUrl: string | null;
   } | null;
   identities: {
-    provider: "EMAIL" | "GOOGLE" | "X" | "NAVER" | "KAKAO" | "DEVELOPMENT";
+    provider: "EMAIL" | "GOOGLE" | "X" | "NAVER" | "KAKAO" | "TIKTOK" | "DEVELOPMENT";
     linkedAt: string;
     lastAuthenticatedAt: string;
   }[];

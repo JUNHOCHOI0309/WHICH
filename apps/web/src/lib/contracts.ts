@@ -267,7 +267,7 @@ export type MemberPrivateProfile = {
   };
   publicProfile: MemberProfileSettings | null;
   identities: Array<{
-    provider: "EMAIL" | "GOOGLE" | "X" | "NAVER" | "KAKAO" | "DEVELOPMENT";
+    provider: "EMAIL" | "GOOGLE" | "X" | "NAVER" | "KAKAO" | "TIKTOK" | "DEVELOPMENT";
     linkedAt: string;
     lastAuthenticatedAt: string;
   }>;

@@ -13,7 +13,13 @@ import {
 } from "@/lib/password-policy";
 import styles from "./credential-auth-experience.module.css";
 
-const providerLabels = { GOOGLE: "Google", X: "X", NAVER: "네이버", KAKAO: "카카오" } as const;
+const providerLabels = {
+  GOOGLE: "Google",
+  X: "X",
+  NAVER: "네이버",
+  KAKAO: "카카오",
+  TIKTOK: "TikTok",
+} as const;
 
 export function SocialSignupExperience({
   provider,

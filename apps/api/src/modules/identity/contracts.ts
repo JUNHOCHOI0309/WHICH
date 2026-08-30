@@ -1,4 +1,5 @@
-export type IdentityProvider = "EMAIL" | "GOOGLE" | "X" | "NAVER" | "KAKAO" | "DEVELOPMENT";
+export type IdentityProvider =
+  "EMAIL" | "GOOGLE" | "X" | "NAVER" | "KAKAO" | "TIKTOK" | "DEVELOPMENT";
 
 export type MemberAvatar = { kind: "INITIALS"; initials: string } | { kind: "IMAGE"; url: string };
 

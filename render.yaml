@@ -214,3 +214,10 @@ services:
       # Kakao Developers credentials and production callback are configured for WHICH-32.
       - key: FEATURE_KAKAO_LOGIN_ENABLED
         value: "true"
+      # Keep disabled until a separate tester-only rollout is approved.
+      - key: FEATURE_TIKTOK_LOGIN_ENABLED
+        value: "false"
+      - key: TIKTOK_OAUTH_CLIENT_KEY
+        sync: false
+      - key: TIKTOK_OAUTH_CLIENT_SECRET
+        sync: false

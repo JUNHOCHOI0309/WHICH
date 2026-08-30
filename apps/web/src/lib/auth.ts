@@ -1,4 +1,4 @@
-export type LoginProvider = "google" | "x" | "naver" | "kakao";
+export type LoginProvider = "google" | "x" | "naver" | "kakao" | "tiktok";
 
 export function loginHref(provider: LoginProvider, returnTo: string, intent?: "link") {
   const query = new URLSearchParams({ returnTo });

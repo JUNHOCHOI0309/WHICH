@@ -24,6 +24,7 @@ const IDENTITY_LABELS = {
   X: "X",
   NAVER: "Naver",
   KAKAO: "Kakao",
+  TIKTOK: "TikTok",
 } as const;
 
 function isVisibleIdentity(

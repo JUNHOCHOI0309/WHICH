@@ -4,6 +4,9 @@ const nextConfig: NextConfig = {
   agentRules: false,
   poweredByHeader: false,
   reactStrictMode: true,
+  allowedDevOrigins: process.env.AUTH_BASE_URL?.startsWith("https://")
+    ? [new URL(process.env.AUTH_BASE_URL).hostname]
+    : [],
   async headers() {
     const privateSources = [
       "/api/:path*",

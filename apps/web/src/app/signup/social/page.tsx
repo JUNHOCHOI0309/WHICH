@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { SocialSignupExperience } from "@/features/identity/social-signup-experience";
 import { privatePageMetadata } from "@/lib/search-discovery";
 import { SOCIAL_SIGNUP_COOKIE, decodeSocialSignupTicket } from "@/lib/server/member-auth";
+import { tiktokLoginAvailable } from "@/lib/server/tiktok-oauth";
 
 export const metadata = privatePageMetadata(
   "소셜 회원가입",
@@ -13,6 +14,8 @@ export const metadata = privatePageMetadata(
 export default async function SocialSignupPage() {
   const ticket = decodeSocialSignupTicket((await cookies()).get(SOCIAL_SIGNUP_COOKIE)?.value);
   if (!ticket) redirect("/login?auth=expired");
+  if (ticket.provider === "TIKTOK" && !tiktokLoginAvailable(ticket.returnTo))
+    redirect("/login?auth=unavailable");
   return (
     <SocialSignupExperience provider={ticket.provider} suggestedEmail={ticket.suggestedEmail} />
   );
