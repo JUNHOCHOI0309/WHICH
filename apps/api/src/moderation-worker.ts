@@ -3,6 +3,7 @@ import { setTimeout as wait } from "node:timers/promises";
 import { z } from "zod";
 
 import { createDatabase } from "./database/client.js";
+import { readLatestPublicationReadiness } from "./modules/issue-media/publication-readiness-reader.js";
 import {
   createR2IssueMediaStorage,
   issueMediaStorageConfig,
@@ -65,6 +66,13 @@ async function once() {
 
 async function main() {
   const command = process.argv[2] ?? "once";
+  if (command === "diagnose-publication") {
+    const submissionId = z.uuid().parse(process.argv[3]);
+    console.log(
+      JSON.stringify(await readLatestPublicationReadiness(database.db, submissionId), null, 2),
+    );
+    return;
+  }
   if (command === "diagnose-provider") {
     console.log(JSON.stringify(providerRuntimeDiagnostic(providerConfig), null, 2));
     return;

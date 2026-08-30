@@ -20,6 +20,7 @@ import {
   outboxEvents,
 } from "../../database/schema/index.js";
 import type { IssueMediaObjectStorage } from "../issue-media/contracts.js";
+import { readPublicationReadiness } from "../issue-media/publication-readiness-reader.js";
 import {
   MODERATION_PROVIDER_INPUT_VERSION,
   ModerationProviderCallError,
@@ -668,7 +669,7 @@ export function createModerationDispatcherService(
       }
       const state = await inspectTarget(eventForRun(run, target), transaction);
       const finalStatus = state.staleReason ? "SKIPPED" : result.status;
-      const finalResult = state.staleReason
+      const finalResult: Record<string, unknown> = state.staleReason
         ? { shadow: true, stale: true, reason: state.staleReason, publicationChanged: false }
         : {
             ...result.result,
@@ -679,6 +680,21 @@ export function createModerationDispatcherService(
               inputHash: run.normalizedInputHash,
             },
           };
+      if (
+        !state.staleReason &&
+        target.targetType === "ISSUE_VERSION" &&
+        target.snapshotReference.startsWith("issue-submission://")
+      ) {
+        finalResult.publicationReadiness = await readPublicationReadiness(transaction, {
+          submissionId: target.targetId,
+          targetVersion: target.targetVersion,
+          inputHash: run.normalizedInputHash,
+          runStatus: finalStatus,
+          runMode: run.mode,
+          providerResult: finalResult,
+          evaluatedAt: completedAt,
+        });
+      }
       const [updated] = await transaction
         .update(moderationRuns)
         .set({

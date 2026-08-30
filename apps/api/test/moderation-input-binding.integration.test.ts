@@ -16,6 +16,7 @@ import {
 import { createMemberIdentityService } from "../src/modules/identity/service.js";
 import type { IssueMediaObjectStorage } from "../src/modules/issue-media/contracts.js";
 import { createIssueMediaService } from "../src/modules/issue-media/service.js";
+import { readLatestPublicationReadiness } from "../src/modules/issue-media/publication-readiness-reader.js";
 import { createIssueWriteService } from "../src/modules/issues/creation-service.js";
 import { createModerationDispatcherService } from "../src/modules/moderation-dispatch/service.js";
 import { MODERATION_POLICY_VERSION } from "../src/modules/moderation-dispatch/contracts.js";
@@ -313,6 +314,18 @@ describe("immutable submission image moderation inputs", () => {
         inputScope: "SUBMISSION_REVISION",
         imageCount: 2,
         publicationChanged: false,
+        publicationReadiness: {
+          executionAuthorized: false,
+          state: "PRIVATE_REVIEW_REQUIRED",
+          blockers: expect.arrayContaining([
+            "IMAGE_COVERAGE_INCOMPLETE",
+            "A_VISUAL_ENGINE_NOT_IMPLEMENTED",
+            "B_VISUAL_ENGINE_NOT_IMPLEMENTED",
+          ]) as unknown,
+          executionBlockers: expect.arrayContaining([
+            "SHADOW_IS_NOT_EXECUTION_AUTHORITY",
+          ]) as unknown,
+        },
         inputBinding: {
           contractVersion: MODERATION_PROVIDER_INPUT_VERSION,
           targetVersion: 1,
@@ -322,6 +335,17 @@ describe("immutable submission image moderation inputs", () => {
     });
     expect(JSON.stringify(run.result)).not.toContain("base64");
     expect(JSON.stringify(run.result)).not.toContain(f.command.question);
+    const diagnostic = await readLatestPublicationReadiness(f.db, f.submission.id);
+    expect(diagnostic).toMatchObject({ runId: run.id, readiness: { executionAuthorized: false } });
+    await f.writer.actOnMemberIssueSubmission({
+      sessionToken: f.session.token,
+      submissionId: f.submission.id,
+      expectedRevision: 1,
+      action: "CANCEL",
+    });
+    expect(await readLatestPublicationReadiness(f.db, f.submission.id)).toMatchObject({
+      readiness: { blockers: expect.arrayContaining(["SUBMISSION_NOT_PENDING"]) as unknown },
+    });
     expect(f.unused).not.toHaveBeenCalled();
   });
 
@@ -370,6 +394,7 @@ describe("immutable submission image moderation inputs", () => {
       const { run } = (await f.runs())[0]!;
       expect(run.status).toBe(mode === "LOST_LEASE" ? "PENDING" : "SKIPPED");
       expect(run.result.signals).toBeUndefined();
+      expect(run.result.publicationReadiness).toBeUndefined();
       if (mode !== "LOST_LEASE") expect(run.result.stale).toBe(true);
       expect(await f.db.select().from(moderationProviderCallCache)).toHaveLength(0);
       expect(await productionGate(1)(await f.target())).toMatchObject({
@@ -429,10 +454,23 @@ describe("immutable submission image moderation inputs", () => {
       .where(eq(moderationProviderCallCache.normalizedInputHash, hash));
     expect(cached!.result.expired).toBeUndefined();
     expect(cached!.expiresAt.getTime()).toBeGreaterThan(Date.now());
-    await f.writer.submitMemberIssue({ ...f.command, idempotencyKey: randomUUID() });
+    expect(cached!.result.publicationReadiness).toBeUndefined();
+    await f.db
+      .update(moderationProviderCallCache)
+      .set({
+        result: {
+          ...cached!.result,
+          publicationReadiness: { executionAuthorized: true, state: "ALLOW" },
+        },
+      })
+      .where(eq(moderationProviderCallCache.id, cached!.id));
+    const next = await f.writer.submitMemberIssue({ ...f.command, idempotencyKey: randomUUID() });
     await worker.dispatchBatch();
     expect(await worker.processBatch()).toMatchObject({ succeeded: 1 });
     expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(await readLatestPublicationReadiness(f.db, next.submission.id)).toMatchObject({
+      readiness: { executionAuthorized: false, state: "PRIVATE_REVIEW_REQUIRED" },
+    });
     expect(await productionGate(2)(target)).toMatchObject({ allowed: true });
   });
 
@@ -447,6 +485,16 @@ describe("immutable submission image moderation inputs", () => {
       reason: "PROVIDER_CIRCUIT_OPEN",
     });
     expect(await f.db.select().from(moderationProviderCallCache)).toHaveLength(0);
+    expect(await readLatestPublicationReadiness(f.db, f.submission.id)).toMatchObject({
+      runStatus: "DEAD_LETTERED",
+      readiness: {
+        executionAuthorized: false,
+        blockers: expect.arrayContaining([
+          "PROVIDER_NOT_SUCCEEDED",
+          "PROVIDER_RESULT_INVALID",
+        ]) as unknown,
+      },
+    });
     expect(f.unused).not.toHaveBeenCalled();
   });
 

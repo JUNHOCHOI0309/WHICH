@@ -1,4 +1,4 @@
-# Moderation Decision Engine v1
+# Moderation Decision Engine v2
 
 WHICH-103 adds the policy boundary between moderation evidence and any automated product action.
 It does not turn on action automation. Production defaults remain `OFF`, the global kill switch is
@@ -44,8 +44,10 @@ Provider/model confidence by itself is never sufficient. The threshold registry 
 - A category or global kill switch causes new decisions to fail closed. Existing action records can
   use the returned `rollbackAction` to restore visibility safely.
 
-The execution and persistence path is intentionally separate. WHICH-109 consumes this decision
-contract to write real actions, expiry jobs, notices, reconciliation and audit events.
+The execution and persistence path is intentionally separate. The engine returns a decision; it
+does not write real actions or operate storage. Issue publication execution, expiry, rollback,
+notices and reconciliation remain part of WHICH-105 integration and WHICH-111 release validation.
+WHICH-109 tracks Profile safety, not this Issue publication executor.
 
 ## Provisional publication gate
 
@@ -59,6 +61,17 @@ All conditions must be true:
 6. the provider succeeded, did not abstain, agrees with the required evidence, and meets the exact
    threshold;
 7. the action is reversible and has an expiry/rollback path.
+
+Since `which-decision-engine-v2`, PROVISIONAL also requires the internal
+`which-provisional-evidence-v1` contract. Every required check (technical, known-block, local PII,
+local visual, image safety, context safety, rights, capability, consent) needs exactly one PASS
+bound to the same input hash and current policy, a source version, evidence ID and valid time window.
+Missing/duplicate checks, stale/expired/future evidence, competing risk signals and duplicated or
+miscounted signal evidence IDs fail closed. This is not a client/provider response schema.
+PROVISIONAL requires a positive integer TTL and expires no later than its earliest required evidence.
+Do not manufacture a clear signal from `1 - max(category_scores)` or treat configured thresholds
+as completed production calibration. The current Shadow pipeline supplies observations only;
+see [publication readiness](./issue-media-publication-readiness.md).
 
 One credible critical public miss must disable the affected category and invoke the rollback action
 for outstanding provisional decisions.

@@ -1,8 +1,9 @@
 import { z } from "zod";
 
 import type { NormalizedModerationProviderResult } from "./contracts.js";
+import { openAiCoverage } from "./openai-coverage.js";
 
-const normalizedResultSchema = z.object({
+export const normalizedResultSchema = z.object({
   schemaVersion: z.literal(1),
   provider: z.string().min(1),
   modality: z.enum(["TEXT", "IMAGE", "TEXT_AND_IMAGE"]),
@@ -101,6 +102,11 @@ export function toImageProviderShadowFindings(input: {
       boundingBoxesSupported: result.capabilities.boundingBoxes,
       relevanceSupported: !result.unsupportedLabels.includes("ISSUE_RELEVANCE"),
       visualFairnessSupported: !result.unsupportedLabels.includes("VISUAL_FAIRNESS"),
+      modalityCoverage:
+        result.provider === "OPENAI_MODERATION" &&
+        result.modelSnapshot === "omni-moderation-2024-09-26"
+          ? openAiCoverage(result.signals)
+          : null,
     },
   });
 

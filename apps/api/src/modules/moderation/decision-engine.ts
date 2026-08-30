@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { validateProvisionalEvidence, type ProvisionalEvidence } from "./provisional-evidence.js";
 
 import {
   DETERMINISTIC_PRIVATE_REJECT_REASONS,
@@ -20,7 +21,7 @@ import {
   type ModerationDecisionModality,
 } from "./decision-threshold-registry.js";
 
-export const MODERATION_DECISION_ENGINE_VERSION = "which-decision-engine-v1" as const;
+export const MODERATION_DECISION_ENGINE_VERSION = "which-decision-engine-v2" as const;
 
 export const MODERATION_DOMAIN_ACTIONS = [
   "ALLOW",
@@ -68,6 +69,11 @@ export const MODERATION_AUTOMATION_REJECTION_CODES = [
   "PROVISIONAL_RELEASE_NOT_APPROVED",
   "PROVISIONAL_COHORT_NOT_ALLOWED",
   "PROVISIONAL_ASSET_TYPE_NOT_ALLOWED",
+  "MISSING_PUBLICATION_CHECKS",
+  "INVALID_PUBLICATION_EVIDENCE",
+  "CONFLICTING_PUBLICATION_SIGNAL",
+  "DUPLICATE_PUBLICATION_EVIDENCE",
+  "INVALID_PUBLICATION_TTL",
 ] as const;
 export type ModerationAutomationRejectionCode =
   (typeof MODERATION_AUTOMATION_REJECTION_CODES)[number];
@@ -82,6 +88,7 @@ export type ModerationDecisionSignal = {
   evidenceCount: number;
   evidenceValid: boolean;
   supported: boolean;
+  evidenceIds?: readonly string[];
 };
 
 export type ModerationDecisionRuntime = {
@@ -118,6 +125,7 @@ export type ModerationDecisionRequest = {
   humanOnlyDecision?: boolean;
   previousAction?: ModerationDomainAction;
   evaluatedAt?: Date;
+  provisionalEvidence?: ProvisionalEvidence;
 };
 
 export type ModerationDecisionResult = {
@@ -172,6 +180,7 @@ export function evaluateModerationDecision(input: {
   runtime: ModerationDecisionRuntime;
 }): ModerationDecisionResult {
   const { request, runtime } = input;
+  const evaluatedAt = request.evaluatedAt ?? new Date();
   const rejectionCodes: ModerationAutomationRejectionCode[] = [];
   if (runtime.mode !== "LIMITED_ACTION") rejectionCodes.push("ENGINE_DISABLED");
   if (runtime.killSwitch) rejectionCodes.push("GLOBAL_KILL_SWITCH_ENABLED");
@@ -271,6 +280,31 @@ export function evaluateModerationDecision(input: {
   if (!authority.allowed) rejectionCodes.push("SOURCE_NOT_AUTHORIZED");
 
   if (request.requestedAction === "PROVISIONAL") {
+    const evidenceError = validateProvisionalEvidence({
+      evidence: request.provisionalEvidence,
+      inputHash: request.normalizedInputHash,
+      policyVersion: request.policyVersion,
+      now: evaluatedAt,
+    });
+    if (evidenceError) rejectionCodes.push(evidenceError);
+    if (
+      !Number.isSafeInteger(runtime.provisionalTtlSeconds) ||
+      runtime.provisionalTtlSeconds <= 0 ||
+      !Number.isFinite(
+        new Date(evaluatedAt.getTime() + runtime.provisionalTtlSeconds * 1000).getTime(),
+      )
+    )
+      rejectionCodes.push("INVALID_PUBLICATION_TTL");
+    // Do not select a clear signal while silently ignoring competing risk evidence.
+    if (request.signals.some((signal) => signal.label !== "NO_POLICY_VIOLATION"))
+      rejectionCodes.push("CONFLICTING_PUBLICATION_SIGNAL");
+    const evidenceIds = matchingSignals.flatMap((signal) => signal.evidenceIds ?? []);
+    if (
+      matchingSignals.some((signal) => signal.evidenceIds?.length !== signal.evidenceCount) ||
+      evidenceIds.some((id) => !id.trim()) ||
+      new Set(evidenceIds).size !== evidenceIds.length
+    )
+      rejectionCodes.push("DUPLICATE_PUBLICATION_EVIDENCE");
     if (!runtime.provisionalReleaseApproved) {
       rejectionCodes.push("PROVISIONAL_RELEASE_NOT_APPROVED");
     }
@@ -284,7 +318,6 @@ export function evaluateModerationDecision(input: {
   }
   if (rejectionCodes.length > 0) return fallback(request, rejectionCodes);
 
-  const evaluatedAt = request.evaluatedAt ?? new Date();
   const ttlSeconds =
     request.requestedAction === "QUARANTINE"
       ? runtime.quarantineTtlSeconds
@@ -299,6 +332,12 @@ export function evaluateModerationDecision(input: {
         ? "PRIVATE_PENDING"
         : null;
   const actionPolicy = getModerationActionPolicy(canonicalAction);
+  const expiryTime = Math.min(
+    evaluatedAt.getTime() + ttlSeconds * 1000,
+    ...(request.requestedAction === "PROVISIONAL"
+      ? request.provisionalEvidence!.checks.map((check) => Date.parse(check.validUntil))
+      : []),
+  );
   return {
     schemaVersion: 1,
     engineVersion: MODERATION_DECISION_ENGINE_VERSION,
@@ -309,8 +348,7 @@ export function evaluateModerationDecision(input: {
     canonicalAction,
     rejectionCodes: [],
     reversible: actionPolicy.reversible,
-    expiresAt:
-      ttlSeconds > 0 ? new Date(evaluatedAt.getTime() + ttlSeconds * 1000).toISOString() : null,
+    expiresAt: ttlSeconds > 0 ? new Date(expiryTime).toISOString() : null,
     automaticExpiryAction: expiryAction,
     rollbackAction: expiryAction,
   };
