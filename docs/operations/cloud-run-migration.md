@@ -65,4 +65,21 @@ Verify `/api/health`, the home page and public feed, static assets, expected una
 
 ## Verification record
 
-To be completed with the actual image digest, revision, test results, and preview status after deployment. No production cutover is implied by a successful preview.
+- Code commit: `6a85901e85d844b044e5921b52ebbc51611e81eb`; [PR #8](https://github.com/JUNHOCHOI0309/WHICH/pull/8).
+- Uploaded image: `asia-southeast1-docker.pkg.dev/which-505908/which/web@sha256:c94c1172829fc8eacd333fa591d0fd0a58d2dcb32a9028c231aa905e70fa2666`.
+- Secret Manager version `which-runtime-env:1`: 105 imported keys; verified TLS external DB URL; task-created plaintext export removed. Application/API keys never entered the image or Git.
+- API 512 tests, web 303 tests, runtime 5 tests passed. Lint/typecheck/format passed (8 pre-existing web image lint warnings). GitHub CI for the code commit passed.
+- Local Linux container under 1 CPU / 2 GiB: `/api/health`, home, and feed returned 200; `/api/me` returned 401. Feed smoke used the normal guest flow, which created a test anonymous subject; no member account, vote, submission, image, or email was modified.
+- OCR/QR/barcode execution against a synthetic blank WebP completed locally; no provider request. This proves engine packaging, not real-image moderation quality or production capacity.
+- Local web/API-only memory snapshot was about 152 MiB / 2 GiB with workers OFF. This is **not** comparable to a fully loaded production instance and is not a capacity guarantee.
+- Cloud Run revision `which-web-00001-6vk` started both processes but failed DB readiness. A short-lived diagnostic Job reproduced `Connection terminated unexpectedly` in about 359ms after successful DNS resolution. No production traffic was switched.
+
+### Activation hold: DB IP allowlist
+
+On 2026-08-31, the Render DB's **PostgreSQL-level inbound IP rules allowed only the owner's workstation `/32`**, although the higher workspace/environment rules displayed `0.0.0.0/0`. All levels must permit the connection. This explains why the same image could connect from the workstation but not Cloud Run. Do not mistake the higher-level defaults for the effective DB allowlist.
+
+Cloud Run uses dynamic outbound IPs by default. To preserve the existing restricted DB access, the next step requires owner approval for **Direct VPC egress + Cloud Router/Public NAT + one reserved outbound IPv4**, followed by adding only that `/32` to the DB rules. Do not open the DB to `0.0.0.0/0` or disable TLS verification.
+
+The extra network resources have recurring costs: the NAT external IP alone is $0.005/hour ($3.60 per 30 days), plus NAT gateway usage, data processing, and applicable data transfer. This is separate from Cloud Run compute and is not a quoted total. [Static outbound IP setup](https://docs.cloud.google.com/run/docs/configuring/static-outbound-ip), [NAT pricing](https://cloud.google.com/nat/pricing), [Render layered IP rules](https://render.com/docs/inbound-ip-rules).
+
+While awaiting the network decision, the failed preview service and temporary DB-diagnostic Job are removed to stop failed-start retries. The container image, dedicated service account, secret version, and deployment scripts remain for redeployment. Render production, its firewall, R2, and all live moderation flags are unchanged. **The Cloud Run migration is not complete.**
