@@ -1,6 +1,6 @@
 # WHICH Cloud Run migration
 
-> **Current state (2026-08-31 KST): compute remains stopped; verified free-trial billing linked.** The Cloud Run preview, Public NAT, router, and reserved external IP have been removed. Production remains on Render. Earlier deployment commands and IP values below are historical/recreation instructions, not active resources. Billing linkage alone does not authorize restarting infrastructure or production cutover.
+> **Current state (2026-08-31 KST): private preview resumed on verified free-trial billing.** Cloud Run `which-web-00001-rcg`, its dedicated Public NAT/router, and reserved egress IP are active again following the owner's resumption request. Production remains on Render. Preview consumers and AI/automatic-publication flags remain OFF. Load-balancer cost approval and production cutover are still pending; see the latest resumption record below rather than treating earlier shutdown records as current state.
 
 ## Scope and safety boundary
 
@@ -142,3 +142,18 @@ If the migration is explicitly resumed, first re-check current billing/credits a
 - Charges accrued before the switch remain on the previous billing account (`01076E-0D88E4-64A129`); billing linkage does not refund past usage. Retained artifacts/secrets may still incur usage, and Render/R2/AI-provider charges are separate. [Project billing changes](https://docs.cloud.google.com/billing/docs/how-to/modify-project), [Free trial terms](https://docs.cloud.google.com/free/docs/free-cloud-features).
 
 Infrastructure resumption and production cutover still require explicit authorization and the cutover checks above. Re-check the trial balance and validity before resuming; do not activate a paid billing account implicitly.
+
+### Private preview resumed on trial billing — 2026-08-31 KST
+
+The owner explicitly requested resuming the previous migration after billing linkage. The approved preview configuration was restored; the previously unresolved load-balancer cost and actual site cutover were asked separately and remain pending.
+
+- Before provisioning, the project still reported billing enabled on `011AB8-5A70E9-6037F0`; the billing console still displayed Free Trial, ₩435,523 remaining, and expiry 2026-11-30. No paid-account activation, billing reassignment, or new project IAM grant was performed.
+- GitHub `main` still points to `af454bd1031453b9e0fca88bb88b1a2046f4ef1f`. The previously validated image digest is present in Artifact Registry, and Secret Manager `which-runtime-env:1` is enabled. No secret payload was re-exported or printed.
+- `setup-network.ps1` retained the matching custom VPC/subnet and recreated the dedicated external address, router, and NAT. Google reallocated **the same numeric IP `34.21.233.254` to the new reservation**; this was independently verified from the new resource's creation timestamp and `IN_USE` status, not assumed from the old record. NAT remains restricted to this one manually reserved IP and the one WHICH subnet.
+- Added only `34.21.233.254/32` (`WHICH Cloud Run static egress`) to the PostgreSQL-specific allowlist, retaining the original workstation rule. Reloading the Render DB page confirmed exactly those two database-level entries. No broad database access rule was added.
+- Ready revision: **`which-web-00001-rcg`**, 1 vCPU / 2 GiB, Direct VPC `all-traffic`, minimum 1 / maximum 1 service instance, concurrency 8, dedicated runtime service account, and secret version 1. It uses the same image digest/code release `6a85901e85d844b044e5921b52ebbc51611e81eb` as the earlier validated preview.
+- Runtime tests: **5/5** passed. Authenticated local-proxy checks returned `/api/health` 200, `/` 200, `/api/issues/feed` 200, three sampled CSS/JS assets 200, `/api/me` 401, and `/api/ops/members` 403. The normal anonymous feed smoke can create guest/session records; no member vote, submission, image, or email was modified.
+- Service IAM has no public invoker binding; direct unauthenticated `/api/health` returned 403. Readiness/configuration/routes all report True. Startup logs confirm `Started 2 processes; preview=true`, and no error-severity entries were found for this revision during smoke verification.
+- `https://whichone.site/` still returned 200 on the existing Render deployment. No production DNS, Render deployment, consumer, model, upload cohort, AI inspection, or automatic-publication setting was changed.
+
+Compute and NAT/IP usage have resumed against the trial-linked project; this is not a zero-usage or scale-to-zero preview. Before production cutover, obtain the pending load-balancer approval (base roughly $18 per 30 days, plus IP/traffic costs, separate from compute/NAT), configure budget notifications, verify TLS/Cloudflare Access and login callbacks, and coordinate the single active points consumer. Render's current start script always launches points; merely setting a points environment flag on Render will not stop it. Do not activate Cloud Run consumers while Render consumers remain running. Keep rollback resources and do not merge/deploy `main` implicitly.
