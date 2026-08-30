@@ -1,6 +1,6 @@
 # WHICH Cloud Run migration
 
-> **Current state (2026-08-31 KST): stopped at the owner's request.** The Cloud Run preview, Public NAT, router, and reserved external IP have been removed. Production remains on Render. Earlier deployment commands and IP values below are historical/recreation instructions, not active resources.
+> **Current state (2026-08-31 KST): compute remains stopped; verified free-trial billing linked.** The Cloud Run preview, Public NAT, router, and reserved external IP have been removed. Production remains on Render. Earlier deployment commands and IP values below are historical/recreation instructions, not active resources. Billing linkage alone does not authorize restarting infrastructure or production cutover.
 
 ## Scope and safety boundary
 
@@ -131,3 +131,14 @@ The owner was asked to confirm the additional load-balancer cost and alerted tha
 - `https://whichone.site/` returned HTTP 200 after shutdown. Render web/DB, production DNS, R2, member data, and production worker settings were not changed. No load balancer was created and no production cutover occurred.
 
 If the migration is explicitly resumed, first re-check current billing/credits and configuration drift, then obtain/validate a static IP and DB allowlist before redeployment. Do not execute the old deploy command as though the preview still exists.
+
+### Billing relinked to verified free trial — 2026-08-31 KST
+
+- The owner approved linking the existing `which-505908` project to the new free-trial billing account. No replacement application project was created or selected for deployment.
+- The new billing account is `011AB8-5A70E9-6037F0`. The signed-in billing console displayed **Free Trial**, **₩435,523** remaining credit, **90 days**, and expiry **2026-11-30** at verification time. These are observed values, not a guarantee that all future services or external-provider costs are covered. No paid-account activation was performed.
+- After the console change, `gcloud billing projects describe which-505908` confirmed `billingAccountName=billingAccounts/011AB8-5A70E9-6037F0` and `billingEnabled=true`.
+- The new billing administrator received only temporary, project-scoped `roles/billing.projectManager`, `roles/browser`, and `roles/serviceusage.serviceUsageViewer` bindings under the time-limited `which-trial-billing-transfer` condition. All three were removed after linkage; a filtered project IAM query returned no remaining bindings for that account. Existing project ownership was unchanged. No secret/data access roles were granted.
+- The Cloud Run service listing in `asia-southeast1` remains empty. No service, NAT, router, reserved public IP, load balancer, worker, or DNS routing was restarted or changed by this billing operation. Render remains production.
+- Charges accrued before the switch remain on the previous billing account (`01076E-0D88E4-64A129`); billing linkage does not refund past usage. Retained artifacts/secrets may still incur usage, and Render/R2/AI-provider charges are separate. [Project billing changes](https://docs.cloud.google.com/billing/docs/how-to/modify-project), [Free trial terms](https://docs.cloud.google.com/free/docs/free-cloud-features).
+
+Infrastructure resumption and production cutover still require explicit authorization and the cutover checks above. Re-check the trial balance and validity before resuming; do not activate a paid billing account implicitly.
