@@ -1,4 +1,4 @@
-import { and, gte, sql } from "drizzle-orm";
+import { and, eq, gte, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import type { Database } from "../../database/client.js";
@@ -113,6 +113,7 @@ export function createModerationProviderGate(input: {
       .where(
         and(
           gte(moderationProviderCallCache.createdAt, dayStart),
+          eq(moderationProviderCallCache.provider, config.MODERATION_PROVIDER),
           sql`${moderationProviderCallCache.result}->>'inputContractVersion' is distinct from ${MODERATION_PROVIDER_INPUT_VERSION}`,
         ),
       );
@@ -125,6 +126,7 @@ export function createModerationProviderGate(input: {
       .where(
         and(
           gte(moderationProviderCallCache.createdAt, circuitStart),
+          eq(moderationProviderCallCache.provider, config.MODERATION_PROVIDER),
           sql`${moderationProviderCallCache.result}->>'inputContractVersion' is distinct from ${MODERATION_PROVIDER_INPUT_VERSION}`,
         ),
       );

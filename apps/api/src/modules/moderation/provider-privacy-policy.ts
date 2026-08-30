@@ -7,7 +7,8 @@ export const IMAGE_PROVIDER_PRIVACY_POLICY = {
 } as const;
 
 export type ImageProviderMode = "OFF" | "SHADOW" | "REVIEWER_ASSIST";
-export type ImageModerationProvider = "OPENAI_MODERATION" | "GOOGLE_CLOUD_VISION";
+export type ImageModerationProvider =
+  "OPENAI_MODERATION" | "OPENAI_POLICY_JUDGE" | "GOOGLE_CLOUD_VISION";
 
 export const PROHIBITED_EXTERNAL_FIELD_NAMES = [
   "rawIp",
@@ -127,6 +128,19 @@ const REQUIRED_PROVIDER_EVIDENCE = [
 ] as const satisfies readonly ProviderEvidenceKey[];
 
 export const IMAGE_MODERATION_PROVIDER_REGISTRY = {
+  OPENAI_POLICY_JUDGE: {
+    approval: "CONDITIONAL",
+    allowedRole: "PAIR_CONTEXT_POLICY_SHADOW",
+    endpoint: "/v1/responses",
+    processingBoundary: "KOREA_STORAGE_DOES_NOT_GUARANTEE_KOREA_PROCESSING",
+    prohibitedRoles: ["PUBLICATION_AUTHORITY", "RIGHTS_DECISION", "IDENTITY_DECISION"],
+    requiredControls: [
+      "DPA",
+      "RESPONSES_DATA_CONTROL_APPROVAL",
+      "STORE_FALSE",
+      "PROJECT_SCOPED_KEY",
+    ],
+  },
   OPENAI_MODERATION: {
     approval: "CONDITIONAL",
     allowedRole: "CONTENT_SAFETY_SHADOW",

@@ -6,6 +6,7 @@ export * from "./identity.js";
 export * from "./interests.js";
 export * from "./issues.js";
 export * from "./moderation-operations.js";
+export * from "./policy-judge.js";
 export * from "./member-moderation.js";
 export * from "./issue-media.js";
 export * from "./issue-media-library.js";
