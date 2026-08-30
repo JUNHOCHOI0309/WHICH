@@ -105,42 +105,50 @@ describe("Issue media responsive storage optimization", () => {
     expect((await sharp(result.body).metadata()).orientation).toBeUndefined();
   });
 
-  it("reduces a deterministic photo-like JPEG versus the old 1600px/84 policy", async () => {
-    const width = 1600,
-      height = 2000;
-    const pixels = Buffer.alloc(width * height * 3);
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        const offset = (y * width + x) * 3;
-        pixels[offset] = Math.round(110 + 65 * Math.sin(x / 31) + 30 * Math.cos(y / 41));
-        pixels[offset + 1] = Math.round(120 + 50 * Math.sin(y / 21) + 30 * Math.cos(x / 54));
-        pixels[offset + 2] = Math.round(115 + 55 * Math.sin((x + y) / 35) + 25 * Math.cos(x / 11));
+  // Fixture generation, both encoders and PSNR analysis share this test budget.
+  // Keep the production processor's independent 10-second deadline unchanged.
+  it(
+    "reduces a deterministic photo-like JPEG versus the old 1600px/84 policy",
+    { timeout: 30_000 },
+    async () => {
+      const width = 1600,
+        height = 2000;
+      const pixels = Buffer.alloc(width * height * 3);
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const offset = (y * width + x) * 3;
+          pixels[offset] = Math.round(110 + 65 * Math.sin(x / 31) + 30 * Math.cos(y / 41));
+          pixels[offset + 1] = Math.round(120 + 50 * Math.sin(y / 21) + 30 * Math.cos(x / 54));
+          pixels[offset + 2] = Math.round(
+            115 + 55 * Math.sin((x + y) / 35) + 25 * Math.cos(x / 11),
+          );
+        }
       }
-    }
-    const input = await sharp(pixels, { raw: { width, height, channels: 3 } })
-      .jpeg({ quality: 95 })
-      .toBuffer();
-    const result = await processIssueMedia(input, "image/jpeg");
-    const legacy = await sharp(input)
-      .rotate()
-      .resize({ width: 1600, height: 1600, fit: "inside", withoutEnlargement: true })
-      .webp({ quality: 84, effort: 5, smartSubsample: true })
-      .toBuffer();
-    expect(result.body.length).toBeLessThan(legacy.length * 0.85);
-    const reference = await sharp(input)
-      .rotate()
-      .resize({ width: 1280, height: 1280, fit: "inside" })
-      .toColourspace("srgb")
-      .raw()
-      .toBuffer();
-    const decoded = await sharp(result.body).raw().toBuffer();
-    expect(decoded.length).toBe(reference.length);
-    let squaredError = 0;
-    for (let index = 0; index < decoded.length; index++)
-      squaredError += (decoded[index]! - reference[index]!) ** 2;
-    const psnr = 10 * Math.log10(255 ** 2 / (squaredError / decoded.length));
-    expect(psnr).toBeGreaterThan(32);
-  });
+      const input = await sharp(pixels, { raw: { width, height, channels: 3 } })
+        .jpeg({ quality: 95 })
+        .toBuffer();
+      const result = await processIssueMedia(input, "image/jpeg");
+      const legacy = await sharp(input)
+        .rotate()
+        .resize({ width: 1600, height: 1600, fit: "inside", withoutEnlargement: true })
+        .webp({ quality: 84, effort: 5, smartSubsample: true })
+        .toBuffer();
+      expect(result.body.length).toBeLessThan(legacy.length * 0.85);
+      const reference = await sharp(input)
+        .rotate()
+        .resize({ width: 1280, height: 1280, fit: "inside" })
+        .toColourspace("srgb")
+        .raw()
+        .toBuffer();
+      const decoded = await sharp(result.body).raw().toBuffer();
+      expect(decoded.length).toBe(reference.length);
+      let squaredError = 0;
+      for (let index = 0; index < decoded.length; index++)
+        squaredError += (decoded[index]! - reference[index]!) ** 2;
+      const psnr = 10 * Math.log10(255 ** 2 / (squaredError / decoded.length));
+      expect(psnr).toBeGreaterThan(32);
+    },
+  );
 
   it("keeps size and MIME checks in front of optimization", async () => {
     await expect(processIssueMedia(Buffer.alloc(0), "image/png")).rejects.toMatchObject({
