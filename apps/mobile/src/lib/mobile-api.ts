@@ -240,6 +240,27 @@ export function createMobileApiClient(
       return bodyOrError<{ items: MemberIssueSubmission[] }>(response);
     },
 
+    async actOnMemberSubmission(
+      sessionToken: string,
+      submission: MemberIssueSubmission,
+      action: "TEXT_ONLY" | "LIBRARY" | "CANCEL" | "CHECK",
+      libraryPairId?: string,
+    ) {
+      return bodyOrError<{ submission: MemberIssueSubmission }>(
+        await request(
+          `${baseUrl}/api/mobile/v1/member/issue-submissions/${encodeURIComponent(submission.id)}/actions`,
+          {
+            method: "POST",
+            headers: {
+              authorization: `Bearer ${sessionToken}`,
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({ action, expectedRevision: submission.revision, libraryPairId }),
+          },
+        ),
+      );
+    },
+
     async loadIssueMediaLibrary(sessionToken: string, limit = 24) {
       const response = await request(
         baseUrl + "/api/mobile/v1/member/issue-media-library?limit=" + String(limit),

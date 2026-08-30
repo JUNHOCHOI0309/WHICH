@@ -31,6 +31,7 @@ const issueWriter: IssueWriteService = {
   submitMemberIssue: vi.fn(),
   resubmitMemberIssue: vi.fn(),
   listMemberIssueSubmissions: vi.fn(),
+  actOnMemberIssueSubmission: vi.fn(),
 };
 
 const commentReader: CommentService = {

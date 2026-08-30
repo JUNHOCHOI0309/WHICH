@@ -197,7 +197,14 @@ const memberIssueSubmissionSchema = Type.Object({
     Type.Literal("APPROVED"),
     Type.Literal("NEEDS_CHANGES"),
     Type.Literal("REJECTED"),
+    Type.Literal("CANCELLED"),
   ]),
+  publishedIssueId: Type.Union([uuidSchema, Type.Null()]),
+  publicationState: Type.Union(
+    ["PROCESSING", "PUBLISHED", "NEEDS_CHANGES", "REJECTED", "QUARANTINED", "CANCELLED"].map(
+      (value) => Type.Literal(value),
+    ),
+  ),
   question: Type.String(),
   context: Type.Union([Type.String(), Type.Null()]),
   choiceA: Type.String(),
@@ -256,6 +263,52 @@ export async function registerIssueRoutes(
     });
 
     if (writer) {
+      issueApp.post<{
+        Headers: { authorization?: string };
+        Params: { submissionId: string };
+        Body: {
+          expectedRevision: number;
+          action: "TEXT_ONLY" | "LIBRARY" | "CANCEL" | "CHECK";
+          libraryPairId?: string;
+        };
+      }>(
+        "/v1/member/issue-submissions/:submissionId/actions",
+        {
+          schema: {
+            params: Type.Object({ submissionId: uuidSchema }),
+            body: Type.Object(
+              {
+                expectedRevision: Type.Integer({ minimum: 1 }),
+                action: Type.Union(
+                  ["TEXT_ONLY", "LIBRARY", "CANCEL", "CHECK"].map((value) => Type.Literal(value)),
+                ),
+                libraryPairId: Type.Optional(uuidSchema),
+              },
+              { additionalProperties: false },
+            ),
+            response: {
+              200: Type.Object({
+                submission: memberIssueSubmissionSchema,
+                created: Type.Boolean(),
+              }),
+              401: errorResponseSchema,
+              404: errorResponseSchema,
+              409: errorResponseSchema,
+              422: errorResponseSchema,
+              500: errorResponseSchema,
+            },
+          },
+        },
+        async (request) => {
+          const token = bearerToken(request.headers.authorization);
+          if (!token) throw new IssueWriteError("SESSION_REQUIRED", 401, "로그인이 필요해요.");
+          return writer.actOnMemberIssueSubmission({
+            sessionToken: token,
+            submissionId: request.params.submissionId,
+            ...request.body,
+          });
+        },
+      );
       issueApp.post<IssueCreateRoute>(
         "/v1/member/issue-submissions",
         {

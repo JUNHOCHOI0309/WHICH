@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { MemberModerationExperience } from "@/features/identity/member-moderation-experience";
@@ -60,7 +60,7 @@ function center() {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("Member moderation experience", () => {
-  it("shows publication and asset states separately and applies a text-only alternative", async () => {
+  it("shows separate states and links submission management without duplicate forms", async () => {
     const requests: string[] = [];
     vi.stubGlobal(
       "fetch",
@@ -80,12 +80,11 @@ describe("Member moderation experience", () => {
     expect(screen.getByText("Asset 검수").parentElement).toHaveTextContent("검수 대기");
     expect(screen.getByText("재검토 요청을 접수했습니다.")).toBeVisible();
 
-    fireEvent.click(screen.getByRole("button", { name: "Text-only로 계속" }));
-    await waitFor(() =>
-      expect(requests).toContain(
-        "POST /api/me/moderation/submissions/dd353808-7318-45a5-83f0-91a04143322e/asset-alternative",
-      ),
+    expect(screen.getByRole("link", { name: "내 질문에서 게시 상태 확인·수정" })).toHaveAttribute(
+      "href",
+      "/me/submissions",
     );
+    expect(screen.queryByLabelText("권리 확인")).not.toBeInTheDocument();
   });
 
   it("does not expose the private moderation center to a Guest", async () => {

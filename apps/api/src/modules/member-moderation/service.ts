@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 
-import { and, desc, eq, inArray, isNull, or } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 
 import type { Database } from "../../database/client.js";
 import {
@@ -566,6 +566,9 @@ export function createMemberModerationService(
 
     async chooseAssetAlternative(input) {
       return database.transaction(async (transaction) => {
+        await transaction.execute(
+          sql`select pg_advisory_xact_lock(hashtextextended(${`which:member-issue-submission:${input.submissionId}`}, 0))`,
+        );
         const [current] = await transaction
           .select()
           .from(memberIssueSubmissions)
@@ -575,13 +578,21 @@ export function createMemberModerationService(
               eq(memberIssueSubmissions.memberId, input.memberId),
             ),
           )
-          .limit(1);
+          .limit(1)
+          .for("update");
         if (!current)
           throw new MemberModerationError(
             "SUBMISSION_NOT_FOUND",
             404,
             "질문 제출 건을 찾지 못했습니다.",
           );
+        if (current.publishedIssueId || !["PENDING", "NEEDS_CHANGES"].includes(current.status)) {
+          throw new MemberModerationError(
+            "SUBMISSION_NOT_EDITABLE",
+            409,
+            "이미 게시되거나 종료된 제출 건은 변경할 수 없어요.",
+          );
+        }
         let mediaAssetAId: string | null = null;
         let mediaAssetBId: string | null = null;
         if (["APPROVED_LIBRARY", "REPLACE_IMAGE"].includes(input.action)) {
