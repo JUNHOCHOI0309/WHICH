@@ -1,5 +1,7 @@
 # WHICH Cloud Run migration
 
+> **Current state (2026-08-31 KST): stopped at the owner's request.** The Cloud Run preview, Public NAT, router, and reserved external IP have been removed. Production remains on Render. Earlier deployment commands and IP values below are historical/recreation instructions, not active resources.
+
 ## Scope and safety boundary
 
 - Project: `which-505908`; service: `which-web`; region: `asia-southeast1` (same region as the existing Render DB).
@@ -117,3 +119,15 @@ The owner requested proceeding with production migration after the private-previ
 - Google currently marks direct Cloud Run domain mappings as Preview and not recommended for production. The recommended global external Application Load Balancer introduces an additional base charge of $0.025/hour, approximately **$18 per 30 days**, plus regional traffic processing and applicable data transfer. This is separate from the existing compute/NAT charges and is not the complete infrastructure bill. [Domain options](https://docs.cloud.google.com/run/docs/mapping-custom-domains), [Load balancing pricing](https://cloud.google.com/vpc/network-pricing#lb).
 
 The owner was asked to confirm the additional load-balancer cost and alerted that trial credits are not shown. Pending that decision, no load balancer, certificate, new public access, DNS change, Render shutdown, or worker activation was performed. The already-approved private preview/NAT remain running and billable; stopping them would be a separate explicit action.
+
+### Stopped at owner request — 2026-08-31 KST
+
+- Deleted Cloud Run preview `which-web`; service and Job listings in Singapore are empty.
+- Deleted Public NAT `which-run-nat` and its dedicated router `which-run-router`.
+- Removed only `34.21.233.254/32` from Render PostgreSQL's inbound rules and verified the saved state after reload. The original workstation rule remains.
+- Released reserved external address `which-run-egress` (`34.21.233.254`). **Do not reuse this IP or its old DB allowlist entry when resuming.** A future deployment needs a newly reserved address and explicit authorization.
+- Dedicated subnet/VPC removal was deferred because Google still holds the managed internal allocation `10.88.0.16` (`serverless-ipv4-1788108245916965352`). No external address, NAT, router, VM, or running Cloud Run service remains. Do not force-delete managed internal allocations; Google documents waiting 1–2 hours after service deletion before subnet deletion. [Direct VPC IP lifecycle](https://docs.cloud.google.com/run/docs/configuring/vpc-direct-vpc#ip_address_allocation).
+- Code, the container image, numbered Secret Manager configuration, and service account are retained for possible reuse. Compute/NAT/external-IP running charges are stopped; previously accrued usage and any retained storage/secret charges are not erased or claimed to be zero.
+- `https://whichone.site/` returned HTTP 200 after shutdown. Render web/DB, production DNS, R2, member data, and production worker settings were not changed. No load balancer was created and no production cutover occurred.
+
+If the migration is explicitly resumed, first re-check current billing/credits and configuration drift, then obtain/validate a static IP and DB allowlist before redeployment. Do not execute the old deploy command as though the preview still exists.
