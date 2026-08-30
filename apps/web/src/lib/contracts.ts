@@ -74,7 +74,10 @@ export type IssueMediaUploadAccess = {
 export type MemberIssueSubmission = {
   id: string;
   revision: number;
-  status: "PENDING" | "APPROVED" | "NEEDS_CHANGES" | "REJECTED";
+  status: "PENDING" | "APPROVED" | "NEEDS_CHANGES" | "REJECTED" | "CANCELLED";
+  publishedIssueId: string | null;
+  publicationState:
+    "PROCESSING" | "PUBLISHED" | "NEEDS_CHANGES" | "REJECTED" | "QUARANTINED" | "CANCELLED";
   question: string;
   context: string | null;
   choiceA: string;
@@ -285,7 +288,7 @@ export type MemberModerationCenter = {
     issueSubmission: {
       id: string;
       question: string;
-      publicationStatus: "PENDING" | "APPROVED" | "NEEDS_CHANGES" | "REJECTED";
+      publicationStatus: "PENDING" | "APPROVED" | "NEEDS_CHANGES" | "REJECTED" | "CANCELLED";
       updatedAt: string;
     } | null;
     assetReview: {

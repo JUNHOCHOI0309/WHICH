@@ -125,6 +125,13 @@ export type CreatedMemberIssue = {
 };
 
 export interface IssueWriteService {
+  actOnMemberIssueSubmission(command: {
+    sessionToken: string;
+    submissionId: string;
+    expectedRevision: number;
+    action: "TEXT_ONLY" | "LIBRARY" | "CANCEL" | "CHECK";
+    libraryPairId?: string;
+  }): Promise<MemberIssueSubmissionResult>;
   createMemberIssue(command: CreateMemberIssueCommand): Promise<CreatedMemberIssue>;
   submitMemberIssue(command: CreateMemberIssueCommand): Promise<MemberIssueSubmissionResult>;
   resubmitMemberIssue(command: ResubmitMemberIssueCommand): Promise<MemberIssueSubmissionResult>;
@@ -139,12 +146,16 @@ export type ResubmitMemberIssueCommand = CreateMemberIssueCommand & {
   expectedRevision: number;
 };
 
-export type MemberIssueSubmissionStatus = "PENDING" | "APPROVED" | "NEEDS_CHANGES" | "REJECTED";
+export type MemberIssueSubmissionStatus =
+  "PENDING" | "APPROVED" | "NEEDS_CHANGES" | "REJECTED" | "CANCELLED";
 
 export type MemberIssueSubmission = {
   id: string;
   revision: number;
   status: MemberIssueSubmissionStatus;
+  publishedIssueId: string | null;
+  publicationState:
+    "PROCESSING" | "PUBLISHED" | "NEEDS_CHANGES" | "REJECTED" | "QUARANTINED" | "CANCELLED";
   question: string;
   context: string | null;
   choiceA: string;

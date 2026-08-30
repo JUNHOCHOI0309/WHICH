@@ -76,6 +76,7 @@ const statusLabel: Record<MemberIssueSubmission["status"], string> = {
   APPROVED: "승인",
   NEEDS_CHANGES: "수정 요청",
   REJECTED: "반려",
+  CANCELLED: "취소됨",
 };
 
 export default function CreateIssueScreen() {
@@ -87,6 +88,7 @@ export default function CreateIssueScreen() {
   const [mediaAccess, setMediaAccess] = useState<IssueMediaUploadAccess | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [libraryTarget, setLibraryTarget] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -206,7 +208,7 @@ export default function CreateIssueScreen() {
     if (!sessionToken || !draft.interestCardCode || !canSubmit || submitting) return;
     setSubmitting(true);
     try {
-      if (draft.libraryPairId) {
+      if (!draft.submissionId && (draft.libraryPairId || (!draft.mediaA && !draft.mediaB))) {
         const result = await mobileApi.createMemberIssue(sessionToken, draft.idempotencyKey, {
           question: draft.question,
           context: draft.context.trim() || null,
@@ -217,7 +219,7 @@ export default function CreateIssueScreen() {
         });
         await subjectStorage.removeItem(DRAFT_KEY);
         setDraft(emptyDraft());
-        toast.success("승인 Library 이미지와 함께 질문을 게시했어요.");
+        toast.success("질문을 게시했어요.");
         router.replace("/issues/" + result.issue.id);
         return;
       }
@@ -270,6 +272,14 @@ export default function CreateIssueScreen() {
         result.submission,
         ...current.filter((item) => item.id !== result.submission.id),
       ]);
+      if (prepared.libraryPairId || !hasDirectMedia) {
+        await transition(
+          result.submission,
+          prepared.libraryPairId ? "LIBRARY" : "TEXT_ONLY",
+          prepared.libraryPairId,
+        );
+        return;
+      }
       toast.success(
         prepared.submissionId
           ? `v${result.submission.revision} 수정본을 다시 제출했어요.`
@@ -277,6 +287,42 @@ export default function CreateIssueScreen() {
       );
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "질문을 제출하지 못했습니다.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function transition(
+    submission: MemberIssueSubmission,
+    action: "TEXT_ONLY" | "LIBRARY" | "CANCEL" | "CHECK",
+    pairId?: string,
+  ) {
+    if (!sessionToken) return;
+    setSubmitting(true);
+    try {
+      const result = await mobileApi.actOnMemberSubmission(
+        sessionToken,
+        submission,
+        action,
+        pairId,
+      );
+      setSubmissions((current) =>
+        current.map((item) => (item.id === submission.id ? result.submission : item)),
+      );
+      setLibraryTarget(null);
+      toast.success(
+        action === "CANCEL"
+          ? "제출을 취소했어요."
+          : result.submission.publishedIssueId
+            ? "질문이 게시되었어요."
+            : "최신 상태를 확인했어요.",
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "처리하지 못했어요.");
+      await mobileApi
+        .loadMemberIssueSubmissions(sessionToken)
+        .then((result) => setSubmissions(result.items))
+        .catch(() => {});
     } finally {
       setSubmitting(false);
     }
@@ -535,19 +581,104 @@ export default function CreateIssueScreen() {
               {submissions.map((submission) => (
                 <View key={submission.id} style={styles.submissionCard}>
                   <View style={styles.submissionHeader}>
-                    <Text style={styles.submissionStatus}>{statusLabel[submission.status]}</Text>
+                    <Text style={styles.submissionStatus}>
+                      {submission.publishedIssueId
+                        ? "게시 완료"
+                        : submission.publicationState === "QUARANTINED"
+                          ? "공개 보류"
+                          : statusLabel[submission.status]}
+                    </Text>
                     <Text style={styles.submissionRevision}>v{submission.revision}</Text>
                   </View>
                   <Text style={styles.submissionQuestion}>{submission.question}</Text>
                   {submission.reviewNote ? (
                     <Text style={styles.reviewNote}>{submission.reviewNote}</Text>
                   ) : null}
-                  {submission.status === "NEEDS_CHANGES" ? (
+                  {!submission.publishedIssueId &&
+                  ["NEEDS_CHANGES", "PENDING"].includes(submission.status) ? (
+                    <View>
+                      <Pressable
+                        disabled={submitting}
+                        onPress={() => editSubmission(submission)}
+                        style={styles.revisionButton}
+                      >
+                        <Text style={styles.revisionButtonText}>수정해서 다시 제출</Text>
+                      </Pressable>
+                      {(["TEXT_ONLY", "CHECK", "CANCEL"] as const).map((action) => (
+                        <Pressable
+                          key={action}
+                          disabled={submitting}
+                          style={styles.revisionButton}
+                          onPress={() => {
+                            if (action === "CHECK") {
+                              void transition(submission, action);
+                              return;
+                            }
+                            Alert.alert(
+                              action === "CANCEL"
+                                ? "제출을 취소할까요?"
+                                : "이미지 없이 바로 게시할까요?",
+                              "",
+                              [
+                                { text: "돌아가기", style: "cancel" },
+                                {
+                                  text: "확인",
+                                  onPress: () => void transition(submission, action),
+                                },
+                              ],
+                            );
+                          }}
+                        >
+                          <Text style={styles.revisionButtonText}>
+                            {action === "TEXT_ONLY"
+                              ? "이미지 없이 게시"
+                              : action === "CHECK"
+                                ? "게시 상태 확인"
+                                : "제출 취소"}
+                          </Text>
+                        </Pressable>
+                      ))}
+                      <Pressable
+                        disabled={submitting}
+                        style={styles.revisionButton}
+                        onPress={() =>
+                          setLibraryTarget(libraryTarget === submission.id ? null : submission.id)
+                        }
+                      >
+                        <Text style={styles.revisionButtonText}>Library로 교체</Text>
+                      </Pressable>
+                      {libraryTarget === submission.id ? (
+                        library.length ? (
+                          library.map((pair) => (
+                            <Pressable
+                              key={pair.id}
+                              disabled={submitting}
+                              style={styles.revisionButton}
+                              onPress={() =>
+                                Alert.alert("Library 이미지로 바로 게시할까요?", pair.title, [
+                                  { text: "취소", style: "cancel" },
+                                  {
+                                    text: "게시",
+                                    onPress: () => void transition(submission, "LIBRARY", pair.id),
+                                  },
+                                ])
+                              }
+                            >
+                              <Text style={styles.revisionButtonText}>{pair.title}</Text>
+                            </Pressable>
+                          ))
+                        ) : (
+                          <Text>사용 가능한 Library 이미지가 없어요.</Text>
+                        )
+                      ) : null}
+                    </View>
+                  ) : null}
+                  {submission.publishedIssueId ? (
                     <Pressable
-                      onPress={() => editSubmission(submission)}
                       style={styles.revisionButton}
+                      onPress={() => router.push(`/issues/${submission.publishedIssueId}`)}
                     >
-                      <Text style={styles.revisionButtonText}>수정해서 다시 제출</Text>
+                      <Text style={styles.revisionButtonText}>게시된 질문 보기</Text>
                     </Pressable>
                   ) : null}
                 </View>

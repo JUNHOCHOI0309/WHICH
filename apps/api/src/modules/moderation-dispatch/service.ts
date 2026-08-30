@@ -122,6 +122,8 @@ export function createModerationDispatcherService(
           .select({
             inputHash: memberIssueSubmissionRevisions.contentHash,
             currentRevision: memberIssueSubmissions.revision,
+            status: memberIssueSubmissions.status,
+            publishedIssueId: memberIssueSubmissions.publishedIssueId,
           })
           .from(memberIssueSubmissionRevisions)
           .innerJoin(
@@ -143,7 +145,9 @@ export function createModerationDispatcherService(
           staleReason:
             submission.inputHash !== target.normalized_input_hash
               ? "INPUT_HASH_CHANGED"
-              : submission.currentRevision !== target.target_version
+              : submission.currentRevision !== target.target_version ||
+                  submission.status === "CANCELLED" ||
+                  Boolean(submission.publishedIssueId)
                 ? "TARGET_REPLACED_OR_REMOVED"
                 : null,
         } as const;

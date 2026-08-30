@@ -113,3 +113,37 @@ export async function loadIssueMediaLibrary(query = "") {
     await fetch(`/api/issue-media-library?${search}`, { cache: "no-store" }),
   );
 }
+
+export async function loadMemberSubmissions() {
+  return responseBody<{ items: MemberIssueSubmission[] }>(
+    await fetch("/api/issue-submissions?limit=20", { cache: "no-store" }),
+  );
+}
+
+export async function updateMemberSubmission(
+  submission: MemberIssueSubmission,
+  command: CreateIssueCommand,
+  key: string,
+) {
+  return responseBody<{ submission: MemberIssueSubmission }>(
+    await fetch(`/api/issue-submissions/${encodeURIComponent(submission.id)}`, {
+      method: "PUT",
+      headers: { "content-type": "application/json", "idempotency-key": key },
+      body: JSON.stringify({ ...command, expectedRevision: submission.revision }),
+    }),
+  );
+}
+
+export async function actOnMemberSubmission(
+  submission: MemberIssueSubmission,
+  action: "TEXT_ONLY" | "LIBRARY" | "CANCEL" | "CHECK",
+  libraryPairId?: string,
+) {
+  return responseBody<{ submission: MemberIssueSubmission }>(
+    await fetch(`/api/issue-submissions/${encodeURIComponent(submission.id)}/actions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action, expectedRevision: submission.revision, libraryPairId }),
+    }),
+  );
+}

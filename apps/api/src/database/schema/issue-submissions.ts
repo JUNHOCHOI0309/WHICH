@@ -13,6 +13,7 @@ import {
 
 import { members } from "./identity.js";
 import { issueMediaAssets } from "./issue-media.js";
+import { issues } from "./issues.js";
 
 export const memberIssueSubmissions = pgTable(
   "member_issue_submissions",
@@ -24,6 +25,9 @@ export const memberIssueSubmissions = pgTable(
     idempotencyKey: uuid("idempotency_key").notNull(),
     revision: integer("revision").default(1).notNull(),
     status: varchar("status", { length: 24 }).default("PENDING").notNull(),
+    publishedIssueId: uuid("published_issue_id").references(() => issues.id, {
+      onDelete: "restrict",
+    }),
     question: text("question").notNull(),
     context: text("context"),
     choiceA: text("choice_a").notNull(),
@@ -52,7 +56,7 @@ export const memberIssueSubmissions = pgTable(
     check("member_issue_submissions_revision_check", sql`${table.revision} > 0`),
     check(
       "member_issue_submissions_status_check",
-      sql`${table.status} in ('PENDING', 'APPROVED', 'NEEDS_CHANGES', 'REJECTED')`,
+      sql`${table.status} in ('PENDING', 'APPROVED', 'NEEDS_CHANGES', 'REJECTED', 'CANCELLED')`,
     ),
   ],
 );

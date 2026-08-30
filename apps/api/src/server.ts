@@ -60,7 +60,10 @@ const issueMediaService = issueMediaStorage
 const commentService = createCommentService(database.db);
 const issueMediaReviewService =
   issueMediaStorage && issueMediaService
-    ? createIssueMediaReviewService(database.db, issueMediaStorage, issueMediaService)
+    ? createIssueMediaReviewService(database.db, issueMediaStorage, issueMediaService, {
+        publishMemberSubmissions:
+          config.environment !== "production" || config.featureFlags.creatorSubmissions,
+      })
     : null;
 const app = await buildApp(config, {
   ...database,

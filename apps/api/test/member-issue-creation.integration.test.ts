@@ -18,12 +18,16 @@ import {
   issueVersions,
   memberIssueSubmissionRevisions,
   memberIssueSubmissions,
+  memberModerationNotices,
   outboxEvents,
   resultSnapshots,
   voteAggregates,
 } from "../src/database/schema/index.js";
 import { createCommentReadService } from "../src/modules/comments/service.js";
-import { createIssueWriteService } from "../src/modules/issues/creation-service.js";
+import {
+  createIssueWriteService,
+  reconcileReviewedIssueSubmissions,
+} from "../src/modules/issues/creation-service.js";
 import type { MemberIssueSubmission } from "../src/modules/issues/contracts.js";
 import { createIssueReadService } from "../src/modules/issues/service.js";
 import { createMemberIdentityService } from "../src/modules/identity/service.js";
@@ -84,6 +88,222 @@ afterAll(async () => {
 });
 
 describe("Member Issue creation v1", () => {
+  it("authenticates actions and returns the publication state through the route contract", async () => {
+    const session = await createSession();
+    const first = (
+      await createIssueWriteService(database.db).submitMemberIssue({
+        ...createPayload("쉬는 날에는 무엇을 할까"),
+        interestCardCode: "DAILY_LIFE",
+        sessionToken: session.token,
+        idempotencyKey: randomUUID(),
+      })
+    ).submission;
+    const request = {
+      method: "POST" as const,
+      url: `/v1/member/issue-submissions/${first.id}/actions`,
+      payload: { expectedRevision: 1, action: "TEXT_ONLY" },
+    };
+    expect((await app.inject(request)).statusCode).toBe(401);
+    const response = await app.inject({
+      ...request,
+      headers: { authorization: `Bearer ${session.token}` },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      submission: {
+        status: "APPROVED",
+        publicationState: "PUBLISHED",
+        revision: 2,
+      },
+      created: true,
+    });
+    expect(
+      typeof response.json<{ submission: MemberIssueSubmission }>().submission.publishedIssueId,
+    ).toBe("string");
+  });
+  it("publishes a pending text conversion once without charging the quota twice", async () => {
+    const session = await createSession();
+    const writer = createIssueWriteService(database.db);
+    const command = {
+      ...createPayload("저녁에는 무엇을 하면 좋을까"),
+      interestCardCode: "DAILY_LIFE" as const,
+      sessionToken: session.token,
+      idempotencyKey: randomUUID(),
+    };
+    const first = (await writer.submitMemberIssue(command)).submission;
+    await writer.submitMemberIssue({ ...command, idempotencyKey: randomUUID() });
+    await writer.submitMemberIssue({ ...command, idempotencyKey: randomUUID() });
+    const action = {
+      sessionToken: session.token,
+      submissionId: first.id,
+      expectedRevision: 1,
+      action: "TEXT_ONLY" as const,
+    };
+    const results = await Promise.all([
+      writer.actOnMemberIssueSubmission(action),
+      writer.actOnMemberIssueSubmission(action),
+    ]);
+    expect(results[0].submission.publishedIssueId).toBeTruthy();
+    expect(results[0].submission.publishedIssueId).toBe(results[1].submission.publishedIssueId);
+    expect(results.map((result) => result.created).sort()).toEqual([false, true]);
+    expect(results[0].submission.publicationState).toBe("PUBLISHED");
+    expect(
+      await database.db
+        .select()
+        .from(issueAuthors)
+        .where(eq(issueAuthors.memberId, session.member.id)),
+    ).toHaveLength(1);
+    expect(
+      await database.db
+        .select()
+        .from(memberModerationNotices)
+        .where(eq(memberModerationNotices.memberId, session.member.id)),
+    ).toHaveLength(1);
+    await expect(
+      writer.createMemberIssue({ ...command, idempotencyKey: randomUUID() }),
+    ).rejects.toMatchObject({ code: "ISSUE_CREATION_LIMIT_REACHED" });
+  });
+
+  it("rejects foreign and stale actions, preserves cancellation and rejects direct-image bypass", async () => {
+    const session = await createSession();
+    const other = await createSession();
+    const writer = createIssueWriteService(database.db);
+    const command = {
+      ...createPayload("잠들기 전에 무엇을 할까"),
+      interestCardCode: "DAILY_LIFE" as const,
+      sessionToken: session.token,
+      idempotencyKey: randomUUID(),
+    };
+    const first = (await writer.submitMemberIssue(command)).submission;
+    const action = {
+      sessionToken: session.token,
+      submissionId: first.id,
+      expectedRevision: 1,
+      action: "CANCEL" as const,
+    };
+    await expect(
+      writer.actOnMemberIssueSubmission({ ...action, sessionToken: other.token }),
+    ).rejects.toMatchObject({ code: "ISSUE_SUBMISSION_NOT_FOUND" });
+    await expect(
+      writer.actOnMemberIssueSubmission({ ...action, expectedRevision: 2 }),
+    ).rejects.toMatchObject({ code: "ISSUE_SUBMISSION_REVISION_CONFLICT" });
+    const cancelled = await writer.actOnMemberIssueSubmission(action);
+    expect(cancelled.submission).toMatchObject({
+      revision: 2,
+      status: "CANCELLED",
+      publicationState: "CANCELLED",
+      publishedIssueId: null,
+    });
+    expect((await writer.actOnMemberIssueSubmission(action)).created).toBe(false);
+    await expect(
+      writer.resubmitMemberIssue({
+        ...command,
+        idempotencyKey: randomUUID(),
+        submissionId: first.id,
+        expectedRevision: 2,
+      }),
+    ).rejects.toMatchObject({ code: "ISSUE_SUBMISSION_NOT_EDITABLE" });
+    await expect(
+      writer.actOnMemberIssueSubmission({ ...action, expectedRevision: 2, action: "TEXT_ONLY" }),
+    ).rejects.toMatchObject({ code: "ISSUE_SUBMISSION_NOT_EDITABLE" });
+    await expect(
+      writer.createMemberIssue({
+        ...command,
+        mediaAssetAId: randomUUID(),
+        mediaAssetBId: randomUUID(),
+      }),
+    ).rejects.toMatchObject({ code: "ISSUE_SUBMISSION_MEDIA_INVALID" });
+  });
+
+  it("waits for both images, publishes once after approval, and never publishes a cancelled submission", async () => {
+    const session = await createSession();
+    const writer = createIssueWriteService(database.db);
+    const mediaIds = [randomUUID(), randomUUID()];
+    await database.db.insert(issueMediaAssets).values(
+      mediaIds.map((id, index) => ({
+        id,
+        uploadedByMemberId: session.member.id,
+        sourceType: "MEMBER_SUBMISSION",
+        rightsAttestation: "Current signup image processing consent applies to this image.",
+        rightsAttestedAt: new Date(),
+        sha256: id.replaceAll("-", "").repeat(2),
+        perceptualHash: String(index + 1).repeat(16),
+        inputMimeType: "image/png",
+        inputByteSize: 100,
+        inputWidth: 10,
+        inputHeight: 10,
+        outputByteSize: 80,
+        outputWidth: 10,
+        outputHeight: 10,
+        stagingObjectKey: `issue-media/staging/${id}.webp`,
+        stagedAt: new Date(),
+      })),
+    );
+    const command = {
+      ...createPayload("사진 중에서 어떤 분위기가 좋을까"),
+      interestCardCode: "DAILY_LIFE" as const,
+      sessionToken: session.token,
+      idempotencyKey: randomUUID(),
+      mediaAssetAId: mediaIds[0],
+      mediaAssetBId: mediaIds[1],
+    };
+    const first = (await writer.submitMemberIssue(command)).submission;
+    const cancelled = (await writer.submitMemberIssue({ ...command, idempotencyKey: randomUUID() }))
+      .submission;
+    await writer.actOnMemberIssueSubmission({
+      sessionToken: session.token,
+      submissionId: cancelled.id,
+      expectedRevision: 1,
+      action: "CANCEL",
+    });
+    await reconcileReviewedIssueSubmissions(database.db, mediaIds[0]!);
+    expect(
+      (
+        await writer.listMemberIssueSubmissions({ sessionToken: session.token, limit: 20 })
+      ).items.find((item) => item.id === first.id)?.publishedIssueId,
+    ).toBeNull();
+    for (const id of mediaIds) {
+      await database.db
+        .update(issueMediaAssets)
+        .set({
+          moderationState: "APPROVED",
+          storageState: "PUBLISHED",
+          stagingObjectKey: null,
+          publishedObjectKey: `issue-media/published/${id}.webp`,
+          publishedAt: new Date(),
+        })
+        .where(eq(issueMediaAssets.id, id));
+      await reconcileReviewedIssueSubmissions(database.db, id);
+      if (id === mediaIds[0])
+        expect(
+          (
+            await writer.listMemberIssueSubmissions({ sessionToken: session.token, limit: 20 })
+          ).items.find((item) => item.id === first.id)?.publishedIssueId,
+        ).toBeNull();
+    }
+    await reconcileReviewedIssueSubmissions(database.db, mediaIds[1]!);
+    const items = (
+      await writer.listMemberIssueSubmissions({ sessionToken: session.token, limit: 20 })
+    ).items;
+    const published = items.find((item) => item.id === first.id)!;
+    expect(published.publicationState).toBe("PUBLISHED");
+    expect(items.find((item) => item.id === cancelled.id)?.publicationState).toBe("CANCELLED");
+    const links = await database.db
+      .select()
+      .from(issueChoiceMedia)
+      .where(eq(issueChoiceMedia.issueId, published.publishedIssueId!));
+    expect(links).toHaveLength(2);
+    expect(links.map((link) => link.altText).sort()).toEqual(
+      [command.choiceA, command.choiceB].sort(),
+    );
+    expect(
+      await database.db
+        .select()
+        .from(issueAuthors)
+        .where(eq(issueAuthors.memberId, session.member.id)),
+    ).toHaveLength(1);
+  });
+
   it("reuses one approved Library pair across multiple immediately published Issues", async () => {
     const session = await createSession("Library 질문 회원");
     const pairId = randomUUID();
@@ -167,6 +387,34 @@ describe("Member Issue creation v1", () => {
         .filter((version) => issueIds.includes(version.issueId))
         .map((item) => item.mediaMode),
     ).toEqual(["OPTION_IMAGES", "OPTION_IMAGES"]);
+    const writer = createIssueWriteService(database.db);
+    const pending = (
+      await writer.submitMemberIssue({
+        ...createPayload("다음 휴일에는 어디가 좋을까"),
+        interestCardCode: "DAILY_LIFE",
+        sessionToken: session.token,
+        idempotencyKey: randomUUID(),
+      })
+    ).submission;
+    const converted = await writer.actOnMemberIssueSubmission({
+      sessionToken: session.token,
+      submissionId: pending.id,
+      expectedRevision: 1,
+      action: "LIBRARY",
+      libraryPairId: pairId,
+    });
+    expect(converted.submission.publicationState).toBe("PUBLISHED");
+    expect(
+      await database.db
+        .select()
+        .from(issueChoiceMedia)
+        .where(eq(issueChoiceMedia.issueId, converted.submission.publishedIssueId!)),
+    ).toHaveLength(2);
+    const history = (
+      await writer.listMemberIssueSubmissions({ sessionToken: session.token, limit: 20 })
+    ).items;
+    expect(history).toHaveLength(3);
+    expect(history.every((item) => item.publicationState === "PUBLISHED")).toBe(true);
   });
 
   it("accepts only paired staged media owned by the submitting Member", async () => {
@@ -282,8 +530,8 @@ describe("Member Issue creation v1", () => {
         mediaAssetBId: mediaIds[1],
       },
     });
-    expect(hiddenEdit.statusCode).toBe(409);
-    expect(hiddenEdit.json()).toMatchObject({ code: "ISSUE_SUBMISSION_NOT_EDITABLE" });
+    expect(hiddenEdit.statusCode).toBe(200);
+    expect(hiddenEdit.json()).toMatchObject({ submission: { revision: 3, status: "PENDING" } });
   });
 
   it("preserves revisions when a requested change is resubmitted", async () => {

@@ -188,7 +188,7 @@ export function IssueCreatorExperience({
               router.push(`/issues/${result.issueId}`);
             } else {
               toast.success("이미지 안전 검사를 요청했어요.");
-              router.push("/me?tab=issues");
+              router.push("/me/submissions");
             }
           })
           .catch((reason) => {

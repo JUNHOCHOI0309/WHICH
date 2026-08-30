@@ -18,6 +18,7 @@ const STATUS_LABELS: Record<string, string> = {
   HIDDEN: "숨김",
   DELETED: "삭제",
   NEEDS_CHANGES: "수정 필요",
+  CANCELLED: "취소됨",
   SUBMITTED: "접수",
   IN_REVIEW: "사람 검토 중",
   UPHELD: "기존 조치 유지",
@@ -57,10 +58,6 @@ export function MemberModerationExperience({
   const [rightsTarget, setRightsTarget] = useState<string | null>(null);
   const [rightsType, setRightsType] = useState<"PRIVACY" | "DEFAMATION" | "COPYRIGHT">("COPYRIGHT");
   const [rightsDetails, setRightsDetails] = useState("");
-  const [replacementTarget, setReplacementTarget] = useState<string | null>(null);
-  const [replacementA, setReplacementA] = useState<File | null>(null);
-  const [replacementB, setReplacementB] = useState<File | null>(null);
-  const [attestation, setAttestation] = useState("");
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -148,77 +145,6 @@ export function MemberModerationExperience({
     }
   }
 
-  async function chooseAlternative(submissionId: string, action: "TEXT_ONLY" | "CANCEL_IMAGE") {
-    setBusy(true);
-    try {
-      await post(`/api/me/moderation/submissions/${submissionId}/asset-alternative`, { action });
-      toast.success(
-        action === "TEXT_ONLY" ? "이미지 없이 검토를 계속해요." : "이미지를 질문에서 제외했어요.",
-      );
-      await load();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "이미지 대안을 적용하지 못했습니다.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function upload(file: File) {
-    const form = new FormData();
-    form.set("media", file);
-    form.set("rightsAttestation", attestation.trim());
-    const response = await fetch("/api/me/moderation/media", { method: "POST", body: form });
-    const body = (await response.json()) as { asset?: { id: string }; message?: string };
-    if (!response.ok || !body.asset)
-      throw new Error(body.message ?? "이미지를 저장하지 못했습니다.");
-    return body.asset.id;
-  }
-
-  async function replaceImages(submissionId: string) {
-    if (!replacementA || !replacementB || attestation.trim().length < 20) {
-      return toast.error("A/B 이미지와 20자 이상의 권리 확인을 입력해 주세요.");
-    }
-    setBusy(true);
-    try {
-      const [replacementAssetAId, replacementAssetBId] = await Promise.all([
-        upload(replacementA),
-        upload(replacementB),
-      ]);
-      await post(`/api/me/moderation/submissions/${submissionId}/asset-alternative`, {
-        action: "REPLACE_IMAGE",
-        replacementAssetAId,
-        replacementAssetBId,
-      });
-      toast.success("새 이미지를 검수 대상으로 제출했어요.");
-      setReplacementTarget(null);
-      setReplacementA(null);
-      setReplacementB(null);
-      setAttestation("");
-      await load();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "이미지 교체에 실패했습니다.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function applyLibrary(submissionId: string, first: string, second: string) {
-    setBusy(true);
-    try {
-      await post(`/api/me/moderation/submissions/${submissionId}/asset-alternative`, {
-        action: "APPROVED_LIBRARY",
-        replacementAssetAId: first,
-        replacementAssetBId: second,
-      });
-      toast.success("승인된 Library 이미지로 교체했어요.");
-      await load();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Library 이미지 교체에 실패했습니다.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
   return (
     <WhichShell active="me" creationEnabled={creationEnabled}>
       <main className={styles.page}>
@@ -296,79 +222,8 @@ export function MemberModerationExperience({
                           <dd>{dateTime(asset.assetReview.submittedAt)}</dd>
                         </div>
                       </dl>
-                      {asset.assetReview.status === "PENDING" && asset.issueSubmission ? (
-                        <div className={styles.actions}>
-                          <button
-                            disabled={busy}
-                            onClick={() =>
-                              void chooseAlternative(asset.issueSubmission!.id, "TEXT_ONLY")
-                            }
-                          >
-                            Text-only로 계속
-                          </button>
-                          {center.libraryAssets.length >= 2 ? (
-                            <button
-                              disabled={busy}
-                              onClick={() =>
-                                void applyLibrary(
-                                  asset.issueSubmission!.id,
-                                  center.libraryAssets[0]!.assetId,
-                                  center.libraryAssets[1]!.assetId,
-                                )
-                              }
-                            >
-                              승인 Library 교체
-                            </button>
-                          ) : null}
-                          <button
-                            disabled={busy}
-                            onClick={() => setReplacementTarget(asset.issueSubmission!.id)}
-                          >
-                            이미지 변경
-                          </button>
-                          <button
-                            disabled={busy}
-                            onClick={() =>
-                              void chooseAlternative(asset.issueSubmission!.id, "CANCEL_IMAGE")
-                            }
-                          >
-                            이미지 취소
-                          </button>
-                        </div>
-                      ) : null}
-                      {replacementTarget === asset.issueSubmission?.id ? (
-                        <div className={styles.inlineForm}>
-                          <label>
-                            A 이미지
-                            <input
-                              type="file"
-                              accept="image/jpeg,image/png,image/webp"
-                              onChange={(event) => setReplacementA(event.target.files?.[0] ?? null)}
-                            />
-                          </label>
-                          <label>
-                            B 이미지
-                            <input
-                              type="file"
-                              accept="image/jpeg,image/png,image/webp"
-                              onChange={(event) => setReplacementB(event.target.files?.[0] ?? null)}
-                            />
-                          </label>
-                          <label className={styles.wide}>
-                            권리 확인
-                            <textarea
-                              value={attestation}
-                              onChange={(event) => setAttestation(event.target.value)}
-                              placeholder="직접 촬영했거나 게시 권리를 보유한 이미지임을 확인합니다."
-                            />
-                          </label>
-                          <button
-                            disabled={busy}
-                            onClick={() => void replaceImages(asset.issueSubmission!.id)}
-                          >
-                            변경 이미지 제출
-                          </button>
-                        </div>
+                      {asset.issueSubmission ? (
+                        <Link href="/me/submissions">내 질문에서 게시 상태 확인·수정</Link>
                       ) : null}
                       {["REJECTED", "HIDDEN", "DELETED"].includes(asset.assetReview.status) ? (
                         <div className={styles.actions}>

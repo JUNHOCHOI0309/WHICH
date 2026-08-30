@@ -11,6 +11,8 @@ import {
   issueMediaAssetVersions,
   issueMediaRuleFindings,
   members,
+  memberIssueSubmissions,
+  memberIssueSubmissionRevisions,
   moderationProviderCallCache,
   moderationRuns,
   outboxEvents,
@@ -134,6 +136,54 @@ describe("Moderation Outbox Dispatcher and Shadow Worker", () => {
     await testDatabase.database.db.insert(outboxEvents).values(events.rows);
     return { asset: asset!, events };
   }
+
+  it.each(["CANCELLED", "APPROVED"])(
+    "skips late submission work for %s even when the revision matches",
+    async (status) => {
+      const db = testDatabase.database.db;
+      const [member] = await db
+        .insert(members)
+        .values({ displayName: "제출 종료 테스트" })
+        .returning();
+      const issueId = status === "APPROVED" ? randomUUID() : null;
+      if (issueId) await db.insert(issues).values({ id: issueId });
+      const content = {
+        memberId: member!.id,
+        idempotencyKey: randomUUID(),
+        question: "쉬는 날 무엇을 할까요?",
+        choiceA: "산책",
+        choiceB: "독서",
+        interestCardCode: "DAILY_LIFE",
+        contentHash: "9".repeat(64),
+      };
+      const [submission] = await db
+        .insert(memberIssueSubmissions)
+        .values({ ...content, status, publishedIssueId: issueId })
+        .returning();
+      await db
+        .insert(memberIssueSubmissionRevisions)
+        .values({ ...content, submissionId: submission!.id, revision: 1 });
+      const events = createModerationSubmissionEvents({
+        targetType: "ISSUE_VERSION",
+        targetId: submission!.id,
+        targetVersion: 1,
+        privateObjectReference: `issue-submission://revision/${submission!.id}/1`,
+        normalizedInputHash: content.contentHash,
+        reason: "CREATE",
+      });
+      await db.insert(outboxEvents).values(events.rows);
+      const worker = createModerationDispatcherService(db, null, options);
+      expect(await worker.dispatchBatch()).toMatchObject({ skipped: 1 });
+      const [run] = await db
+        .select()
+        .from(moderationRuns)
+        .where(eq(moderationRuns.sourceEventId, events.requestEvent.id));
+      expect(run).toMatchObject({
+        status: "SKIPPED",
+        result: { stale: true, reason: "TARGET_REPLACED_OR_REMOVED", publicationChanged: false },
+      });
+    },
+  );
 
   it("defines private, versioned events without binary data or public URLs", () => {
     const targetId = randomUUID();

@@ -61,7 +61,7 @@ export type MemberModerationAsset = {
   issueSubmission: {
     id: string;
     question: string;
-    publicationStatus: "PENDING" | "APPROVED" | "NEEDS_CHANGES" | "REJECTED";
+    publicationStatus: "PENDING" | "APPROVED" | "NEEDS_CHANGES" | "REJECTED" | "CANCELLED";
     updatedAt: string;
   } | null;
   assetReview: {

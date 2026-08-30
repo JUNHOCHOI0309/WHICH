@@ -231,7 +231,7 @@ describe("IssueCreatorExperience", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "안전 검사 요청하기" }));
 
-    await waitFor(() => expect(navigation.push).toHaveBeenCalledWith("/me?tab=issues"));
+    await waitFor(() => expect(navigation.push).toHaveBeenCalledWith("/me/submissions"));
     expect(requests.filter((url) => url === "/api/issue-submission-media")).toHaveLength(2);
     expect(requests.indexOf("/api/issue-submission-media")).toBeLessThan(
       requests.lastIndexOf("/api/issue-submission-media"),

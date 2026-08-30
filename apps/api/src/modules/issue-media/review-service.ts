@@ -32,6 +32,7 @@ import type {
   IssueMediaRightsRequest,
 } from "./review-contracts.js";
 import { IssueMediaError } from "./service.js";
+import { reconcileReviewedIssueSubmissions } from "../issues/creation-service.js";
 
 const POLICY_VERSION = "issue-media-review-v1";
 
@@ -85,6 +86,7 @@ export function createIssueMediaReviewService(
   database: Database["db"],
   storage: IssueMediaObjectStorage,
   foundation: IssueMediaService,
+  options: { publishMemberSubmissions?: boolean } = {},
 ): IssueMediaReviewService {
   async function operator(memberId: string) {
     const [row] = await database
@@ -255,6 +257,13 @@ export function createIssueMediaReviewService(
           });
         }
       }
+    }
+    if (
+      options.publishMemberSubmissions &&
+      input.assetId &&
+      ["APPROVED", "RESTORED"].includes(input.status)
+    ) {
+      await reconcileReviewedIssueSubmissions(database, input.assetId);
     }
     return mapDecision({ decision: created!, reviewedBy: reviewer?.displayName ?? "OPERATOR" });
   }
