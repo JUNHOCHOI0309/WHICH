@@ -33,6 +33,8 @@ docker run --rm --entrypoint node --workdir /app/apps/api which-cloud-run:pilot 
 gcloud auth configure-docker asia-southeast1-docker.pkg.dev
 docker tag which-cloud-run:pilot asia-southeast1-docker.pkg.dev/which-505908/which/web:<release>
 docker push asia-southeast1-docker.pkg.dev/which-505908/which/web:<release>
+./scripts/cloud-run/setup-network.ps1
+# Add only the printed static IP /32 to Render's PostgreSQL inbound rules, retaining existing entries.
 ./scripts/cloud-run/deploy-preview.ps1 -Image <image-at-sha256-digest> -ReleaseId <git-commit> -SecretVersion 1
 ```
 
@@ -45,6 +47,12 @@ gcloud run services proxy which-web --project=which-505908 --region=asia-southea
 ```
 
 Verify `/api/health`, the home page and public feed, static assets, expected unauthenticated `/api/me` behavior, and fail-closed `/api/ops` behavior. Do not create real votes, send emails, mutate user records, or publish pending images just to verify migration.
+
+### Restricted outbound DB connectivity
+
+The deployment uses Direct VPC egress (`all-traffic`) through `which-run-vpc` / `which-run-subnet` (`10.88.0.0/26`, Private Google Access enabled). Router `which-run-router` and Public NAT `which-run-nat` use only the reserved external IPv4 `which-run-egress`; NAT covers only that subnet. No VM, connector, or inbound allow-all firewall rule is required. The setup script checks existing resources and stops on incompatible configuration instead of silently replacing it.
+
+Render's PostgreSQL-specific allowlist must retain the owner's existing entry and add only this egress IP `/32`. Do not release or replace the reserved address while it is allowlisted. Direct VPC startup can take longer than ordinary startup; the HTTP startup probe allows 240 seconds and checks real DB readiness. The service remains IAM-private throughout preview.
 
 ## Cutover gate — separate approval
 
@@ -74,12 +82,26 @@ Verify `/api/health`, the home page and public feed, static assets, expected una
 - Local web/API-only memory snapshot was about 152 MiB / 2 GiB with workers OFF. This is **not** comparable to a fully loaded production instance and is not a capacity guarantee.
 - Cloud Run revision `which-web-00001-6vk` started both processes but failed DB readiness. A short-lived diagnostic Job reproduced `Connection terminated unexpectedly` in about 359ms after successful DNS resolution. No production traffic was switched.
 
-### Activation hold: DB IP allowlist
+### Initial activation hold: DB IP allowlist
 
 On 2026-08-31, the Render DB's **PostgreSQL-level inbound IP rules allowed only the owner's workstation `/32`**, although the higher workspace/environment rules displayed `0.0.0.0/0`. All levels must permit the connection. This explains why the same image could connect from the workstation but not Cloud Run. Do not mistake the higher-level defaults for the effective DB allowlist.
 
-Cloud Run uses dynamic outbound IPs by default. To preserve the existing restricted DB access, the next step requires owner approval for **Direct VPC egress + Cloud Router/Public NAT + one reserved outbound IPv4**, followed by adding only that `/32` to the DB rules. Do not open the DB to `0.0.0.0/0` or disable TLS verification.
+Cloud Run uses dynamic outbound IPs by default. To preserve the existing restricted DB access, the owner approved **Direct VPC egress + Cloud Router/Public NAT + one reserved outbound IPv4** on 2026-08-31, followed by adding only that `/32` to the DB rules. This approval does not authorize a production cutover. Do not open the DB to `0.0.0.0/0` or disable TLS verification.
 
 The extra network resources have recurring costs: the NAT external IP alone is $0.005/hour ($3.60 per 30 days), plus NAT gateway usage, data processing, and applicable data transfer. This is separate from Cloud Run compute and is not a quoted total. [Static outbound IP setup](https://docs.cloud.google.com/run/docs/configuring/static-outbound-ip), [NAT pricing](https://cloud.google.com/nat/pricing), [Render layered IP rules](https://render.com/docs/inbound-ip-rules).
 
-While awaiting the network decision, the failed preview service and temporary DB-diagnostic Job are removed to stop failed-start retries. The container image, dedicated service account, secret version, and deployment scripts remain for redeployment. Render production, its firewall, R2, and all live moderation flags are unchanged. **The Cloud Run migration is not complete.**
+While awaiting the network decision, the failed preview service and temporary DB-diagnostic Job were removed to stop failed-start retries. The container image, dedicated service account, secret version, and deployment scripts were retained for redeployment. No production traffic was switched during this hold.
+
+### Private preview activated — 2026-08-31 KST
+
+- Static outbound IPv4: `34.21.233.254`. Render PostgreSQL rules now contain exactly the existing workstation `/32` and `34.21.233.254/32` (`WHICH Cloud Run static egress`); saved state was verified after page reload. No PostgreSQL-level allow-all rule was added.
+- Network/subnet/router/NAT creation succeeded; rerunning `setup-network.ps1` passed without creating duplicates. NAT uses one manually reserved IP and only the expected subnet's primary range. No explicit inbound firewall rules were added to this VPC.
+- Ready revision: `which-web-00001-vzg`, using the image digest and secret version above. Readiness, configuration, and routes all report `True`. Direct VPC `all-traffic`, 1 vCPU / 2 GiB, and the dedicated service account were verified on the deployed service.
+- Preview URL: `https://which-web-416579096500.asia-southeast1.run.app`. IAM policy has no public invoker binding. An unauthenticated `/api/health` request returns **403**.
+- Authenticated smoke: `/api/health` **200**, `/` **200**, `/api/issues/feed` **200**, `/api/me` **401**, `/api/ops/members` **403**. The ops check uses an actual route, not a nonexistent session endpoint.
+- The authenticated local proxy renders the homepage and six feed cards successfully; CSS and client-side loading were visually checked. Normal anonymous feed requests create guest/session records; no member account, vote, submission, image, or email was modified for this check.
+- This revision logs `Started 2 processes; preview=true`. Only web/API are running: point/moderation consumers, paid provider calls, decisions, and automatic publication remain disabled in preview. No error-level log entries were returned for this revision during smoke verification.
+- Runtime tests: **5/5** passed again. Network script syntax, repeat execution, Markdown formatting, and diff whitespace checks passed.
+- Render remains the production host. Production DNS, OAuth callbacks, Render consumers, R2 contents, and live moderation flags were not changed. Login/posting/upload/background-worker production acceptance remains a **cutover gate**, not a completed test.
+
+The private preview remains running with minimum 1 and always-allocated CPU. Google compute and NAT/IP charges therefore continue while it is retained; the actual trial-credit balance remains unverified. **Private preview is ready; production migration is not yet complete.**
