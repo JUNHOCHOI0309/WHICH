@@ -9,8 +9,24 @@ import {
   memberIssueSubmissions,
   moderationRuns,
   moderationTargets,
+  members,
+  memberCapabilityGrants,
+  memberMediaConsents,
 } from "../../database/schema/index.js";
 import { evaluatePublicationReadiness } from "./publication-readiness.js";
+import { resolvePublicationEvidence } from "./publication-evidence.js";
+import { moderationDecisionRuntime } from "../moderation/decision-runtime.js";
+import type { ModerationDecisionRuntime } from "../moderation/decision-engine.js";
+
+export type PublicationEvidenceOptions = {
+  consentVersion: string;
+  decisionRuntime: ModerationDecisionRuntime;
+};
+// Explicit defaults avoid inheriting a caller's environment in tests or library usage.
+const defaultOptions: PublicationEvidenceOptions = {
+  consentVersion: "which-media-consent-v1",
+  decisionRuntime: moderationDecisionRuntime({}),
+};
 
 export async function readPublicationReadiness(
   database: Pick<Database["db"], "select">,
@@ -20,9 +36,11 @@ export async function readPublicationReadiness(
     inputHash: string;
     runStatus: string;
     runMode: string;
+    runPolicyVersion?: string;
     providerResult: Record<string, unknown>;
     evaluatedAt: Date;
   },
+  options: PublicationEvidenceOptions = defaultOptions,
 ) {
   const [submission] = await database
     .select()
@@ -75,13 +93,68 @@ export async function readPublicationReadiness(
           ),
         )
     : [];
-  return evaluatePublicationReadiness({
+  const snapshot = {
     ...input,
     submission: submission ?? null,
     assets,
     findings,
     knownBlockedHashes: new Set(known.map((row) => row.hash)),
-  });
+  };
+  // Read live rows without expiry mutations or borrowing the upload-time access result.
+  const [member] = submission
+    ? await database
+        .select({ id: members.id, status: members.status })
+        .from(members)
+        .where(eq(members.id, submission.memberId))
+    : [];
+  const [capability] = submission
+    ? await database
+        .select({
+          id: memberCapabilityGrants.id,
+          memberId: memberCapabilityGrants.memberId,
+          state: memberCapabilityGrants.state,
+          policyVersion: memberCapabilityGrants.policyVersion,
+          grantedAt: memberCapabilityGrants.grantedAt,
+          expiresAt: memberCapabilityGrants.expiresAt,
+        })
+        .from(memberCapabilityGrants)
+        .where(
+          and(
+            eq(memberCapabilityGrants.memberId, submission.memberId),
+            eq(memberCapabilityGrants.capabilityCode, "ISSUE_IMAGE_UPLOAD"),
+          ),
+        )
+    : [];
+  const [consent] = submission
+    ? await database
+        .select({
+          id: memberMediaConsents.id,
+          memberId: memberMediaConsents.memberId,
+          consentVersion: memberMediaConsents.consentVersion,
+          acceptedAt: memberMediaConsents.acceptedAt,
+          revokedAt: memberMediaConsents.revokedAt,
+        })
+        .from(memberMediaConsents)
+        .where(
+          and(
+            eq(memberMediaConsents.memberId, submission.memberId),
+            eq(memberMediaConsents.consentVersion, options.consentVersion),
+          ),
+        )
+    : [];
+  return {
+    ...evaluatePublicationReadiness(snapshot),
+    decisionAssessment: resolvePublicationEvidence({
+      snapshot,
+      access: {
+        member: member ?? null,
+        capability: capability ?? null,
+        consent: consent ?? null,
+        requiredConsentVersion: options.consentVersion,
+      },
+      runtime: options.decisionRuntime,
+    }),
+  };
 }
 
 // Read-only operational observation. Never reuse a stored readiness flag as approval.
@@ -89,6 +162,7 @@ export async function readLatestPublicationReadiness(
   database: Pick<Database["db"], "select">,
   submissionId: string,
   evaluatedAt = new Date(),
+  options: PublicationEvidenceOptions = defaultOptions,
 ) {
   z.uuid().parse(submissionId);
   const [latest] = await database
@@ -113,14 +187,19 @@ export async function readLatestPublicationReadiness(
     submissionId,
     runId: latest.run.id,
     runStatus: latest.run.status,
-    readiness: await readPublicationReadiness(database, {
-      submissionId,
-      targetVersion: latest.target.targetVersion,
-      inputHash: latest.run.normalizedInputHash,
-      runStatus: latest.run.status,
-      runMode: latest.run.mode,
-      providerResult: latest.run.result,
-      evaluatedAt,
-    }),
+    readiness: await readPublicationReadiness(
+      database,
+      {
+        submissionId,
+        targetVersion: latest.target.targetVersion,
+        inputHash: latest.run.normalizedInputHash,
+        runStatus: latest.run.status,
+        runMode: latest.run.mode,
+        runPolicyVersion: latest.run.policyVersion,
+        providerResult: latest.run.result,
+        evaluatedAt,
+      },
+      options,
+    ),
   };
 }

@@ -20,7 +20,10 @@ import {
   outboxEvents,
 } from "../../database/schema/index.js";
 import type { IssueMediaObjectStorage } from "../issue-media/contracts.js";
-import { readPublicationReadiness } from "../issue-media/publication-readiness-reader.js";
+import {
+  readPublicationReadiness,
+  type PublicationEvidenceOptions,
+} from "../issue-media/publication-readiness-reader.js";
 import {
   MODERATION_PROVIDER_INPUT_VERSION,
   ModerationProviderCallError,
@@ -46,6 +49,7 @@ export type ModerationDispatcherOptions = {
   ruleVersion?: string;
   now?: () => Date;
   providerGate?: ModerationProviderGate;
+  publicationEvidence?: PublicationEvidenceOptions;
 };
 
 export type ModerationProviderGate = (input: {
@@ -686,15 +690,20 @@ export function createModerationDispatcherService(
         target.targetType === "ISSUE_VERSION" &&
         target.snapshotReference.startsWith("issue-submission://")
       ) {
-        finalResult.publicationReadiness = await readPublicationReadiness(transaction, {
-          submissionId: target.targetId,
-          targetVersion: target.targetVersion,
-          inputHash: run.normalizedInputHash,
-          runStatus: finalStatus,
-          runMode: run.mode,
-          providerResult: finalResult,
-          evaluatedAt: completedAt,
-        });
+        finalResult.publicationReadiness = await readPublicationReadiness(
+          transaction,
+          {
+            submissionId: target.targetId,
+            targetVersion: target.targetVersion,
+            inputHash: run.normalizedInputHash,
+            runStatus: finalStatus,
+            runMode: run.mode,
+            runPolicyVersion: run.policyVersion,
+            providerResult: finalResult,
+            evaluatedAt: completedAt,
+          },
+          options.publicationEvidence,
+        );
       }
       const [updated] = await transaction
         .update(moderationRuns)

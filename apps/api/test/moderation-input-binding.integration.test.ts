@@ -12,6 +12,9 @@ import {
   moderationProviderCallCache,
   moderationRuns,
   moderationTargets,
+  memberCapabilityGrants,
+  memberMediaConsents,
+  members,
 } from "../src/database/schema/index.js";
 import { createMemberIdentityService } from "../src/modules/identity/service.js";
 import type { IssueMediaObjectStorage } from "../src/modules/issue-media/contracts.js";
@@ -21,6 +24,8 @@ import {
   type EmbeddedText,
 } from "../src/modules/issue-media/embedded-text.js";
 import { readLatestPublicationReadiness } from "../src/modules/issue-media/publication-readiness-reader.js";
+import { TRUSTED_IMAGE_UPLOADER_POLICY_VERSION } from "../src/modules/issue-media/trusted-uploader-policy.js";
+import { moderationDecisionRuntime } from "../src/modules/moderation/decision-runtime.js";
 import { createIssueWriteService } from "../src/modules/issues/creation-service.js";
 import { createModerationDispatcherService } from "../src/modules/moderation-dispatch/service.js";
 import { MODERATION_POLICY_VERSION } from "../src/modules/moderation-dispatch/contracts.js";
@@ -190,6 +195,124 @@ describe("immutable submission image moderation inputs", () => {
       { status: 200 },
     );
   }
+
+  it("reads current capability, consent and member status without changing stored observations or publishing", async () => {
+    const f = await fixture();
+    const acceptedAt = new Date(Date.now() - 10000);
+    const expiresAt = new Date(Date.now() + 60000);
+    await f.db.insert(memberCapabilityGrants).values({
+      memberId: f.session.member.id,
+      capabilityCode: "ISSUE_IMAGE_UPLOAD",
+      state: "ACTIVE",
+      policyVersion: TRUSTED_IMAGE_UPLOADER_POLICY_VERSION,
+      reason: "Locally generated test account only",
+      grantedAt: acceptedAt,
+      expiresAt,
+    });
+    await f.db.insert(memberMediaConsents).values({
+      memberId: f.session.member.id,
+      consentVersion: "which-media-consent-v1",
+      acceptedAt,
+    });
+    const fetchImpl = vi.fn(() => Promise.resolve(response()));
+    const worker = f.worker(fetchImpl);
+    await worker.dispatchBatch();
+    await worker.processBatch();
+    const stored = (await f.runs())[0]!.run.result;
+    const check = (name: string, status: string, reasons?: string[]) => ({
+      readiness: {
+        decisionAssessment: {
+          executionAuthorized: false,
+          checks: expect.arrayContaining([
+            expect.objectContaining({
+              check: name,
+              status,
+              ...(reasons ? { reasons: expect.arrayContaining(reasons) as unknown } : {}),
+            }),
+          ]) as unknown,
+        },
+      },
+    });
+    const first = await readLatestPublicationReadiness(f.db, f.submission.id);
+    expect(first).toMatchObject(check("TECHNICAL", "PASS"));
+    expect(first).toMatchObject(check("CAPABILITY", "PASS"));
+    expect(first).toMatchObject(check("CONSENT", "PASS"));
+    expect(first).toMatchObject(check("LOCAL_VISUAL", "UNAVAILABLE"));
+    const future = await readLatestPublicationReadiness(f.db, f.submission.id, expiresAt);
+    expect(future).toMatchObject(
+      check("CAPABILITY", "REVIEW", ["CAPABILITY_TIME_INVALID_OR_EXPIRED"]),
+    );
+    // Diagnosis must not expire or rewrite the grant itself.
+    expect((await f.db.select().from(memberCapabilityGrants))[0]?.state).toBe("ACTIVE");
+    await f.db
+      .update(memberCapabilityGrants)
+      .set({ state: "REVOKED" })
+      .where(eq(memberCapabilityGrants.memberId, f.session.member.id));
+    expect(await readLatestPublicationReadiness(f.db, f.submission.id)).toMatchObject(
+      check("CAPABILITY", "REVIEW", ["CAPABILITY_REQUIRED"]),
+    );
+    await f.db
+      .update(memberMediaConsents)
+      .set({ revokedAt: new Date() })
+      .where(eq(memberMediaConsents.memberId, f.session.member.id));
+    expect(await readLatestPublicationReadiness(f.db, f.submission.id)).toMatchObject(
+      check("CONSENT", "REVIEW", ["CURRENT_CONSENT_REQUIRED"]),
+    );
+    expect(
+      await readLatestPublicationReadiness(f.db, f.submission.id, new Date(), {
+        consentVersion: "next-terms",
+        decisionRuntime: moderationDecisionRuntime({}),
+      }),
+    ).toMatchObject(check("CONSENT", "REVIEW", ["CURRENT_CONSENT_REQUIRED"]));
+    await f.db
+      .update(members)
+      .set({ status: "SUSPENDED" })
+      .where(eq(members.id, f.session.member.id));
+    expect(await readLatestPublicationReadiness(f.db, f.submission.id)).toMatchObject(
+      check("TECHNICAL", "REVIEW", ["MEMBER_NOT_ACTIVE"]),
+    );
+    expect((await f.runs())[0]!.run.result).toEqual(stored);
+    const caches = await f.db.select().from(moderationProviderCallCache);
+    expect(JSON.stringify(caches)).not.toContain("decisionAssessment");
+    expect(JSON.stringify(stored)).not.toContain(f.command.question);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(f.unused).not.toHaveBeenCalled();
+  });
+
+  it("observes consent revoked during a provider request at completion, not upload-time consent", async () => {
+    const f = await fixture();
+    await f.db.insert(memberMediaConsents).values({
+      memberId: f.session.member.id,
+      consentVersion: "which-media-consent-v1",
+      acceptedAt: new Date(Date.now() - 1000),
+    });
+    const worker = f.worker(
+      vi.fn(async () => {
+        await f.db
+          .update(memberMediaConsents)
+          .set({ revokedAt: new Date() })
+          .where(eq(memberMediaConsents.memberId, f.session.member.id));
+        return response();
+      }),
+    );
+    await worker.dispatchBatch();
+    await worker.processBatch();
+    expect((await f.runs())[0]!.run.result).toMatchObject({
+      publicationReadiness: {
+        decisionAssessment: {
+          executionAuthorized: false,
+          checks: expect.arrayContaining([
+            expect.objectContaining({
+              check: "CONSENT",
+              status: "REVIEW",
+              reasons: ["CURRENT_CONSENT_REQUIRED"],
+            }),
+          ]) as unknown,
+        },
+      },
+    });
+    expect(f.unused).not.toHaveBeenCalled();
+  });
 
   it("sends ordered A/B OCR with context once, persisting only bound metadata", async () => {
     let calls = 0;
