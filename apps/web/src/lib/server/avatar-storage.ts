@@ -133,11 +133,12 @@ export async function deleteStoredAvatar(objectKey: string | null | undefined) {
   );
 }
 
-const SOCIAL_IMAGE_HOSTS: Record<"GOOGLE" | "X" | "NAVER" | "KAKAO", string[]> = {
+const SOCIAL_IMAGE_HOSTS: Record<"GOOGLE" | "X" | "NAVER" | "KAKAO" | "TIKTOK", string[]> = {
   GOOGLE: ["googleusercontent.com", "ggpht.com"],
   X: ["twimg.com"],
   NAVER: ["pstatic.net", "naver.net"],
   KAKAO: ["kakaocdn.net", "kakao.com"],
+  TIKTOK: ["tiktokcdn.com", "tiktokcdn-us.com"],
 };
 
 function hostMatches(hostname: string, allowedSuffix: string) {

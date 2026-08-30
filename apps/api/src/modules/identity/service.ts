@@ -168,6 +168,7 @@ const PROVIDER_PLACEHOLDER_DISPLAY_NAMES: Partial<Record<IdentityProvider, strin
   X: "WHICH 회원",
   NAVER: "네이버 회원",
   KAKAO: "카카오 회원",
+  TIKTOK: "TikTok 회원",
 };
 
 function shouldRefreshProviderDisplayName(

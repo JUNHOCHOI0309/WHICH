@@ -11,20 +11,21 @@ export const AUTH_FLOW_COOKIE = "which_auth_flow";
 export const AUTH_FLOW_COOKIE_PATH = "/api/auth";
 export const SOCIAL_SIGNUP_COOKIE = "which_social_signup";
 
-export type AuthProvider = "GOOGLE" | "X" | "NAVER" | "KAKAO";
+export type AuthProvider = "GOOGLE" | "X" | "NAVER" | "KAKAO" | "TIKTOK";
 export type AuthOutcome = "success" | "cancelled" | "error" | "unavailable" | "merge-review";
 
 export type AuthFlow = {
-  provider: AuthProvider;
   state: string;
   nonce?: string;
-  codeVerifier: string;
   returnTo: string;
   anonymousSubjectId?: string;
   intent?: "LINK";
   linkMemberId?: string;
   createdAt: number;
-};
+} & (
+  | { provider: Exclude<AuthProvider, "TIKTOK">; codeVerifier: string }
+  | { provider: "TIKTOK"; codeVerifier?: never }
+);
 
 export type GoogleBrowserHandoff = {
   version: 1;
@@ -128,7 +129,7 @@ export function decodeSocialSignupTicket(
     const ticket = JSON.parse(plaintext) as SocialSignupTicket;
     if (
       ticket.version !== 1 ||
-      !["GOOGLE", "X", "NAVER", "KAKAO"].includes(ticket.provider) ||
+      !["GOOGLE", "X", "NAVER", "KAKAO", "TIKTOK"].includes(ticket.provider) ||
       typeof ticket.providerSubject !== "string" ||
       ticket.providerSubject.length < 1 ||
       ticket.providerSubject.length > 255 ||
@@ -242,17 +243,20 @@ export function decodeAuthFlow(value: string | undefined) {
   try {
     const flow = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as AuthFlow;
     if (
-      !["GOOGLE", "X", "NAVER", "KAKAO"].includes(flow.provider) ||
+      !["GOOGLE", "X", "NAVER", "KAKAO", "TIKTOK"].includes(flow.provider) ||
       typeof flow.state !== "string" ||
       (["GOOGLE", "KAKAO"].includes(flow.provider) && typeof flow.nonce !== "string") ||
       (flow.nonce !== undefined && typeof flow.nonce !== "string") ||
-      typeof flow.codeVerifier !== "string" ||
+      (flow.provider === "TIKTOK"
+        ? flow.codeVerifier !== undefined
+        : typeof flow.codeVerifier !== "string") ||
       typeof flow.returnTo !== "string" ||
       (flow.anonymousSubjectId !== undefined && !uuidPattern.test(flow.anonymousSubjectId)) ||
       (flow.intent !== undefined && flow.intent !== "LINK") ||
       (flow.intent === "LINK") !== (flow.linkMemberId !== undefined) ||
       (flow.linkMemberId !== undefined && !uuidPattern.test(flow.linkMemberId)) ||
-      typeof flow.createdAt !== "number" ||
+      !Number.isInteger(flow.createdAt) ||
+      flow.createdAt > Date.now() + 30_000 ||
       Date.now() - flow.createdAt > 10 * 60 * 1_000
     ) {
       return null;
@@ -263,11 +267,11 @@ export function decodeAuthFlow(value: string | undefined) {
   }
 }
 
-export function authFlowMatches(
+export function authFlowMatches<P extends AuthProvider>(
   flow: AuthFlow,
-  provider: AuthProvider,
+  provider: P,
   returnedState: string | null,
-) {
+): flow is AuthFlow & { provider: P } {
   if (flow.provider !== provider || !returnedState) return false;
   const expected = Buffer.from(flow.state);
   const actual = Buffer.from(returnedState);

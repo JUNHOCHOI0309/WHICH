@@ -9,7 +9,7 @@ import {
 import { internalAuthSecret } from "./member-auth";
 import { fetchWhichApi } from "./which-api";
 
-type SocialProvider = "GOOGLE" | "X" | "NAVER" | "KAKAO";
+type SocialProvider = "GOOGLE" | "X" | "NAVER" | "KAKAO" | "TIKTOK";
 
 export type AvatarMember = {
   id: string;

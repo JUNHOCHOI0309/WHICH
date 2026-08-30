@@ -9,6 +9,7 @@ import {
   decodeSocialSignupTicket,
 } from "@/lib/server/member-auth";
 import { completeSocialSignup, MemberIdentityLinkError } from "@/lib/server/member-session-bridge";
+import { tiktokLoginAvailable } from "@/lib/server/tiktok-oauth";
 import {
   clearGuestSubjectCookie,
   clearSocialSignupCookie,
@@ -29,6 +30,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       { code: "SIGNUP_TICKET_EXPIRED", message: "소셜 인증이 만료됐습니다. 다시 시도해 주세요." },
       { status: 401 },
+    );
+  }
+  if (ticket.provider === "TIKTOK" && !tiktokLoginAvailable(ticket.returnTo)) {
+    return NextResponse.json(
+      { code: "PROVIDER_UNAVAILABLE", message: "TikTok 로그인을 사용할 수 없습니다." },
+      { status: 403 },
     );
   }
 

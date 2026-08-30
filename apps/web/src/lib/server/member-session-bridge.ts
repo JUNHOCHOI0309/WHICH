@@ -3,7 +3,7 @@ import { internalAuthSecret } from "./member-auth";
 import { cacheSocialAvatar } from "./member-avatar-bridge";
 import type { AuthFlow, AuthOutcome } from "./member-auth";
 
-type SocialProvider = "GOOGLE" | "X" | "NAVER" | "KAKAO";
+type SocialProvider = "GOOGLE" | "X" | "NAVER" | "KAKAO" | "TIKTOK";
 type Provider = "EMAIL" | SocialProvider;
 
 type SessionResponse = {

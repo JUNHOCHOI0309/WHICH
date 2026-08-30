@@ -5,6 +5,35 @@ import { CredentialAuthExperience } from "@/features/identity/credential-auth-ex
 import { SocialSignupExperience } from "@/features/identity/social-signup-experience";
 
 describe("Member credential authentication experience", () => {
+  it("places enabled TikTok after Kakao and X on both auth forms", () => {
+    const { rerender } = render(
+      <CredentialAuthExperience
+        mode="login"
+        returnTo="/me"
+        providers={{ naver: true, kakao: true, tiktok: true }}
+      />,
+    );
+    const link = screen.getByRole("link", { name: "TikTok으로 계속하기" });
+    expect(link).toHaveAttribute("href", "/api/auth/tiktok/start?returnTo=%2Fme");
+    expect(link).toHaveAccessibleName("TikTok으로 계속하기");
+    expect(link.querySelector("span > span")).toHaveTextContent("TikTok");
+    expect(link.previousElementSibling).toHaveTextContent("X로 계속하기");
+    expect(link.parentElement?.lastElementChild).toBe(link);
+    rerender(
+      <CredentialAuthExperience
+        mode="signup"
+        returnTo="/me"
+        providers={{ naver: true, kakao: true, tiktok: true }}
+      />,
+    );
+    expect(screen.getByRole("link", { name: "TikTok으로 계속하기" })).toBeVisible();
+  });
+
+  it("asks TikTok members for their WHICH email instead of inventing one", () => {
+    render(<SocialSignupExperience provider="TIKTOK" />);
+    expect(screen.getByRole("textbox", { name: "이메일" })).toHaveValue("");
+  });
+
   it("keeps email/password as the main login path and four social branches on one page", () => {
     render(
       <CredentialAuthExperience
@@ -28,6 +57,7 @@ describe("Member credential authentication experience", () => {
     expect(screen.getByRole("link", { name: "네이버로 계속하기" })).toBeVisible();
     expect(screen.getByRole("link", { name: "카카오로 계속하기" })).toBeVisible();
     expect(screen.getByRole("link", { name: "X로 계속하기" })).toBeVisible();
+    expect(screen.queryByRole("link", { name: "TikTok으로 계속하기" })).toBeNull();
     expect(screen.getAllByRole("link", { name: "홈" })).toHaveLength(2);
     expect(screen.getAllByRole("link", { name: "관심사" })).toHaveLength(2);
     expect(screen.getAllByRole("link", { name: "로그인" })).toHaveLength(3);

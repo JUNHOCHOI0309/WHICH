@@ -38,6 +38,7 @@ const providerLabels = {
   X: "X",
   NAVER: "Naver",
   KAKAO: "Kakao",
+  TIKTOK: "TikTok",
   DEVELOPMENT: "개발 계정",
 } as const;
 

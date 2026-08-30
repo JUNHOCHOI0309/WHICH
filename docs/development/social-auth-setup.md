@@ -57,6 +57,35 @@ Provider Console에는 환경에 맞는 정확한 Callback URL을 등록합니�
 - Kakao: OpenID Connect Authorization Code + PKCE Adapter와 Callback 구현 완료, 운영 Credential 설정 대기
 - Instagram: 현재 제품 범위에서 제외
 
+TikTok Web Login Kit는 PC·모바일 웹의 Sandbox 테스트용으로 구현되었습니다. Native 로그인과
+Production 공개는 아직 보류입니다. 범위와 공개 기준은
+[TikTok OAuth 로그인 도입 검토안](../product/tiktok-oauth-login-plan-v1.md)을 확인하세요.
+
+### TikTok Sandbox 테스트
+
+1. 로컬 API DB에 `pnpm --filter @which/api db:migrate`를 적용하고 API를 실행합니다.
+   운영 DB가 아닌 테스트용 DB인지 먼저 확인합니다.
+2. `apps/web/.env.local`에 Sandbox의 `TIKTOK_OAUTH_CLIENT_KEY`,
+   `TIKTOK_OAUTH_CLIENT_SECRET`을 넣습니다. `NEXT_PUBLIC_` 변수로 만들지 않습니다.
+3. `AUTH_BASE_URL=https://<현재-HTTPS-터널-호스트>`와
+   `FEATURE_TIKTOK_LOGIN_ENABLED=true`를 로컬에만 설정합니다.
+4. TikTok Sandbox의 Login Kit Web Redirect URI에
+   `https://<현재-HTTPS-터널-호스트>/api/auth/tiktok/callback`을 정확히 등록하고,
+   `user.info.basic` Scope와 Target User를 확인한 뒤 Apply changes를 누릅니다.
+5. Windows에서 의존성 경로가 `C:\p\which`처럼 저장소 밖에 있으면
+   `pnpm --filter @which/web dev:webpack --hostname 127.0.0.1 --port 3000`으로 실행합니다.
+   기존 `dev`와 Production `build`는 변경하지 않았습니다.
+6. HTTPS 주소의 `/login`에서 TikTok을 누릅니다. 처음 연결하는 TikTok 계정은
+   추가 가입 또는 기존 WHICH 이메일·비밀번호 재인증을 거칩니다. TikTok에서 이메일은 받지 않습니다.
+
+- PC에서는 활성 소셜 버튼 아래 중앙, 모바일 웹에서는 한 열의 전체 폭으로 표시합니다.
+- Flag OFF, 키 누락, 비 HTTPS origin이면 버튼과 직접 시작·콜백·추가 가입을 차단합니다.
+- 앱의 `/mobile-auth` 경로에서는 TikTok을 표시하거나 시작하지 않습니다.
+- 터널이 바뀌면 `AUTH_BASE_URL`과 TikTok Redirect URI를 함께 바꾸고 다시 테스트합니다.
+- 이 테스트는 로컬 DB를 사용하므로 운영 사이트 계정/기록과 자동으로 공유되지 않습니다.
+- 실제 동의 → WHICH 복귀 → 재로그인·게스트 기록 승계를 직접 확인한 뒤 데모를 촬영합니다.
+  Sandbox 성공만으로 Production이 승인되지는 않습니다.
+
 Credential이 없는 Provider는 로그인 가능 상태로 간주하지 않습니다. Access Token은 사용자
 식별 요청이 끝난 뒤 보관하지 않는 것을 기본 정책으로 합니다.
 

@@ -82,7 +82,7 @@ async function submitGuestVote(anonymousSubjectId: string, issueId: string, choi
 }
 
 function createMemberSession(input: {
-  provider?: "EMAIL" | "GOOGLE" | "X" | "NAVER" | "KAKAO" | "DEVELOPMENT";
+  provider?: "EMAIL" | "GOOGLE" | "X" | "NAVER" | "KAKAO" | "TIKTOK" | "DEVELOPMENT";
   providerSubject: string;
   anonymousSubjectId?: string;
   createIfMissing?: boolean;
@@ -108,7 +108,7 @@ function createMemberSession(input: {
 
 function linkMemberIdentity(input: {
   memberId: string;
-  provider: "GOOGLE" | "X" | "NAVER" | "KAKAO";
+  provider: "GOOGLE" | "X" | "NAVER" | "KAKAO" | "TIKTOK";
   providerSubject: string;
   avatarUrl?: string;
 }) {
@@ -168,6 +168,68 @@ afterAll(async () => {
 });
 
 describe("Member identity and Guest vote linking", () => {
+  it("registers TikTok explicitly, preserves Guest votes, and reuses the canonical Member", async () => {
+    const providerSubject = `tiktok-${randomUUID()}`;
+    const anonymousSubjectId = await createGuest();
+    const issue = await createIssue();
+    expect(
+      (await submitGuestVote(anonymousSubjectId, issue.issueId, issue.choiceAId)).statusCode,
+    ).toBe(201);
+    const input = { provider: "TIKTOK" as const, providerSubject, anonymousSubjectId };
+    const before = await database.db.select({ id: members.id }).from(members);
+    const unregistered = await createMemberSession({ ...input, createIfMissing: false });
+    expect(unregistered.statusCode).toBe(409);
+    expect(unregistered.json()).toMatchObject({ code: "IDENTITY_SIGNUP_REQUIRED" });
+    expect(await database.db.select({ id: members.id }).from(members)).toHaveLength(before.length);
+    const registered = await createMemberSession({
+      ...input,
+      credential: { email: `tiktok-${randomUUID()}@example.com`, password: "TikTok!123" },
+    });
+    expect(registered.statusCode).toBe(201);
+    const memberId = registered.json<{ member: { id: string } }>().member.id;
+    const again = await createMemberSession({ ...input, createIfMissing: false });
+    expect(again.statusCode).toBe(201);
+    expect(again.json()).toMatchObject({ member: { id: memberId } });
+    const identities = await database.db
+      .select({ provider: memberIdentityLinks.provider })
+      .from(memberIdentityLinks)
+      .where(eq(memberIdentityLinks.memberId, memberId));
+    expect(identities).toEqual(
+      expect.arrayContaining([{ provider: "EMAIL" }, { provider: "TIKTOK" }]),
+    );
+    const linked = await database.db
+      .select({ memberId: guestMemberLinks.memberId })
+      .from(guestMemberLinks)
+      .innerJoin(voterSubjects, eq(guestMemberLinks.guestSubjectId, voterSubjects.id))
+      .where(eq(voterSubjects.anonymousSubjectId, anonymousSubjectId));
+    expect(linked).toEqual([{ memberId }]);
+    expect(
+      await database.db
+        .select({ id: votes.id })
+        .from(votes)
+        .where(eq(votes.issueId, issue.issueId)),
+    ).toHaveLength(1);
+  });
+
+  it("links TikTok to an existing Member without creating another account", async () => {
+    const existing = await createMemberSession({ providerSubject: `existing-${randomUUID()}` });
+    const memberId = existing.json<{ member: { id: string } }>().member.id;
+    const providerSubject = `tiktok-link-${randomUUID()}`;
+    const linked = await linkMemberIdentity({ memberId, provider: "TIKTOK", providerSubject });
+    expect(linked.statusCode).toBe(201);
+    expect(linked.json()).toMatchObject({
+      member: { id: memberId },
+      identity: { provider: "TIKTOK" },
+    });
+    const signedIn = await createMemberSession({
+      provider: "TIKTOK",
+      providerSubject,
+      createIfMissing: false,
+    });
+    expect(signedIn.statusCode).toBe(201);
+    expect(signedIn.json()).toMatchObject({ member: { id: memberId } });
+  });
+
   it("protects the Provider assertion boundary with an internal secret", async () => {
     const response = await app.inject({
       method: "POST",
