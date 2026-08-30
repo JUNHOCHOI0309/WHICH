@@ -3,6 +3,12 @@ import { setTimeout as wait } from "node:timers/promises";
 import { z } from "zod";
 
 import { createDatabase } from "./database/client.js";
+import {
+  createLocalEmbeddedTextExtractor,
+  localMediaScannerConfig,
+} from "./modules/issue-media/local-scan-detector.js";
+import { LOCAL_SCAN_VERSION } from "./modules/issue-media/local-scan-contract.js";
+import { EMBEDDED_TEXT_VERSION } from "./modules/issue-media/embedded-text.js";
 import { readLatestPublicationReadiness } from "./modules/issue-media/publication-readiness-reader.js";
 import {
   createR2IssueMediaStorage,
@@ -36,9 +42,27 @@ const database = createDatabase(config.DATABASE_URL);
 const providerConfig = moderationProviderRuntimeConfig();
 const mediaConfig = issueMediaStorageConfig();
 const mediaStorage = mediaConfig ? createR2IssueMediaStorage(mediaConfig) : null;
+const scannerConfig = localMediaScannerConfig();
+if (
+  scannerConfig.enabled &&
+  config.MODERATION_WORKER_LEASE_MS <
+    2 * scannerConfig.timeoutMs + providerConfig.OPENAI_MODERATION_TIMEOUT_MS + 5000
+) {
+  throw new Error(
+    "MODERATION_WORKER_LEASE_MS must cover two local scans, the provider timeout, and 5000ms completion margin.",
+  );
+}
 const resolveProviderInput = createModerationProviderInputResolver({
   database: database.db,
   storage: mediaStorage,
+  extractEmbeddedText: createLocalEmbeddedTextExtractor({
+    ...scannerConfig,
+    workerUrl: new URL(
+      import.meta.url.endsWith(".ts") ? "./local-media-scanner.ts" : "./local-media-scanner.js",
+      import.meta.url,
+    ),
+    execArgv: import.meta.url.endsWith(".ts") ? ["--import", "tsx"] : [],
+  }),
 });
 const adapter =
   providerConfig.MODERATION_PROVIDER === "OPENAI_MODERATION" && providerConfig.OPENAI_API_KEY
@@ -47,6 +71,8 @@ const adapter =
         model: providerConfig.OPENAI_MODERATION_MODEL,
         timeoutMs: providerConfig.OPENAI_MODERATION_TIMEOUT_MS,
         resolveInput: resolveProviderInput,
+        embeddedTextEnabled: scannerConfig.enabled,
+        cacheProfile: `${EMBEDDED_TEXT_VERSION}:${LOCAL_SCAN_VERSION}:${scannerConfig.enabled ? "LOCAL" : "OFF"}`,
       })
     : null;
 const worker = createModerationDispatcherService(database.db, adapter, {

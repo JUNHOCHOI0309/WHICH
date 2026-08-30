@@ -15,6 +15,11 @@ import type { IssueMediaObjectStorage } from "../issue-media/contracts.js";
 import { buildExternalImageModerationEnvelope } from "../moderation/provider-privacy-policy.js";
 import type { ModerationShadowAdapter } from "../moderation-dispatch/contracts.js";
 import { ModerationProviderCallError, type ModerationProviderInput } from "./contracts.js";
+import {
+  EMBEDDED_TEXT_VERSION,
+  minimizeEmbeddedText,
+  type EmbeddedText,
+} from "../issue-media/embedded-text.js";
 
 const MAX_TEXT_CHARACTERS = 8_000;
 const MAX_CONTEXT_CHARACTERS = 1_500;
@@ -46,6 +51,7 @@ function unavailable(code: string): never {
 export function createModerationProviderInputResolver(input: {
   database: Database["db"];
   storage: IssueMediaObjectStorage | null;
+  extractEmbeddedText?: (bytes: Buffer) => Promise<EmbeddedText>;
 }): (
   target: Parameters<ModerationShadowAdapter["inspect"]>[0],
 ) => Promise<ModerationProviderInput> {
@@ -90,6 +96,18 @@ export function createModerationProviderInputResolver(input: {
       unavailable("ISSUE_MEDIA_BINARY_HASH_MISMATCH");
     }
     const derivative = await normalizeProviderImage(bytes);
+    // Extraction sees the same hash-verified canonical pixels, not an arbitrary image or cached text.
+    const extracted = input.extractEmbeddedText
+      ? await input.extractEmbeddedText(bytes).catch(() => ({
+          version: EMBEDDED_TEXT_VERSION,
+          status: "UNAVAILABLE" as const,
+          text: "",
+        }))
+      : { version: EMBEDDED_TEXT_VERSION, status: "UNAVAILABLE" as const, text: "" };
+    const embeddedText =
+      extracted.status === "WITHHELD_PII"
+        ? { ...extracted, text: "" }
+        : minimizeEmbeddedText(extracted.text, extracted.status);
     const envelope = buildExternalImageModerationEnvelope({
       provider: "OPENAI_MODERATION",
       opaqueRequestId: snapshot.inputHash.slice(0, 32),
@@ -103,7 +121,7 @@ export function createModerationProviderInputResolver(input: {
         content: derivative.data.toString("base64"),
       },
     });
-    return {
+    const image = {
       dataUrl: `data:${envelope.media.mimeType};base64,${envelope.media.content}`,
       mimeType: envelope.media.mimeType,
       width: envelope.media.width,
@@ -112,6 +130,7 @@ export function createModerationProviderInputResolver(input: {
       metadataStripped: true as const,
       reencoded: true as const,
     };
+    return { image, embeddedText, normalizedHash: snapshot.inputHash };
   }
 
   return async (target) => {
@@ -157,10 +176,11 @@ export function createModerationProviderInputResolver(input: {
         if (ids.some(Boolean) && (!ids.every(Boolean) || ids[0] === ids[1]))
           unavailable("SUBMISSION_MEDIA_PAIR_INVALID");
         // Bind both images to this immutable question revision, never an arbitrary linked revision.
-        const images = [];
+        const resolvedImages = [];
         for (const id of ids) {
-          if (id) images.push(await resolveImage(id, 1, undefined, submission.memberId));
+          if (id) resolvedImages.push(await resolveImage(id, 1, undefined, submission.memberId));
         }
+        const images = resolvedImages.map((resolved) => resolved.image);
         const context = {
           question: redactProviderContext(submission.question),
           choices: [submission.choiceA, submission.choiceB].map(redactProviderContext),
@@ -180,8 +200,29 @@ export function createModerationProviderInputResolver(input: {
           targetType: target.targetType,
           scope: "SUBMISSION_REVISION",
           modality: images.length ? "TEXT_AND_IMAGE" : "TEXT",
-          text,
+          text: [
+            text,
+            ...resolvedImages.map((resolved, index) =>
+              resolved.embeddedText.text
+                ? `Image ${index === 0 ? "A" : "B"} extracted text: ${resolved.embeddedText.text}`
+                : "",
+            ),
+          ]
+            .filter(Boolean)
+            .join("\n"),
           images,
+          ...(images.length
+            ? {
+                embeddedText: {
+                  version: EMBEDDED_TEXT_VERSION,
+                  images: resolvedImages.map((resolved) => ({
+                    normalizedHash: resolved.normalizedHash,
+                    status: resolved.embeddedText.status,
+                    characters: resolved.embeddedText.text.length,
+                  })),
+                },
+              }
+            : {}),
           context,
         };
       }
@@ -219,13 +260,29 @@ export function createModerationProviderInputResolver(input: {
       `issue-media://asset/${target.targetId}/version/${target.targetVersion}`
     )
       unavailable("ISSUE_MEDIA_REFERENCE_MISMATCH");
+    const resolved = await resolveImage(
+      target.targetId,
+      target.targetVersion,
+      target.normalizedInputHash,
+    );
     return {
       targetType: target.targetType,
       scope: "ASSET_ONLY",
-      modality: "IMAGE",
-      images: [
-        await resolveImage(target.targetId, target.targetVersion, target.normalizedInputHash),
-      ],
+      modality: resolved.embeddedText.text ? "TEXT_AND_IMAGE" : "IMAGE",
+      ...(resolved.embeddedText.text
+        ? { text: `Image extracted text: ${resolved.embeddedText.text}` }
+        : {}),
+      images: [resolved.image],
+      embeddedText: {
+        version: EMBEDDED_TEXT_VERSION,
+        images: [
+          {
+            normalizedHash: resolved.normalizedHash,
+            status: resolved.embeddedText.status,
+            characters: resolved.embeddedText.text.length,
+          },
+        ],
+      },
     };
   };
 }

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createLocalMediaSignalDetector,
   localMediaScannerConfig,
+  createLocalEmbeddedTextExtractor,
 } from "../src/modules/issue-media/local-scan-detector.js";
 import {
   incompleteLocalScan,
@@ -19,6 +20,20 @@ const detector = (script: string, timeoutMs = 1000) =>
 afterEach(() => vi.unstubAllEnvs());
 
 describe("local scanner isolation and limits", () => {
+  it("discards malformed or failed text IPC without exposing child output", async () => {
+    for (const script of [
+      "process.stdin.resume(); process.stdout.write('private text')",
+      "process.stdin.resume(); process.exit(2)",
+    ]) {
+      const extract = createLocalEmbeddedTextExtractor({
+        enabled: true,
+        timeoutMs: 1000,
+        workerUrl: scriptUrl,
+        execArgv: ["--eval", script],
+      });
+      expect(await extract(Buffer.from("x"))).toMatchObject({ status: "UNAVAILABLE", text: "" });
+    }
+  });
   it("defaults OFF and rejects invalid runtime limits", async () => {
     expect(localMediaScannerConfig({})).toEqual({ enabled: false, timeoutMs: 15000 });
     expect(() =>

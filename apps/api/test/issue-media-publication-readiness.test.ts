@@ -6,6 +6,7 @@ import {
 } from "../src/modules/issue-media/publication-readiness.js";
 import { ISSUE_MEDIA_RULE_POLICY_VERSION } from "../src/modules/issue-media/upload-gate-policy.js";
 import { LOCAL_SCAN_VERSION } from "../src/modules/issue-media/local-scan-contract.js";
+import { EMBEDDED_TEXT_VERSION } from "../src/modules/issue-media/embedded-text.js";
 import { MODERATION_PROVIDER_INPUT_VERSION } from "../src/modules/moderation-providers/contracts.js";
 import {
   OPENAI_IMAGE_LABELS,
@@ -111,6 +112,38 @@ function fixture(): PublicationReadinessInput {
 }
 
 describe("publication evidence readiness (observation only)", () => {
+  it("accepts complete bound OCR observations without granting publication authority", () => {
+    const f = fixture();
+    f.providerResult.embeddedText = {
+      version: EMBEDDED_TEXT_VERSION,
+      images: f.assets.map((asset) => ({
+        normalizedHash: asset.normalizedHash,
+        status: "COMPLETE",
+        characters: 25,
+      })),
+    };
+    const result = evaluatePublicationReadiness(f);
+    expect(result.blockers.some((code) => code.includes("EMBEDDED_TEXT"))).toBe(false);
+    expect(result.executionAuthorized).toBe(false);
+    expect(result.blockers).toContain("A_VISUAL_ENGINE_NOT_IMPLEMENTED");
+  });
+  it("checks each image's OCR binding and incomplete or withheld evidence", () => {
+    const f = fixture();
+    f.providerResult.embeddedText = {
+      version: EMBEDDED_TEXT_VERSION,
+      images: [
+        { normalizedHash: "e".repeat(64), status: "PARTIAL", characters: 10 },
+        { normalizedHash: f.assets[1]!.normalizedHash, status: "WITHHELD_PII", characters: 0 },
+      ],
+    };
+    expect(evaluatePublicationReadiness(f).blockers).toEqual(
+      expect.arrayContaining([
+        "A_EMBEDDED_TEXT_BINDING_MISMATCH",
+        "A_EMBEDDED_TEXT_PARTIAL",
+        "B_EMBEDDED_TEXT_WITHHELD_PII",
+      ]),
+    );
+  });
   it("does not interpret low provider scores and clean local scans as a calibrated clear decision", () => {
     const result = evaluatePublicationReadiness(fixture());
     expect(result).toMatchObject({ state: "PRIVATE_REVIEW_REQUIRED", executionAuthorized: false });
@@ -119,7 +152,7 @@ describe("publication evidence readiness (observation only)", () => {
       "A_VISUAL_ENGINE_NOT_IMPLEMENTED",
       "B_VISUAL_SCAN_INCOMPLETE",
       "B_VISUAL_ENGINE_NOT_IMPLEMENTED",
-      "EMBEDDED_TEXT_SAFETY_NOT_IMPLEMENTED",
+      "EMBEDDED_TEXT_EVIDENCE_MISSING",
     ]);
     expect(result.executionBlockers).toContain("SHADOW_IS_NOT_EXECUTION_AUTHORITY");
     expect(result.executionBlockers).toContain("CALIBRATED_CLEAR_EVIDENCE_REQUIRED");

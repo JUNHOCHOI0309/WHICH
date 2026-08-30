@@ -16,6 +16,10 @@ import {
 import { createMemberIdentityService } from "../src/modules/identity/service.js";
 import type { IssueMediaObjectStorage } from "../src/modules/issue-media/contracts.js";
 import { createIssueMediaService } from "../src/modules/issue-media/service.js";
+import {
+  EMBEDDED_TEXT_VERSION,
+  type EmbeddedText,
+} from "../src/modules/issue-media/embedded-text.js";
 import { readLatestPublicationReadiness } from "../src/modules/issue-media/publication-readiness-reader.js";
 import { createIssueWriteService } from "../src/modules/issues/creation-service.js";
 import { createModerationDispatcherService } from "../src/modules/moderation-dispatch/service.js";
@@ -40,7 +44,7 @@ describe("immutable submission image moderation inputs", () => {
     await testDatabase.drop();
   });
 
-  async function fixture() {
+  async function fixture(extractEmbeddedText?: (bytes: Buffer) => Promise<EmbeddedText>) {
     const db = testDatabase.database.db;
     const objects = new Map<string, Buffer>();
     const unused = vi.fn(() =>
@@ -102,7 +106,11 @@ describe("immutable submission image moderation inputs", () => {
       mediaAssetBId: assets[1]!.id,
     };
     const { submission } = await writer.submitMemberIssue(command);
-    const resolveInput = createModerationProviderInputResolver({ database: db, storage });
+    const resolveInput = createModerationProviderInputResolver({
+      database: db,
+      storage,
+      extractEmbeddedText,
+    });
     async function target(revision = 1) {
       const [row] = await db
         .select()
@@ -134,6 +142,8 @@ describe("immutable submission image moderation inputs", () => {
         apiKey: "mock-only-key",
         resolveInput,
         fetchImpl,
+        embeddedTextEnabled: Boolean(extractEmbeddedText),
+        cacheProfile: extractEmbeddedText ? "test-embedded:LOCAL" : undefined,
       });
       return createModerationDispatcherService(db, adapter, {
         batchSize: 25,
@@ -180,6 +190,77 @@ describe("immutable submission image moderation inputs", () => {
       { status: 200 },
     );
   }
+
+  it("sends ordered A/B OCR with context once, persisting only bound metadata", async () => {
+    let calls = 0;
+    const extract = vi.fn((): Promise<EmbeddedText> =>
+      Promise.resolve({
+        version: EMBEDDED_TEXT_VERSION,
+        status: "COMPLETE" as const,
+        text: ++calls === 1 ? "first embedded phrase" : "second embedded phrase",
+      }),
+    );
+    const f = await fixture(extract);
+    let sent = "";
+    const fetchImpl = vi.fn((_url: unknown, init?: RequestInit) => {
+      sent = typeof init?.body === "string" ? init.body : "";
+      return Promise.resolve(response());
+    });
+    const worker = f.worker(fetchImpl);
+    await worker.dispatchBatch();
+    await worker.processBatch();
+    expect(sent).toContain("Image A extracted text: first embedded phrase");
+    expect(sent).toContain("Image B extracted text: second embedded phrase");
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    const { run } = (await f.runs())[0]!;
+    expect(run.result.embeddedText).toMatchObject({
+      version: EMBEDDED_TEXT_VERSION,
+      images: [
+        { status: "COMPLETE", characters: 21 },
+        { status: "COMPLETE", characters: 22 },
+      ],
+    });
+    const caches = await f.db.select().from(moderationProviderCallCache);
+    expect(caches).toHaveLength(1);
+    expect(JSON.stringify([run, caches])).not.toContain("embedded phrase");
+    await f.writer.submitMemberIssue({ ...f.command, idempotencyKey: randomUUID() });
+    await worker.dispatchBatch();
+    await worker.processBatch();
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(extract).toHaveBeenCalledTimes(2);
+    expect(f.unused).not.toHaveBeenCalled();
+  });
+
+  it.each(["PARTIAL", "UNAVAILABLE", "WITHHELD_PII", "THROW"] as const)(
+    "does not cache incomplete OCR %s or mistake it for approval",
+    async (status) => {
+      const f = await fixture(() =>
+        status === "THROW"
+          ? Promise.reject(new Error("private error"))
+          : Promise.resolve({
+              version: EMBEDDED_TEXT_VERSION,
+              status,
+              text: status === "PARTIAL" ? "partial words" : "must not leak",
+            }),
+      );
+      let sent = "";
+      const worker = f.worker(
+        vi.fn((_url: unknown, init?: RequestInit) => {
+          sent = typeof init?.body === "string" ? init.body : "";
+          return Promise.resolve(response());
+        }),
+      );
+      await worker.dispatchBatch();
+      await worker.processBatch();
+      expect(sent).not.toContain("must not leak");
+      expect(sent).not.toContain("private error");
+      expect(await f.db.select().from(moderationProviderCallCache)).toHaveLength(0);
+      const { run } = (await f.runs())[0]!;
+      expect(run.result.publicationReadiness).toMatchObject({ executionAuthorized: false });
+      expect(JSON.stringify(run.result)).not.toContain("partial words");
+      expect(f.unused).not.toHaveBeenCalled();
+    },
+  );
 
   function productionGate(dailyCap: number, circuitMinimum = 5) {
     return createModerationProviderGate({

@@ -1,4 +1,5 @@
 import { scanLocalImage, localScanResources } from "./modules/issue-media/local-scan-engine.js";
+import { EMBEDDED_TEXT_VERSION, type EmbeddedText } from "./modules/issue-media/embedded-text.js";
 import {
   incompleteLocalScan,
   LOCAL_SCAN_MAX_BYTES,
@@ -23,6 +24,17 @@ async function main() {
     total += bytes.length;
     if (total > LOCAL_SCAN_MAX_BYTES) return incompleteLocalScan("INPUT_LIMIT");
     chunks.push(bytes);
+  }
+  if (process.argv[2] === "moderation-text") {
+    let embeddedText: EmbeddedText = {
+      version: EMBEDDED_TEXT_VERSION,
+      status: "UNAVAILABLE",
+      text: "",
+    };
+    const scan = await scanLocalImage(Buffer.concat(chunks), (text) => {
+      embeddedText = text;
+    });
+    return { scan, embeddedText };
   }
   return scanLocalImage(Buffer.concat(chunks));
 }

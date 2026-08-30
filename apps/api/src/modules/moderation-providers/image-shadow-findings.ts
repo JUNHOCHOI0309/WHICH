@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import type { NormalizedModerationProviderResult } from "./contracts.js";
 import { openAiCoverage } from "./openai-coverage.js";
+import { embeddedTextEvidenceSchema } from "../issue-media/embedded-text.js";
 
 export const normalizedResultSchema = z.object({
   schemaVersion: z.literal(1),
@@ -60,6 +61,7 @@ export function toImageProviderShadowFindings(input: {
 
   const result: NormalizedModerationProviderResult = parsed.data;
   const version = sourceVersion(result);
+  const embedded = embeddedTextEvidenceSchema.safeParse(input.result.embeddedText);
   const commonEvidence = {
     schemaVersion: result.schemaVersion,
     provider: result.provider,
@@ -102,6 +104,7 @@ export function toImageProviderShadowFindings(input: {
       boundingBoxesSupported: result.capabilities.boundingBoxes,
       relevanceSupported: !result.unsupportedLabels.includes("ISSUE_RELEVANCE"),
       visualFairnessSupported: !result.unsupportedLabels.includes("VISUAL_FAIRNESS"),
+      embeddedText: embedded.success ? embedded.data : null,
       modalityCoverage:
         result.provider === "OPENAI_MODERATION" &&
         result.modelSnapshot === "omni-moderation-2024-09-26"

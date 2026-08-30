@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { openAiCoverage } from "./openai-coverage.js";
+import { embeddedTextEvidenceSchema } from "../issue-media/embedded-text.js";
 
 import type { ModerationShadowAdapter } from "../moderation-dispatch/contracts.js";
 import {
@@ -57,6 +58,8 @@ export type OpenAiModerationAdapterOptions = {
   endpoint?: string;
   timeoutMs?: number;
   cacheTtlMilliseconds?: number;
+  cacheProfile?: string;
+  embeddedTextEnabled?: boolean;
   resolveInput(
     input: Parameters<ModerationShadowAdapter["inspect"]>[0],
   ): Promise<ModerationProviderInput>;
@@ -76,6 +79,16 @@ export function createOpenAiModerationAdapter(
     modelName: "omni-moderation",
     modelVersion: model,
     cacheTtlMilliseconds: options.cacheTtlMilliseconds ?? 86_400_000,
+    cacheProfile: options.cacheProfile,
+    canReuseResult(result) {
+      if (!options.embeddedTextEnabled || result.imageCount === 0) return true;
+      const parsed = embeddedTextEvidenceSchema.safeParse(result.embeddedText);
+      return (
+        parsed.success &&
+        parsed.data.images.length === result.imageCount &&
+        parsed.data.images.every((image) => image.status === "COMPLETE")
+      );
+    },
     async inspect(target) {
       const input = await options.resolveInput(target);
       const images = input.images ?? (input.image ? [input.image] : []);
@@ -185,6 +198,9 @@ export function createOpenAiModerationAdapter(
           modality: input.modality,
           inputScope: input.scope ?? "UNSPECIFIED",
           imageCount: images.length,
+          ...(input.embeddedText
+            ? { embeddedText: embeddedTextEvidenceSchema.parse(input.embeddedText) }
+            : {}),
           modelSnapshot: parsed.model,
           supportedLabels,
           unsupportedLabels,

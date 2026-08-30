@@ -3,7 +3,10 @@ import { createRequire } from "node:module";
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 import { prepareZXingModule, writeBarcode } from "zxing-wasm/writer";
-import { createLocalMediaSignalDetector } from "../src/modules/issue-media/local-scan-detector.js";
+import {
+  createLocalMediaSignalDetector,
+  createLocalEmbeddedTextExtractor,
+} from "../src/modules/issue-media/local-scan-detector.js";
 import { evaluateLocalMediaInspection } from "../src/modules/issue-media/upload-gate-policy.js";
 import { detectOcrPiiKinds } from "../src/modules/issue-media/ocr-pii.js";
 
@@ -16,6 +19,33 @@ const detector = createLocalMediaSignalDetector({
 });
 
 describe("real local OCR and barcode engines", () => {
+  it("extracts bounded text from real pixels only on the explicit moderation IPC path", async () => {
+    const extract = createLocalEmbeddedTextExtractor({
+      enabled: true,
+      timeoutMs: 30000,
+      workerUrl: new URL("../src/local-media-scanner.ts", import.meta.url),
+      execArgv: ["--import", "tsx"],
+    });
+    const image = await sharp(
+      Buffer.from(
+        '<svg width="1000" height="200"><rect width="100%" height="100%" fill="white"/><text x="30" y="100" font-size="52" font-family="sans-serif">Choose your favorite season</text></svg>',
+      ),
+    )
+      .webp({ lossless: true })
+      .toBuffer();
+    const extracted = await extract(image);
+    expect(["COMPLETE", "PARTIAL"]).toContain(extracted.status);
+    expect(extracted.text.toLowerCase()).toContain("favorite season");
+    expect(extracted.text.length).toBeLessThanOrEqual(2000);
+    const privateImage = await sharp(
+      Buffer.from(
+        '<svg width="1000" height="200"><rect width="100%" height="100%" fill="white"/><text x="30" y="100" font-size="52" font-family="sans-serif">support@example.com</text></svg>',
+      ),
+    )
+      .webp({ lossless: true })
+      .toBuffer();
+    expect(await extract(privateImage)).toMatchObject({ status: "WITHHELD_PII", text: "" });
+  }, 65000);
   it("extracts only PII categories from actual image pixels", async () => {
     const image = await sharp(
       Buffer.from(

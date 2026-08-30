@@ -533,6 +533,7 @@ export function createModerationDispatcherService(
     const cacheHash = moderationProviderCacheHash({
       targetType: event.data.target_type,
       normalizedInputHash: run.normalizedInputHash,
+      cacheProfile: adapter.cacheProfile,
     });
     const [cached] = await database
       .select()
@@ -549,7 +550,7 @@ export function createModerationDispatcherService(
         ),
       )
       .limit(1);
-    if (cached) {
+    if (cached && (adapter.canReuseResult?.(cached.result) ?? true)) {
       return {
         status: cached.status as "SUCCEEDED" | "SKIPPED",
         result: { ...cached.result, cacheHit: true, shadow: true, publicationChanged: false },
@@ -722,13 +723,19 @@ export function createModerationDispatcherService(
         .returning({ id: moderationRuns.id });
       if (updated) {
         // An expired lease or stale response must not populate the reusable provider cache.
-        if (adapter && !state.staleReason && result.result.cacheHit === false) {
+        if (
+          adapter &&
+          !state.staleReason &&
+          result.result.cacheHit === false &&
+          (adapter.canReuseResult?.(result.result) ?? true)
+        ) {
           const cacheValue = {
             provider: adapter.provider,
             modelName: adapter.modelName,
             modelVersion: adapter.modelVersion,
             policyVersion: run.policyVersion,
             normalizedInputHash: moderationProviderCacheHash({
+              cacheProfile: adapter.cacheProfile,
               targetType: target.targetType as ModerationRequestedEvent["data"]["target_type"],
               normalizedInputHash: run.normalizedInputHash,
             }),
