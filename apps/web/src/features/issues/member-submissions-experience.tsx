@@ -1,10 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "@/components/feedback/toast-provider";
 import { WhichShell } from "@/components/layout/which-shell";
 import type { IssueMediaLibraryPair, MemberIssueSubmission } from "@/lib/contracts";
+import { MemberProfileTabs } from "../identity/member-profile-tabs";
+import { MemberPointPanel } from "../identity/member-point-panel";
+import historyStyles from "../identity/member-history-layout.module.css";
 import {
   actOnMemberSubmission,
   loadIssueMediaLibrary,
@@ -33,10 +36,22 @@ export function MemberSubmissionsExperience({
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const [editing, setEditing] = useState<MemberIssueSubmission | null>(null);
+  const [managingId, setManagingId] = useState<string | null>(null);
   const [files, setFiles] = useState<{ a: File | null; b: File | null }>({ a: null, b: null });
   const [libraryTarget, setLibraryTarget] = useState<MemberIssueSubmission | null>(null);
   const [library, setLibrary] = useState<IssueMediaLibraryPair[]>([]);
   const key = useRef("");
+  const groups = useMemo(() => {
+    const months = new Map<string, MemberIssueSubmission[]>();
+    for (const item of [...items].sort(
+      (a, b) => Date.parse(b.submittedAt) - Date.parse(a.submittedAt),
+    )) {
+      const date = new Date(item.submittedAt);
+      const month = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+      months.set(month, [...(months.get(month) ?? []), item]);
+    }
+    return [...months];
+  }, [items]);
 
   async function load() {
     try {
@@ -131,27 +146,30 @@ export function MemberSubmissionsExperience({
   }
 
   return (
-    <WhichShell active="me" creationEnabled={creationEnabled}>
-      <main className={styles.page}>
-        <header className={styles.heading}>
+    <WhichShell
+      active="me"
+      creationEnabled={creationEnabled}
+      aside={screen === "ready" ? <MemberPointPanel /> : undefined}
+      preserveAsideOnNarrow={screen === "ready"}
+    >
+      <div className={`${historyStyles.page} ${styles.page}`}>
+        <header className={historyStyles.hero}>
           <div>
             <p>MY QUESTIONS</p>
             <h1>내 질문</h1>
+            <span>
+              최근 제출한 질문 {screen === "ready" ? `${items.length}개` : "20개"} · 본인에게만
+              보여요
+            </span>
           </div>
           <button disabled={busy} onClick={() => void run(load)}>
             새로고침
           </button>
         </header>
-        <nav className={styles.nav} aria-label="내 기록 메뉴">
-          <Link href="/me">프로필</Link>
-          <Link href="/me/votes">투표 기록</Link>
-          <Link href="/me/submissions" aria-current="page">
-            내 질문
-          </Link>
-        </nav>
+        <MemberProfileTabs active="submissions" creationEnabled={creationEnabled} />
         <p className={styles.note}>
-          최근 제출한 질문 20개입니다. 이미지를 검사하는 동안에도 수정하거나 이미지 없이 게시할 수
-          있어요.
+          최근 제출한 질문을 최대 20개까지 보여요. 이미지를 검사하는 동안에도 수정하거나 이미지 없이
+          게시할 수 있어요.
         </p>
         {screen === "loading" ? <p role="status">질문을 불러오고 있어요.</p> : null}
         {screen === "guest" ? (
@@ -161,212 +179,285 @@ export function MemberSubmissionsExperience({
           <p role="alert">질문을 불러오지 못했어요. 새로고침으로 다시 시도해 주세요.</p>
         ) : null}
         {screen === "ready" && !items.length ? (
-          <section className={styles.card}>아직 제출한 질문이 없어요.</section>
+          <section className={historyStyles.empty}>
+            <h2>아직 제출한 질문이 없어요.</h2>
+            <p>질문을 만들면 게시 상태와 선택지를 이곳에서 확인할 수 있어요.</p>
+            {creationEnabled ? <Link href="/create">질문 만들기</Link> : null}
+          </section>
         ) : null}
-        {screen === "ready"
-          ? items.map((item) => {
-              const editable =
-                !item.publishedIssueId && ["PENDING", "NEEDS_CHANGES"].includes(item.status);
-              const state =
-                item.publicationState ??
-                (item.status === "PENDING" || item.status === "APPROVED"
-                  ? "PROCESSING"
-                  : item.status);
-              return (
-                <article className={styles.card} key={item.id} aria-label={item.question}>
-                  <div className={styles.heading}>
-                    <strong className={styles.badge}>{labels[state]}</strong>
-                    <small>수정본 {item.revision}</small>
-                  </div>
-                  <h2>{item.question}</h2>
-                  <p>{item.context}</p>
-                  <div className={styles.choices}>
-                    <span>A · {item.choiceA}</span>
-                    <span>B · {item.choiceB}</span>
-                  </div>
-                  {item.reviewNote ? <p className={styles.note}>{item.reviewNote}</p> : null}
-                  {item.publishedIssueId ? (
-                    <Link className={styles.link} href={`/issues/${item.publishedIssueId}`}>
-                      게시된 질문 보기 →
-                    </Link>
-                  ) : null}
-                  {editable ? (
-                    <div className={styles.actions}>
-                      <button
-                        disabled={busy}
-                        onClick={() => {
-                          setEditing({ ...item });
-                          setLibraryTarget(null);
-                          setFiles({ a: null, b: null });
-                          key.current = crypto.randomUUID();
-                        }}
+        {screen === "ready" ? (
+          <div className={historyStyles.monthList}>
+            {groups.map(([month, submissions]) => (
+              <section
+                className={historyStyles.monthGroup}
+                key={month}
+                aria-labelledby={`submissions-${month}`}
+              >
+                <header>
+                  <h2 id={`submissions-${month}`}>
+                    {new Intl.DateTimeFormat("ko-KR", { year: "numeric", month: "long" }).format(
+                      new Date(submissions[0]!.submittedAt),
+                    )}
+                  </h2>
+                  <span>{submissions.length}개 질문</span>
+                </header>
+                <div className={`${historyStyles.timeline} ${styles.submissionTimeline}`}>
+                  {submissions.map((item) => {
+                    const editable =
+                      !item.publishedIssueId && ["PENDING", "NEEDS_CHANGES"].includes(item.status);
+                    const state =
+                      item.publicationState ??
+                      (item.status === "PENDING" || item.status === "APPROVED"
+                        ? "PROCESSING"
+                        : item.status);
+                    return (
+                      <article
+                        className={`${historyStyles.timelineItem} ${styles.row}`}
+                        key={item.id}
+                        aria-label={item.question}
                       >
-                        수정·이미지 변경
-                      </button>
-                      <button
-                        disabled={busy}
-                        onClick={() => {
-                          if (window.confirm("이미지를 제외하고 이 질문을 바로 게시할까요?"))
-                            void action(item, "TEXT_ONLY");
-                        }}
-                      >
-                        이미지 없이 게시
-                      </button>
-                      <button
-                        disabled={busy}
-                        onClick={() =>
-                          void run(async () => {
-                            const result = await loadIssueMediaLibrary();
-                            setLibrary(result.items);
-                            setLibraryTarget(item);
-                            setEditing(null);
-                          })
-                        }
-                      >
-                        Library로 교체
-                      </button>
-                      <button disabled={busy} onClick={() => void action(item, "CHECK")}>
-                        게시 상태 확인
-                      </button>
-                      <button
-                        disabled={busy}
-                        onClick={() => {
-                          if (
-                            window.confirm(
-                              "이 질문 제출을 취소할까요? 취소한 제출은 다시 게시되지 않아요.",
-                            )
-                          )
-                            void action(item, "CANCEL");
-                        }}
-                      >
-                        제출 취소
-                      </button>
-                    </div>
-                  ) : null}
-                  {editing?.id === item.id ? (
-                    <form
-                      className={styles.form}
-                      onSubmit={(event) => {
-                        event.preventDefault();
-                        void save();
-                      }}
-                    >
-                      <label>
-                        질문
-                        <input
-                          required
-                          minLength={5}
-                          maxLength={120}
-                          value={editing.question}
-                          onChange={(event) => {
-                            setEditing({ ...editing, question: event.target.value });
-                            key.current = crypto.randomUUID();
-                          }}
-                        />
-                      </label>
-                      <label>
-                        짧은 설명
-                        <textarea
-                          maxLength={240}
-                          value={editing.context ?? ""}
-                          onChange={(event) => {
-                            setEditing({ ...editing, context: event.target.value });
-                            key.current = crypto.randomUUID();
-                          }}
-                        />
-                      </label>
-                      <div className={styles.choices}>
-                        {(["A", "B"] as const).map((side) => (
-                          <label key={side}>
-                            {side} 선택지
-                            <input
-                              required
-                              maxLength={50}
-                              value={side === "A" ? editing.choiceA : editing.choiceB}
-                              onChange={(event) => {
-                                setEditing({
-                                  ...editing,
-                                  [side === "A" ? "choiceA" : "choiceB"]: event.target.value,
-                                });
-                                key.current = crypto.randomUUID();
-                              }}
-                            />
-                          </label>
-                        ))}
-                      </div>
-                      <p className={styles.note}>
-                        이미지를 바꾸지 않으면 기존 이미지를 유지합니다. 새 이미지는 업로드 권한과
-                        안전 검사가 필요해요.
-                      </p>
-                      <div className={styles.choices}>
-                        {(["a", "b"] as const).map((side) => (
-                          <label key={side}>
-                            {side.toUpperCase()} 새 이미지
-                            <input
-                              disabled={busy}
-                              type="file"
-                              accept="image/jpeg,image/png,image/webp"
-                              onChange={(event) => {
-                                setFiles((current) => ({
-                                  ...current,
-                                  [side]: event.target.files?.[0] ?? null,
-                                }));
-                                key.current = crypto.randomUUID();
-                              }}
-                            />
-                          </label>
-                        ))}
-                      </div>
-                      <div className={styles.actions}>
-                        <button className={styles.primary} disabled={busy} type="submit">
-                          수정본 제출
-                        </button>
-                        <button disabled={busy} type="button" onClick={() => setEditing(null)}>
-                          접기
-                        </button>
-                      </div>
-                    </form>
-                  ) : null}
-                  {libraryTarget?.id === item.id ? (
-                    <section className={styles.library} aria-label="승인된 이미지 선택">
-                      {!library.length ? (
-                        <p>지금 사용할 수 있는 Library 이미지가 없어요.</p>
-                      ) : (
-                        library.map((pair) => (
+                        <div className={historyStyles.voteCopy}>
+                          <div className={historyStyles.voteMeta}>
+                            <span>{item.interestCardCode.replaceAll("_", " ")}</span>
+                            <time dateTime={item.submittedAt}>
+                              {new Intl.DateTimeFormat("ko-KR", {
+                                month: "short",
+                                day: "numeric",
+                              }).format(new Date(item.submittedAt))}
+                            </time>
+                          </div>
+                          <h3>{item.question}</h3>
+                          {item.context ? <p className={styles.context}>{item.context}</p> : null}
+                          <div className={styles.choiceSummary}>
+                            <span>
+                              <b>A</b> {item.choiceA}
+                            </span>
+                            <span>
+                              <b>B</b> {item.choiceB}
+                            </span>
+                          </div>
+                        </div>
+                        <div className={styles.submissionState}>
+                          <strong className={styles.badge} data-state={state}>
+                            {labels[state]}
+                          </strong>
+                          <small>수정본 {item.revision}</small>
+                        </div>
+                        {item.publishedIssueId ? (
+                          <Link
+                            aria-label={`${item.question} 게시된 질문 보기`}
+                            href={`/issues/${item.publishedIssueId}`}
+                          >
+                            ↗
+                          </Link>
+                        ) : null}
+                        {editable ? (
                           <button
+                            className={styles.manageButton}
+                            type="button"
+                            aria-label={`${item.question} 관리`}
+                            aria-expanded={managingId === item.id}
+                            aria-controls={`manage-${item.id}`}
                             disabled={busy}
-                            key={pair.id}
                             onClick={() => {
-                              if (window.confirm("선택한 Library 이미지로 바로 게시할까요?"))
-                                void action(item, "LIBRARY", pair.id);
+                              setManagingId(managingId === item.id ? null : item.id);
+                              setEditing(null);
+                              setLibraryTarget(null);
                             }}
                           >
-                            <strong>{pair.title}</strong>
+                            {managingId === item.id ? "접기" : "관리"}
+                          </button>
+                        ) : null}
+                        {item.reviewNote ? (
+                          <p className={`${styles.note} ${styles.reviewNote}`}>{item.reviewNote}</p>
+                        ) : null}
+                        {editable && managingId === item.id ? (
+                          <div className={styles.actions} id={`manage-${item.id}`}>
+                            <button
+                              disabled={busy}
+                              onClick={() => {
+                                setEditing({ ...item });
+                                setLibraryTarget(null);
+                                setFiles({ a: null, b: null });
+                                key.current = crypto.randomUUID();
+                              }}
+                            >
+                              수정·이미지 변경
+                            </button>
+                            <button
+                              disabled={busy}
+                              onClick={() => {
+                                if (window.confirm("이미지를 제외하고 이 질문을 바로 게시할까요?"))
+                                  void action(item, "TEXT_ONLY");
+                              }}
+                            >
+                              이미지 없이 게시
+                            </button>
+                            <button
+                              disabled={busy}
+                              onClick={() =>
+                                void run(async () => {
+                                  const result = await loadIssueMediaLibrary();
+                                  setLibrary(result.items);
+                                  setLibraryTarget(item);
+                                  setEditing(null);
+                                })
+                              }
+                            >
+                              Library로 교체
+                            </button>
+                            <button disabled={busy} onClick={() => void action(item, "CHECK")}>
+                              게시 상태 확인
+                            </button>
+                            <button
+                              disabled={busy}
+                              onClick={() => {
+                                if (
+                                  window.confirm(
+                                    "이 질문 제출을 취소할까요? 취소한 제출은 다시 게시되지 않아요.",
+                                  )
+                                )
+                                  void action(item, "CANCEL");
+                              }}
+                            >
+                              제출 취소
+                            </button>
+                          </div>
+                        ) : null}
+                        {editing?.id === item.id ? (
+                          <form
+                            className={styles.form}
+                            onSubmit={(event) => {
+                              event.preventDefault();
+                              void save();
+                            }}
+                          >
+                            <label>
+                              질문
+                              <input
+                                required
+                                minLength={5}
+                                maxLength={120}
+                                value={editing.question}
+                                onChange={(event) => {
+                                  setEditing({ ...editing, question: event.target.value });
+                                  key.current = crypto.randomUUID();
+                                }}
+                              />
+                            </label>
+                            <label>
+                              짧은 설명
+                              <textarea
+                                maxLength={240}
+                                value={editing.context ?? ""}
+                                onChange={(event) => {
+                                  setEditing({ ...editing, context: event.target.value });
+                                  key.current = crypto.randomUUID();
+                                }}
+                              />
+                            </label>
                             <div className={styles.choices}>
-                              {pair.assets.map((asset) => (
-                                <figure key={asset.id}>
-                                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                                  <img src={asset.url} alt={asset.altText} />
-                                  <figcaption>
-                                    {asset.side} · {asset.altText}
-                                    {asset.attributionText ? ` · ${asset.attributionText}` : ""}
-                                  </figcaption>
-                                </figure>
+                              {(["A", "B"] as const).map((side) => (
+                                <label key={side}>
+                                  {side} 선택지
+                                  <input
+                                    required
+                                    maxLength={50}
+                                    value={side === "A" ? editing.choiceA : editing.choiceB}
+                                    onChange={(event) => {
+                                      setEditing({
+                                        ...editing,
+                                        [side === "A" ? "choiceA" : "choiceB"]: event.target.value,
+                                      });
+                                      key.current = crypto.randomUUID();
+                                    }}
+                                  />
+                                </label>
                               ))}
                             </div>
-                          </button>
-                        ))
-                      )}
-                      <button disabled={busy} onClick={() => setLibraryTarget(null)}>
-                        접기
-                      </button>
-                    </section>
-                  ) : null}
-                </article>
-              );
-            })
-          : null}
-      </main>
+                            <p className={styles.note}>
+                              이미지를 바꾸지 않으면 기존 이미지를 유지합니다. 새 이미지는 업로드
+                              권한과 안전 검사가 필요해요.
+                            </p>
+                            <div className={styles.choices}>
+                              {(["a", "b"] as const).map((side) => (
+                                <label key={side}>
+                                  {side.toUpperCase()} 새 이미지
+                                  <input
+                                    disabled={busy}
+                                    type="file"
+                                    accept="image/jpeg,image/png,image/webp"
+                                    onChange={(event) => {
+                                      setFiles((current) => ({
+                                        ...current,
+                                        [side]: event.target.files?.[0] ?? null,
+                                      }));
+                                      key.current = crypto.randomUUID();
+                                    }}
+                                  />
+                                </label>
+                              ))}
+                            </div>
+                            <div className={styles.actions}>
+                              <button className={styles.primary} disabled={busy} type="submit">
+                                수정본 제출
+                              </button>
+                              <button
+                                disabled={busy}
+                                type="button"
+                                onClick={() => setEditing(null)}
+                              >
+                                접기
+                              </button>
+                            </div>
+                          </form>
+                        ) : null}
+                        {libraryTarget?.id === item.id ? (
+                          <section className={styles.library} aria-label="승인된 이미지 선택">
+                            {!library.length ? (
+                              <p>지금 사용할 수 있는 Library 이미지가 없어요.</p>
+                            ) : (
+                              library.map((pair) => (
+                                <button
+                                  disabled={busy}
+                                  key={pair.id}
+                                  onClick={() => {
+                                    if (window.confirm("선택한 Library 이미지로 바로 게시할까요?"))
+                                      void action(item, "LIBRARY", pair.id);
+                                  }}
+                                >
+                                  <strong>{pair.title}</strong>
+                                  <div className={styles.choices}>
+                                    {pair.assets.map((asset) => (
+                                      <figure key={asset.id}>
+                                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                                        <img src={asset.url} alt={asset.altText} />
+                                        <figcaption>
+                                          {asset.side} · {asset.altText}
+                                          {asset.attributionText
+                                            ? ` · ${asset.attributionText}`
+                                            : ""}
+                                        </figcaption>
+                                      </figure>
+                                    ))}
+                                  </div>
+                                </button>
+                              ))
+                            )}
+                            <button disabled={busy} onClick={() => setLibraryTarget(null)}>
+                              접기
+                            </button>
+                          </section>
+                        ) : null}
+                      </article>
+                    );
+                  })}
+                </div>
+              </section>
+            ))}
+          </div>
+        ) : null}
+      </div>
     </WhichShell>
   );
 }

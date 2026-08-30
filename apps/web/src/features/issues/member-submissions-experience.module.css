@@ -1,60 +1,76 @@
 .page {
-  display: grid;
-  gap: 20px;
   min-width: 0;
-  padding-bottom: 40px;
 }
-.heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-.heading p {
-  color: #0798ad;
-  font-size: 12px;
-  letter-spacing: 0.12em;
-}
-.heading h1 {
-  margin: 8px 0;
-}
-.nav,
 .actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
+  grid-column: 1 / -1;
 }
-.nav a {
-  padding: 10px 16px;
-  border-radius: 12px;
-  background: white;
-}
-.nav a[aria-current] {
-  background: #0b303a;
-  color: white;
-}
-.card {
+.submissionTimeline > .row {
   min-width: 0;
-  padding: 24px;
-  border: 1px solid #dbe5e9;
-  border-radius: 20px;
-  background: white;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 16px;
   overflow-wrap: anywhere;
 }
-.card h2 {
-  font-size: 22px;
-  margin: 16px 0;
+.submissionState {
+  display: grid;
+  justify-items: end;
+  gap: 8px;
+}
+.submissionState small {
+  color: var(--which-text-tertiary);
+  font-size: 0.66rem;
 }
 .badge {
-  color: #087f91;
-  background: #eafafd;
-  padding: 6px 12px;
-  border-radius: 20px;
-  font-size: 13px;
+  color: var(--which-cyan-strong);
+  background: var(--which-cyan-soft);
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  white-space: nowrap;
+}
+.badge[data-state="REJECTED"],
+.badge[data-state="NEEDS_CHANGES"],
+.badge[data-state="QUARANTINED"] {
+  color: var(--which-orange-strong);
+  background: var(--which-orange-soft);
+}
+.badge[data-state="CANCELLED"] {
+  color: var(--which-text-secondary);
+  background: var(--which-bg);
+}
+.choiceSummary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-top: 10px;
+  font-size: 0.76rem;
+  line-height: 1.6;
+}
+.choiceSummary span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.choiceSummary b {
+  margin-right: 4px;
+  color: var(--which-cyan-strong);
+}
+.choiceSummary span:last-child b {
+  color: var(--which-orange-strong);
+}
+.row .context {
+  line-height: 1.6;
+}
+.reviewNote {
+  grid-column: 1 / -1;
+  border-left: 3px solid var(--which-border-strong);
+  padding-left: 12px;
 }
 .note {
-  color: #657986;
-  font-size: 14px;
+  margin: 0;
+  color: var(--which-text-secondary);
+  font-size: 0.8rem;
   line-height: 1.6;
 }
 .choices {
@@ -68,31 +84,36 @@
   background: #f1f6f8;
   border-radius: 12px;
 }
-.page button,
-.link {
+.page button {
   min-height: 44px;
   padding: 10px 16px;
-  border: 1px solid #bdcfd5;
-  border-radius: 12px;
-  background: white;
+  border: 1px solid var(--which-border-strong);
+  border-radius: 999px;
+  background: var(--which-surface);
+  color: var(--which-text);
   font: inherit;
+  font-size: 0.78rem;
+  font-weight: 900;
   cursor: pointer;
 }
 .page button:disabled {
   opacity: 0.55;
   cursor: wait;
 }
+.page .manageButton {
+  padding: 8px 12px;
+}
 .page button.primary {
-  background: #0798ad;
+  background: var(--which-cyan-strong);
   color: white;
   border-color: #0798ad;
 }
-.link {
-  display: inline-flex;
-  align-items: center;
-  color: #087f91;
+.page button:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--which-cyan) 40%, transparent);
+  outline-offset: 2px;
 }
 .form {
+  grid-column: 1 / -1;
   display: grid;
   gap: 14px;
   border-top: 1px solid #dbe5e9;
@@ -119,6 +140,7 @@
   resize: vertical;
 }
 .library {
+  grid-column: 1 / -1;
   display: grid;
   gap: 16px;
   margin-top: 20px;
@@ -136,17 +158,28 @@
   background: #f1f6f8;
   margin-bottom: 8px;
 }
-@media (max-width: 600px) {
-  .card {
-    padding: 16px;
+@media (max-width: 760px) {
+  .submissionTimeline > .row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 14px;
   }
+  .submissionState {
+    grid-column: 1;
+    grid-row: 2;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .manageButton {
+    grid-column: 2;
+    grid-row: 1;
+  }
+}
+@media (max-width: 600px) {
   .form .choices {
     grid-template-columns: 1fr;
   }
   .actions button {
     flex: 1 1 135px;
-  }
-  .card h2 {
-    font-size: 19px;
   }
 }
