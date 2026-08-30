@@ -18,6 +18,7 @@ import {
   loadEditorialDecisionImport,
   planEditorialDecisionImport,
 } from "./modules/operations/editorial-import.js";
+import { decideUploadOnlyAccess } from "./modules/operations/upload-only-access.js";
 
 loadEnvironment({
   path: [resolve(process.cwd(), "../../.env.local"), resolve(process.cwd(), "../../.env")],
@@ -221,6 +222,35 @@ async function main() {
   const database = createDatabase(getConfig().databaseUrl);
   const actor = process.env.OPS_CHANGE_ACTOR?.trim() || "render-shell";
   try {
+    if (
+      ["grant-upload-only", "revoke-upload-only"].includes(command ?? "") &&
+      identifier &&
+      value
+    ) {
+      if (rest.length !== 0 && (rest.length !== 2 || rest[0] !== "--confirm" || !rest[1])) {
+        throw new Error("Use --confirm <resolved-member-id> after the quoted rationale.");
+      }
+      // UUID revocation must also work after suspension/deletion.
+      const memberId =
+        command === "revoke-upload-only" && uuidPattern.test(identifier)
+          ? identifier
+          : await resolveMemberId(database.db, identifier);
+      if (!memberId) throw new Error("An active Member matching the identifier was not found.");
+      console.log(
+        JSON.stringify(
+          await decideUploadOnlyAccess(database.db, {
+            memberId,
+            action: command === "grant-upload-only" ? "GRANT" : "REVOKE",
+            rationale: value,
+            actor,
+            confirmMemberId: rest[1],
+          }),
+          null,
+          2,
+        ),
+      );
+      return;
+    }
     if (command === "grant" && identifier) {
       console.log(JSON.stringify(await grant(database.db, identifier, actor), null, 2));
       return;
@@ -283,7 +313,7 @@ async function main() {
       return;
     }
     throw new Error(
-      "Usage: ops-operator <grant|revoke> <member-id-or-email> | list | notify-member <member-id-or-email> <summary> <next-step> | confirm-backup <member-id-or-email> <reference> [notes] | import-editorial <member-id-or-email> [decisions-path] [--confirm <token>]",
+      "Usage: ops-operator <grant|revoke> <member-id-or-email> | <grant-upload-only|revoke-upload-only> <member-id-or-email> <quoted-rationale> [--confirm <member-id>] | list | notify-member <member-id-or-email> <summary> <next-step> | confirm-backup <member-id-or-email> <reference> [notes] | import-editorial <member-id-or-email> [decisions-path] [--confirm <token>]",
     );
   } finally {
     await database.close();

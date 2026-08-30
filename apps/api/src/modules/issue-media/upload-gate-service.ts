@@ -592,6 +592,21 @@ export function createIssueMediaUploadGateService(
             eq(issueMediaUploadSessions.state, "CREATED"),
             gt(issueMediaUploadSessions.expiresAt, now),
             gte(issueMediaUploadSessions.maxBytes, input.byteSize),
+            sql`${options.mode} = 'PILOT'`,
+            sql`exists (
+              select 1 from member_capability_grants cap
+              join members m on m.member_id = cap.member_id
+              where cap.member_id = ${input.memberId}
+                and cap.capability_code = 'ISSUE_IMAGE_UPLOAD'
+                and cap.state = 'ACTIVE' and cap.expires_at > ${now}
+                and m.status = 'ACTIVE'
+            )`,
+            sql`exists (
+              select 1 from member_media_consents consent
+              where consent.member_id = ${input.memberId}
+                and consent.consent_version = ${options.consentVersion}
+                and consent.revoked_at is null
+            )`,
           ),
         )
         .returning({ objectKey: issueMediaUploadSessions.objectKey });
