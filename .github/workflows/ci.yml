@@ -62,3 +62,6 @@ jobs:
 
       - name: Verify
         run: pnpm check
+
+      - name: Verify Cloud Run runtime isolation
+        run: node --test scripts/cloud-run/runtime.test.mjs

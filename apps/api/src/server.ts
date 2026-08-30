@@ -144,6 +144,15 @@ const app = await buildApp(config, {
   }),
 });
 
+for (const signal of ["SIGTERM", "SIGINT"] as const) {
+  process.once(signal, () => {
+    void app.close().then(
+      () => process.exit(0),
+      () => process.exit(1),
+    );
+  });
+}
+
 try {
   await app.listen({ host: config.server.host, port: config.server.port });
 } catch (error) {
