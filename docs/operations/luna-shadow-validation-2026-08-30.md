@@ -59,3 +59,30 @@ current v2 동의와 테스트 범위를 확인한다. API 키 존재나 모델 
 - 실제 호출을 하지 못했다면 사유와 필요한 사용자 작업을 별도로 남긴다.
 
 공식 근거: [OpenAI 데이터 관리](https://developers.openai.com/api/docs/guides/your-data).
+
+## 배포·사전 검증 결과
+
+- 코드 main: `f687413c1e5fa4fc4dc6bf044a433e9b60276249`.
+- [PR #4](https://github.com/JUNHOCHOI0309/WHICH/pull/4),
+  [main CI](https://github.com/JUNHOCHOI0309/WHICH/actions/runs/33313953983) 성공.
+- API 478개·Web 294개 로컬 테스트, API/Web typecheck·lint·build 통과.
+  CI도 12개 task 모두 성공. 기존 이미지 lint 경고 8개만 유지.
+- Render `which-web` 배포 `dep-daa2uleq1p3s738t9dr0` Live.
+  새 인스턴스 `csvj4`, public 고지 반영 확인: 2026-08-30 22:29 KST.
+- 배포 후 공개 페이지·피드·로그인 등 15개 smoke check PASS/GO.
+  개인정보 페이지 Responses 안내·새 동의 안내 표시 및 가로 overflow 없음 확인(1280px).
+- 승인 근거 `missingEvidence: []`, Responses 승인 true, current consent v2 적용.
+- 지속 설정: 무료 provider OFF/kill true/canary 0/call cap 0;
+  Luna OFF/kill true/canary 0/call cap 5/cost cap 50,000 microdollars.
+  무료 cap 5는 **일회성 검증 프로세스에만** 적용한다.
+- 일회성 `diagnose-policy-judge`에만 SHADOW·kill false·canary 100을 전달한 결과:
+  `SHADOW_READY`, `allowed: true`, `requiredConsentVersion: which-media-consent-v2`,
+  `publicationChanged: false`. 이 명령은 외부 API나 이미지 읽기를 실행하지 않는다.
+  100%는 이 진단 프로세스 안의 값이며 전체 사용자 rollout 설정이 아니다.
+- OCR/QR 로컬 리소스 영·한 3개 존재 확인. 스캐너 모드의 지속 기본값은 OFF이며
+  실제 이미지 OCR/분류 실행을 검증한 것은 아니다. 테스트 시 LOCAL 모드를 별도로 적용한다.
+- 지속 자동 조치 OFF/kill true, provisional release false 유지.
+- 실제 유료 추론 **0회**, 예약/추정 사용액 **0**. 실패·검증 성공으로 꾸며 기록하지 않았다.
+- **남은 작업:** 테스트 계정 사용·Pilot 권한 부여 승인, 해당 회원의 직접 v2 동의와
+  이미지 A/B 질문 제출 후, 무료 안전 검사→Luna의 실제 소량 추론·비용 검증.
+  이번 턴에서는 권한·동의·질문을 대신 생성하거나 일반 사용자 이미지를 전송하지 않았다.
