@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
       },
       body: JSON.stringify({
         submissionId,
-        consentVersion: process.env.ISSUE_MEDIA_CONSENT_VERSION ?? "which-media-consent-v1",
+        consentVersion: process.env.ISSUE_MEDIA_CONSENT_VERSION ?? "which-media-consent-v2",
       }),
     });
     const sessionPayload = (await sessionResponse.json()) as {

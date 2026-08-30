@@ -20,6 +20,7 @@ import { createJudgeLedger } from "../src/modules/policy-judge/ledger.js";
 import { createPolicyJudgeService } from "../src/modules/policy-judge/service.js";
 import {
   POLICY_JUDGE_MODEL,
+  POLICY_JUDGE_CONSENT_VERSION,
   POLICY_JUDGE_PROFILE,
   POLICY_JUDGE_PROVIDER,
 } from "../src/modules/policy-judge/contracts.js";
@@ -44,9 +45,12 @@ describe("Luna durable budget and Shadow pipeline", () => {
   async function source() {
     const db = testDb.database.db;
     const [member] = await db.insert(members).values({ displayName: "Judge test" }).returning();
-    await db
-      .insert(memberMediaConsents)
-      .values({ memberId: member!.id, consentVersion: "which-media-consent-v1" });
+    await db.insert(memberMediaConsents).values({
+      memberId: member!.id,
+      consentVersion: POLICY_JUDGE_CONSENT_VERSION,
+      // Do not compare a container DB clock with the test runner's clock on revocation.
+      acceptedAt: new Date("2026-01-01T00:00:00Z"),
+    });
     await db.insert(memberCapabilityGrants).values({
       memberId: member!.id,
       capabilityCode: "ISSUE_IMAGE_UPLOAD",
@@ -382,7 +386,7 @@ describe("Luna durable budget and Shadow pipeline", () => {
     ).toBe(true);
   });
 
-  it.each(["consent", "member", "capability", "blocked-image"])(
+  it.each(["consent", "old-consent", "member", "capability", "blocked-image"])(
     "checks current %s before sending private images",
     async (kind) => {
       const s = await source();
@@ -391,6 +395,11 @@ describe("Luna durable budget and Shadow pipeline", () => {
         await db
           .update(memberMediaConsents)
           .set({ revokedAt: new Date() })
+          .where(eq(memberMediaConsents.memberId, s.submission.memberId));
+      if (kind === "old-consent")
+        await db
+          .update(memberMediaConsents)
+          .set({ consentVersion: "which-media-consent-v1" })
           .where(eq(memberMediaConsents.memberId, s.submission.memberId));
       if (kind === "member")
         await db

@@ -24,6 +24,7 @@ import { createLunaJudgeAdapter, prepareJudgeRequest } from "./adapter.js";
 import {
   judgeCosts,
   judgeDiagnostic,
+  POLICY_JUDGE_CONSENT_VERSION,
   POLICY_JUDGE_PROFILE,
   sampleBucket,
   type PolicyJudgeConfig,
@@ -49,7 +50,6 @@ export function createPolicyJudgeService(options: {
   ) => Promise<ModerationProviderInput>;
   call?: ReturnType<typeof createLunaJudgeAdapter>;
   now?: () => Date;
-  consentVersion?: string;
 }) {
   const { database, config, provider } = options;
   const now = options.now ?? (() => new Date());
@@ -134,10 +134,7 @@ export function createPolicyJudgeService(options: {
         memberMediaConsents,
         and(
           eq(memberMediaConsents.memberId, members.id),
-          eq(
-            memberMediaConsents.consentVersion,
-            options.consentVersion ?? "which-media-consent-v1",
-          ),
+          eq(memberMediaConsents.consentVersion, POLICY_JUDGE_CONSENT_VERSION),
           isNull(memberMediaConsents.revokedAt),
         ),
       )

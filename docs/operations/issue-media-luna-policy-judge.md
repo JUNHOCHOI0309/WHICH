@@ -98,7 +98,7 @@ MODERATION_POLICY_JUDGE_DAILY_COST_MICROS_CAP=0
 MODERATION_POLICY_JUDGE_TIMEOUT_MS=15000
 ```
 
-Responses 데이터 통제 승인과 해당 프로젝트의 모델 접근 확인 후, 제한된 Shadow 시작 예:
+장기 Pilot 확대 예시(지금 적용할 값이 아님):
 
 ```dotenv
 MODERATION_POLICY_JUDGE_MODE=SHADOW
@@ -112,6 +112,10 @@ MODERATION_POLICY_JUDGE_DAILY_COST_MICROS_CAP=1000000
 `1000000` microdollars = USD 1. 원화/센트 단위가 아니다.
 승인 플래그는 확인된 증빙을 표현해야 하며, 키 재사용 동의를 증빙 승인으로 대신하지 않는다.
 이 문서 작성 시 위 활성화 값은 운영에 적용하지 않았다.
+
+2026-08-30 최초 검증은 이 예시보다 작은 **5회 / USD 0.05** 한도로 제한하며,
+상시 OFF를 유지한 일회성 실행만 허용한다. Responses 범위의 v2 회원 동의가 필수다.
+현재 상태와 실제 적용값은 [제한 검증 기록](luna-shadow-validation-2026-08-30.md)을 따른다.
 
 API/worker 배포와 migration 적용 후 Render에서:
 
