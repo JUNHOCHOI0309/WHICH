@@ -29,7 +29,7 @@ import {
 
 const environmentSchema = z.object({
   DATABASE_URL: z.string().min(1),
-  ISSUE_MEDIA_CONSENT_VERSION: z.string().min(1).max(64).default("which-media-consent-v1"),
+  ISSUE_MEDIA_CONSENT_VERSION: z.string().min(1).max(64).default("which-media-consent-v2"),
   MODERATION_WORKER_BATCH_SIZE: z.coerce.number().int().min(1).max(500).default(25),
   MODERATION_WORKER_LEASE_MS: z.coerce.number().int().min(5_000).default(60_000),
   MODERATION_WORKER_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(20).default(5),
@@ -100,7 +100,6 @@ const policyJudge = createPolicyJudgeService({
   config: judgeConfig,
   provider: providerConfig,
   resolveInput: resolveProviderInput,
-  consentVersion: config.ISSUE_MEDIA_CONSENT_VERSION,
 });
 
 async function once() {

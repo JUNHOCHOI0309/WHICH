@@ -147,7 +147,7 @@ export const IMAGE_MODERATION_PROVIDER_REGISTRY = {
     endpoint: "/v1/moderations",
     processingBoundary: "KOREA_STORAGE_DOES_NOT_GUARANTEE_KOREA_PROCESSING",
     prohibitedRoles: ["OCR_SOURCE_OF_TRUTH", "RIGHTS_DECISION", "IDENTITY_DECISION"],
-    requiredControls: ["DPA", "ENHANCED_ZDR_OR_MAM_APPROVAL", "PROJECT_SCOPED_KEY"],
+    requiredControls: ["DPA", "ENDPOINT_DATA_CONTROL_APPROVAL", "PROJECT_SCOPED_KEY"],
   },
   GOOGLE_CLOUD_VISION: {
     approval: "CONDITIONAL",

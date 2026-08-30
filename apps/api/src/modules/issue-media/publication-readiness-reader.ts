@@ -24,7 +24,7 @@ export type PublicationEvidenceOptions = {
 };
 // Explicit defaults avoid inheriting a caller's environment in tests or library usage.
 const defaultOptions: PublicationEvidenceOptions = {
-  consentVersion: "which-media-consent-v1",
+  consentVersion: "which-media-consent-v2",
   decisionRuntime: moderationDecisionRuntime({}),
 };
 

@@ -306,8 +306,10 @@ export function IssueCreatorExperience({
           {mediaAccess?.mode === "PILOT" && mediaAccess.reasons.includes("CONSENT_REQUIRED") ? (
             <div className={styles.mediaConsent}>
               <p>
-                기존 회원은 이미지 직접 업로드 전에 현재 <Link href="/legal/terms">이용약관</Link>의
-                콘텐츠 권리·자동 안전 검사 항목을 한 번 확인해 주세요.
+                이미지 직접 업로드 전에 현재 <Link href="/legal/terms">이용약관</Link>과{" "}
+                <Link href="/legal/privacy">개인정보 처리방침</Link>의 콘텐츠 권리·자동 안전 검사·
+                OpenAI 국외 처리 및 보존 조건을 한 번 확인해 주세요. 동의하지 않아도 텍스트 질문은
+                작성할 수 있습니다.
               </p>
               <button
                 type="button"

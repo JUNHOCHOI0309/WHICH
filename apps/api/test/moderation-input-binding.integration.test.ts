@@ -211,7 +211,7 @@ describe("immutable submission image moderation inputs", () => {
     });
     await f.db.insert(memberMediaConsents).values({
       memberId: f.session.member.id,
-      consentVersion: "which-media-consent-v1",
+      consentVersion: "which-media-consent-v2",
       acceptedAt,
     });
     const fetchImpl = vi.fn(() => Promise.resolve(response()));
@@ -283,7 +283,7 @@ describe("immutable submission image moderation inputs", () => {
     const f = await fixture();
     await f.db.insert(memberMediaConsents).values({
       memberId: f.session.member.id,
-      consentVersion: "which-media-consent-v1",
+      consentVersion: "which-media-consent-v2",
       acceptedAt: new Date(Date.now() - 1000),
     });
     const worker = f.worker(

@@ -92,18 +92,27 @@ the deleted content into the audit event.
 
 ## Provider decision register
 
-No provider is approved for production calls in v1 of this Gate.
+The initial gate default is OFF. Endpoint-specific owner review and runtime activation are separate:
+the restricted evidence register records approvals; the table below is not blanket authorization
+to process traffic or to publish content.
 
-| Provider            | Candidate role                                        | Current decision | Key constraints                                                                                                                                                  |
-| ------------------- | ----------------------------------------------------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| OpenAI Moderation   | Image content-safety shadow signal                    | `CONDITIONAL`    | Executed DPA; project-level data control; enhanced ZDR/MAM approval for images; processing-location and Korean international-transfer review; project-scoped key |
-| Google Cloud Vision | Local-gate supplement for OCR/QR or SafeSearch shadow | `CONDITIONAL`    | Executed DPA; exact project location/configuration; subprocessor and retention review; Korean international-transfer review; project-scoped service account      |
+| Provider            | Candidate role                                        | Current decision | Key constraints                                                                                                                                                          |
+| ------------------- | ----------------------------------------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| OpenAI Moderation   | Image content-safety shadow signal                    | `CONDITIONAL`    | Executed DPA; endpoint-specific data-control approval; Global processing and international-transfer owner review; project-scoped key. ZDR/MAM is not enabled or claimed. |
+| OpenAI Luna         | A/B image context policy shadow                       | `CONDITIONAL`    | Separate Responses retention approval; current v2 member consent; store:false; strict call/cost caps; no publication authority.                                          |
+| Google Cloud Vision | Local-gate supplement for OCR/QR or SafeSearch shadow | `CONDITIONAL`    | Executed DPA; exact project location/configuration; subprocessor and retention review; Korean international-transfer review; project-scoped service account              |
 
 OpenAI documents that API business data is not used for training by default and that the moderation
-endpoint has no default abuse-monitoring or application-state retention. Its data-control document
-also states that Korean data residency supports storage but not regional processing, and that image
-support under enhanced Zero Data Retention or Modified Abuse Monitoring requires approval. WHICH
-therefore must not equate a Korean endpoint or storage control with Korean-only processing.
+endpoint has no default abuse-monitoring or application-state retention. Responses is different:
+even with store:false, default abuse logs can remain for up to 30 days (longer for legal obligations
+or necessary service/third-party protection). Encrypted prompt-cache state can remain for up to
+24 hours; suspected CSAM image inputs have a manual-review retention exception. Global processing
+does not guarantee Korean storage or processing. WHICH has not enabled or claimed ZDR/MAM.
+
+The owner accepted these Responses-specific terms for a bounded Shadow validation on 2026-08-30,
+subject to deployed notice and current member consent. This records internal owner review, not
+independent legal advice, regulatory approval, or approval of automatic publication/sanctions.
+See [the bounded validation runbook](luna-shadow-validation-2026-08-30.md).
 
 Google SafeSearch returns a limited likelihood taxonomy and cannot decide privacy, rights,
 relevance, visual fairness, identity, or context. Google publishes a Cloud subprocessor register,

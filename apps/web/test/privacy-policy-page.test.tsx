@@ -67,3 +67,43 @@ describe("Privacy policy TikTok disclosure", () => {
     );
   });
 });
+
+describe("Privacy policy image moderation disclosure", () => {
+  it("distinguishes the two endpoints and does not promise zero retention", () => {
+    render(<PrivacyPolicyPage />);
+
+    expect(screen.getByText(/안전 분류 API\(\/v1\/moderations\)/)).toHaveTextContent(
+      "아래 Luna 검증 API와 보존 조건이 다릅니다",
+    );
+    const responses = screen.getByText(/Luna 검증 API\(\/v1\/responses\)/);
+    expect(responses).toHaveTextContent("store:false");
+    expect(responses).toHaveTextContent("최대 30일");
+    expect(responses).toHaveTextContent("최대 24시간");
+    expect(responses).toHaveTextContent("별도 보존 예외");
+    expect(screen.getByText(/현재 프로젝트는 Zero Data Retention/)).toHaveTextContent(
+      "승인·활성화된 상태가 아닙니다",
+    );
+  });
+
+  it("discloses minimized inputs, Global processing, optional image use and Shadow-only actions", () => {
+    render(<PrivacyPolicyPage />);
+
+    expect(screen.getByText(/전송 항목·방법:/)).toHaveTextContent("최대 긴 변 512px");
+    expect(screen.getByText(/전송 항목·방법:/)).toHaveTextContent(
+      "얼굴 식별·생체정보 생성은 하지 않습니다",
+    );
+    expect(screen.getByText(/처리 위치: 지역을 한정하지 않는 Global/)).toHaveTextContent(
+      "한국 내 저장·처리를 보장하지 않습니다",
+    );
+    expect(screen.getByText(/현재 프로젝트는 Zero Data Retention/)).toHaveTextContent(
+      "텍스트 질문·투표 기능은 계속 이용할 수 있습니다",
+    );
+    expect(screen.getByText(/이미지 질문 기능을 이용할 때 OpenAI API/)).toHaveTextContent(
+      "이 결과만으로 게시·차단·계정 제재를 실행하지 않습니다",
+    );
+    expect(screen.getByRole("link", { name: "OpenAI 데이터 관리 안내" })).toHaveAttribute(
+      "href",
+      "https://developers.openai.com/api/docs/guides/your-data",
+    );
+  });
+});
