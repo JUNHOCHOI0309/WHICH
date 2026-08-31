@@ -3,6 +3,7 @@ import sharp from "sharp";
 
 import type {
   ModerationProviderCallError,
+  ModerationProviderInput,
   NormalizedModerationProviderResult,
 } from "../src/modules/moderation-providers/contracts.js";
 import {
@@ -31,6 +32,15 @@ const target = {
   policyVersion: "moderation-shadow-v1",
 };
 
+type ProviderTestBody = {
+  model: string;
+  results: Array<{
+    categories: Record<string, boolean>;
+    category_scores: Record<string, number>;
+    category_applied_input_types: Record<string, string[]>;
+  }>;
+};
+
 function providerResponse(status = 200) {
   return new Response(
     JSON.stringify({
@@ -48,6 +58,22 @@ function providerResponse(status = 200) {
     { status, headers: { "content-type": "application/json" } },
   );
 }
+
+const pairInput: ModerationProviderInput = {
+  targetType: "ISSUE_VERSION",
+  modality: "TEXT_AND_IMAGE",
+  scope: "SUBMISSION_REVISION",
+  text: "minimized question and OCR",
+  images: ["QQ==", "Qg=="].map((bytes) => ({
+    dataUrl: `data:image/webp;base64,${bytes}`,
+    mimeType: "image/webp",
+    width: 128,
+    height: 128,
+    byteLength: 1,
+    metadataStripped: true,
+    reencoded: true,
+  })),
+};
 
 describe("OpenAI moderation Shadow adapter", () => {
   it("normalizes provider labels without treating unsupported policy areas as safe", async () => {
@@ -147,6 +173,125 @@ describe("OpenAI moderation Shadow adapter", () => {
       retryable,
       httpStatus: status,
     });
+  });
+
+  it("sends A/B separately, runs accounting per HTTP call and conservatively unions signals", async () => {
+    const requests: Array<{
+      input: Array<{ type: string; text?: string; image_url?: { url: string } }>;
+    }> = [];
+    const fetchImpl = vi.fn(async (_url: unknown, init?: RequestInit) => {
+      requests.push(
+        JSON.parse(typeof init?.body === "string" ? init.body : "{}") as (typeof requests)[number],
+      );
+      const body = (await providerResponse().json()) as ProviderTestBody;
+      if (requests.length === 2) {
+        body.results[0]!.categories = { harassment: false, sexual: true };
+        body.results[0]!.category_scores = { harassment: 0.01, sexual: 0.95 };
+        body.results[0]!.category_applied_input_types = { harassment: ["text"], sexual: ["image"] };
+      }
+      return new Response(JSON.stringify(body));
+    });
+    const adapter = createOpenAiModerationAdapter({
+      apiKey: "test-key",
+      fetchImpl,
+      resolveInput: () => Promise.resolve(pairInput),
+    });
+    let audited = 0;
+    const inspected = await adapter.inspect(target, async (request) => {
+      audited += 1;
+      return request();
+    });
+    expect(audited).toBe(2);
+    expect(requests.map((request) => request.input.map((item) => item.type))).toEqual([
+      ["text", "image_url"],
+      ["text", "image_url"],
+    ]);
+    for (let index = 0; index < 2; index += 1) {
+      expect(requests[index]!.input[0]!.text).toBe(pairInput.text);
+      expect(requests[index]!.input[1]!.image_url?.url).toBe(pairInput.images![index]!.dataUrl);
+    }
+    expect(inspected.result).toMatchObject({
+      imageCount: 2,
+      requestCount: 2,
+      requestStrategy: "PER_IMAGE_V1",
+      publicationChanged: false,
+    });
+    expect(inspected.result.signals).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ providerLabel: "harassment", rawScore: 0.91, flagged: true }),
+        expect.objectContaining({
+          providerLabel: "sexual",
+          rawScore: 0.95,
+          flagged: true,
+          appliedModalities: ["TEXT", "IMAGE"],
+        }),
+      ]),
+    );
+    expect(
+      adapter.requestCount?.({
+        ...target,
+        privateObjectReference: "issue-submission://revision/example/1",
+      }),
+    ).toBe(2);
+    expect(adapter.requestCount?.(target)).toBe(1);
+    expect(adapter.canReuseResult?.({ imageCount: 2 })).toBe(false);
+    expect(adapter.canReuseResult?.(inspected.result)).toBe(true);
+    expect(JSON.stringify(inspected)).not.toContain("base64");
+  });
+
+  it.each(["HTTP", "SCHEMA", "MODEL", "LABELS"])(
+    "rejects partial A evidence when B fails with %s",
+    async (failure) => {
+      const fetchImpl = vi.fn(async () => {
+        if (fetchImpl.mock.calls.length === 1) return providerResponse();
+        if (failure === "HTTP") return new Response("private provider error", { status: 400 });
+        if (failure === "SCHEMA") return new Response("{}");
+        const body = (await providerResponse().json()) as ProviderTestBody;
+        if (failure === "MODEL") body.model = "different-snapshot";
+        else {
+          delete body.results[0]!.categories.sexual;
+          delete body.results[0]!.category_scores.sexual;
+          delete body.results[0]!.category_applied_input_types.sexual;
+        }
+        return new Response(JSON.stringify(body));
+      });
+      const adapter = createOpenAiModerationAdapter({
+        apiKey: "test-key",
+        fetchImpl,
+        resolveInput: () => Promise.resolve(pairInput),
+      });
+      await expect(adapter.inspect(target)).rejects.toMatchObject({
+        kind: failure === "HTTP" ? "REFUSAL" : "MALFORMED_OUTPUT",
+      });
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it("stops after a failed A request and preserves only allowlisted technical error details", async () => {
+    const fetchImpl = vi.fn(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            error: {
+              code: "too_many_images",
+              message: "private image data and key",
+              other: "private",
+            },
+          }),
+          { status: 400 },
+        ),
+      ),
+    );
+    const adapter = createOpenAiModerationAdapter({
+      apiKey: "test-key",
+      fetchImpl,
+      resolveInput: () => Promise.resolve(pairInput),
+    });
+    await expect(adapter.inspect(target)).rejects.toMatchObject({
+      code: "HTTP_400_TOO_MANY_IMAGES",
+      message: "REFUSAL:HTTP_400_TOO_MANY_IMAGES",
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
   it("classifies malformed output and stores no raw provider body", async () => {
@@ -266,6 +411,31 @@ describe("moderation provider privacy controls", () => {
         callsToday: 10,
       }),
     ).toEqual({ allowed: false, reason: "DAILY_CALL_CAP_REACHED" });
+    expect(
+      evaluateModerationRuntimeGate({
+        config,
+        normalizedInputHash: "0".repeat(64),
+        callsToday: 9,
+        requiredCalls: 2,
+      }),
+    ).toEqual({ allowed: false, reason: "DAILY_CALL_CAP_REACHED" });
+    expect(
+      evaluateModerationRuntimeGate({
+        config,
+        normalizedInputHash: "0".repeat(64),
+        callsToday: 8,
+        requiredCalls: 2,
+      }),
+    ).toEqual({ allowed: true, reason: "SHADOW_CANARY_ALLOWED" });
+    for (const requiredCalls of [0, -1, 3, NaN])
+      expect(
+        evaluateModerationRuntimeGate({
+          config,
+          normalizedInputHash: "0".repeat(64),
+          callsToday: 0,
+          requiredCalls,
+        }),
+      ).toEqual({ allowed: false, reason: "INVALID_PROVIDER_REQUEST_COUNT" });
     expect(
       evaluateModerationRuntimeGate({
         config,

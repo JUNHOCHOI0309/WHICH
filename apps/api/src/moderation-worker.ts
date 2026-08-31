@@ -56,7 +56,9 @@ if (config.MODERATION_WORKER_RETRY_MAX_MS < config.MODERATION_WORKER_RETRY_BASE_
   throw new Error("MODERATION_WORKER_RETRY_MAX_MS must be at least the retry base.");
 }
 
-const database = createDatabase(config.DATABASE_URL);
+// A cold Cloud Run Job connects to the external DB over VPC/TLS. Keep the web
+// pool's short default, but allow this background worker time to connect.
+const database = createDatabase(config.DATABASE_URL, { connectionTimeoutMillis: 10_000 });
 const publicationEvidence = {
   consentVersion: config.ISSUE_MEDIA_CONSENT_VERSION,
   decisionRuntime: moderationDecisionRuntime(),
@@ -72,10 +74,10 @@ if (pilotRuntime && autoConfig.ISSUE_MEDIA_AUTO_PUBLICATION_MEMBER_IDS.length ==
 if (
   scannerConfig.enabled &&
   config.MODERATION_WORKER_LEASE_MS <
-    2 * scannerConfig.timeoutMs + providerConfig.OPENAI_MODERATION_TIMEOUT_MS + 5000
+    2 * scannerConfig.timeoutMs + 2 * providerConfig.OPENAI_MODERATION_TIMEOUT_MS + 5000
 ) {
   throw new Error(
-    "MODERATION_WORKER_LEASE_MS must cover two local scans, the provider timeout, and 5000ms completion margin.",
+    "MODERATION_WORKER_LEASE_MS must cover two local scans, two provider requests, and 5000ms completion margin.",
   );
 }
 const resolveRawInput = createModerationProviderInputResolver({

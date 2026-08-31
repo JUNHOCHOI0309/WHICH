@@ -180,12 +180,21 @@ export type ModerationShadowAdapter = {
   cacheTtlMilliseconds: number;
   cacheProfile?: string;
   canReuseResult?: (result: Record<string, unknown>) => boolean;
-  inspect(input: {
-    targetType: ModerationTargetType;
-    targetId: string;
-    targetVersion: number;
-    privateObjectReference: string;
-    normalizedInputHash: string;
-    policyVersion: string;
-  }): Promise<ModerationShadowInspection>;
+  // Multi-request adapters must execute each outbound call through the supplied
+  // runner so gates/audits count HTTP attempts, not aggregate inspections.
+  accountsPerRequest?: boolean;
+  requestCount?: (input: Parameters<ModerationShadowAdapter["inspect"]>[0]) => number;
+  inspect(
+    input: {
+      targetType: ModerationTargetType;
+      targetId: string;
+      targetVersion: number;
+      privateObjectReference: string;
+      normalizedInputHash: string;
+      policyVersion: string;
+    },
+    runRequest?: ModerationProviderRequestExecutor,
+  ): Promise<ModerationShadowInspection>;
 };
+
+export type ModerationProviderRequestExecutor = <T>(request: () => Promise<T>) => Promise<T>;

@@ -1,11 +1,22 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 
-export function createDatabase(databaseUrl: string) {
+export function createDatabase(
+  databaseUrl: string,
+  options: { connectionTimeoutMillis?: number } = {},
+) {
+  const connectionTimeoutMillis = options.connectionTimeoutMillis ?? 2_000;
+  if (
+    !Number.isInteger(connectionTimeoutMillis) ||
+    connectionTimeoutMillis < 1 ||
+    connectionTimeoutMillis > 60_000
+  ) {
+    throw new Error("DATABASE_CONNECTION_TIMEOUT_INVALID");
+  }
   const pool = new Pool({
     connectionString: databaseUrl,
     max: 10,
-    connectionTimeoutMillis: 2_000,
+    connectionTimeoutMillis,
     idleTimeoutMillis: 30_000,
   });
 

@@ -53,6 +53,8 @@ describe("ephemeral image text", () => {
     expect(
       adapter.canReuseResult!({
         imageCount: 2,
+        requestStrategy: "PER_IMAGE_V1",
+        requestCount: 2,
         embeddedText: { version: EMBEDDED_TEXT_VERSION, images },
       }),
     ).toBe(true);
@@ -60,6 +62,8 @@ describe("ephemeral image text", () => {
       expect(
         adapter.canReuseResult!({
           imageCount: 2,
+          requestStrategy: "PER_IMAGE_V1",
+          requestCount: 2,
           embeddedText: {
             version: EMBEDDED_TEXT_VERSION,
             images: [{ ...images[0], status }, images[1]],

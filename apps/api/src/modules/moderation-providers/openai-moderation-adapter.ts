@@ -79,8 +79,16 @@ export function createOpenAiModerationAdapter(
     modelName: "omni-moderation",
     modelVersion: model,
     cacheTtlMilliseconds: options.cacheTtlMilliseconds ?? 86_400_000,
-    cacheProfile: options.cacheProfile,
+    cacheProfile: `${options.cacheProfile ?? "default"}:per-image-v1`,
+    accountsPerRequest: true,
+    requestCount: (target) =>
+      target.privateObjectReference.startsWith("issue-submission://revision/") ? 2 : 1,
     canReuseResult(result) {
+      if (
+        result.imageCount === 2 &&
+        (result.requestStrategy !== "PER_IMAGE_V1" || result.requestCount !== 2)
+      )
+        return false;
       if (!options.embeddedTextEnabled || result.imageCount === 0) return true;
       const parsed = embeddedTextEvidenceSchema.safeParse(result.embeddedText);
       return (
@@ -89,18 +97,13 @@ export function createOpenAiModerationAdapter(
         parsed.data.images.every((image) => image.status === "COMPLETE")
       );
     },
-    async inspect(target) {
+    async inspect(target, runRequest = (request) => request()) {
       const input = await options.resolveInput(target);
       const images = input.images ?? (input.image ? [input.image] : []);
       if ((input.images && input.image) || images.length > 2) {
         throw new ModerationProviderCallError("INPUT_UNAVAILABLE", "INVALID_IMAGE_INPUT", false);
       }
-      const requestInput: Array<Record<string, unknown>> = [];
-      if (input.text) requestInput.push({ type: "text", text: input.text });
-      for (const image of images) {
-        requestInput.push({ type: "image_url", image_url: { url: image.dataUrl } });
-      }
-      if (requestInput.length === 0) {
+      if (!input.text && images.length === 0) {
         throw new ModerationProviderCallError(
           "INPUT_UNAVAILABLE",
           "NO_MINIMIZED_PROVIDER_INPUT",
@@ -109,68 +112,144 @@ export function createOpenAiModerationAdapter(
       }
 
       const startedAt = performance.now();
-      let response: Response;
-      try {
-        response = await fetchImpl(endpoint, {
-          method: "POST",
-          headers: {
-            authorization: `Bearer ${options.apiKey}`,
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({ model, input: requestInput }),
-          signal: AbortSignal.timeout(timeoutMs),
+      const responses: Array<z.infer<typeof responseSchema>> = [];
+      // The moderation endpoint rejects multiple images with too_many_images.
+      // Repeat minimized context for each image; never drop B or merge images
+      // into a lower-resolution contact sheet to fit a single request.
+      for (const image of images.length ? images : [undefined]) {
+        const requestInput: Array<Record<string, unknown>> = [];
+        if (input.text) requestInput.push({ type: "text", text: input.text });
+        if (image) requestInput.push({ type: "image_url", image_url: { url: image.dataUrl } });
+        const parsed = await runRequest(async () => {
+          let response: Response;
+          try {
+            response = await fetchImpl(endpoint, {
+              method: "POST",
+              headers: {
+                authorization: `Bearer ${options.apiKey}`,
+                "content-type": "application/json",
+              },
+              body: JSON.stringify({ model, input: requestInput }),
+              signal: AbortSignal.timeout(timeoutMs),
+            });
+          } catch (error) {
+            if (
+              error instanceof Error &&
+              (error.name === "AbortError" || error.name === "TimeoutError")
+            ) {
+              throw new ModerationProviderCallError("TIMEOUT", "REQUEST_TIMEOUT", true);
+            }
+            throw new ModerationProviderCallError("PROVIDER_UNAVAILABLE", "NETWORK_FAILURE", true);
+          }
+
+          if (!response.ok) {
+            const kind =
+              response.status === 429
+                ? "RATE_LIMITED"
+                : response.status === 401 || response.status === 403
+                  ? "AUTHENTICATION"
+                  : response.status >= 500
+                    ? "PROVIDER_UNAVAILABLE"
+                    : "REFUSAL";
+            // Keep only recognized technical codes, never the provider's raw error
+            // message/body (which may echo user content or image data).
+            let detail = "";
+            try {
+              const body: unknown = await response.json();
+              const code = z.object({ error: z.object({ code: z.string() }) }).safeParse(body);
+              if (code.success && code.data.error.code === "too_many_images")
+                detail = "_TOO_MANY_IMAGES";
+            } catch {
+              /* The HTTP classification remains valid for non-JSON errors. */
+            }
+            throw new ModerationProviderCallError(
+              kind,
+              `HTTP_${response.status}${detail}`,
+              response.status === 429 || response.status >= 500,
+              response.status,
+            );
+          }
+
+          let parsed: z.infer<typeof responseSchema>;
+          try {
+            parsed = responseSchema.parse(await response.json());
+          } catch {
+            throw new ModerationProviderCallError(
+              "MALFORMED_OUTPUT",
+              "INVALID_RESPONSE_SCHEMA",
+              false,
+            );
+          }
+
+          const result = parsed.results[0]!;
+          if (/\d{4}-\d{2}-\d{2}$/u.test(model) && parsed.model !== model) {
+            throw new ModerationProviderCallError(
+              "MALFORMED_OUTPUT",
+              "MODEL_SNAPSHOT_MISMATCH",
+              false,
+            );
+          }
+          if (
+            Object.keys(result.categories).some((label) => !(label in result.category_scores)) ||
+            Object.keys(result.category_scores).some(
+              (label) =>
+                !(label in result.categories) || !(label in result.category_applied_input_types),
+            )
+          ) {
+            throw new ModerationProviderCallError(
+              "MALFORMED_OUTPUT",
+              "INCOMPLETE_CATEGORY_EVIDENCE",
+              false,
+            );
+          }
+          return parsed;
         });
-      } catch (error) {
-        if (
-          error instanceof Error &&
-          (error.name === "AbortError" || error.name === "TimeoutError")
-        ) {
-          throw new ModerationProviderCallError("TIMEOUT", "REQUEST_TIMEOUT", true);
-        }
-        throw new ModerationProviderCallError("PROVIDER_UNAVAILABLE", "NETWORK_FAILURE", true);
+        responses.push(parsed);
       }
-
-      if (!response.ok) {
-        const kind =
-          response.status === 429
-            ? "RATE_LIMITED"
-            : response.status === 401 || response.status === 403
-              ? "AUTHENTICATION"
-              : response.status >= 500
-                ? "PROVIDER_UNAVAILABLE"
-                : "REFUSAL";
-        throw new ModerationProviderCallError(
-          kind,
-          `HTTP_${response.status}`,
-          response.status === 429 || response.status >= 500,
-          response.status,
-        );
-      }
-
-      let parsed: z.infer<typeof responseSchema>;
-      try {
-        parsed = responseSchema.parse(await response.json());
-      } catch {
-        throw new ModerationProviderCallError("MALFORMED_OUTPUT", "INVALID_RESPONSE_SCHEMA", false);
-      }
-
-      const result = parsed.results[0]!;
-      if (/\d{4}-\d{2}-\d{2}$/u.test(model) && parsed.model !== model) {
-        throw new ModerationProviderCallError("MALFORMED_OUTPUT", "MODEL_SNAPSHOT_MISMATCH", false);
-      }
+      const first = responses[0]!;
+      const labels = Object.keys(first.results[0]!.category_scores).sort();
       if (
-        Object.keys(result.categories).some((label) => !(label in result.category_scores)) ||
-        Object.keys(result.category_scores).some(
-          (label) =>
-            !(label in result.categories) || !(label in result.category_applied_input_types),
+        responses.some(
+          (response) =>
+            response.model !== first.model ||
+            JSON.stringify(Object.keys(response.results[0]!.category_scores).sort()) !==
+              JSON.stringify(labels),
         )
       ) {
         throw new ModerationProviderCallError(
           "MALFORMED_OUTPUT",
-          "INCOMPLETE_CATEGORY_EVIDENCE",
+          "INCONSISTENT_IMAGE_EVIDENCE",
           false,
         );
       }
+      // Conservative union: any flag wins, use the highest score, and retain
+      // all applied modalities. No result/cache is returned unless ALL pass.
+      const result = {
+        categories: Object.fromEntries(
+          labels.map((label) => [
+            label,
+            responses.some((response) => response.results[0]!.categories[label] === true),
+          ]),
+        ),
+        category_scores: Object.fromEntries(
+          labels.map((label) => [
+            label,
+            Math.max(...responses.map((response) => response.results[0]!.category_scores[label]!)),
+          ]),
+        ),
+        category_applied_input_types: Object.fromEntries(
+          labels.map((label) => [
+            label,
+            [
+              ...new Set(
+                responses.flatMap(
+                  (response) => response.results[0]!.category_applied_input_types[label] ?? [],
+                ),
+              ),
+            ],
+          ]),
+        ),
+      };
       const signals: ModerationProviderSignal[] = Object.entries(result.category_scores).map(
         ([providerLabel, rawScore]) => ({
           providerLabel,
@@ -198,10 +277,12 @@ export function createOpenAiModerationAdapter(
           modality: input.modality,
           inputScope: input.scope ?? "UNSPECIFIED",
           imageCount: images.length,
+          requestCount: responses.length,
+          requestStrategy: "PER_IMAGE_V1",
           ...(input.embeddedText
             ? { embeddedText: embeddedTextEvidenceSchema.parse(input.embeddedText) }
             : {}),
-          modelSnapshot: parsed.model,
+          modelSnapshot: first.model,
           supportedLabels,
           unsupportedLabels,
           signals,

@@ -37,6 +37,7 @@ import {
   type ModerationRequestedEvent,
   type ModerationShadowAdapter,
   type ModerationShadowInspection,
+  type ModerationProviderRequestExecutor,
 } from "./contracts.js";
 
 export type ModerationDispatcherOptions = {
@@ -61,6 +62,7 @@ export type ModerationProviderGate = (input: {
   targetVersion: number;
   normalizedInputHash: string;
   policyVersion: string;
+  requiredCalls?: number;
 }) => Promise<{ allowed: boolean; reason: string }> | { allowed: boolean; reason: string };
 
 const MAX_ERROR_LENGTH = 2_000;
@@ -538,6 +540,14 @@ export function createModerationDispatcherService(
         costMicros: 0,
       };
     }
+    const adapterInput = {
+      targetType: event.data.target_type,
+      targetId: target.targetId,
+      targetVersion: target.targetVersion,
+      privateObjectReference: target.snapshotReference,
+      normalizedInputHash: run.normalizedInputHash,
+      policyVersion: run.policyVersion,
+    };
     const gate = options.providerGate
       ? await options.providerGate({
           targetType: event.data.target_type,
@@ -545,6 +555,7 @@ export function createModerationDispatcherService(
           targetVersion: target.targetVersion,
           normalizedInputHash: run.normalizedInputHash,
           policyVersion: run.policyVersion,
+          requiredCalls: adapter.requestCount?.(adapterInput) ?? 1,
         })
       : { allowed: false, reason: "PROVIDER_GATE_REQUIRED" };
     if (!gate.allowed) {
@@ -591,32 +602,19 @@ export function createModerationDispatcherService(
       };
     }
 
-    // Account for uncached attempts independently of the reusable cache. Stale, failed or
-    // lease-lost results still consumed capacity, even when they cannot become evidence.
-    await database.insert(moderationAuditEvents).values({
-      eventType: "PROVIDER_INSPECTION_ATTEMPTED",
-      entityType: "RUN",
-      entityId: run.id,
-      actorType: "SYSTEM",
-      metadata: {
-        provider: adapter.provider,
-        inputContractVersion: MODERATION_PROVIDER_INPUT_VERSION,
-      },
-      occurredAt: now(),
-    });
-    let inspected: ModerationShadowInspection;
-    try {
-      inspected = await adapter.inspect({
-        targetType: event.data.target_type,
-        targetId: target.targetId,
-        targetVersion: target.targetVersion,
-        privateObjectReference: target.snapshotReference,
-        normalizedInputHash: run.normalizedInputHash,
-        policyVersion: run.policyVersion,
-      });
-    } catch (error) {
+    const runRequest: ModerationProviderRequestExecutor = async (request) => {
+      // Recheck immediately before every HTTP request, including image B.
+      const requestGate = await options.providerGate?.({ ...adapterInput, requiredCalls: 1 });
+      if (!requestGate?.allowed)
+        throw new ModerationProviderCallError(
+          "INPUT_UNAVAILABLE",
+          requestGate?.reason ?? "PROVIDER_GATE_REQUIRED",
+          false,
+        );
+      // Account for uncached attempts independently of the reusable cache. Stale, failed or
+      // lease-lost results still consumed capacity, even when they cannot become evidence.
       await database.insert(moderationAuditEvents).values({
-        eventType: "PROVIDER_INSPECTION_FAILED",
+        eventType: "PROVIDER_INSPECTION_ATTEMPTED",
         entityType: "RUN",
         entityId: run.id,
         actorType: "SYSTEM",
@@ -626,20 +624,46 @@ export function createModerationDispatcherService(
         },
         occurredAt: now(),
       });
-      throw error;
-    }
-    await database.insert(moderationAuditEvents).values({
-      eventType: "PROVIDER_INSPECTION_COMPLETED",
-      entityType: "RUN",
-      entityId: run.id,
-      actorType: "SYSTEM",
-      metadata: {
-        provider: adapter.provider,
-        inputContractVersion: MODERATION_PROVIDER_INPUT_VERSION,
-        costMicros: inspected.costMicros,
-      },
-      occurredAt: now(),
-    });
+      let inspected: Awaited<ReturnType<typeof request>>;
+      try {
+        inspected = await request();
+      } catch (error) {
+        await database.insert(moderationAuditEvents).values({
+          eventType: "PROVIDER_INSPECTION_FAILED",
+          entityType: "RUN",
+          entityId: run.id,
+          actorType: "SYSTEM",
+          metadata: {
+            provider: adapter.provider,
+            inputContractVersion: MODERATION_PROVIDER_INPUT_VERSION,
+          },
+          occurredAt: now(),
+        });
+        throw error;
+      }
+      await database.insert(moderationAuditEvents).values({
+        eventType: "PROVIDER_INSPECTION_COMPLETED",
+        entityType: "RUN",
+        entityId: run.id,
+        actorType: "SYSTEM",
+        metadata: {
+          provider: adapter.provider,
+          inputContractVersion: MODERATION_PROVIDER_INPUT_VERSION,
+          costMicros:
+            inspected &&
+            typeof inspected === "object" &&
+            "costMicros" in inspected &&
+            typeof inspected.costMicros === "number"
+              ? inspected.costMicros
+              : 0,
+        },
+        occurredAt: now(),
+      });
+      return inspected;
+    };
+    const inspected = adapter.accountsPerRequest
+      ? await adapter.inspect(adapterInput, runRequest)
+      : await runRequest(() => adapter.inspect(adapterInput));
     return {
       ...inspected,
       result: {
