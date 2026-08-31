@@ -73,6 +73,15 @@
   font-size: 0.8rem;
   line-height: 1.6;
 }
+.noteRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.noteRow .note {
+  min-width: 0;
+}
 .choices {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -99,6 +108,20 @@
 .page button:disabled {
   opacity: 0.55;
   cursor: wait;
+}
+.page .refreshButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  padding: 10px;
+  border-color: transparent;
+  background: transparent;
+}
+.page .refreshButton:hover:not(:disabled) {
+  background: var(--which-cyan-soft);
 }
 .page .manageButton {
   padding: 8px 12px;
