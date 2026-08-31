@@ -16,6 +16,7 @@ const environmentSchema = z.object({
   API_PORT: z.coerce.number().int().positive().max(65_535).optional(),
   PORT: z.coerce.number().int().positive().max(65_535).optional(),
   DATABASE_URL: z.string().url().default("postgresql://which:which_local@localhost:54329/which"),
+  DATABASE_CONNECTION_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(60_000).default(10_000),
   WEB_ORIGIN: z.string().url().default("http://localhost:3000"),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
   RELEASE_ID: z.string().min(1).max(128).optional(),
@@ -82,6 +83,7 @@ export function getConfig(environment: NodeJS.ProcessEnv = process.env) {
       webOrigin: parsed.WEB_ORIGIN,
     },
     databaseUrl: parsed.DATABASE_URL,
+    databaseConnectionTimeoutMillis: parsed.DATABASE_CONNECTION_TIMEOUT_MS,
     auth: {
       internalSecret: parsed.INTERNAL_AUTH_SECRET,
       moderationInternalSecret: parsed.MODERATION_INTERNAL_SECRET,

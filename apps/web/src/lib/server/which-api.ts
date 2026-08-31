@@ -2,6 +2,7 @@ import type { NextRequest, NextResponse } from "next/server";
 
 import type { ApiErrorBody } from "../contracts";
 import { SOCIAL_SIGNUP_COOKIE } from "./member-auth";
+import { fetchReadWithRetry } from "./read-retry";
 
 export const GUEST_SUBJECT_COOKIE = "which_guest_subject";
 export const MEMBER_SESSION_COOKIE = "which_member_session";
@@ -25,8 +26,20 @@ function apiBaseUrl() {
   return baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`;
 }
 
+const RETRYABLE_MEMBER_READS = new Set([
+  "/v1/me",
+  "/v1/me/points",
+  "/v1/me/point-shop",
+  "/v1/member/issue-submissions",
+  "/v1/member-session",
+]);
+
 export function fetchWhichApi(path: string, init?: RequestInit) {
-  return fetch(new URL(path.replace(/^\//, ""), apiBaseUrl()), {
+  const url = new URL(path.replace(/^\//, ""), apiBaseUrl());
+  if ((init?.method ?? "GET").toUpperCase() === "GET" && RETRYABLE_MEMBER_READS.has(url.pathname)) {
+    return fetchReadWithRetry(url, init);
+  }
+  return fetch(url, {
     ...init,
     cache: "no-store",
   });

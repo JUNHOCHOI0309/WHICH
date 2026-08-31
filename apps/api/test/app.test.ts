@@ -84,6 +84,36 @@ afterEach(async () => {
 });
 
 describe("system health", () => {
+  it("records safe pool diagnostics for a wrapped connection timeout without changing the error status", async () => {
+    const connectionDiagnostics = vi.fn(() => ({
+      connectionTimeoutMillis: 10_000,
+      maxConnections: 10,
+      totalConnections: 10,
+      idleConnections: 0,
+      waitingRequests: 2,
+    }));
+    const app = await buildApp(getConfig({ NODE_ENV: "test" }), {
+      ping: vi.fn(),
+      close: vi.fn(),
+      connectionDiagnostics,
+      issueReader,
+      guestVotes,
+      commentReader,
+      memberIdentity,
+    });
+    openApps.push(app);
+    app.get("/test-connection-timeout", () =>
+      Promise.reject(
+        new Error("Failed query: private query parameters", {
+          cause: new Error("timeout exceeded when trying to connect"),
+        }),
+      ),
+    );
+    const response = await app.inject({ method: "GET", url: "/test-connection-timeout" });
+    expect(response.statusCode).toBe(500);
+    expect(connectionDiagnostics).toHaveBeenCalledOnce();
+  });
+
   it("reports liveness without requiring the database", async () => {
     const app = await buildApp(getConfig({ NODE_ENV: "test" }), {
       ping: vi.fn(),

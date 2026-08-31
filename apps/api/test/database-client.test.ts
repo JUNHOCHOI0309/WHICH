@@ -9,6 +9,9 @@ vi.mock("pg", () => ({
   Pool: class {
     query = mocks.query;
     end = mocks.end;
+    totalCount = 4;
+    idleCount = 2;
+    waitingCount = 1;
     constructor(options: unknown) {
       mocks.pool(options);
     }
@@ -23,7 +26,7 @@ const url = "postgresql://test:example@db.example.com/which?sslmode=verify-full"
 describe("database connection timeouts", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("preserves the web timeout and verified TLS connection string", async () => {
+  it("preserves the generic default and verified TLS connection string", async () => {
     const database = createDatabase(url);
     expect(mocks.pool).toHaveBeenCalledWith({
       connectionString: url,
@@ -35,6 +38,17 @@ describe("database connection timeouts", () => {
     await database.close();
     expect(mocks.query).toHaveBeenCalledWith("select 1");
     expect(mocks.end).toHaveBeenCalledOnce();
+  });
+
+  it("exposes only safe pool counters and the effective timeout", () => {
+    const database = createDatabase(url, { connectionTimeoutMillis: 10_000 });
+    expect(database.connectionDiagnostics()).toEqual({
+      connectionTimeoutMillis: 10_000,
+      maxConnections: 10,
+      totalConnections: 4,
+      idleConnections: 2,
+      waitingRequests: 1,
+    });
   });
 
   it("allows a bounded cold-worker timeout without changing other pool settings", () => {
