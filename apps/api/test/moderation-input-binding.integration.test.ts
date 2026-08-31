@@ -12,6 +12,7 @@ import {
   moderationProviderCallCache,
   moderationRuns,
   moderationTargets,
+  moderationAuditEvents,
   memberCapabilityGrants,
   memberMediaConsents,
   members,
@@ -27,7 +28,10 @@ import { readLatestPublicationReadiness } from "../src/modules/issue-media/publi
 import { TRUSTED_IMAGE_UPLOADER_POLICY_VERSION } from "../src/modules/issue-media/trusted-uploader-policy.js";
 import { moderationDecisionRuntime } from "../src/modules/moderation/decision-runtime.js";
 import { createIssueWriteService } from "../src/modules/issues/creation-service.js";
-import { createModerationDispatcherService } from "../src/modules/moderation-dispatch/service.js";
+import {
+  createModerationDispatcherService,
+  type ModerationProviderGate,
+} from "../src/modules/moderation-dispatch/service.js";
 import { MODERATION_POLICY_VERSION } from "../src/modules/moderation-dispatch/contracts.js";
 import { MODERATION_PROVIDER_INPUT_VERSION } from "../src/modules/moderation-providers/contracts.js";
 import { moderationProviderCacheHash } from "../src/modules/moderation-providers/input-binding.js";
@@ -142,7 +146,7 @@ describe("immutable submission image moderation inputs", () => {
         .innerJoin(moderationTargets, eq(moderationTargets.id, moderationRuns.targetId))
         .where(eq(moderationTargets.targetId, submission.id));
     }
-    function worker(fetchImpl: typeof fetch) {
+    function worker(fetchImpl: typeof fetch, gate?: ModerationProviderGate) {
       const adapter = createOpenAiModerationAdapter({
         apiKey: "mock-only-key",
         resolveInput,
@@ -156,10 +160,12 @@ describe("immutable submission image moderation inputs", () => {
         maxAttempts: 1,
         retryBaseMilliseconds: 1000,
         retryMaxMilliseconds: 10000,
-        providerGate: (input) => ({
-          allowed: input.targetType === "ISSUE_VERSION",
-          reason: "MOCK_SUBMISSION_ONLY",
-        }),
+        providerGate:
+          gate ??
+          ((input) => ({
+            allowed: input.targetType === "ISSUE_VERSION",
+            reason: "MOCK_SUBMISSION_ONLY",
+          })),
       });
     }
     return {
@@ -275,7 +281,7 @@ describe("immutable submission image moderation inputs", () => {
     const caches = await f.db.select().from(moderationProviderCallCache);
     expect(JSON.stringify(caches)).not.toContain("decisionAssessment");
     expect(JSON.stringify(stored)).not.toContain(f.command.question);
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
     expect(f.unused).not.toHaveBeenCalled();
   });
 
@@ -314,7 +320,7 @@ describe("immutable submission image moderation inputs", () => {
     expect(f.unused).not.toHaveBeenCalled();
   });
 
-  it("sends ordered A/B OCR with context once, persisting only bound metadata", async () => {
+  it("extracts ordered A/B OCR once and repeats minimized context per image, persisting only metadata", async () => {
     let calls = 0;
     const extract = vi.fn((): Promise<EmbeddedText> =>
       Promise.resolve({
@@ -334,7 +340,7 @@ describe("immutable submission image moderation inputs", () => {
     await worker.processBatch();
     expect(sent).toContain("Image A extracted text: first embedded phrase");
     expect(sent).toContain("Image B extracted text: second embedded phrase");
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
     const { run } = (await f.runs())[0]!;
     expect(run.result.embeddedText).toMatchObject({
       version: EMBEDDED_TEXT_VERSION,
@@ -349,7 +355,7 @@ describe("immutable submission image moderation inputs", () => {
     await f.writer.submitMemberIssue({ ...f.command, idempotencyKey: randomUUID() });
     await worker.dispatchBatch();
     await worker.processBatch();
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
     expect(extract).toHaveBeenCalledTimes(2);
     expect(f.unused).not.toHaveBeenCalled();
   });
@@ -483,7 +489,7 @@ describe("immutable submission image moderation inputs", () => {
     },
   );
 
-  it("bypasses the old unbound cache and sends question plus two images in a single request", async () => {
+  it("bypasses old caches and sends question plus each image in separately audited requests", async () => {
     const f = await fixture();
     const target = await f.target();
     await f.db.insert(moderationProviderCallCache).values({
@@ -508,15 +514,22 @@ describe("immutable submission image moderation inputs", () => {
     const worker = f.worker(fetchImpl);
     await worker.dispatchBatch();
     expect(await worker.processBatch()).toMatchObject({ succeeded: 1, skipped: 2 });
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
-    expect(requests[0]!.input.map((item) => item.type)).toEqual(["text", "image_url", "image_url"]);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(requests.map((request) => request.input.map((item) => item.type))).toEqual([
+      ["text", "image_url"],
+      ["text", "image_url"],
+    ]);
     expect(requests[0]!.input[0]!.text).toContain(f.command.question);
+    expect(requests[1]!.input[0]!.text).toBe(requests[0]!.input[0]!.text);
+    expect(requests[1]!.input[1]).not.toEqual(requests[0]!.input[1]);
     const { run } = (await f.runs())[0]!;
     expect(run).toMatchObject({
       status: "SUCCEEDED",
       result: {
         inputScope: "SUBMISSION_REVISION",
         imageCount: 2,
+        requestCount: 2,
+        requestStrategy: "PER_IMAGE_V1",
         publicationChanged: false,
         publicationReadiness: {
           executionAuthorized: false,
@@ -539,6 +552,16 @@ describe("immutable submission image moderation inputs", () => {
     });
     expect(JSON.stringify(run.result)).not.toContain("base64");
     expect(JSON.stringify(run.result)).not.toContain(f.command.question);
+    const audit = await f.db
+      .select()
+      .from(moderationAuditEvents)
+      .where(eq(moderationAuditEvents.entityId, run.id));
+    expect(
+      audit.filter((event) => event.eventType === "PROVIDER_INSPECTION_ATTEMPTED"),
+    ).toHaveLength(2);
+    expect(
+      audit.filter((event) => event.eventType === "PROVIDER_INSPECTION_COMPLETED"),
+    ).toHaveLength(2);
     const diagnostic = await readLatestPublicationReadiness(f.db, f.submission.id);
     expect(diagnostic).toMatchObject({ runId: run.id, readiness: { executionAuthorized: false } });
     await f.writer.actOnMemberIssueSubmission({
@@ -557,7 +580,10 @@ describe("immutable submission image moderation inputs", () => {
     "discards a response made stale by %s during the request",
     async (mode) => {
       const f = await fixture();
+      let changed = false;
       const fetchImpl = vi.fn(async () => {
+        if (changed) return response();
+        changed = true;
         if (mode === "EDIT")
           await f.writer.resubmitMemberIssue({
             ...f.command,
@@ -627,14 +653,14 @@ describe("immutable submission image moderation inputs", () => {
     const worker = f.worker(fetchImpl);
     expect(await worker.dispatchBatch()).toMatchObject({ skipped: 1, queued: 3 });
     expect(await worker.processBatch()).toMatchObject({ succeeded: 1, skipped: 2 });
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
     expect((await f.runs()).map(({ run }) => run.status).sort()).toEqual(["SKIPPED", "SUCCEEDED"]);
   });
 
   it("refreshes expired versioned cache entries and avoids duplicate concurrent execution", async () => {
     const f = await fixture();
     const target = await f.target();
-    const hash = moderationProviderCacheHash(target);
+    const hash = moderationProviderCacheHash({ ...target, cacheProfile: "default:per-image-v1" });
     await f.db.insert(moderationProviderCallCache).values({
       provider: "OPENAI_MODERATION",
       modelName: "omni-moderation",
@@ -651,7 +677,7 @@ describe("immutable submission image moderation inputs", () => {
     const worker = f.worker(fetchImpl);
     await worker.dispatchBatch();
     await Promise.all([worker.processBatch(), worker.processBatch()]);
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
     const [cached] = await f.db
       .select()
       .from(moderationProviderCallCache)
@@ -671,11 +697,75 @@ describe("immutable submission image moderation inputs", () => {
     const next = await f.writer.submitMemberIssue({ ...f.command, idempotencyKey: randomUUID() });
     await worker.dispatchBatch();
     expect(await worker.processBatch()).toMatchObject({ succeeded: 1 });
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
     expect(await readLatestPublicationReadiness(f.db, next.submission.id)).toMatchObject({
       readiness: { executionAuthorized: false, state: "PRIVATE_REVIEW_REQUIRED" },
     });
-    expect(await productionGate(2)(target)).toMatchObject({ allowed: true });
+    expect(await productionGate(3)(target)).toMatchObject({ allowed: true });
+    expect(await productionGate(2)(target)).toMatchObject({
+      allowed: false,
+      reason: "DAILY_CALL_CAP_REACHED",
+    });
+  });
+
+  it("does not begin a two-image check when the daily budget has room for only one request", async () => {
+    const f = await fixture();
+    const fetchImpl = vi.fn(() => Promise.resolve(response()));
+    const worker = f.worker(fetchImpl, (input) =>
+      input.targetType === "ISSUE_VERSION"
+        ? productionGate(1)(input)
+        : { allowed: false, reason: "SUBMISSION_ONLY" },
+    );
+    await worker.dispatchBatch();
+    expect(await worker.processBatch()).toMatchObject({ succeeded: 0, skipped: 3 });
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect((await f.runs())[0]!.run.result.reason).toBe("DAILY_CALL_CAP_REACHED");
+    expect(
+      await f.db
+        .select()
+        .from(moderationAuditEvents)
+        .where(eq(moderationAuditEvents.eventType, "PROVIDER_INSPECTION_ATTEMPTED")),
+    ).toHaveLength(0);
+    expect(f.unused).not.toHaveBeenCalled();
+  });
+
+  it("counts both HTTP attempts when B fails and never caches partial A evidence", async () => {
+    const f = await fixture();
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(response())
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ error: { code: "invalid_image", message: "private-content" } }),
+          { status: 400 },
+        ),
+      );
+    const worker = f.worker(fetchImpl);
+    await worker.dispatchBatch();
+    expect(await worker.processBatch()).toMatchObject({
+      succeeded: 0,
+      deadLettered: 1,
+      skipped: 2,
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    const { run } = (await f.runs())[0]!;
+    const events = await f.db
+      .select()
+      .from(moderationAuditEvents)
+      .where(eq(moderationAuditEvents.entityId, run.id));
+    expect(
+      events.filter((event) => event.eventType === "PROVIDER_INSPECTION_ATTEMPTED"),
+    ).toHaveLength(2);
+    expect(
+      events.filter((event) => event.eventType === "PROVIDER_INSPECTION_COMPLETED"),
+    ).toHaveLength(1);
+    expect(events.filter((event) => event.eventType === "PROVIDER_INSPECTION_FAILED")).toHaveLength(
+      1,
+    );
+    expect(await f.db.select().from(moderationProviderCallCache)).toHaveLength(0);
+    expect(await productionGate(2)(await f.target())).toMatchObject({ allowed: false });
+    expect(JSON.stringify([run, events])).not.toContain("private-content");
+    expect(f.unused).not.toHaveBeenCalled();
   });
 
   it("counts failed provider attempts toward the circuit without creating reusable results", async () => {

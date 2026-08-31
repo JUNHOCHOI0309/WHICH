@@ -68,10 +68,23 @@ It is Ready with one task, parallelism one, no retries, a 10-minute timeout,
 `which-run-subnet` Direct VPC path with all-traffic egress, and mounts
 `which-runtime-env` only at `/var/run/which/runtime.json`.
 
-The Job has no execution history and no Cloud Scheduler attachment. The
+At provisioning, the Job had no execution history and no Cloud Scheduler attachment. The
 provider, policy-judge, and automatic-publication switches remain unchanged;
 creating this resource did not make a moderation provider call or publish an
 Issue image.
+
+The 2026-09-01 limited validation is recorded in
+[cloud-run-moderation-validation-2026-09-01.md](cloud-run-moderation-validation-2026-09-01.md).
+Execution-level overrides do not enable the persistent Job or web rollout.
+The moderation worker now allows 10 seconds for a cold external DB connection;
+the HTTP service keeps its 2-second connection timeout and verified TLS.
+For A/B images, allow time for **two** sequential moderation requests as well
+as two local scans. The worker rejects a lease shorter than both scan timeouts
+plus both request timeouts and a five-second completion margin.
+
+A successful Cloud Run execution only means the process exited normally.
+Always inspect the batch's `succeeded`, `deadLettered`, and `retried` counts;
+a green Job with dead-lettered checks does not prove image safety or publication.
 
 ## Activation sequence
 

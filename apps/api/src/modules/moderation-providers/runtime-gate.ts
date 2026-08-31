@@ -97,6 +97,7 @@ export function createModerationProviderGate(input: {
       config,
       normalizedInputHash: target.normalizedInputHash,
       callsToday: 0,
+      requiredCalls: target.requiredCalls,
     });
     if (!preflight.allowed) return preflight;
     const dayStart = new Date();
@@ -152,6 +153,7 @@ export function createModerationProviderGate(input: {
       config,
       normalizedInputHash: target.normalizedInputHash,
       callsToday: (usage?.calls ?? 0) + (attempts?.calls ?? 0),
+      requiredCalls: target.requiredCalls,
       costMicrosToday: Number(usage?.costMicros ?? 0) + Number(attempts?.costMicros ?? 0),
       recentCalls: (circuit?.calls ?? 0) + (attempts?.recentCalls ?? 0),
       recentFailures: (circuit?.failures ?? 0) + (attempts?.recentFailures ?? 0),
@@ -163,6 +165,7 @@ export function evaluateModerationRuntimeGate(input: {
   config: ModerationProviderRuntimeConfig;
   normalizedInputHash: string;
   callsToday: number;
+  requiredCalls?: number;
   costMicrosToday?: number;
   recentCalls?: number;
   recentFailures?: number;
@@ -188,7 +191,11 @@ export function evaluateModerationRuntimeGate(input: {
   if (config.MODERATION_PROVIDER_DAILY_CALL_CAP <= 0) {
     return { allowed: false, reason: "DAILY_CALL_CAP_DISABLED" } as const;
   }
-  if (input.callsToday >= config.MODERATION_PROVIDER_DAILY_CALL_CAP) {
+  const requiredCalls = input.requiredCalls ?? 1;
+  if (!Number.isInteger(requiredCalls) || requiredCalls < 1 || requiredCalls > 2) {
+    return { allowed: false, reason: "INVALID_PROVIDER_REQUEST_COUNT" } as const;
+  }
+  if (input.callsToday + requiredCalls > config.MODERATION_PROVIDER_DAILY_CALL_CAP) {
     return { allowed: false, reason: "DAILY_CALL_CAP_REACHED" } as const;
   }
   if ((input.costMicrosToday ?? 0) > config.MODERATION_PROVIDER_DAILY_COST_MICROS_CAP) {
