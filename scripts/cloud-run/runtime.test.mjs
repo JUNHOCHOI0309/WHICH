@@ -16,6 +16,7 @@ test("preview defaults to no consumers and no paid calls", () => {
     ...base,
     POINTS_WORKER_ENABLED: "true",
     MODERATION_WORKER_ENABLED: "true",
+    MODERATION_JOB_DISPATCH_ENABLED: "true",
   });
   assert.deepEqual(
     serviceDefinitions(env).map((x) => x.name),
@@ -72,6 +73,21 @@ test("moderation job is a finite production-only batch", () => {
     () =>
       moderationJobDefinition(runtimeEnvironment({ ...base, CLOUD_RUN_PREVIEW: "false" }), "/app"),
     /CLOUD_RUN_MODERATION_JOB_DISABLED/,
+  );
+});
+test("submission dispatcher stays lightweight and cannot run beside an in-process OCR worker", () => {
+  const env = runtimeEnvironment({
+    ...base,
+    CLOUD_RUN_PREVIEW: "false",
+    MODERATION_JOB_DISPATCH_ENABLED: "true",
+  });
+  assert.deepEqual(
+    serviceDefinitions(env).map((x) => x.name),
+    ["api", "web", "moderation-dispatch"],
+  );
+  assert.throws(
+    () => serviceDefinitions({ ...env, MODERATION_WORKER_ENABLED: "true" }),
+    /WORKLOAD_CONFLICT/,
   );
 });
 test("internal Render DB or unverified external TLS fails closed without secret leakage", () => {

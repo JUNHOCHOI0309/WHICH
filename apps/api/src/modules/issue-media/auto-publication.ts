@@ -33,6 +33,7 @@ import {
   POLICY_JUDGE_CACHE_TTL_MS,
 } from "../policy-judge/contracts.js";
 import type { createPolicyJudgeService } from "../policy-judge/service.js";
+import { hasClaimedWakeup } from "../moderation-dispatch/submission-wakeup-event.js";
 
 export const AUTO_PUBLICATION_POLICY = "which-auto-publication-pilot-v1";
 const PUBLIC_REPAIR = `${AUTO_PUBLICATION_POLICY}:public`;
@@ -133,6 +134,7 @@ export function createAutoPublicationService(options: {
     policyVersion: string;
   }) => Promise<ModerationProviderInput>;
   now?: () => Date;
+  submissionWakeupsOnly?: boolean;
 }) {
   const { database, storage, config, judge } = options;
   const now = options.now ?? (() => new Date());
@@ -437,6 +439,9 @@ export function createAutoPublicationService(options: {
       .where(
         and(
           eq(memberIssueSubmissions.status, "PENDING"),
+          options.submissionWakeupsOnly
+            ? hasClaimedWakeup(memberIssueSubmissions.id, memberIssueSubmissions.revision)
+            : undefined,
           inArray(memberIssueSubmissions.memberId, config.ISSUE_MEDIA_AUTO_PUBLICATION_MEMBER_IDS),
           eq(policyJudgeEvaluations.profile, POLICY_JUDGE_PROFILE),
           inArray(policyJudgeEvaluations.status, ["SUCCEEDED", "CACHE_HIT"]),

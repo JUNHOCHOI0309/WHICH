@@ -52,6 +52,7 @@ export function runtimeEnvironment(environment = process.env, readFile = readFil
     Object.assign(result, {
       POINTS_WORKER_ENABLED: "false",
       MODERATION_WORKER_ENABLED: "false",
+      MODERATION_JOB_DISPATCH_ENABLED: "false",
       MODERATION_PROVIDER_MODE: "OFF",
       MODERATION_PROVIDER_KILL_SWITCH: "true",
       MODERATION_POLICY_JUDGE_MODE: "OFF",
@@ -66,6 +67,11 @@ export function runtimeEnvironment(environment = process.env, readFile = readFil
 }
 
 export function serviceDefinitions(environment, root = process.cwd()) {
+  if (
+    environment.MODERATION_JOB_DISPATCH_ENABLED === "true" &&
+    environment.MODERATION_WORKER_ENABLED === "true"
+  )
+    throw new Error("CLOUD_RUN_MODERATION_WORKLOAD_CONFLICT");
   return [
     { name: "api", cwd: resolve(root, "apps/api"), args: ["dist/server.js"], env: environment },
     {
@@ -90,6 +96,16 @@ export function serviceDefinitions(environment, root = process.cwd()) {
             name: "moderation",
             cwd: resolve(root, "apps/api"),
             args: ["dist/moderation-worker.js", "run"],
+            env: environment,
+          },
+        ]
+      : []),
+    ...(environment.MODERATION_JOB_DISPATCH_ENABLED === "true"
+      ? [
+          {
+            name: "moderation-dispatch",
+            cwd: resolve(root, "apps/api"),
+            args: ["dist/moderation-job-dispatcher.js"],
             env: environment,
           },
         ]

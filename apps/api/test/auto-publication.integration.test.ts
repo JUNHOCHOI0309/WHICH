@@ -32,6 +32,12 @@ import {
 } from "../src/modules/moderation-dispatch/contracts.js";
 import { createModerationDispatcherService } from "../src/modules/moderation-dispatch/service.js";
 import { withModerationWorkerLock } from "../src/modules/moderation-dispatch/worker-lock.js";
+import { createSubmissionWakeups } from "../src/modules/moderation-dispatch/submission-wakeups.js";
+import { submissionWakeup as wakeupEvent } from "../src/modules/moderation-dispatch/submission-wakeup-event.js";
+
+// Explicit due time: the local Docker PostgreSQL clock can lead the host clock.
+const submissionWakeup = (...args: Parameters<typeof wakeupEvent>) =>
+  wakeupEvent(...args).map((row) => ({ ...row, availableAt: new Date(0) }));
 
 describe("explicit image publication pilot", () => {
   let testDb: Awaited<ReturnType<typeof createTestDatabase>>;
@@ -268,6 +274,116 @@ describe("explicit image publication pilot", () => {
       autoPublicationConfig({ ISSUE_MEDIA_AUTO_PUBLICATION_MEMBER_IDS: "not-an-id" }),
     ).toThrow();
   });
+  it("durably dispatches one job across concurrent dispatchers and acknowledges actual publication", async () => {
+    const f = await fixture();
+    await f.db
+      .insert(schema.outboxEvents)
+      .values(submissionWakeup(f.submission.id, f.submission.revision, true));
+    const wakeups = createSubmissionWakeups(f.db, [f.member.id]);
+    const start = vi.fn(async () => {});
+    await Promise.all([wakeups.dispatch(start), wakeups.dispatch(start)]);
+    expect(start).toHaveBeenCalledTimes(1);
+    const [request] = await wakeups.claimed();
+    expect(request).toBeTruthy();
+    expect(await f.service.process(f.evaluation.id)).toMatchObject({ status: "PUBLISHED" });
+    await wakeups.finish(request!);
+    expect(await wakeups.claimed()).toEqual([]);
+    await wakeups.dispatch(start);
+    expect(start).toHaveBeenCalledTimes(1);
+  });
+  it("converts uncertain judgement into an editable private outcome with one notification", async () => {
+    const f = await fixture();
+    await f.db
+      .update(schema.policyJudgeEvaluations)
+      .set({
+        status: "ABSTAINED",
+        result: {
+          decision: {
+            ...clearDecision,
+            decision: "ABSTAIN",
+            reason_codes: ["INSUFFICIENT_DETAIL"],
+            needs_human: true,
+          },
+        },
+      })
+      .where(eq(schema.policyJudgeEvaluations.id, f.evaluation.id));
+    await f.db
+      .insert(schema.outboxEvents)
+      .values(submissionWakeup(f.submission.id, f.submission.revision, true));
+    const wakeups = createSubmissionWakeups(f.db, [f.member.id]);
+    await wakeups.dispatch(async () => {});
+    const [request] = await wakeups.claimed();
+    await wakeups.finish(request!);
+    await wakeups.finish(request!);
+    const [row] = await f.db
+      .select()
+      .from(schema.memberIssueSubmissions)
+      .where(eq(schema.memberIssueSubmissions.id, f.submission.id));
+    expect(row).toMatchObject({ status: "NEEDS_CHANGES", publishedIssueId: null });
+    expect(row!.reviewNote).toContain("충분히 확인하지 못해");
+    expect(
+      await f.db
+        .select()
+        .from(schema.memberModerationNotices)
+        .where(eq(schema.memberModerationNotices.memberId, f.member.id)),
+    ).toHaveLength(1);
+    expect(f.storage.preparePublication).not.toHaveBeenCalled();
+  });
+  it("defers an unknown job start without immediate duplicate execution and eventually exposes technical failure", async () => {
+    const f = await fixture();
+    // No AI result should be assumed when the Job has not run.
+    await f.db
+      .delete(schema.policyJudgeEvaluations)
+      .where(eq(schema.policyJudgeEvaluations.id, f.evaluation.id));
+    let time = new Date();
+    await f.db
+      .insert(schema.outboxEvents)
+      .values(submissionWakeup(f.submission.id, f.submission.revision, true));
+    const wakeups = createSubmissionWakeups(f.db, [f.member.id], () => time);
+    const start = vi.fn(async () => {
+      throw new Error("ambiguous timeout");
+    });
+    expect(await wakeups.dispatch(start)).toMatchObject({ status: "START_UNKNOWN" });
+    await wakeups.dispatch(start);
+    expect(start).toHaveBeenCalledTimes(1);
+    for (let i = 0; i < 5; i++) {
+      time = new Date(time.getTime() + 13 * 60000);
+      await wakeups.dispatch(start);
+    }
+    expect(start).toHaveBeenCalledTimes(5);
+    const [row] = await f.db
+      .select()
+      .from(schema.memberIssueSubmissions)
+      .where(eq(schema.memberIssueSubmissions.id, f.submission.id));
+    expect(row).toMatchObject({ status: "NEEDS_CHANGES", publishedIssueId: null });
+    expect(row!.reviewNote).toContain("자동 검사를 완료하지 못했어요");
+  });
+  it("requires a claimed new submission wakeup for the automated job scope", async () => {
+    const f = await fixture();
+    const judge = createPolicyJudgeService({
+      database: f.db,
+      config: judgeConfig(),
+      provider: providerConfig(),
+      resolveInput: async () => f.input,
+      submissionWakeupsOnly: true,
+    });
+    expect(await judge.readCurrentSource(f.run.id)).toBeNull();
+    await f.db
+      .insert(schema.outboxEvents)
+      .values(submissionWakeup(f.submission.id, f.submission.revision, true));
+    expect(await judge.readCurrentSource(f.run.id)).toBeNull();
+    const wrongCohort = createSubmissionWakeups(f.db, [randomUUID()]);
+    const start = vi.fn(async () => {});
+    await wrongCohort.dispatch(start);
+    expect(start).not.toHaveBeenCalled();
+    await createSubmissionWakeups(f.db, [f.member.id]).dispatch(start);
+    expect(await judge.readCurrentSource(f.run.id)).not.toBeNull();
+    await f.db
+      .update(schema.memberIssueSubmissions)
+      .set({ revision: f.submission.revision + 1 })
+      .where(eq(schema.memberIssueSubmissions.id, f.submission.id));
+    expect(await judge.readCurrentSource(f.run.id)).toBeNull();
+  });
   it("publishes a current clear pair once, records system evidence and a notification, then cleans private copies", async () => {
     const f = await fixture();
     const results = await Promise.all([
@@ -438,6 +554,50 @@ describe("explicit image publication pilot", () => {
       deferProviderGate: true,
       providerGate: () => ({ allowed: false, reason: "DAILY_CALL_CAP_REACHED" }),
     };
+    const scoped = createModerationDispatcherService(f.db, adapter, {
+      ...opts,
+      submissionMemberIds: [f.member.id],
+      submissionWakeupsOnly: true,
+    });
+    expect(await scoped.dispatchBatch()).toMatchObject({ claimed: 0 });
+    expect(await scoped.processBatch()).toMatchObject({ claimed: 0 });
+    await f.db
+      .insert(schema.outboxEvents)
+      .values(submissionWakeup(f.submission.id, f.submission.revision, true));
+    // Claim only this fixture's request to avoid leaving unrelated fixture work in the batch.
+    await f.db
+      .update(schema.outboxEvents)
+      .set({
+        claimToken: randomUUID(),
+        claimedAt: new Date(),
+        availableAt: new Date(Date.now() + 600000),
+      })
+      .where(eq(schema.outboxEvents.aggregateId, f.submission.id));
+    expect(await scoped.dispatchBatch()).toMatchObject({ claimed: 1 });
+    expect(await scoped.processBatch()).toMatchObject({ claimed: 1, retried: 1 });
+    const [request] = await createSubmissionWakeups(f.db, [f.member.id]).claimed();
+    await createSubmissionWakeups(f.db, [f.member.id]).finish(request!, { budgetDeferred: true });
+    const [queued] = await f.db
+      .select()
+      .from(schema.outboxEvents)
+      .where(eq(schema.outboxEvents.id, request!.id));
+    expect(queued).toMatchObject({
+      status: "PENDING",
+      lastError: "DAILY_BUDGET_DEFERRED",
+      claimToken: null,
+    });
+    expect(queued!.availableAt.toISOString().slice(0, 10)).not.toBe(
+      new Date().toISOString().slice(0, 10),
+    );
+    // The original cohort assertions below exercise unscoped compatibility separately.
+    await f.db
+      .update(schema.moderationRuns)
+      .set({ status: "PENDING", availableAt: new Date(0) })
+      .where(eq(schema.moderationRuns.id, f.run.id));
+    await f.db
+      .update(schema.outboxEvents)
+      .set({ status: "PENDING", publishedAt: null, availableAt: new Date(0) })
+      .where(eq(schema.outboxEvents.eventType, "MODERATION_REQUESTED"));
     expect(
       await createModerationDispatcherService(f.db, adapter, {
         ...opts,

@@ -7,12 +7,18 @@ export async function GET(request: NextRequest) {
   if (!token) return NextResponse.json({ code: "SESSION_REQUIRED" }, { status: 401 });
   const requestedLimit = Number(request.nextUrl.searchParams.get("limit") ?? "10");
   const limit = Number.isInteger(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 20) : 10;
-  const upstream = await fetchWhichApi(`/v1/member/issue-submissions?limit=${limit}`, {
+  const query = new URLSearchParams({ limit: String(limit) });
+  const submissionId = request.nextUrl.searchParams.get("submissionId");
+  if (submissionId) query.set("submissionId", submissionId);
+  const upstream = await fetchWhichApi(`/v1/member/issue-submissions?${query}`, {
     headers: { accept: "application/json", authorization: `Bearer ${token}` },
   });
   return new NextResponse(upstream.body, {
     status: upstream.status,
-    headers: { "content-type": upstream.headers.get("content-type") ?? "application/json" },
+    headers: {
+      "content-type": upstream.headers.get("content-type") ?? "application/json",
+      "cache-control": "private, no-store",
+    },
   });
 }
 

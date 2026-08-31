@@ -137,6 +137,7 @@ export function createOutboxPublisherService(
             and(
               eq(outboxEvents.status, "PENDING"),
               ne(outboxEvents.eventType, "MODERATION_REQUESTED"),
+              ne(outboxEvents.eventType, "MODERATION_JOB_REQUESTED"),
               lte(outboxEvents.availableAt, claimedAt),
             ),
           )

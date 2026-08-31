@@ -30,6 +30,7 @@ import {
   type PolicyJudgeConfig,
 } from "./contracts.js";
 import { createJudgeLedger } from "./ledger.js";
+import { hasClaimedWakeup } from "../moderation-dispatch/submission-wakeup-event.js";
 
 const safetySchema = z.object({
   provider: z.literal("OPENAI_MODERATION"),
@@ -50,6 +51,7 @@ export function createPolicyJudgeService(options: {
   ) => Promise<ModerationProviderInput>;
   call?: ReturnType<typeof createLunaJudgeAdapter>;
   now?: () => Date;
+  submissionWakeupsOnly?: boolean;
 }) {
   const { database, config, provider } = options;
   const now = options.now ?? (() => new Date());
@@ -102,7 +104,14 @@ export function createPolicyJudgeService(options: {
       .from(moderationRuns)
       .innerJoin(moderationTargets, eq(moderationTargets.id, moderationRuns.targetId))
       .innerJoin(memberIssueSubmissions, eq(memberIssueSubmissions.id, moderationTargets.targetId))
-      .where(eq(moderationRuns.id, sourceRunId))
+      .where(
+        and(
+          eq(moderationRuns.id, sourceRunId),
+          options.submissionWakeupsOnly
+            ? hasClaimedWakeup(memberIssueSubmissions.id, memberIssueSubmissions.revision)
+            : undefined,
+        ),
+      )
       .limit(1);
     if (!row) return null;
     if (lock) {
@@ -308,6 +317,9 @@ export function createPolicyJudgeService(options: {
       .where(
         and(
           eq(moderationRuns.status, "SUCCEEDED"),
+          options.submissionWakeupsOnly
+            ? hasClaimedWakeup(memberIssueSubmissions.id, memberIssueSubmissions.revision)
+            : undefined,
           eq(moderationRuns.modelProvider, "OPENAI_MODERATION"),
           eq(moderationTargets.targetType, "ISSUE_VERSION"),
           inArray(memberIssueSubmissions.status, ["PENDING", "NEEDS_CHANGES"]),

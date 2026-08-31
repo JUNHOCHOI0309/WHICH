@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 
 import { ToastProvider } from "@/components/feedback/toast-provider";
+import { SubmissionFeedbackProvider } from "@/features/issues/submission-feedback";
 import { SITE_DESCRIPTION, SITE_NAME, siteOrigin } from "@/lib/search-discovery";
 
 import "./styles.css";
@@ -42,7 +43,9 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
   return (
     <html lang="ko">
       <body>
-        <ToastProvider>{children}</ToastProvider>
+        <ToastProvider>
+          <SubmissionFeedbackProvider>{children}</SubmissionFeedbackProvider>
+        </ToastProvider>
       </body>
     </html>
   );

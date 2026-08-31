@@ -40,6 +40,7 @@ import type {
 import { sealIssueVersionSnapshot } from "../content-revisions/service.js";
 import { evaluateTextRules, normalizeModerationText } from "../moderation/rule-engine.js";
 import { createModerationSubmissionEvents } from "../moderation-dispatch/contracts.js";
+import { submissionWakeup } from "../moderation-dispatch/submission-wakeup-event.js";
 import { IssueWriteError } from "./errors.js";
 
 const ISSUE_VERSION = 1 as const;
@@ -300,7 +301,7 @@ async function submissionView(
   return view;
 }
 
-async function recordSubmissionTransition(
+export async function recordSubmissionTransition(
   transaction: Transaction,
   row: SubmissionRow,
   action: string,
@@ -577,7 +578,16 @@ export function createIssueWriteService(database: Database["db"]): IssueWriteSer
           normalizedInputHash: contentHash,
           reason: "CREATE",
         });
-        await transaction.insert(outboxEvents).values(moderationEvents.rows);
+        await transaction
+          .insert(outboxEvents)
+          .values([
+            ...moderationEvents.rows,
+            ...submissionWakeup(
+              submissionId,
+              1,
+              Boolean(normalized.mediaAssetAId && normalized.mediaAssetBId),
+            ),
+          ]);
         return { submission: toSubmission(created!), created: true };
       });
     },
@@ -723,7 +733,16 @@ export function createIssueWriteService(database: Database["db"]): IssueWriteSer
           reason: "EDIT",
           occurredAt: now,
         });
-        await transaction.insert(outboxEvents).values(moderationEvents.rows);
+        await transaction
+          .insert(outboxEvents)
+          .values([
+            ...moderationEvents.rows,
+            ...submissionWakeup(
+              current.id,
+              revision,
+              Boolean(normalized.mediaAssetAId && normalized.mediaAssetBId),
+            ),
+          ]);
         return { submission: toSubmission(updated!), created: true };
       });
     },
@@ -733,7 +752,12 @@ export function createIssueWriteService(database: Database["db"]): IssueWriteSer
       const rows = await database
         .select()
         .from(memberIssueSubmissions)
-        .where(eq(memberIssueSubmissions.memberId, session.memberId))
+        .where(
+          and(
+            eq(memberIssueSubmissions.memberId, session.memberId),
+            command.submissionId ? eq(memberIssueSubmissions.id, command.submissionId) : undefined,
+          ),
+        )
         .orderBy(desc(memberIssueSubmissions.updatedAt))
         .limit(Math.min(Math.max(command.limit, 1), 20));
       return { items: await Promise.all(rows.map((row) => submissionView(database, row))) };
