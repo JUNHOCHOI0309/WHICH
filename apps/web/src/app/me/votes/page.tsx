@@ -7,6 +7,6 @@ export const metadata = privatePageMetadata(
   "WHICH에서 내가 고른 선택과 현재 결과를 월별로 확인하세요.",
 );
 
-export default function MemberVoteHistoryPage() {
-  return <MemberVoteHistoryExperience creationEnabled={creatorSubmissionsEnabled()} />;
+export default async function MemberVoteHistoryPage() {
+  return <MemberVoteHistoryExperience creationEnabled={await creatorSubmissionsEnabled()} />;
 }

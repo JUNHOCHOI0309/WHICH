@@ -7,7 +7,7 @@ describe("shared Member profile tabs", () => {
   it.each(["profile", "votes", "submissions"] as const)(
     "keeps the same order and design on %s",
     (active) => {
-      render(<MemberProfileTabs active={active} creationEnabled />);
+      render(<MemberProfileTabs active={active} />);
       const links = within(screen.getByRole("navigation", { name: "내 기록 메뉴" })).getAllByRole(
         "link",
       );
@@ -23,9 +23,12 @@ describe("shared Member profile tabs", () => {
       );
     },
   );
-  it("preserves the creation feature flag outside the existing submissions page", () => {
+  it("keeps submission history accessible independently of new question creation", () => {
     render(<MemberProfileTabs active="votes" />);
-    expect(screen.getAllByRole("link")).toHaveLength(2);
-    expect(screen.queryByRole("link", { name: "내 질문" })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("link")).toHaveLength(3);
+    expect(screen.getByRole("link", { name: "내 질문" })).toHaveAttribute(
+      "href",
+      "/me/submissions",
+    );
   });
 });

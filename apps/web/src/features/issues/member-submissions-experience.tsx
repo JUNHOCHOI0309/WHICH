@@ -166,7 +166,7 @@ export function MemberSubmissionsExperience({
             새로고침
           </button>
         </header>
-        <MemberProfileTabs active="submissions" creationEnabled={creationEnabled} />
+        <MemberProfileTabs active="submissions" />
         <p className={styles.note}>
           최근 제출한 질문을 최대 20개까지 보여요. 이미지를 검사하는 동안에도 수정하거나 이미지 없이
           게시할 수 있어요.

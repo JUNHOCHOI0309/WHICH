@@ -160,7 +160,7 @@ describe("Member navigation", () => {
         ),
       ).toBe(true);
     });
-    expect(within(dialog).getByText("새 알림이 없습니다.")).toBeInTheDocument();
+    expect(await within(dialog).findByText("새 알림이 없습니다.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "알림" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "알림" }));

@@ -7,6 +7,6 @@ export const metadata = privatePageMetadata(
   "콘텐츠와 이미지의 검수 상태, 재검토 및 권리 요청 결과를 확인하세요.",
 );
 
-export default function MemberModerationPage() {
-  return <MemberModerationExperience creationEnabled={creatorSubmissionsEnabled()} />;
+export default async function MemberModerationPage() {
+  return <MemberModerationExperience creationEnabled={await creatorSubmissionsEnabled()} />;
 }

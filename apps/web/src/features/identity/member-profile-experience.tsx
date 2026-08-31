@@ -238,7 +238,7 @@ export function MemberProfileExperience({
               </div>
             </section>
 
-            <MemberProfileTabs active="profile" creationEnabled={creationEnabled} />
+            <MemberProfileTabs active="profile" />
 
             <MemberPublicProfileSettings
               value={profile.publicProfile}

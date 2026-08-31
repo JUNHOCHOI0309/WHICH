@@ -60,7 +60,7 @@ describe("member submissions", () => {
         },
       ],
     });
-    render(<MemberSubmissionsExperience creationEnabled />);
+    render(<MemberSubmissionsExperience creationEnabled={false} />);
     expect(await screen.findByRole("heading", { name: "2026년 8월" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "2026년 7월" })).toBeVisible();
     const navigation = within(screen.getByRole("navigation", { name: "내 기록 메뉴" }));
