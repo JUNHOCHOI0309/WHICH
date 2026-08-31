@@ -26,12 +26,35 @@
   font-size: 0.66rem;
 }
 .badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   color: var(--which-cyan-strong);
   background: var(--which-cyan-soft);
   padding: 6px 10px;
   border-radius: 999px;
   font-size: 0.7rem;
   white-space: nowrap;
+}
+.processingSpinner {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 12px;
+  box-sizing: border-box;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: processingSpin 0.8s linear infinite;
+}
+@keyframes processingSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .processingSpinner {
+    animation: none;
+  }
 }
 .badge[data-state="REJECTED"],
 .badge[data-state="NEEDS_CHANGES"],
