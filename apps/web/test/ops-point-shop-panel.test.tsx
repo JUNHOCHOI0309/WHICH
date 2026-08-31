@@ -68,6 +68,10 @@ describe("Ops Point Shop status controls", () => {
     render(<OpsPointShopPanel />);
 
     const status = await screen.findByRole("combobox", { name: "판매 상태" });
+    // The selection effect hydrates the draft after the form first appears.
+    await waitFor(() =>
+      expect(screen.getByRole("textbox", { name: "판매 가격" })).toHaveValue("500"),
+    );
     fireEvent.change(status, { target: { value: "PAUSED" } });
     fireEvent.click(await screen.findByRole("button", { name: "판매 상태 저장" }));
 
