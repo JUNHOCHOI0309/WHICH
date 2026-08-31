@@ -42,7 +42,6 @@ import { evaluateTextRules, normalizeModerationText } from "../moderation/rule-e
 import { createModerationSubmissionEvents } from "../moderation-dispatch/contracts.js";
 import { IssueWriteError } from "./errors.js";
 
-const DAILY_CREATION_LIMIT = 3;
 const ISSUE_VERSION = 1 as const;
 const EXPERIENCE_MODE = "PLAYFUL_QUICK";
 const URL_PATTERN = /(?:https?:\/\/|www\.|[a-z0-9-]+\.(?:com|net|org|kr|io)(?:\/|\b))/iu;
@@ -270,26 +269,6 @@ export function toSubmission(
   };
 }
 
-export async function requireIssueQuota(
-  transaction: Pick<Database["db"], "execute">,
-  memberId: string,
-) {
-  const result = await transaction.execute(sql`
-    select (
-      (select count(*) from member_issue_submissions s where s.member_id = ${memberId}::uuid and s.created_at > now() - interval '24 hours') +
-      (select count(*) from issue_authors a where a.member_id = ${memberId}::uuid and a.assigned_at > now() - interval '24 hours'
-        and not exists (select 1 from member_issue_submissions s where s.published_issue_id = a.issue_id))
-    )::int as count
-  `);
-  if (Number(result.rows[0]?.count ?? 0) >= DAILY_CREATION_LIMIT) {
-    throw new IssueWriteError(
-      "ISSUE_CREATION_LIMIT_REACHED",
-      429,
-      "질문은 24시간 동안 최대 3개까지 만들 수 있어요.",
-    );
-  }
-}
-
 type SubmissionRow = typeof memberIssueSubmissions.$inferSelect;
 type Transaction = Parameters<Parameters<Database["db"]["transaction"]>[0]>[0];
 
@@ -432,7 +411,6 @@ export async function publishReviewedSubmission(
     current.id,
     normalized,
     ordered,
-    current.id,
   );
   const [updated] = await transaction
     .update(memberIssueSubmissions)
@@ -559,8 +537,6 @@ export function createIssueWriteService(database: Database["db"]): IssueWriteSer
           }
           return { submission: toSubmission(existing), created: false };
         }
-
-        await requireIssueQuota(transaction, session.memberId);
 
         const [created] = await transaction
           .insert(memberIssueSubmissions)
@@ -833,8 +809,6 @@ export function createIssueWriteService(database: Database["db"]): IssueWriteSer
             session.memberId,
             current.id,
             normalized,
-            [],
-            current.id,
           );
           publishedIssueId = result.issue.id;
         }
@@ -951,7 +925,6 @@ export async function publishMemberIssue(
   idempotencyKey: string,
   normalized: ReturnType<typeof normalizeCommand>,
   directAssets: Array<typeof issueMediaAssets.$inferSelect> = [],
-  reservedSubmissionId?: string,
 ): Promise<CreatedMemberIssue> {
   const now = new Date();
   await transaction.execute(
@@ -1030,8 +1003,6 @@ export async function publishMemberIssue(
       created: false,
     };
   }
-
-  if (!reservedSubmissionId) await requireIssueQuota(transaction, memberId);
 
   await transaction.insert(issues).values({
     id: issueId,

@@ -208,7 +208,6 @@ export function IssueCreatorExperience({
             <p className={styles.eyebrow}>CREATE YOUR CHOICE</p>
             <h1>사람들에게 어떤 선택을 물어볼까요?</h1>
           </div>
-          <span>24시간 최대 3개</span>
         </div>
 
         <label className={styles.field}>

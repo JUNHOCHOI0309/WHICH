@@ -14,9 +14,11 @@ Tasks: WHICH-98, WHICH-120
 2. 만료되지 않은 `ISSUE_IMAGE_UPLOAD` capability grant
 3. `ISSUE_MEDIA_CONSENT_VERSION`과 일치하는 철회되지 않은 동의
 4. 본인 소유의 `PENDING` 또는 `NEEDS_CHANGES` 제출
-5. 최근 24시간 Member 세션 3개 미만, IP 세션 12개 미만
-6. 동시에 열린 업로드 세션 1개 미만
-7. 삭제되지 않은 Member 검수 자산 10개 미만
+5. 동시에 열린 업로드 세션 1개 미만
+
+2026-09-01부터 Member/IP별 일일 업로드 횟수와 보관 자산 개수 제한은 제거했다.
+access 응답의 `limits.dailyUploads`, `limits.maximumOpenAssets`는 `null`(횟수 제한 없음)이다.
+파일당 10MB, 일회성 세션, 소유권·동의·권한, 검사 장애 시 비공개 유지와 AI 호출 예산은 유지한다.
 
 세션은 서버가 UUID, object key와 256-bit token을 생성합니다. DB에는 token 원문이 아닌 SHA-256만 저장하며 Member ID와 IP는 HMAC pseudonym bucket으로 별도 기록합니다. 세션은 한 번 소비되면 재사용할 수 없습니다.
 
@@ -39,7 +41,7 @@ Tasks: WHICH-98, WHICH-120
 부여·정지·회수·복원할 수 있으며 모든 변경은 `member_capability_events`에 기록됩니다.
 
 웹과 Mobile 작성기는 서버의 access 응답이 `allowed=true`인 경우에만 직접 업로드 입력을
-노출합니다. 화면을 우회해도 세션 생성 단계에서 동일한 mode·capability·consent·quota를 다시
+노출합니다. 화면을 우회해도 세션 생성 단계에서 mode·capability·consent·소유권·동시 세션을 다시
 검증합니다.
 
 ## 개별 계정의 업로드 전용 예외
@@ -60,7 +62,7 @@ node apps/api/dist/ops-operator.js revoke-upload-only '<member-id>' 'Private ima
 - 별도 `which-operator-upload-only-v1` 정책으로 기록하므로 자동 공개의 trusted capability로 인정되지 않습니다.
 - 업로드에는 `ISSUE_MEMBER_MEDIA_UPLOAD_MODE=PILOT`이 필요하지만 `FEATURE_ISSUE_MEDIA_ENABLED`나
   Provider/Decision 모드를 켤 필요는 없습니다. 수동 검수 또는 별도 승인된 검증 전에는 비공개로 남습니다.
-- 기존 바이트·횟수·동시 세션·소유권·운영 장애 게이트를 유지하고, capability와 운영 감사 이력을 함께 저장합니다.
+- 기존 바이트·동시 세션·소유권·운영 장애 게이트를 유지하고, capability와 운영 감사 이력을 함께 저장합니다.
 - 재실행은 활성 권한의 만료일을 연장하지 않습니다. 다른 정책의 기존 권한은 덮어쓰지 않습니다.
 - 발급된 세션도 실제 업로드 직전에 mode·활성 계정·권한 만료/회수·최신 동의를 다시 확인합니다.
 

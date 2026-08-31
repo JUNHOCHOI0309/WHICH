@@ -6,8 +6,6 @@ export const TRUSTED_IMAGE_UPLOADER_LIMITS = {
   minimumPublishedLowRiskIssues: 3,
   violationLookbackDays: 90,
   grantDurationDays: 30,
-  dailyUploadLimit: 3,
-  maximumOpenAssets: 10,
 } as const;
 
 export type TrustedUploaderEligibilityInput = {

@@ -13,14 +13,11 @@ const eligibleGate = {
   hasCurrentConsent: true,
   ownsSubmission: true,
   submissionStatus: "PENDING",
-  memberSessionsToday: 0,
-  ipSessionsToday: 0,
   activeSessions: 0,
-  openAssets: 0,
 };
 
 describe("Member Issue media upload gate", () => {
-  it("fails closed unless every mode, capability, consent, ownership, and quota check passes", () => {
+  it("retains mode, capability, consent, ownership, and concurrent-session checks", () => {
     expect(evaluateIssueMediaUploadGate(eligibleGate)).toEqual({ allowed: true, reasons: [] });
     expect(
       evaluateIssueMediaUploadGate({
@@ -29,9 +26,7 @@ describe("Member Issue media upload gate", () => {
         hasActiveCapability: false,
         hasCurrentConsent: false,
         ownsSubmission: false,
-        memberSessionsToday: 3,
         activeSessions: 1,
-        openAssets: 10,
       }),
     ).toMatchObject({
       allowed: false,
@@ -40,12 +35,20 @@ describe("Member Issue media upload gate", () => {
         "CAPABILITY_REQUIRED",
         "CONSENT_REQUIRED",
         "SUBMISSION_OWNERSHIP_REQUIRED",
-        "MEMBER_DAILY_LIMIT",
         "CONCURRENT_SESSION_LIMIT",
-        "OPEN_ASSET_LIMIT",
       ],
     });
   });
+
+  it.each([null, "CANCELLED", "APPROVED", "REJECTED"])(
+    "still rejects uploads for an ineligible submission (%s)",
+    (submissionStatus) => {
+      expect(evaluateIssueMediaUploadGate({ ...eligibleGate, submissionStatus })).toEqual({
+        allowed: false,
+        reasons: ["SUBMISSION_STATE_INELIGIBLE"],
+      });
+    },
+  );
 
   it("pseudonymizes Member and IP buckets without retaining raw identifiers", () => {
     const member = uploadActorPseudonym("member", "member-id", "secret-secret-secret");

@@ -124,7 +124,7 @@ export function MemberSubmissionsExperience({
       let mediaAssetAId = editing.mediaAssetAId;
       let mediaAssetBId = editing.mediaAssetBId;
       if (files.a && files.b) {
-        // Sequential uploads preserve the server upload-session quota and failure handling.
+        // Sequential uploads preserve the single-active-session guard and failure handling.
         mediaAssetAId = (await uploadIssueSubmissionMedia(editing.id, files.a)).asset.id;
         mediaAssetBId = (await uploadIssueSubmissionMedia(editing.id, files.b)).asset.id;
       }

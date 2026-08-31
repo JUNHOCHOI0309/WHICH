@@ -65,6 +65,7 @@ describe("IssueCreatorExperience", () => {
     render(<IssueCreatorExperience />);
 
     const question = await screen.findByPlaceholderText("예: 퇴근 후 바로 잘까, 조금 더 놀까?");
+    expect(screen.queryByText("24시간 최대 3개")).not.toBeInTheDocument();
     fireEvent.change(question, { target: { value: "오늘 저녁은 무엇을 먹을까" } });
     fireEvent.change(screen.getByPlaceholderText("바로 자기"), { target: { value: "라면" } });
     fireEvent.change(screen.getByPlaceholderText("조금 더 놀기"), { target: { value: "김밥" } });
@@ -187,8 +188,8 @@ describe("IssueCreatorExperience", () => {
               reasons: [],
               capability: { state: "ACTIVE", expiresAt: "2026-09-28T00:00:00.000Z" },
               limits: {
-                dailyUploads: 3,
-                maximumOpenAssets: 10,
+                dailyUploads: null,
+                maximumOpenAssets: null,
                 maximumBytes: 10 * 1024 * 1024,
               },
             },

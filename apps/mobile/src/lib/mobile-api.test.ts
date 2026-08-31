@@ -230,7 +230,7 @@ describe("mobile API client", () => {
       consentVersion: "which-media-consent-v1",
       reasons: ["CONSENT_REQUIRED" as const],
       capability: { state: "ACTIVE" as const, expiresAt: "2026-09-28T00:00:00.000Z" },
-      limits: { dailyUploads: 3, maximumOpenAssets: 10, maximumBytes: 10 * 1024 * 1024 },
+      limits: { dailyUploads: null, maximumOpenAssets: null, maximumBytes: 10 * 1024 * 1024 },
     };
     const request = vi
       .fn()

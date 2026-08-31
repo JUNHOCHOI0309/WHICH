@@ -1,10 +1,9 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 
-import { and, eq, gt, gte, isNull, ne, sql } from "drizzle-orm";
+import { and, eq, gt, gte, isNull, sql } from "drizzle-orm";
 
 import type { Database } from "../../database/client.js";
 import {
-  issueMediaAssets,
   issueMediaUploadSessions,
   memberCapabilityGrants,
   memberCapabilityEvents,
@@ -37,8 +36,9 @@ export type IssueMediaUploadAccess = {
     expiresAt: string;
   } | null;
   limits: {
-    dailyUploads: number;
-    maximumOpenAssets: number;
+    /** null means no posting-volume quota. */
+    dailyUploads: number | null;
+    maximumOpenAssets: number | null;
     maximumBytes: number;
   };
 };
@@ -218,8 +218,8 @@ export function createIssueMediaUploadGateService(
           }
         : null,
       limits: {
-        dailyUploads: ISSUE_MEDIA_UPLOAD_LIMITS.dailySessionsPerMember,
-        maximumOpenAssets: ISSUE_MEDIA_UPLOAD_LIMITS.maximumOpenAssets,
+        dailyUploads: null,
+        maximumOpenAssets: null,
         maximumBytes: ISSUE_MEDIA_UPLOAD_LIMITS.maximumBytes,
       },
     };
@@ -433,7 +433,6 @@ export function createIssueMediaUploadGateService(
         );
       }
       const now = new Date();
-      const dayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1_000);
       const memberPseudonym = uploadActorPseudonym(
         "member",
         input.memberId,
@@ -445,79 +444,50 @@ export function createIssueMediaUploadGateService(
         await transaction.execute(
           sql`select pg_advisory_xact_lock(hashtextextended(${`which:media-upload:${input.memberId}`}, 0))`,
         );
-        const [capability, consent, submission, memberDaily, ipDaily, active, openAssets] =
-          await Promise.all([
-            transaction
-              .select({ id: memberCapabilityGrants.id })
-              .from(memberCapabilityGrants)
-              .where(
-                and(
-                  eq(memberCapabilityGrants.memberId, input.memberId),
-                  eq(memberCapabilityGrants.capabilityCode, "ISSUE_IMAGE_UPLOAD"),
-                  eq(memberCapabilityGrants.state, "ACTIVE"),
-                  gt(memberCapabilityGrants.expiresAt, now),
-                ),
-              )
-              .limit(1),
-            transaction
-              .select({ id: memberMediaConsents.id })
-              .from(memberMediaConsents)
-              .where(
-                and(
-                  eq(memberMediaConsents.memberId, input.memberId),
-                  eq(memberMediaConsents.consentVersion, options.consentVersion),
-                  eq(memberMediaConsents.consentVersion, input.consentVersion),
-                  isNull(memberMediaConsents.revokedAt),
-                ),
-              )
-              .limit(1),
-            transaction
-              .select({
-                memberId: memberIssueSubmissions.memberId,
-                status: memberIssueSubmissions.status,
-              })
-              .from(memberIssueSubmissions)
-              .where(eq(memberIssueSubmissions.id, input.submissionId))
-              .limit(1),
-            transaction
-              .select({ count: sql<number>`count(*)::int` })
-              .from(issueMediaUploadSessions)
-              .where(
-                and(
-                  eq(issueMediaUploadSessions.memberPseudonym, memberPseudonym),
-                  gte(issueMediaUploadSessions.createdAt, dayAgo),
-                ),
+        const [capability, consent, submission, active] = await Promise.all([
+          transaction
+            .select({ id: memberCapabilityGrants.id })
+            .from(memberCapabilityGrants)
+            .where(
+              and(
+                eq(memberCapabilityGrants.memberId, input.memberId),
+                eq(memberCapabilityGrants.capabilityCode, "ISSUE_IMAGE_UPLOAD"),
+                eq(memberCapabilityGrants.state, "ACTIVE"),
+                gt(memberCapabilityGrants.expiresAt, now),
               ),
-            transaction
-              .select({ count: sql<number>`count(*)::int` })
-              .from(issueMediaUploadSessions)
-              .where(
-                and(
-                  eq(issueMediaUploadSessions.ipPseudonym, ipPseudonym),
-                  gte(issueMediaUploadSessions.createdAt, dayAgo),
-                ),
+            )
+            .limit(1),
+          transaction
+            .select({ id: memberMediaConsents.id })
+            .from(memberMediaConsents)
+            .where(
+              and(
+                eq(memberMediaConsents.memberId, input.memberId),
+                eq(memberMediaConsents.consentVersion, options.consentVersion),
+                eq(memberMediaConsents.consentVersion, input.consentVersion),
+                isNull(memberMediaConsents.revokedAt),
               ),
-            transaction
-              .select({ count: sql<number>`count(*)::int` })
-              .from(issueMediaUploadSessions)
-              .where(
-                and(
-                  eq(issueMediaUploadSessions.memberId, input.memberId),
-                  eq(issueMediaUploadSessions.state, "CREATED"),
-                  gt(issueMediaUploadSessions.expiresAt, now),
-                ),
+            )
+            .limit(1),
+          transaction
+            .select({
+              memberId: memberIssueSubmissions.memberId,
+              status: memberIssueSubmissions.status,
+            })
+            .from(memberIssueSubmissions)
+            .where(eq(memberIssueSubmissions.id, input.submissionId))
+            .limit(1),
+          transaction
+            .select({ count: sql<number>`count(*)::int` })
+            .from(issueMediaUploadSessions)
+            .where(
+              and(
+                eq(issueMediaUploadSessions.memberId, input.memberId),
+                eq(issueMediaUploadSessions.state, "CREATED"),
+                gt(issueMediaUploadSessions.expiresAt, now),
               ),
-            transaction
-              .select({ count: sql<number>`count(*)::int` })
-              .from(issueMediaAssets)
-              .where(
-                and(
-                  eq(issueMediaAssets.uploadedByMemberId, input.memberId),
-                  eq(issueMediaAssets.sourceType, "MEMBER_SUBMISSION"),
-                  ne(issueMediaAssets.storageState, "PURGED"),
-                ),
-              ),
-          ]);
+            ),
+        ]);
 
         const gate = evaluateIssueMediaUploadGate({
           mode: options.mode,
@@ -525,10 +495,7 @@ export function createIssueMediaUploadGateService(
           hasCurrentConsent: Boolean(consent[0]),
           ownsSubmission: submission[0]?.memberId === input.memberId,
           submissionStatus: submission[0]?.status ?? null,
-          memberSessionsToday: countOf(memberDaily[0]),
-          ipSessionsToday: countOf(ipDaily[0]),
           activeSessions: countOf(active[0]),
-          openAssets: countOf(openAssets[0]),
         });
         if (!gate.allowed) {
           throw new IssueMediaUploadGateError(

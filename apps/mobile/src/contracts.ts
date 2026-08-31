@@ -360,7 +360,7 @@ export type IssueMediaUploadAccess = {
     state: "ACTIVE" | "SUSPENDED" | "REVOKED" | "EXPIRED";
     expiresAt: string;
   } | null;
-  limits: { dailyUploads: number; maximumOpenAssets: number; maximumBytes: number };
+  limits: { dailyUploads: number | null; maximumOpenAssets: number | null; maximumBytes: number };
 };
 
 export type MemberModerationTargetType =
