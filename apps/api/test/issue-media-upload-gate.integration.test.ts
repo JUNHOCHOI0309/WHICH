@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import type { Database } from "../src/database/client.js";
 import {
+  issueMediaAssets,
   memberCapabilityGrants,
   memberIssueSubmissions,
   memberMediaConsents,
@@ -68,7 +69,7 @@ describe("Issue media upload session service", () => {
       allowed: true,
       reasons: [],
       capability: { state: "ACTIVE" },
-      limits: { dailyUploads: 3, maximumOpenAssets: 10, maximumBytes: 10 * 1024 * 1024 },
+      limits: { dailyUploads: null, maximumOpenAssets: null, maximumBytes: 10 * 1024 * 1024 },
     });
   });
 
@@ -184,4 +185,51 @@ describe("Issue media upload session service", () => {
       }),
     ).rejects.toMatchObject({ code: "MEDIA_UPLOAD_SESSION_INVALID" });
   });
+
+  it("allows repeated uploads beyond the former Member, IP and stored-asset quotas", async () => {
+    await database.db.insert(issueMediaAssets).values(
+      Array.from({ length: 11 }, () => {
+        const id = randomUUID();
+        return {
+          id,
+          uploadedByMemberId: memberId,
+          sourceType: "MEMBER_SUBMISSION",
+          rightsAttestation: "The member accepted the current image processing policy.",
+          rightsAttestedAt: new Date(),
+          sha256: id.replaceAll("-", "").repeat(2),
+          perceptualHash: "a".repeat(16),
+          inputMimeType: "image/png",
+          inputByteSize: 100,
+          inputWidth: 10,
+          inputHeight: 10,
+          outputByteSize: 80,
+          outputWidth: 10,
+          outputHeight: 10,
+          stagingObjectKey: `issue-media/staging/${id}.webp`,
+          stagedAt: new Date(),
+        };
+      }),
+    );
+    const service = createIssueMediaUploadGateService(database.db, {
+      mode: "PILOT",
+      consentVersion: "which-media-consent-v1",
+      pseudonymSecret: "test-pseudonym-secret-long-enough",
+    });
+    for (let index = 0; index < 14; index += 1) {
+      const session = await service.createSession({
+        memberId,
+        submissionId,
+        consentVersion: "which-media-consent-v1",
+        ipAddress: "203.0.113.6",
+      });
+      await expect(
+        service.consumeSession({
+          memberId,
+          sessionId: session.id,
+          token: session.token,
+          byteSize: 1024,
+        }),
+      ).resolves.toEqual({ objectKey: session.objectKey });
+    }
+  }, 30_000);
 });

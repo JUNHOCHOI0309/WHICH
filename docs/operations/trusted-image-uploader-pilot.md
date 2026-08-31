@@ -19,7 +19,7 @@ Gate다. 심각한 누락이 없더라도 자동 공개 안전성을 입증하�
 - 검수 Queue의 oldest age, p95 처리 시간, 자산당 처리 시간과 주간 운영 시간을 측정할 수 있다.
 - Member capability grant/event migration과 operator grant 도구가 준비되어 있다.
 - 사용자 업로드 mode 기본값과 배포 환경값이 `OFF`다.
-- mode, active capability, consent version, 하루 3개, open asset 10개와 Issue 소유권이 모든
+- mode, active capability, consent version, 동시 업로드 세션과 Issue 소유권이 모든
   Member 업로드 Route에서 서버 측으로 강제된다.
 - 자산 신고, 사용자 통지·소명, legal hold와 삭제 차단이 준비되어 있다.
 - 질문·A/B 선택지와 두 이미지, 계정 동의 버전을 함께 볼 수 있는 검수 문맥이 준비되어 있다.
@@ -40,7 +40,8 @@ Gate다. 심각한 누락이 없더라도 자동 공개 안전성을 입증하�
 
 ## 제출과 자동 검사
 
-- 하루 3개, open asset 10개를 서버에서 강제한다.
+- 2026-09-01부터 일일 업로드 횟수와 보관 자산 개수로 작성을 차단하지 않는다. 파일 크기,
+  일회성·동시 세션, 안전 검사와 AI 비용 한도는 유지한다.
 - 사용자는 이미지마다 출처·alt text·crop을 반복 입력하지 않는다. 가입 시 또는 기존 회원 최초
   1회 동의한 권리·안전 검사 계약을 서버가 현재 동의 버전으로 검증한다.
 - A/B 이미지는 먼저 텍스트 질문의 비공개 제출을 만든 뒤 각각 일회성 업로드 세션으로 순차

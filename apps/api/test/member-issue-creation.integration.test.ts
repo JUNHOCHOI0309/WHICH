@@ -121,7 +121,7 @@ describe("Member Issue creation v1", () => {
       typeof response.json<{ submission: MemberIssueSubmission }>().submission.publishedIssueId,
     ).toBe("string");
   });
-  it("publishes a pending text conversion once without charging the quota twice", async () => {
+  it("publishes a pending text conversion once and permits further questions", async () => {
     const session = await createSession();
     const writer = createIssueWriteService(database.db);
     const command = {
@@ -161,7 +161,7 @@ describe("Member Issue creation v1", () => {
     ).toHaveLength(1);
     await expect(
       writer.createMemberIssue({ ...command, idempotencyKey: randomUUID() }),
-    ).rejects.toMatchObject({ code: "ISSUE_CREATION_LIMIT_REACHED" });
+    ).resolves.toMatchObject({ created: true });
   });
 
   it("rejects foreign and stale actions, preserves cancellation and rejects direct-image bypass", async () => {
@@ -663,24 +663,19 @@ describe("Member Issue creation v1", () => {
     expect(duplicateChoices.json()).toMatchObject({ code: "INVALID_ISSUE_CONTENT" });
   });
 
-  it("limits each Member to three questions per rolling day", async () => {
-    const session = await createSession("많이 묻는 회원");
-    for (let index = 1; index <= 3; index += 1) {
-      const response = await app.inject({
-        method: "POST",
-        url: "/v1/issues",
-        headers: { authorization: `Bearer ${session.token}`, "idempotency-key": randomUUID() },
-        payload: createPayload(`오늘의 선택 ${index}번은 무엇일까`),
-      });
-      expect(response.statusCode).toBe(201);
-    }
-    const limited = await app.inject({
-      method: "POST",
-      url: "/v1/issues",
-      headers: { authorization: `Bearer ${session.token}`, "idempotency-key": randomUUID() },
-      payload: createPayload("네 번째 선택은 무엇일까"),
-    });
-    expect(limited.statusCode).toBe(429);
-    expect(limited.json()).toMatchObject({ code: "ISSUE_CREATION_LIMIT_REACHED" });
-  });
+  it.each(["/v1/issues", "/v1/member/issue-submissions"])(
+    "allows more than three questions per day through %s",
+    async (url) => {
+      const session = await createSession("많이 묻는 회원");
+      for (let index = 1; index <= 6; index += 1) {
+        const response = await app.inject({
+          method: "POST",
+          url,
+          headers: { authorization: `Bearer ${session.token}`, "idempotency-key": randomUUID() },
+          payload: createPayload(`오늘의 선택 ${index}번은 무엇일까`),
+        });
+        expect(response.statusCode).toBe(201);
+      }
+    },
+  );
 });

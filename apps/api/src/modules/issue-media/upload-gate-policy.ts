@@ -45,10 +45,7 @@ export const unavailableLocalMediaSignalDetector: LocalMediaSignalDetector = {
 export const ISSUE_MEDIA_UPLOAD_LIMITS = {
   sessionTtlSeconds: 600,
   maximumBytes: 10 * 1024 * 1024,
-  dailySessionsPerMember: 3,
-  dailySessionsPerIp: 12,
   maximumConcurrentSessions: 1,
-  maximumOpenAssets: 10,
 } as const;
 
 export type IssueMediaUploadGateReason =
@@ -57,10 +54,7 @@ export type IssueMediaUploadGateReason =
   | "CONSENT_REQUIRED"
   | "SUBMISSION_OWNERSHIP_REQUIRED"
   | "SUBMISSION_STATE_INELIGIBLE"
-  | "MEMBER_DAILY_LIMIT"
-  | "IP_DAILY_LIMIT"
   | "CONCURRENT_SESSION_LIMIT"
-  | "OPEN_ASSET_LIMIT"
   | "MODERATION_CAPACITY_PAUSED";
 
 export function evaluateIssueMediaUploadGate(input: {
@@ -69,10 +63,7 @@ export function evaluateIssueMediaUploadGate(input: {
   hasCurrentConsent: boolean;
   ownsSubmission: boolean;
   submissionStatus: string | null;
-  memberSessionsToday: number;
-  ipSessionsToday: number;
   activeSessions: number;
-  openAssets: number;
 }): { allowed: boolean; reasons: IssueMediaUploadGateReason[] } {
   const reasons: IssueMediaUploadGateReason[] = [];
   if (input.mode !== "PILOT") reasons.push("MODE_DISABLED");
@@ -82,17 +73,8 @@ export function evaluateIssueMediaUploadGate(input: {
   if (!input.submissionStatus || !["PENDING", "NEEDS_CHANGES"].includes(input.submissionStatus)) {
     reasons.push("SUBMISSION_STATE_INELIGIBLE");
   }
-  if (input.memberSessionsToday >= ISSUE_MEDIA_UPLOAD_LIMITS.dailySessionsPerMember) {
-    reasons.push("MEMBER_DAILY_LIMIT");
-  }
-  if (input.ipSessionsToday >= ISSUE_MEDIA_UPLOAD_LIMITS.dailySessionsPerIp) {
-    reasons.push("IP_DAILY_LIMIT");
-  }
   if (input.activeSessions >= ISSUE_MEDIA_UPLOAD_LIMITS.maximumConcurrentSessions) {
     reasons.push("CONCURRENT_SESSION_LIMIT");
-  }
-  if (input.openAssets >= ISSUE_MEDIA_UPLOAD_LIMITS.maximumOpenAssets) {
-    reasons.push("OPEN_ASSET_LIMIT");
   }
   return { allowed: reasons.length === 0, reasons };
 }
