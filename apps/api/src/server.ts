@@ -45,7 +45,9 @@ loadEnvironment({
 });
 
 const config = getConfig();
-const database = createDatabase(config.databaseUrl);
+const database = createDatabase(config.databaseUrl, {
+  connectionTimeoutMillis: config.databaseConnectionTimeoutMillis,
+});
 const moderationProviderConfig = moderationProviderRuntimeConfig();
 const moderationRuntimeDiagnostic = providerRuntimeDiagnostic(moderationProviderConfig);
 const mediaStorageConfig = issueMediaStorageConfig();
@@ -154,6 +156,10 @@ for (const signal of ["SIGTERM", "SIGINT"] as const) {
 }
 
 try {
+  app.log.info(
+    { event: "DATABASE_POOL_CONFIGURED", pool: database.connectionDiagnostics() },
+    "Database pool configured",
+  );
   await app.listen({ host: config.server.host, port: config.server.port });
 } catch (error) {
   app.log.error(error);

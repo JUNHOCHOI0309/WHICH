@@ -7,6 +7,7 @@ import Fastify from "fastify";
 
 import type { AppConfig } from "./config.js";
 import type { Database } from "./database/client.js";
+import { databaseConnectionFailure } from "./database/connection-failure.js";
 import type { CommentService } from "./modules/comments/contracts.js";
 import { registerCommentRoutes } from "./modules/comments/routes.js";
 import type { IssueReadService, IssueWriteService } from "./modules/issues/contracts.js";
@@ -44,6 +45,7 @@ import type { MemberModerationService } from "./modules/member-moderation/contra
 import { registerMemberModerationRoutes } from "./modules/member-moderation/routes.js";
 
 export type AppDependencies = Pick<Database, "ping" | "close"> & {
+  connectionDiagnostics?: Database["connectionDiagnostics"];
   issueReader: IssueReadService;
   issueWriter?: IssueWriteService;
   guestVotes: GuestVoteService;
@@ -82,6 +84,22 @@ export async function buildApp(config: AppConfig, database: AppDependencies) {
                 ? { target: "pino-pretty", options: { colorize: true } }
                 : undefined,
           },
+  });
+
+  app.addHook("onError", async (request, _reply, error) => {
+    const failure = databaseConnectionFailure(error);
+    if (failure) {
+      request.log.warn(
+        {
+          event: "DATABASE_CONNECTION_TIMEOUT",
+          failure,
+          route: request.routeOptions.url,
+          method: request.method,
+          pool: database.connectionDiagnostics?.(),
+        },
+        "Database connection acquisition timed out",
+      );
+    }
   });
 
   await app.register(sensible);

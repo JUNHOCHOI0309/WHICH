@@ -24,6 +24,15 @@ export function createDatabase(
 
   return {
     db,
+    connectionDiagnostics() {
+      return {
+        connectionTimeoutMillis,
+        maxConnections: 10,
+        totalConnections: pool.totalCount,
+        idleConnections: pool.idleCount,
+        waitingRequests: pool.waitingCount,
+      };
+    },
     async ping() {
       await pool.query("select 1");
     },
