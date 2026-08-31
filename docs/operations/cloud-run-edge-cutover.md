@@ -133,9 +133,9 @@ This is an alert, **not a spending cap or a promise of uninterrupted service**. 
 - After separate explicit owner approval, added the two CNAMEs below to Cloudflare on 2026-08-31 KST, both **DNS only**, TTL Auto. The initial 10-record inventory had neither regional record; existing global renewal CNAMEs were preserved. After saving, verified both rows and exact target values, and confirmed both CNAME answers through public resolver `1.1.1.1` with `Resolve-DnsName`. Existing apex/www remain proxied CNAMEs to `which-web.onrender.com`; no traffic cutover or other DNS edits occurred.
 - The subsequent regional certificate detail page still shows certificate and both DNS authorizations **pending**, with no failure reason. DNS publication alone is not evidence of completed certificate issuance; recheck Google before origin TLS testing/cutover. No certificate recreation or new authorization is needed merely while pending.
 
-| DNS-only CNAME name | Target |
-| --- | --- |
-| `_acme-challenge_zkrjoldq3tyazigf.whichone.site` | `7aaea64f-fb75-4bc0-93c9-8620fbe88509.0.asia-southeast1.authorize.certificatemanager.goog` |
+| DNS-only CNAME name                                  | Target                                                                                     |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `_acme-challenge_zkrjoldq3tyazigf.whichone.site`     | `7aaea64f-fb75-4bc0-93c9-8620fbe88509.0.asia-southeast1.authorize.certificatemanager.goog` |
 | `_acme-challenge_zkrjoldq3tyazigf.www.whichone.site` | `0d38aebe-b88b-4f0b-8ff0-89f66a9216e1.4.asia-southeast1.authorize.certificatemanager.goog` |
 
 Authorization resources are `which-apex-auth-regional` and `which-www-auth-regional` in `asia-southeast1`. Do not replace the existing apex/www Render records or old certificate-renewal records. Creating edge resources does not make the migration complete: certificate activation and origin access/functional validation are still gates.
@@ -175,12 +175,12 @@ Authorization resources are `which-apex-auth-regional` and `which-www-auth-regio
 
 Cutover is **not complete**. All four managed backend inserts below finished with HTTP 503 / `INTERNAL_ERROR`. Their temporary backend entries disappeared; no deletion was needed. The error is a Google resource-creation operation failure, not an HTTP response from the WHICH application. Its underlying cause is still unconfirmed.
 
-| Attempt | Operation | Finished (KST) | Google error reference |
-| --- | --- | --- | --- |
-| Empty managed backend, CLI | `operation-1788110848110-65a46ffebb0b3-54e460e7-417c2d45` | 02:48:43 | `730389151359505014` |
-| Empty managed backend, CLI retry | `operation-1788112650932-65a476b6090ac-47fc1fe2-b868f596` | 03:18:48 | `-6810333619241256391` |
-| NEG-attached managed backend, console LB workflow | `operation-1788114646658-65a47e254ed2b-d82d771d-c7f3c7ba` | 03:52:20 | `-6229719532309145028` |
-| Standalone managed backend `which-web-backend-v2`, console | `operation-1788117240404-65a487cee5ad8-09180b45-5d149183` | 04:35:20 | `-1476718102206605432` |
+| Attempt                                                    | Operation                                                 | Finished (KST) | Google error reference |
+| ---------------------------------------------------------- | --------------------------------------------------------- | -------------- | ---------------------- |
+| Empty managed backend, CLI                                 | `operation-1788110848110-65a46ffebb0b3-54e460e7-417c2d45` | 02:48:43       | `730389151359505014`   |
+| Empty managed backend, CLI retry                           | `operation-1788112650932-65a476b6090ac-47fc1fe2-b868f596` | 03:18:48       | `-6810333619241256391` |
+| NEG-attached managed backend, console LB workflow          | `operation-1788114646658-65a47e254ed2b-d82d771d-c7f3c7ba` | 03:52:20       | `-6229719532309145028` |
+| Standalone managed backend `which-web-backend-v2`, console | `operation-1788117240404-65a487cee5ad8-09180b45-5d149183` | 04:35:20       | `-1476718102206605432` |
 
 - The classic console wizard only retained the entered backend in its unsaved LB form; a separately refreshed backend inventory was empty. Do not submit that old draft after creating the same backend with the CLI.
 - The owner then explicitly approved a **CLI classic-backend-only comparison**. Before submission, backend and running-operation inventories were empty; the existing `which-web-neg` was verified as SERVERLESS, pointing to `which-web` in `asia-southeast1`.
