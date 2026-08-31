@@ -180,7 +180,7 @@ type IssueCreateRoute = {
 };
 
 type MemberIssueSubmissionListRoute = {
-  Querystring: { limit?: number };
+  Querystring: { limit?: number; submissionId?: string };
   Headers: { authorization?: string };
 };
 
@@ -371,6 +371,7 @@ export async function registerIssueRoutes(
             ),
             querystring: Type.Object({
               limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 20, default: 10 })),
+              submissionId: Type.Optional(uuidSchema),
             }),
             response: {
               200: Type.Object({ items: Type.Array(memberIssueSubmissionSchema) }),
@@ -391,6 +392,7 @@ export async function registerIssueRoutes(
           return writer.listMemberIssueSubmissions({
             sessionToken: token,
             limit: request.query.limit ?? 10,
+            submissionId: request.query.submissionId,
           });
         },
       );

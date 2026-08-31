@@ -129,7 +129,7 @@ export function QuestionComposerProvider({
               </button>
             </header>
             <div className={styles.body}>
-              <IssueCreatorExperience presentation="modal" />
+              <IssueCreatorExperience presentation="modal" onSubmitted={closeComposer} />
             </div>
           </div>
         </div>

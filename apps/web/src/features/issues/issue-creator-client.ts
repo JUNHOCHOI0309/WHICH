@@ -120,6 +120,14 @@ export async function loadMemberSubmissions() {
   );
 }
 
+export async function loadMemberSubmission(submissionId: string, signal?: AbortSignal) {
+  const query = new URLSearchParams({ limit: "1", submissionId });
+  const result = await responseBody<{ items: MemberIssueSubmission[] }>(
+    await fetch(`/api/issue-submissions?${query}`, { cache: "no-store", signal }),
+  );
+  return result.items.find((item) => item.id === submissionId) ?? null;
+}
+
 export async function updateMemberSubmission(
   submission: MemberIssueSubmission,
   command: CreateIssueCommand,

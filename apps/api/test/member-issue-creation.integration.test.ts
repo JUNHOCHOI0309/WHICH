@@ -88,6 +88,45 @@ afterAll(async () => {
 });
 
 describe("Member Issue creation v1", () => {
+  it("reads a specific owned submission without exposing another member's submission", async () => {
+    const session = await createSession();
+    const other = await createSession();
+    const writer = createIssueWriteService(database.db);
+    const first = (
+      await writer.submitMemberIssue({
+        ...createPayload("휴일에는 어디서 쉬고 싶나요"),
+        interestCardCode: "DAILY_LIFE",
+        sessionToken: session.token,
+        idempotencyKey: randomUUID(),
+      })
+    ).submission;
+    await writer.submitMemberIssue({
+      ...createPayload("주말에는 어떤 활동이 좋나요"),
+      interestCardCode: "DAILY_LIFE",
+      sessionToken: session.token,
+      idempotencyKey: randomUUID(),
+    });
+    const url = `/v1/member/issue-submissions?limit=1&submissionId=${first.id}`;
+    const own = await app.inject({ url, headers: { authorization: `Bearer ${session.token}` } });
+    expect(own.statusCode).toBe(200);
+    expect(own.json<{ items: MemberIssueSubmission[] }>().items.map((r) => r.id)).toEqual([
+      first.id,
+    ]);
+    expect(
+      (await app.inject({ url, headers: { authorization: `Bearer ${other.token}` } })).json<{
+        items: MemberIssueSubmission[];
+      }>().items,
+    ).toEqual([]);
+    expect((await app.inject({ url })).statusCode).toBe(401);
+    expect(
+      (
+        await app.inject({
+          url: "/v1/member/issue-submissions?submissionId=invalid",
+          headers: { authorization: `Bearer ${session.token}` },
+        })
+      ).statusCode,
+    ).toBe(400);
+  });
   it("authenticates actions and returns the publication state through the route contract", async () => {
     const session = await createSession();
     const first = (

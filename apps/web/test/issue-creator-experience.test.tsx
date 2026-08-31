@@ -31,6 +31,30 @@ beforeEach(() => {
 });
 
 describe("IssueCreatorExperience", () => {
+  it("keeps the modal and draft open on a failed submit", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = String(input);
+        if (url === "/api/member-session") return jsonResponse({ member: { status: "ACTIVE" } });
+        if (url === "/api/interests/cards") return jsonResponse(registry);
+        if (url === "/api/issues")
+          return jsonResponse({ message: "잠시 후 다시 시도해 주세요." }, 503);
+        return jsonResponse({}, 404);
+      }),
+    );
+    const onSubmitted = vi.fn();
+    render(<IssueCreatorExperience presentation="modal" onSubmitted={onSubmitted} />);
+    const question = await screen.findByPlaceholderText("예: 퇴근 후 바로 잘까, 조금 더 놀까?");
+    fireEvent.change(question, { target: { value: "오늘 저녁은 무엇을 먹을까" } });
+    fireEvent.change(screen.getByPlaceholderText("바로 자기"), { target: { value: "라면" } });
+    fireEvent.change(screen.getByPlaceholderText("조금 더 놀기"), { target: { value: "김밥" } });
+    fireEvent.click(screen.getByRole("button", { name: "질문 게시" }));
+    await screen.findByText("잠시 후 다시 시도해 주세요.");
+    expect(onSubmitted).not.toHaveBeenCalled();
+    expect(navigation.push).not.toHaveBeenCalled();
+    expect(question).toHaveValue("오늘 저녁은 무엇을 먹을까");
+  });
   it("directs a Guest to login while preserving the return path", async () => {
     vi.stubGlobal(
       "fetch",
@@ -70,7 +94,7 @@ describe("IssueCreatorExperience", () => {
     fireEvent.change(screen.getByPlaceholderText("바로 자기"), { target: { value: "라면" } });
     fireEvent.change(screen.getByPlaceholderText("조금 더 놀기"), { target: { value: "김밥" } });
     fireEvent.click(screen.getByRole("radio", { name: "음식" }));
-    fireEvent.click(screen.getByRole("button", { name: "질문 게시하기" }));
+    fireEvent.click(screen.getByRole("button", { name: "질문 게시" }));
 
     await waitFor(() => expect(submissions).toHaveLength(1));
     expect(submissions[0]).toMatchObject({
@@ -150,7 +174,7 @@ describe("IssueCreatorExperience", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "승인 이미지 Library" }));
     fireEvent.click(await screen.findByRole("button", { name: /도시와 자연/ }));
-    fireEvent.click(screen.getByRole("button", { name: "질문 게시하기" }));
+    fireEvent.click(screen.getByRole("button", { name: "질문 게시" }));
 
     await waitFor(() => expect(submissions).toHaveLength(1));
     expect(submissions[0]).toMatchObject({
@@ -215,7 +239,10 @@ describe("IssueCreatorExperience", () => {
         throw new Error(`unexpected request: ${url}`);
       }),
     );
-    const { container } = render(<IssueCreatorExperience />);
+    const onSubmitted = vi.fn();
+    const { container } = render(
+      <IssueCreatorExperience presentation="modal" onSubmitted={onSubmitted} />,
+    );
 
     fireEvent.change(await screen.findByPlaceholderText("예: 퇴근 후 바로 잘까, 조금 더 놀까?"), {
       target: { value: "휴일에는 어디서 시간을 보낼까" },
@@ -230,9 +257,13 @@ describe("IssueCreatorExperience", () => {
     fireEvent.change(inputs[1]!, {
       target: { files: [new File(["b"], "b.png", { type: "image/png" })] },
     });
-    fireEvent.click(screen.getByRole("button", { name: "안전 검사 요청하기" }));
+    fireEvent.click(screen.getByRole("button", { name: "질문 게시" }));
 
-    await waitFor(() => expect(navigation.push).toHaveBeenCalledWith("/me/submissions"));
+    await waitFor(() => expect(onSubmitted).toHaveBeenCalledTimes(1));
+    expect(navigation.push).not.toHaveBeenCalled();
+    expect(JSON.parse(window.sessionStorage.getItem("which:pending-submissions:v1")!)).toEqual([
+      expect.objectContaining({ id: "submission-1", revision: 2 }),
+    ]);
     expect(requests.filter((url) => url === "/api/issue-submission-media")).toHaveLength(2);
     expect(requests.indexOf("/api/issue-submission-media")).toBeLessThan(
       requests.lastIndexOf("/api/issue-submission-media"),

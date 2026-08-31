@@ -13,6 +13,8 @@ import {
   createAutoPublicationService,
 } from "./modules/issue-media/auto-publication.js";
 import { withModerationWorkerLock } from "./modules/moderation-dispatch/worker-lock.js";
+import { createSubmissionWakeups } from "./modules/moderation-dispatch/submission-wakeups.js";
+import { hasClaimedWakeup } from "./modules/moderation-dispatch/submission-wakeup-event.js";
 import { POLICY_JUDGE_CONSENT_VERSION } from "./modules/policy-judge/contracts.js";
 
 import { createPolicyJudgeService } from "./modules/policy-judge/service.js";
@@ -69,6 +71,9 @@ const mediaStorage = mediaConfig ? createR2IssueMediaStorage(mediaConfig) : null
 const scannerConfig = localMediaScannerConfig();
 const autoConfig = autoPublicationConfig();
 const pilotRuntime = process.env.MODERATION_WORKER_ENABLED === "true";
+const submissionWakeupsOnly = process.env.MODERATION_SUBMISSION_WAKEUPS_ONLY === "true";
+if (submissionWakeupsOnly && !pilotRuntime)
+  throw new Error("SUBMISSION_WAKEUPS_REQUIRE_PILOT_RUNTIME");
 if (pilotRuntime && autoConfig.ISSUE_MEDIA_AUTO_PUBLICATION_MEMBER_IDS.length === 0)
   throw new Error("MODERATION_WORKER_PILOT_COHORT_REQUIRED");
 if (
@@ -122,6 +127,9 @@ async function requirePilotAccess(target: Parameters<typeof resolveRawInput>[0])
         eq(memberIssueSubmissions.revision, target.targetVersion),
         eq(memberIssueSubmissions.contentHash, target.normalizedInputHash),
         eq(memberIssueSubmissions.status, "PENDING"),
+        submissionWakeupsOnly
+          ? hasClaimedWakeup(memberIssueSubmissions.id, memberIssueSubmissions.revision)
+          : undefined,
         isNull(memberIssueSubmissions.publishedIssueId),
         eq(members.status, "ACTIVE"),
       ),
@@ -167,16 +175,19 @@ const worker = createModerationDispatcherService(database.db, adapter, {
     ? autoConfig.ISSUE_MEDIA_AUTO_PUBLICATION_MEMBER_IDS
     : undefined,
   deferProviderGate: true,
+  submissionWakeupsOnly,
 });
 
 const judgeConfig = policyJudgeConfig();
 const policyJudge = createPolicyJudgeService({
+  submissionWakeupsOnly,
   database: database.db,
   config: judgeConfig,
   provider: providerConfig,
   resolveInput: resolveProviderInput,
 });
 const autoPublication = createAutoPublicationService({
+  submissionWakeupsOnly,
   database: database.db,
   storage: mediaStorage,
   config: autoConfig,
@@ -193,6 +204,12 @@ const autoPublication = createAutoPublicationService({
 
 async function once() {
   return withModerationWorkerLock(database.db, async () => {
+    const wakeups = createSubmissionWakeups(
+      database.db,
+      autoConfig.ISSUE_MEDIA_AUTO_PUBLICATION_MEMBER_IDS,
+    );
+    const requests = submissionWakeupsOnly ? await wakeups.claimed() : [];
+    if (submissionWakeupsOnly && !requests.length) return { status: "NO_SUBMISSION_REQUESTS" };
     const dispatched = await worker.dispatchBatch();
     const processed = await worker.processBatch();
     const policyJudgeShadow = await policyJudge.runBatch().catch(() => ({
@@ -201,6 +218,16 @@ async function once() {
       publicationChanged: false,
     }));
     const automaticPublication = await autoPublication.runBatch();
+    if (automaticPublication.enabled) {
+      const budgetDeferred =
+        "processed" in policyJudgeShadow &&
+        policyJudgeShadow.processed.some((r) => r.reason === "DAILY_BUDGET_EXHAUSTED");
+      const publicationRetryable = automaticPublication.processed.some(
+        (result) => "reason" in result && result.reason === "PUBLICATION_FAILED_RETRYABLE",
+      );
+      for (const request of requests)
+        await wakeups.finish(request, { budgetDeferred, publicationRetryable });
+    }
     return { dispatched, processed, policyJudgeShadow, automaticPublication };
   });
 }

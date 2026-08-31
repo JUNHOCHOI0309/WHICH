@@ -22,6 +22,7 @@ import {
   uploadIssueSubmissionMedia,
 } from "./issue-creator-client";
 import styles from "./issue-creator-experience.module.css";
+import { trackSubmission } from "./submission-feedback";
 
 const DRAFT_KEY = "which_issue_draft_v1";
 const EMPTY_DRAFT: CreateIssueCommand = {
@@ -56,8 +57,10 @@ function useObjectUrl(file: File | null) {
 
 export function IssueCreatorExperience({
   presentation = "page",
+  onSubmitted,
 }: {
   presentation?: "page" | "modal";
+  onSubmitted?: () => void;
 }) {
   const router = useRouter();
   const [state, setState] = useState<"loading" | "guest" | "member" | "error">("loading");
@@ -79,6 +82,7 @@ export function IssueCreatorExperience({
   const directPreviewA = useObjectUrl(directFiles.A);
   const directPreviewB = useObjectUrl(directFiles.B);
   const pendingKey = useRef<string | null>(null);
+  const submittingRef = useRef(false);
 
   useEffect(() => {
     void loadIssueCreationContext()
@@ -155,6 +159,8 @@ export function IssueCreatorExperience({
       className={`${styles.form} ${presentation === "modal" ? styles.modalForm : ""}`}
       onSubmit={(event) => {
         event.preventDefault();
+        if (submittingRef.current) return;
+        submittingRef.current = true;
         setSubmitting(true);
         setError(null);
         pendingKey.current ??= crypto.randomUUID();
@@ -170,25 +176,27 @@ export function IssueCreatorExperience({
           const result = await submitMemberIssue(base, pendingKey.current!);
           const assetA = await uploadIssueSubmissionMedia(result.submission.id, directFiles.A);
           const assetB = await uploadIssueSubmissionMedia(result.submission.id, directFiles.B);
-          await attachIssueSubmissionMedia(
+          const attached = await attachIssueSubmissionMedia(
             result.submission,
             base,
             assetA.asset.id,
             assetB.asset.id,
             crypto.randomUUID(),
           );
-          return { kind: "PENDING" as const };
+          return { kind: "PENDING" as const, submission: attached.submission };
         };
         void publish()
           .then((result) => {
             window.sessionStorage.removeItem(DRAFT_KEY);
             pendingKey.current = null;
+            onSubmitted?.();
             if (result.kind === "PUBLISHED") {
               toast.success("질문을 게시했어요.");
-              router.push(`/issues/${result.issueId}`);
+              if (presentation === "page") router.push(`/issues/${result.issueId}`);
             } else {
-              toast.success("이미지 안전 검사를 요청했어요.");
-              router.push("/me/submissions");
+              trackSubmission(result.submission);
+              toast.info("질문을 접수했어요. 안전 검사를 거쳐 게시 결과를 알려드릴게요.");
+              if (presentation === "page") router.push("/me/submissions");
             }
           })
           .catch((reason) => {
@@ -197,9 +205,14 @@ export function IssueCreatorExperience({
                 ? Number(reason.status)
                 : 0;
             if (status === 401) setState("guest");
-            setError(reason instanceof Error ? reason.message : "질문을 만들지 못했습니다.");
+            const message = reason instanceof Error ? reason.message : "질문을 만들지 못했습니다.";
+            setError(message);
+            toast.error(message);
           })
-          .finally(() => setSubmitting(false));
+          .finally(() => {
+            submittingRef.current = false;
+            setSubmitting(false);
+          });
       }}
     >
       <section className={styles.panel}>
@@ -466,13 +479,7 @@ export function IssueCreatorExperience({
             (mediaMode === "DIRECT" && (!directFiles.A || !directFiles.B))
           }
         >
-          {submitting
-            ? mediaMode === "DIRECT"
-              ? "검사 요청 중…"
-              : "게시하는 중…"
-            : mediaMode === "DIRECT"
-              ? "안전 검사 요청하기"
-              : "질문 게시하기"}
+          {submitting ? "게시 요청 중…" : "질문 게시"}
         </button>
       </div>
       {error ? (

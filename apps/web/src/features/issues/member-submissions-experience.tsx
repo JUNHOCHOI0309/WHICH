@@ -17,6 +17,8 @@ import {
   uploadIssueSubmissionMedia,
 } from "./issue-creator-client";
 import styles from "./member-submissions-experience.module.css";
+import { submissionOutcome, submissionFailureReason } from "./submission-outcome";
+import { SUBMISSION_UPDATED_EVENT, trackSubmission, forgetSubmission } from "./submission-feedback";
 
 const labels = {
   PROCESSING: "처리 중",
@@ -64,18 +66,23 @@ export function MemberSubmissionsExperience({
   }
   useEffect(() => {
     let active = true;
-    void loadMemberSubmissions()
-      .then((result) => {
-        if (active) {
-          setItems(result.items);
-          setScreen("ready");
-        }
-      })
-      .catch((error) => {
-        if (active) setScreen(error.status === 401 ? "guest" : "error");
-      });
+    const refresh = () => {
+      void loadMemberSubmissions()
+        .then((result) => {
+          if (active) {
+            setItems(result.items);
+            setScreen("ready");
+          }
+        })
+        .catch((error) => {
+          if (active) setScreen(error.status === 401 ? "guest" : "error");
+        });
+    };
+    refresh();
+    window.addEventListener(SUBMISSION_UPDATED_EVENT, refresh);
     return () => {
       active = false;
+      window.removeEventListener(SUBMISSION_UPDATED_EVENT, refresh);
     };
   }, []);
 
@@ -106,6 +113,7 @@ export function MemberSubmissionsExperience({
   ) {
     await run(async () => {
       const result = await actOnMemberSubmission(item, kind, pairId);
+      if (submissionOutcome(result.submission) !== "processing") forgetSubmission(item.id);
       replace(result.submission);
       toast.success(
         kind === "CANCEL"
@@ -142,6 +150,7 @@ export function MemberSubmissionsExperience({
         key.current,
       );
       replace(result.submission);
+      if (submissionOutcome(result.submission) === "processing") trackSubmission(result.submission);
       toast.success("수정한 질문을 제출했어요.");
     });
   }
@@ -220,6 +229,9 @@ export function MemberSubmissionsExperience({
                       (item.status === "PENDING" || item.status === "APPROVED"
                         ? "PROCESSING"
                         : item.status);
+                    const outcome = submissionOutcome(item);
+                    const published = outcome === "published";
+                    const failed = outcome === "failed";
                     return (
                       <article
                         className={`${historyStyles.timelineItem} ${styles.row}`}
@@ -247,21 +259,24 @@ export function MemberSubmissionsExperience({
                             </span>
                           </div>
                         </div>
-                        <div className={styles.submissionState}>
-                          <strong className={styles.badge} data-state={state}>
-                            {labels[state]}
-                          </strong>
-                          <small>수정본 {item.revision}</small>
-                        </div>
-                        {item.publishedIssueId ? (
+                        {!published ? (
+                          <div className={styles.submissionState}>
+                            <strong className={styles.badge} data-state={state}>
+                              {labels[state]}
+                            </strong>
+                            <small>수정본 {item.revision}</small>
+                          </div>
+                        ) : null}
+                        {published ? (
                           <Link
+                            className={styles.publishedLink}
                             aria-label={`${item.question} 게시된 질문 보기`}
                             href={`/issues/${item.publishedIssueId}`}
                           >
-                            ↗
+                            글 바로가기 ↗
                           </Link>
                         ) : null}
-                        {editable ? (
+                        {editable && !failed ? (
                           <button
                             className={styles.manageButton}
                             type="button"
@@ -278,13 +293,15 @@ export function MemberSubmissionsExperience({
                             {managingId === item.id ? "접기" : "관리"}
                           </button>
                         ) : null}
-                        {item.reviewNote ? (
-                          <p className={`${styles.note} ${styles.reviewNote}`}>{item.reviewNote}</p>
+                        {failed ? (
+                          <p className={`${styles.note} ${styles.reviewNote}`}>
+                            {submissionFailureReason(item)}
+                          </p>
                         ) : null}
-                        {editable && managingId === item.id ? (
+                        {failed || (editable && managingId === item.id) ? (
                           <div className={styles.actions} id={`manage-${item.id}`}>
                             <button
-                              disabled={busy}
+                              disabled={busy || !editable}
                               onClick={() => {
                                 setEditing({ ...item });
                                 setLibraryTarget(null);
@@ -295,7 +312,7 @@ export function MemberSubmissionsExperience({
                               수정·이미지 변경
                             </button>
                             <button
-                              disabled={busy}
+                              disabled={busy || !editable}
                               onClick={() => {
                                 if (window.confirm("이미지를 제외하고 이 질문을 바로 게시할까요?"))
                                   void action(item, "TEXT_ONLY");
@@ -304,7 +321,7 @@ export function MemberSubmissionsExperience({
                               이미지 없이 게시
                             </button>
                             <button
-                              disabled={busy}
+                              disabled={busy || !editable}
                               onClick={() =>
                                 void run(async () => {
                                   const result = await loadIssueMediaLibrary();
@@ -316,11 +333,11 @@ export function MemberSubmissionsExperience({
                             >
                               Library로 교체
                             </button>
-                            <button disabled={busy} onClick={() => void action(item, "CHECK")}>
+                            <button disabled={busy} onClick={() => void run(load)}>
                               게시 상태 확인
                             </button>
                             <button
-                              disabled={busy}
+                              disabled={busy || !editable}
                               onClick={() => {
                                 if (
                                   window.confirm(
@@ -333,6 +350,12 @@ export function MemberSubmissionsExperience({
                               제출 취소
                             </button>
                           </div>
+                        ) : null}
+                        {failed && !editable ? (
+                          <p className={styles.reviewNote}>
+                            확정 처리된 질문은 수정하거나 취소할 수 없어요. 새 질문으로 작성해
+                            주세요.
+                          </p>
                         ) : null}
                         {editing?.id === item.id ? (
                           <form

@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { and, asc, eq, gt, inArray, isNotNull, lte, or, sql } from "drizzle-orm";
 
 import type { Database } from "../../database/client.js";
+import { hasClaimedWakeup } from "./submission-wakeup-event.js";
 import {
   commentRevisions,
   comments,
@@ -54,6 +55,7 @@ export type ModerationDispatcherOptions = {
   // An explicit cohort limits provider calls, not just eventual publication.
   submissionMemberIds?: string[];
   deferProviderGate?: boolean;
+  submissionWakeupsOnly?: boolean;
 };
 
 export type ModerationProviderGate = (input: {
@@ -410,6 +412,12 @@ export function createModerationDispatcherService(
             eq(outboxEvents.status, "PENDING"),
             eq(outboxEvents.eventType, "MODERATION_REQUESTED"),
             lte(outboxEvents.availableAt, claimedAt),
+            options.submissionWakeupsOnly
+              ? hasClaimedWakeup(
+                  sql`${outboxEvents.payload}->'data'->>'target_id'`,
+                  sql`${outboxEvents.payload}->'data'->>'target_version'`,
+                )
+              : undefined,
             options.submissionMemberIds
               ? sql`exists (
               select 1 from ${memberIssueSubmissions} s
@@ -465,6 +473,7 @@ export function createModerationDispatcherService(
               and s.status = 'PENDING' and s.published_issue_id is null
               and s.media_asset_a_id is not null and s.media_asset_b_id is not null
               and ${inArray(sql`s.member_id`, options.submissionMemberIds)}
+              ${options.submissionWakeupsOnly ? sql`and ${hasClaimedWakeup(sql`s.submission_id`, sql`s.revision`)}` : sql``}
           )`
               : undefined,
             or(

@@ -138,6 +138,7 @@ export interface IssueWriteService {
   listMemberIssueSubmissions(command: {
     sessionToken: string;
     limit: number;
+    submissionId?: string;
   }): Promise<{ items: MemberIssueSubmission[] }>;
 }
 

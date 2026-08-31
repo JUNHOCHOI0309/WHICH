@@ -46,6 +46,68 @@ afterEach(() => {
 });
 
 describe("member submissions", () => {
+  it("shows only the published-question link without review status or controls", async () => {
+    api.loadMemberSubmissions.mockResolvedValue({
+      items: [
+        {
+          ...pending,
+          status: "APPROVED",
+          publicationState: "PUBLISHED",
+          publishedIssueId: "live",
+          reviewNote: "internal review note",
+        },
+      ],
+    });
+    render(<MemberSubmissionsExperience />);
+    const row = await screen.findByRole("article", { name: pending.question });
+    expect(within(row).getByRole("link")).toHaveTextContent("글 바로가기");
+    expect(within(row).queryByRole("button")).not.toBeInTheDocument();
+    expect(
+      within(row).queryByText(/수정본|게시 완료|internal review note/),
+    ).not.toBeInTheDocument();
+  });
+  it("automatically exposes failure reasons and five actions, with read-only status refresh", async () => {
+    api.loadMemberSubmissions.mockResolvedValue({
+      items: [
+        {
+          ...pending,
+          status: "NEEDS_CHANGES",
+          publicationState: "NEEDS_CHANGES",
+          reviewNote: "이미지를 확인하기 어려워요.",
+        },
+      ],
+    });
+    render(<MemberSubmissionsExperience />);
+    const row = await screen.findByRole("article", { name: pending.question });
+    expect(within(row).getByText("이미지를 확인하기 어려워요.")).toBeVisible();
+    expect(
+      within(row)
+        .getAllByRole("button")
+        .map((button) => button.textContent),
+    ).toEqual([
+      "수정·이미지 변경",
+      "이미지 없이 게시",
+      "Library로 교체",
+      "게시 상태 확인",
+      "제출 취소",
+    ]);
+    fireEvent.click(within(row).getByRole("button", { name: "게시 상태 확인" }));
+    await waitFor(() => expect(api.loadMemberSubmissions).toHaveBeenCalledTimes(2));
+    expect(api.actOnMemberSubmission).not.toHaveBeenCalled();
+  });
+  it("does not enable impossible mutations on final rejected submissions", async () => {
+    api.loadMemberSubmissions.mockResolvedValue({
+      items: [{ ...pending, status: "REJECTED", publicationState: "REJECTED" }],
+    });
+    render(<MemberSubmissionsExperience />);
+    const row = await screen.findByRole("article", { name: pending.question });
+    expect(
+      within(row)
+        .getAllByRole("button")
+        .filter((b) => !(b as HTMLButtonElement).disabled),
+    ).toHaveLength(1);
+    expect(within(row).getByRole("button", { name: "게시 상태 확인" })).toBeEnabled();
+  });
   it("refreshes from the icon beside the note instead of the hero", async () => {
     render(<MemberSubmissionsExperience />);
     const refresh = screen.getByRole("button", { name: "새로고침" });
