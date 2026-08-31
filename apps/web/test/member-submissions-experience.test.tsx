@@ -60,7 +60,11 @@ describe("member submissions", () => {
     });
     render(<MemberSubmissionsExperience />);
     const row = await screen.findByRole("article", { name: pending.question });
-    expect(within(row).getByRole("link")).toHaveTextContent("글 바로가기");
+    const link = within(row).getByRole("link", { name: `${pending.question} 게시된 질문 보기` });
+    expect(link).toHaveTextContent(/^↗$/);
+    expect(link).toHaveAttribute("href", "/issues/live");
+    expect(row).toHaveAttribute("data-published", "true");
+    expect(within(row).queryByText("글 바로가기")).not.toBeInTheDocument();
     expect(within(row).queryByRole("button")).not.toBeInTheDocument();
     expect(
       within(row).queryByText(/수정본|게시 완료|internal review note/),

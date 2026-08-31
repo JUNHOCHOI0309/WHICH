@@ -110,8 +110,12 @@ export function createJudgeLedger(
         .where(
           and(
             eq(policyJudgeBudgets.day, day),
-            sql`${policyJudgeBudgets.calls} < ${config.MODERATION_POLICY_JUDGE_DAILY_CALL_CAP}`,
-            sql`${policyJudgeBudgets.committedMicros} + ${input.reservedMicros} <= ${config.MODERATION_POLICY_JUDGE_DAILY_COST_MICROS_CAP}`,
+            config.MODERATION_DAILY_LIMITS_ENABLED
+              ? sql`${policyJudgeBudgets.calls} < ${config.MODERATION_POLICY_JUDGE_DAILY_CALL_CAP}`
+              : undefined,
+            config.MODERATION_DAILY_LIMITS_ENABLED
+              ? sql`${policyJudgeBudgets.committedMicros} + ${input.reservedMicros} <= ${config.MODERATION_POLICY_JUDGE_DAILY_COST_MICROS_CAP}`
+              : undefined,
           ),
         )
         .returning();

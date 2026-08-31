@@ -114,14 +114,22 @@ export function evaluateModerationOperationalHealth(input: {
       message: "Provider 오류율 Circuit이 열려 외부 호출을 중단했습니다.",
     });
   }
-  if (providerEnabled && input.callsToday >= input.runtime.dailyCallCap) {
+  if (
+    providerEnabled &&
+    input.runtime.dailyLimitsEnabled &&
+    input.callsToday >= input.runtime.dailyCallCap
+  ) {
     alerts.push({
       code: "MODERATION_DAILY_CALL_CAP",
       severity: "WARNING",
       message: "오늘의 Provider 호출 Cap에 도달했습니다.",
     });
   }
-  if (providerEnabled && input.costMicrosToday > input.runtime.dailyCostMicrosCap) {
+  if (
+    providerEnabled &&
+    input.runtime.dailyLimitsEnabled &&
+    input.costMicrosToday > input.runtime.dailyCostMicrosCap
+  ) {
     alerts.push({
       code: "MODERATION_DAILY_COST_CAP",
       severity: "CRITICAL",

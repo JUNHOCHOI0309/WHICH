@@ -171,6 +171,54 @@ describe("Luna durable budget and Shadow pipeline", () => {
       .where(eq(policyJudgeBudgets.day, "2030-01-01"));
     expect(budget).toMatchObject({ calls: 2, committedMicros: 2000 });
   });
+  it("allows uncapped reservations while preserving accounting, deduplication and settlement", async () => {
+    const now = () => new Date("2030-02-01T12:00:00Z");
+    const db = testDb.database.db;
+    const ledger = createJudgeLedger(
+      db,
+      {
+        ...judgeConfig(),
+        MODERATION_DAILY_LIMITS_ENABLED: false,
+        MODERATION_POLICY_JUDGE_DAILY_CALL_CAP: 0,
+        MODERATION_POLICY_JUDGE_DAILY_COST_MICROS_CAP: 0,
+      },
+      now,
+    );
+    const sources = await Promise.all(Array.from({ length: 4 }, () => source()));
+    const inputs = sources.map((s) => reserveInput(s.run.id));
+    const results = await Promise.all(inputs.map((input) => ledger.reserve(input)));
+    expect(results.every((r) => r.status === "RESERVED")).toBe(true);
+    expect(await ledger.reserve(inputs[0]!)).toMatchObject({ status: "EXISTING" });
+    const extra = await source();
+    expect(await ledger.reserve(reserveInput(extra.run.id, inputs[0]!.cacheKey))).toMatchObject({
+      reason: "DUPLICATE_IN_FLIGHT",
+    });
+    const [before] = await db
+      .select()
+      .from(policyJudgeBudgets)
+      .where(eq(policyJudgeBudgets.day, "2030-02-01"));
+    expect(before).toMatchObject({ calls: 4, committedMicros: 4000 });
+    const first = results[0]!;
+    if (first.status !== "RESERVED") throw new Error("fixture reservation failed");
+    const finish = {
+      id: first.job.id,
+      status: "FAILED" as const,
+      reason: "TEST_FAILURE",
+      result: {},
+      chargedMicros: 200,
+      costMicros: 200,
+      latencyMs: 10,
+      policyVersion: MODERATION_POLICY_VERSION,
+      isCurrent: () => Promise.resolve(true),
+    };
+    expect(await ledger.finish(finish)).toBe("FAILED");
+    expect(await ledger.finish(finish)).toBe("ALREADY_FINISHED");
+    const [after] = await db
+      .select()
+      .from(policyJudgeBudgets)
+      .where(eq(policyJudgeBudgets.day, "2030-02-01"));
+    expect(after).toMatchObject({ calls: 4, committedMicros: 3200 });
+  });
   it("deduplicates simultaneous requests for identical pair context", async () => {
     const ledger = createJudgeLedger(
       testDb.database.db,
