@@ -20,11 +20,11 @@ control and AI moderation controls remain service-managed settings.
 
 ## Preconditions
 
-The remote `main` branch must first contain the Cloud Run runtime introduced
-on `codex/cloud-run-migration`, including `infra/cloud-run/Dockerfile`,
-`.dockerignore`, `scripts/cloud-run/*` and `cloudbuild.yaml`. As of
-2026-08-31, `main` does not yet contain the Dockerfile; do not enable a
-production `main` trigger before that merge or its builds will fail.
+The remote `main` branch must contain the Cloud Run runtime introduced on
+`codex/cloud-run-migration`, including `infra/cloud-run/Dockerfile`,
+`.dockerignore`, `scripts/cloud-run/*` and `cloudbuild.yaml`. This condition
+was satisfied by merge commit `cd8601245f01b7a3f6cb7f394b0c266c307582e9` on
+2026-08-31 before the production trigger was created.
 
 Keep GitHub branch protection requiring the existing `CI / verify` check before
 merging to `main`. Cloud Build does not replace the PostgreSQL-backed test
@@ -33,7 +33,7 @@ runtime isolation and builds the exact production image.
 
 ## Trigger and identity
 
-After `main` contains this configuration, create one Cloud Build GitHub trigger:
+The production Cloud Build GitHub trigger is configured as follows:
 
 | Setting        | Value                                                                                                                                             |
 | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -66,6 +66,24 @@ Do not grant the trigger Owner, Editor, Secret Manager Secret Accessor,
 Cloud SQL Admin, or broad project-wide service-account impersonation. The
 build neither reads the runtime secret nor changes database, R2, DNS,
 load-balancer, ingress, worker, or AI settings.
+
+## Verified first release
+
+On 2026-08-31, a manual run of `which-main-cloud-run` successfully deployed
+the merged `main` commit before relying on automatic pushes:
+
+| Check              | Verified result                                                           |
+| ------------------ | ------------------------------------------------------------------------- |
+| Cloud Build        | `3c8feb08-36c5-4517-80b2-84ed2904da5f` succeeded                          |
+| Source revision    | `cd8601245f01b7a3f6cb7f394b0c266c307582e9`                                |
+| Image digest       | `sha256:5aa44f82ca176a4aed21002be8ab5d4fba627fb7eb63c1dbf3d8b1e9f9945c27` |
+| Cloud Run revision | `which-web-00004-s7n`, Ready and receiving 100% traffic                   |
+| Release identifier | `RELEASE_ID=cd8601245f01b7a3f6cb7f394b0c266c307582e9`                     |
+| Edge smoke         | `node scripts/cloud-run/smoke-edge.mjs` passed                            |
+
+The trigger runs only for `main` pushes that alter one of its included runtime
+inputs. Documentation-only changes are intentionally excluded, so they do not
+create a production image or revision.
 
 ## First release and rollback
 
