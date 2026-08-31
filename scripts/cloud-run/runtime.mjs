@@ -96,3 +96,20 @@ export function serviceDefinitions(environment, root = process.cwd()) {
       : []),
   ];
 }
+
+// Cloud Run Jobs must finish. The web service uses the long-running `run`
+// command, while an isolated Job consumes one locked moderation batch and
+// exits. This keeps OCR/model work out of the HTTP process without silently
+// converting a preview or an OFF rollout into a paid worker.
+export function moderationJobDefinition(environment, root = process.cwd()) {
+  if (environment.CLOUD_RUN_PREVIEW !== "false")
+    throw new Error("CLOUD_RUN_MODERATION_JOB_PREVIEW_FORBIDDEN");
+  if (environment.MODERATION_WORKER_ENABLED !== "true")
+    throw new Error("CLOUD_RUN_MODERATION_JOB_DISABLED");
+  return {
+    name: "moderation-job",
+    cwd: resolve(root, "apps/api"),
+    args: ["dist/moderation-worker.js", "once"],
+    env: environment,
+  };
+}

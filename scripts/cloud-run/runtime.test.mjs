@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { runtimeEnvironment, serviceDefinitions } from "./runtime.mjs";
+import { resolve } from "node:path";
+import { moderationJobDefinition, runtimeEnvironment, serviceDefinitions } from "./runtime.mjs";
 
 const base = {
   K_SERVICE: "which-web",
@@ -51,6 +52,26 @@ test("workers require explicit production switch and individual enabling", () =>
   assert.deepEqual(
     serviceDefinitions(env).map((x) => x.name),
     ["api", "web", "points", "moderation"],
+  );
+});
+test("moderation job is a finite production-only batch", () => {
+  const environment = runtimeEnvironment({
+    ...base,
+    CLOUD_RUN_PREVIEW: "false",
+    MODERATION_WORKER_ENABLED: "true",
+  });
+  const job = moderationJobDefinition(environment, "/app");
+  assert.equal(job.name, "moderation-job");
+  assert.equal(job.cwd, resolve("/app", "apps/api"));
+  assert.deepEqual(job.args, ["dist/moderation-worker.js", "once"]);
+  assert.throws(
+    () => moderationJobDefinition(runtimeEnvironment({ ...base }), "/app"),
+    /CLOUD_RUN_MODERATION_JOB_PREVIEW_FORBIDDEN/,
+  );
+  assert.throws(
+    () =>
+      moderationJobDefinition(runtimeEnvironment({ ...base, CLOUD_RUN_PREVIEW: "false" }), "/app"),
+    /CLOUD_RUN_MODERATION_JOB_DISABLED/,
   );
 });
 test("internal Render DB or unverified external TLS fails closed without secret leakage", () => {
