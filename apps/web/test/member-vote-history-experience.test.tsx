@@ -117,7 +117,7 @@ describe("Member vote history experience", () => {
       }),
     );
 
-    render(<MemberVoteHistoryExperience creationEnabled />);
+    render(<MemberVoteHistoryExperience creationEnabled={false} />);
 
     expect(
       await screen.findByRole("heading", { name: "기록 회원님의 선택 기록" }, { timeout: 5_000 }),

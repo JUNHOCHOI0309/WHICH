@@ -15,7 +15,8 @@ export const metadata: Metadata = {
   },
 };
 
-export default function Home() {
+export default async function Home() {
+  const creationEnabled = await creatorSubmissionsEnabled();
   return (
     <>
       <StructuredData
@@ -41,7 +42,7 @@ export default function Home() {
           ],
         }}
       />
-      <FeedExperience creationEnabled={creatorSubmissionsEnabled()} />
+      <FeedExperience creationEnabled={creationEnabled} />
     </>
   );
 }

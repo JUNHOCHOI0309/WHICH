@@ -8,8 +8,8 @@ export const metadata = privatePageMetadata(
   "사람들에게 물어볼 A/B 질문을 만드세요.",
 );
 
-export default function CreateIssuePage() {
-  const enabled = creatorSubmissionsEnabled();
+export default async function CreateIssuePage() {
+  const enabled = await creatorSubmissionsEnabled();
   return (
     <WhichShell
       active="create"

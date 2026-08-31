@@ -7,6 +7,6 @@ export const metadata = privatePageMetadata(
   "제출한 질문의 게시 상태를 확인하고 관리하세요.",
 );
 
-export default function SubmissionsPage() {
-  return <MemberSubmissionsExperience creationEnabled={creatorSubmissionsEnabled()} />;
+export default async function SubmissionsPage() {
+  return <MemberSubmissionsExperience creationEnabled={await creatorSubmissionsEnabled()} />;
 }

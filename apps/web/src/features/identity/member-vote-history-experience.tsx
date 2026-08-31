@@ -177,7 +177,7 @@ export function MemberVoteHistoryExperience({
               </div>
             </header>
 
-            <MemberProfileTabs active="votes" creationEnabled={creationEnabled} />
+            <MemberProfileTabs active="votes" />
 
             {groups.length === 0 ? (
               <section className={styles.empty}>
