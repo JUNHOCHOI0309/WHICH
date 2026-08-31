@@ -25,7 +25,7 @@ long-running `run` command. The existing database advisory lock still
 serializes overlapping executions. Provider, Luna, decision, and automatic
 publication gates stay governed by their existing environment controls.
 
-## Proposed production Job
+## Production Job
 
 Use the same runtime identity, Direct VPC subnet, and Secret Manager volume as
 `which-web`. The current web values are documented here deliberately so this
@@ -35,7 +35,7 @@ Job does not fall back to an internal Render hostname or unverified TLS.
 gcloud run jobs create which-moderation `
   --project=which-505908 `
   --region=asia-southeast1 `
-  --image=asia-southeast1-docker.pkg.dev/which-505908/which/web:<COMMIT_SHA> `
+  --image=asia-southeast1-docker.pkg.dev/which-505908/which/web@sha256:<IMAGE_DIGEST> `
   --command=node `
   --args=scripts/cloud-run/moderation-job.mjs `
   --service-account=which-web@which-505908.iam.gserviceaccount.com `
@@ -48,7 +48,7 @@ gcloud run jobs create which-moderation `
   --parallelism=1 `
   --max-retries=0 `
   --task-timeout=10m `
-  --set-env-vars=CLOUD_RUN_ENV_FILE=/var/run/which/runtime.json,CLOUD_RUN_PREVIEW=false,POINTS_WORKER_ENABLED=false,MODERATION_WORKER_ENABLED=true `
+  --set-env-vars '^@^CLOUD_RUN_ENV_FILE=/var/run/which/runtime.json@CLOUD_RUN_PREVIEW=false@POINTS_WORKER_ENABLED=false@MODERATION_WORKER_ENABLED=true@RELEASE_ID=<COMMIT_SHA>' `
   --set-secrets=/var/run/which/runtime.json=which-runtime-env:latest
 ```
 
@@ -56,6 +56,22 @@ The 2 vCPU / 4 GiB limit is isolated from the web service and sized for one
 bounded OCR/model batch. It is a starting capacity, not permission to process
 multiple submissions concurrently. Keep task count and parallelism at one
 until the moderation ledger, R2 latency, and database impact are measured.
+
+## Provisioning record
+
+On 2026-08-31, `which-moderation` was created in `asia-southeast1` from the
+immutable image
+`asia-southeast1-docker.pkg.dev/which-505908/which/web@sha256:e16cf0f7207d982496f3898fbf01ede929939b4719d1f07af4835bc76d79b6f1`.
+It is Ready with one task, parallelism one, no retries, a 10-minute timeout,
+2 vCPU, and 4 GiB memory. It uses
+`which-web@which-505908.iam.gserviceaccount.com`, the `which-run-vpc` /
+`which-run-subnet` Direct VPC path with all-traffic egress, and mounts
+`which-runtime-env` only at `/var/run/which/runtime.json`.
+
+The Job has no execution history and no Cloud Scheduler attachment. The
+provider, policy-judge, and automatic-publication switches remain unchanged;
+creating this resource did not make a moderation provider call or publish an
+Issue image.
 
 ## Activation sequence
 

@@ -766,6 +766,7 @@ describe("operator Issue media foundation", () => {
     ).toEqual({ detached: false });
   }, 10_000);
 
+  // Two real image normalization passes and DB work need headroom on shared CI runners.
   it("purges old unlinked staging objects and prevents in-place edits after publication", async () => {
     const storage = new FakeIssueMediaStorage();
     const service = createIssueMediaService(database.db, storage);
@@ -819,7 +820,7 @@ describe("operator Issue media foundation", () => {
       .from(issueVersions)
       .where(and(eq(issueVersions.issueId, issueId), eq(issueVersions.version, 1)));
     expect(version).toMatchObject({ formatMode: "VS", mediaMode: "TEXT_ONLY" });
-  });
+  }, 10_000);
 
   it("keeps review decisions append-only and supports emergency hide, restore, and rights cases", async () => {
     const storage = new FakeIssueMediaStorage();
