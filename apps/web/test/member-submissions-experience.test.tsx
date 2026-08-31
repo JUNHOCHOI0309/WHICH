@@ -46,6 +46,46 @@ afterEach(() => {
 });
 
 describe("member submissions", () => {
+  it("refreshes from the icon beside the note instead of the hero", async () => {
+    render(<MemberSubmissionsExperience />);
+    const refresh = screen.getByRole("button", { name: "새로고침" });
+    expect(refresh).toBeDisabled();
+    await screen.findByText(pending.question);
+    expect(refresh).toBeEnabled();
+    expect(refresh.closest("header")).toBeNull();
+    expect(refresh).toHaveTextContent("");
+    expect(refresh.querySelector("img")).toHaveAttribute("alt", "");
+    expect(refresh.querySelector("img")).toHaveAttribute("width", "22");
+    expect(
+      within(refresh.parentElement!).getByText(/최근 제출한 질문을 최대 20개까지 보여요/),
+    ).toBeVisible();
+
+    let resolveRefresh!: (result: { items: MemberIssueSubmission[] }) => void;
+    api.loadMemberSubmissions.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveRefresh = resolve;
+      }),
+    );
+    fireEvent.click(refresh);
+    expect(refresh).toBeDisabled();
+    fireEvent.click(refresh);
+    expect(api.loadMemberSubmissions).toHaveBeenCalledTimes(2);
+    resolveRefresh({ items: [] });
+    expect(await screen.findByText("아직 제출한 질문이 없어요.")).toBeVisible();
+    expect(refresh).toBeEnabled();
+  });
+  it("allows retrying a failed refresh from the same icon", async () => {
+    render(<MemberSubmissionsExperience />);
+    await screen.findByText(pending.question);
+    const refresh = screen.getByRole("button", { name: "새로고침" });
+    api.loadMemberSubmissions.mockRejectedValueOnce(new Error("Unavailable"));
+    fireEvent.click(refresh);
+    expect(await screen.findByRole("alert")).toHaveTextContent("질문을 불러오지 못했어요.");
+    expect(refresh).toBeEnabled();
+    fireEvent.click(refresh);
+    expect(await screen.findByText(pending.question)).toBeVisible();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
   it("uses the shared tabs and compact month groups with real submission states", async () => {
     api.loadMemberSubmissions.mockResolvedValue({
       items: [

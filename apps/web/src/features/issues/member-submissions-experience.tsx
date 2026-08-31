@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "@/components/feedback/toast-provider";
 import { WhichShell } from "@/components/layout/which-shell";
@@ -162,15 +163,24 @@ export function MemberSubmissionsExperience({
               보여요
             </span>
           </div>
-          <button disabled={busy} onClick={() => void run(load)}>
-            새로고침
-          </button>
         </header>
         <MemberProfileTabs active="submissions" />
-        <p className={styles.note}>
-          최근 제출한 질문을 최대 20개까지 보여요. 이미지를 검사하는 동안에도 수정하거나 이미지 없이
-          게시할 수 있어요.
-        </p>
+        <div className={styles.noteRow}>
+          <p className={styles.note}>
+            최근 제출한 질문을 최대 20개까지 보여요. 이미지를 검사하는 동안에도 수정하거나 이미지
+            없이 게시할 수 있어요.
+          </p>
+          <button
+            type="button"
+            className={styles.refreshButton}
+            aria-label="새로고침"
+            title="새로고침"
+            disabled={busy || screen === "loading"}
+            onClick={() => void run(load)}
+          >
+            <Image src="/icons/refresh-arrow.png" width={22} height={22} alt="" />
+          </button>
+        </div>
         {screen === "loading" ? <p role="status">질문을 불러오고 있어요.</p> : null}
         {screen === "guest" ? (
           <Link href="/login?returnTo=%2Fme%2Fsubmissions">로그인하고 내 질문 보기</Link>
