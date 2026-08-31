@@ -1,6 +1,6 @@
 # WHICH Cloud Run migration
 
-> **Current state (2026-08-31 KST): certificate ACTIVE; user-requested console LB creation pending.** Both empty-backend CLI attempts ended with Google INTERNAL_ERROR. After verifying no leftover backend/pending operation, the user asked to continue the open console form; the NEG-attached HTTPS backend and dependent LB workflow were submitted there. `which-web-map` is creating, not verified ready. The original certificate and both certificate-map entries are now ACTIVE, without DNS/CAA changes. Cloud Run `which-web-00002-mbk` remains restricted to internal/load-balancer ingress with all consumers OFF; production DNS and points remain on Render. See [edge cutover runbook](cloud-run-edge-cutover.md) for current operation IDs and recovery rules. Do not race the console workflow with duplicate CLI creates.
+> **Current state (2026-08-31): production apex/www are proxied A records to regional LB `34.1.141.120`, and HTTP→HTTPS verification passes.** Owner-approved DNS changes preserve Cloudflare proxy/TTL Auto and all other records. Public HTTPS health/home/feed/static/OAuth-start checks pass, Google origin routing is verified, and the existing signed-in Chrome session loads `/me` and `/me/votes`. A single active hostname-scoped Cloudflare Redirect Rule provides a 308 redirect for HTTP apex/www only, preserving path/query/method; zone-wide Always Use HTTPS remains OFF. Full (strict), regional certificate ACTIVE, restricted Cloud Run ingress and application Access checks are retained. Render `which-web` is suspended (not deleted); Cloud Run revision `which-web-00003-gcb` runs the points worker only, with moderation OFF. No AI activation, DB/R2 change, paid-support purchase or billing-plan activation occurred. All six earlier failures were GLOBAL inserts; regional scope succeeds without moving Cloud Run geographically, but the global failure root cause remains unknown. Do not reuse historical global cutover commands. See the [edge cutover runbook](cloud-run-edge-cutover.md).
 
 ## Scope and safety boundary
 
@@ -8,8 +8,8 @@
 - One container runs Next.js and the loopback-only API directly with Node, without pnpm wrapper processes.
 - Initial capacity: **1 vCPU, 2 GiB, CPU always allocated, minimum 1 / maximum 1 service instance, concurrency 8**. This incurs idle compute charges; it is not a zero-cost scale-to-zero configuration. Revision transitions can briefly overlap; the instance maximum is not a hard spending cap.
 - Existing Render Postgres and Cloudflare R2 remain in place. No DB migration, database deletion, R2 copy, model change, or DNS cutover is part of preview deployment.
-- Before cutover, the service requires Google IAM authentication. Cloudflare Access checks remain enabled in the application; do not turn them off to make `/ops` work on the preview URL.
-- Preview is the default. Both point/moderation consumers, paid provider calls, the decision engine, and automatic publication are forced OFF. The existing Render site remains the production host.
+- Initial preview required Google IAM authentication. After explicit owner approval on 2026-08-31, public invocation was enabled for origin verification with restricted ingress retained. Cloudflare Access checks remain enabled in the application; do not turn them off to make `/ops` work on the preview URL.
+- Preview is the deployment default. Both point/moderation consumers, paid provider calls, the decision engine, and automatic publication are forced OFF for initial preview. The production handoff deliberately overrides only points on current revision `which-web-00003-gcb`; moderation, paid provider calls, decisions, and automatic publication remain OFF. Render's web service is preserved in a suspended state solely for ordered rollback.
 
 ## Credentials
 
@@ -54,7 +54,7 @@ Verify `/api/health`, the home page and public feed, static assets, expected una
 
 The deployment uses Direct VPC egress (`all-traffic`) through `which-run-vpc` / `which-run-subnet` (`10.88.0.0/26`, Private Google Access enabled). Router `which-run-router` and Public NAT `which-run-nat` use only the reserved external IPv4 `which-run-egress`; NAT covers only that subnet. No VM, connector, or inbound allow-all firewall rule is required. The setup script checks existing resources and stops on incompatible configuration instead of silently replacing it.
 
-Render's PostgreSQL-specific allowlist must retain the owner's existing entry and add only this egress IP `/32`. Do not release or replace the reserved address while it is allowlisted. Direct VPC startup can take longer than ordinary startup; the HTTP startup probe allows 240 seconds and checks real DB readiness. The service remains IAM-private throughout preview.
+Render's PostgreSQL-specific allowlist must retain the owner's existing entry and add only this egress IP `/32`. Do not release or replace the reserved address while it is allowlisted. Direct VPC startup can take longer than ordinary startup; the HTTP startup probe allows 240 seconds and checks real DB readiness. IAM-private initial preview is followed by the separately approved restricted-ingress/public-invocation origin verification described above.
 
 ## Cutover gate — separate approval
 
@@ -74,6 +74,14 @@ Render's PostgreSQL-specific allowlist must retain the owner's existing entry an
 - [Render external Postgres connections](https://render.com/docs/postgresql-creating-connecting)
 
 ## Verification record
+
+### Production points-worker handoff (2026-08-31, approximately 17:07 KST)
+
+- Render web service `which-web` (`srv-da2vjmbncjis73d3g3kg`) was suspended with owner approval; PostgreSQL remained running and unchanged.
+- Cloud Run revision `which-web-00003-gcb` received 100% traffic with `CLOUD_RUN_PREVIEW=false`, `POINTS_WORKER_ENABLED=true`, and `MODERATION_WORKER_ENABLED=false`. Cloud Run reported the revision Ready after the `/api/health` startup probe.
+- `node scripts/cloud-run/smoke-edge.mjs` exited 0 after handoff: public health/home/feed/static routes were 200, unauthenticated member access was 401, ops was Cloudflare Access 302, and provider starts were 307. No social login, posting, vote, image, R2, DB, billing, or AI operation was performed by this check.
+- The existing signed-in `skyho0309` browser session reloaded `/me/votes` and displayed all 10 recorded selections after handoff, without mutating member data. This proves current-session continuity only; a new OAuth callback was not exercised.
+- To roll back background processing, first deploy Cloud Run with points disabled and verify shutdown, then resume the preserved Render web service. Never allow both point consumers to run against the shared database.
 
 - Code commit: `6a85901e85d844b044e5921b52ebbc51611e81eb`; [PR #8](https://github.com/JUNHOCHOI0309/WHICH/pull/8).
 - Uploaded image: `asia-southeast1-docker.pkg.dev/which-505908/which/web@sha256:c94c1172829fc8eacd333fa591d0fd0a58d2dcb32a9028c231aa905e70fa2666`.

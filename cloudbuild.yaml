@@ -1,0 +1,56 @@
+# Production Cloud Run delivery. The trigger must target only the protected
+# main branch after this file and the Cloud Run runtime have been merged there.
+substitutions:
+  _REGION: asia-southeast1
+  _ARTIFACT_REPOSITORY: which
+  _IMAGE_NAME: web
+  _SERVICE: which-web
+
+options:
+  # Compatible with the dedicated, least-privilege trigger service account.
+  logging: CLOUD_LOGGING_ONLY
+
+steps:
+  - id: verify-cloud-run-runtime
+    name: node:22-bookworm
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        corepack enable
+        corepack prepare pnpm@10.6.5 --activate
+        pnpm install --frozen-lockfile
+        node --test scripts/cloud-run/runtime.test.mjs
+
+  - id: build-image
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --file=infra/cloud-run/Dockerfile
+      - --tag=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_ARTIFACT_REPOSITORY}/${_IMAGE_NAME}:$COMMIT_SHA
+      - .
+
+  - id: push-image
+    name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_ARTIFACT_REPOSITORY}/${_IMAGE_NAME}:$COMMIT_SHA
+
+  - id: deploy-revision
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: gcloud
+    args:
+      - run
+      - services
+      - update
+      - ${_SERVICE}
+      - --project=$PROJECT_ID
+      - --region=${_REGION}
+      - --image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_ARTIFACT_REPOSITORY}/${_IMAGE_NAME}:$COMMIT_SHA
+      # This is the only runtime setting changed by the pipeline. Existing
+      # secret mounts, VPC egress, ingress and worker controls are retained.
+      - --update-env-vars=RELEASE_ID=$COMMIT_SHA
+      - --quiet
+
+images:
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_ARTIFACT_REPOSITORY}/${_IMAGE_NAME}:$COMMIT_SHA
