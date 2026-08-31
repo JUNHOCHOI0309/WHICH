@@ -46,6 +46,25 @@ afterEach(() => {
 });
 
 describe("member submissions", () => {
+  it("shows a decorative spinner only while processing and removes it for a terminal result", async () => {
+    api.loadMemberSubmissions.mockResolvedValueOnce({ items: [pending] }).mockResolvedValue({
+      items: [
+        {
+          ...pending,
+          status: "NEEDS_CHANGES",
+          publicationState: "NEEDS_CHANGES",
+          reviewNote: "확인 필요",
+        },
+      ],
+    });
+    render(<MemberSubmissionsExperience />);
+    const row = await screen.findByRole("article", { name: pending.question });
+    expect(within(row).getByText("처리 중").querySelector('[aria-hidden="true"]')).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "새로고침" }));
+    await within(row).findByText("수정 필요");
+    expect(within(row).queryByText("처리 중")).not.toBeInTheDocument();
+    expect(within(row).getByText("수정 필요").querySelector('[aria-hidden="true"]')).toBeNull();
+  });
   it("shows only the published-question link without review status or controls", async () => {
     api.loadMemberSubmissions.mockResolvedValue({
       items: [

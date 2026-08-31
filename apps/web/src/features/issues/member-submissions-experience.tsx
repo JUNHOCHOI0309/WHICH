@@ -263,6 +263,9 @@ export function MemberSubmissionsExperience({
                         {!published ? (
                           <div className={styles.submissionState}>
                             <strong className={styles.badge} data-state={state}>
+                              {state === "PROCESSING" ? (
+                                <span className={styles.processingSpinner} aria-hidden="true" />
+                              ) : null}
                               {labels[state]}
                             </strong>
                             <small>수정본 {item.revision}</small>
