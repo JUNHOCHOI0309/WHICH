@@ -235,6 +235,7 @@ export function MemberSubmissionsExperience({
                     return (
                       <article
                         className={`${historyStyles.timelineItem} ${styles.row}`}
+                        data-published={published || undefined}
                         key={item.id}
                         aria-label={item.question}
                       >
@@ -269,11 +270,11 @@ export function MemberSubmissionsExperience({
                         ) : null}
                         {published ? (
                           <Link
-                            className={styles.publishedLink}
                             aria-label={`${item.question} 게시된 질문 보기`}
+                            title="게시된 질문 보기"
                             href={`/issues/${item.publishedIssueId}`}
                           >
-                            글 바로가기 ↗
+                            <span aria-hidden="true">↗</span>
                           </Link>
                         ) : null}
                         {editable && !failed ? (

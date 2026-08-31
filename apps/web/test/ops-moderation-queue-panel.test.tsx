@@ -117,6 +117,14 @@ function queueResponse(recommendationVisible: boolean) {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("Ops moderation Reviewer Assist", () => {
+  it("shows an uncapped daily budget explicitly", async () => {
+    const payload = await queueResponse(false).json();
+    payload.operational.provider.dailyLimitsEnabled = false;
+    payload.operational.provider.callsToday = 12;
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify(payload))));
+    render(<OpsModerationQueuePanel />);
+    expect(await screen.findByText("12 / 제한 없음")).toBeInTheDocument();
+  });
   it("keeps Random Audit AI assist hidden behind a human provisional label", async () => {
     vi.stubGlobal(
       "fetch",

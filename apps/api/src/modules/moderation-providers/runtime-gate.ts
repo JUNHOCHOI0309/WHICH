@@ -35,6 +35,8 @@ const environmentSchema = z.object({
   MODERATION_PROVIDER: z.enum(["NONE", "OPENAI_MODERATION"]).default("NONE"),
   MODERATION_PROVIDER_KILL_SWITCH: booleanValue("true"),
   MODERATION_PROVIDER_CANARY_PERCENT: z.coerce.number().min(0).max(100).default(0),
+  // Explicit opt-out changes daily budgets only, never privacy or safety gates.
+  MODERATION_DAILY_LIMITS_ENABLED: booleanValue("true"),
   MODERATION_PROVIDER_DAILY_CALL_CAP: z.coerce.number().int().min(0).default(0),
   MODERATION_PROVIDER_DAILY_COST_MICROS_CAP: z.coerce.number().int().min(0).default(0),
   MODERATION_PROVIDER_CIRCUIT_WINDOW_MINUTES: z.coerce.number().int().min(1).max(60).default(5),
@@ -75,6 +77,7 @@ export function providerRuntimeDiagnostic(config: ModerationProviderRuntimeConfi
     killSwitch: config.MODERATION_PROVIDER_KILL_SWITCH,
     canaryPercent: config.MODERATION_PROVIDER_CANARY_PERCENT,
     dailyCallCap: config.MODERATION_PROVIDER_DAILY_CALL_CAP,
+    dailyLimitsEnabled: config.MODERATION_DAILY_LIMITS_ENABLED,
     dailyCostMicrosCap: config.MODERATION_PROVIDER_DAILY_COST_MICROS_CAP,
     circuitWindowMinutes: config.MODERATION_PROVIDER_CIRCUIT_WINDOW_MINUTES,
     circuitMinimumCalls: config.MODERATION_PROVIDER_CIRCUIT_MIN_CALLS,
@@ -188,17 +191,23 @@ export function evaluateModerationRuntimeGate(input: {
   if (bucket * 100 >= config.MODERATION_PROVIDER_CANARY_PERCENT) {
     return { allowed: false, reason: "OUTSIDE_CANARY" } as const;
   }
-  if (config.MODERATION_PROVIDER_DAILY_CALL_CAP <= 0) {
+  if (config.MODERATION_DAILY_LIMITS_ENABLED && config.MODERATION_PROVIDER_DAILY_CALL_CAP <= 0) {
     return { allowed: false, reason: "DAILY_CALL_CAP_DISABLED" } as const;
   }
   const requiredCalls = input.requiredCalls ?? 1;
   if (!Number.isInteger(requiredCalls) || requiredCalls < 1 || requiredCalls > 2) {
     return { allowed: false, reason: "INVALID_PROVIDER_REQUEST_COUNT" } as const;
   }
-  if (input.callsToday + requiredCalls > config.MODERATION_PROVIDER_DAILY_CALL_CAP) {
+  if (
+    config.MODERATION_DAILY_LIMITS_ENABLED &&
+    input.callsToday + requiredCalls > config.MODERATION_PROVIDER_DAILY_CALL_CAP
+  ) {
     return { allowed: false, reason: "DAILY_CALL_CAP_REACHED" } as const;
   }
-  if ((input.costMicrosToday ?? 0) > config.MODERATION_PROVIDER_DAILY_COST_MICROS_CAP) {
+  if (
+    config.MODERATION_DAILY_LIMITS_ENABLED &&
+    (input.costMicrosToday ?? 0) > config.MODERATION_PROVIDER_DAILY_COST_MICROS_CAP
+  ) {
     return { allowed: false, reason: "DAILY_COST_CAP_REACHED" } as const;
   }
   const recentCalls = input.recentCalls ?? 0;

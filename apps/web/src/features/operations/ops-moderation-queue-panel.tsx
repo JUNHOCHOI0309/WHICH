@@ -274,7 +274,10 @@ export function OpsModerationQueuePanel() {
               <article>
                 <span>CALLS TODAY / CAP</span>
                 <strong>
-                  {page.operational.provider.callsToday} / {page.operational.provider.dailyCallCap}
+                  {page.operational.provider.callsToday} /{" "}
+                  {page.operational.provider.dailyLimitsEnabled === false
+                    ? "제한 없음"
+                    : page.operational.provider.dailyCallCap}
                 </strong>
               </article>
               <article>

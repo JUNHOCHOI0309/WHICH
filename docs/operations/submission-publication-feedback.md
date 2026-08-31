@@ -6,7 +6,7 @@
 - 직접 업로드는 비공개 제출 → A/B 업로드 → 수정본 연결의 접수가 성공하면 모달을 닫는다. 업로드 오류는 모달에 남겨 재시도할 수 있다.
 - 전역 결과 추적기는 본인 제출 ID/revision만 sessionStorage에 보관한다. 이동·모달 닫힘 이후에도 조회하며 실제 `PUBLISHED + publishedIssueId`일 때만 성공 toast를 표시한다.
 - NEEDS_CHANGES/REJECTED/QUARANTINED에는 게시 실패 toast, 취소에는 결과 toast 없음. 네트워크 실패나 시간 경과를 게시 거절로 오인하지 않는다.
-- `/me/submissions`: 게시 완료 항목은 상태·수정본·검수 문구 없이 `글 바로가기`; 실패 항목은 사유 및 기존 다섯 버튼을 바로 표시한다. 최종 거절처럼 API가 변경을 허용하지 않는 경우 변경 버튼은 비활성화한다.
+- `/me/submissions`: 게시 완료 항목은 상태·수정본·검수 문구 없이 `↗` 링크만 표시한다. 접근성 이름과 툴팁은 게시된 질문 보기다. 실패 항목은 사유 및 기존 다섯 버튼을 바로 표시한다. 최종 거절처럼 API가 변경을 허용하지 않는 경우 변경 버튼은 비활성화한다.
 - 화면의 `게시 상태 확인`은 GET만 수행한다. 공개를 실행하는 기존 CHECK action은 자동 조회에 사용하지 않는다.
 - 조회 API의 선택적 `submissionId` 필터는 인증된 회원 소유권 조건 안에서 적용한다. 최근 20건 밖으로 밀려도 대상 결과 조회가 가능하다.
 
@@ -32,6 +32,7 @@ Job 실행 API는 [Google Cloud Run jobs.run](https://docs.cloud.google.com/run/
 
 ```text
 MODERATION_WORKER_ENABLED=false
+MODERATION_DAILY_LIMITS_ENABLED=false
 MODERATION_JOB_DISPATCH_ENABLED=true
 MODERATION_CLOUD_RUN_JOB=projects/which-505908/locations/asia-southeast1/jobs/which-moderation
 ISSUE_MEDIA_AUTO_PUBLICATION_MEMBER_IDS=<기존 승인된 테스트 회원 UUID>
@@ -45,6 +46,7 @@ ISSUE_MEDIA_EXPERIMENT_PERCENT=100
 
 ```text
 MODERATION_WORKER_ENABLED=true
+MODERATION_DAILY_LIMITS_ENABLED=false
 MODERATION_SUBMISSION_WAKEUPS_ONLY=true
 MODERATION_WORKER_BATCH_SIZE=2
 MODERATION_WORKER_LEASE_MS=180000
@@ -65,11 +67,20 @@ ISSUE_MEDIA_AUTO_PUBLICATION_KILL_SWITCH=false
 ISSUE_MEDIA_AUTO_PUBLICATION_MEMBER_IDS=<동일 UUID>
 ```
 
-`SHADOW`는 제공자 결과 저장 모드다. 별도의 명시적 `AUTO_PUBLICATION_MODE=PILOT` 실행부가 모든 조건을 통과했을 때만 공개한다. 일반 결정 엔진·제재 자동화는 OFF를 유지한다. 캡은 기존 운영 승인값이며, 두 장 기본 검사에는 캐시 미적중 시 기본 요청 2회가 필요하다.
+`SHADOW`는 제공자 결과 저장 모드다. 별도의 명시적 `AUTO_PUBLICATION_MODE=PILOT` 실행부가 모든 조건을 통과했을 때만 공개한다. 일반 결정 엔진·제재 자동화는 OFF를 유지한다. 캡 숫자는 기존 값으로 보존하되 일일 상한 해제 시 적용하지 않는다. 두 장 기본 검사에는 캐시 미적중 시 기본 요청 2회가 필요하다.
 
 웹 런타임 계정에 해당 Job 하나의 `roles/run.invoker`만 부여한다. 공개 웹 방문자에게 Job 실행 권한을 주지 않는다. Job 설정 변경/환경변수 override 권한도 부여하지 않는다.
 
 ## 검증·중단
+
+### 2026-09-01 일일 상한 해제 요청
+
+- 사용자의 명시 요청에 따라 운영 Job에 `MODERATION_DAILY_LIMITS_ENABLED=false`를 적용한다. 기본 안전검사와 Luna의 **일일 호출 수·비용 상한만** 미적용한다. 큰 임의 숫자로 상한을 대체하지 않는다.
+- 기본값은 `true`로 유지하여 기존/미설정 환경은 이전 한도 의미를 보존한다. 캡 값 0 자체의 의미도 바꾸지 않는다. 진단 결과의 `dailyLimitsEnabled`로 실제 적용 여부를 구별한다.
+- 사용량·비용 원장, 캐시, 동시 예약과 중복 방지, 개인정보 승인·동의, 안전 판정, kill switch, 유한 재시도, 장애 circuit breaker는 유지한다. 무제한 모드에서도 호출과 비용을 기록한다.
+- [OpenAI 자체 속도·사용 한도](https://developers.openai.com/api/docs/guides/rate-limits)는 별개이며 이 설정으로 해제되지 않는다. 자동 공개 대상 회원 범위도 변경하지 않는다.
+- 기존 `DAILY_BUDGET_DEFERRED` 요청은 설정 변경만으로 앞당겨지지 않는다. 운영에서 확인한 해당 회원/제출 ID/현재 revision의 미공개 PENDING 요청만, claim이 없는 상태에서 `available_at`을 현재로 변경해 자동 검사에 복귀시킨다. 취소·거절·과거 무관한 대기 제출은 재등록하지 않는다. 사용량 원장이나 시도 이력은 초기화하지 않는다.
+- 롤백은 Job에 `MODERATION_DAILY_LIMITS_ENABLED=true`를 적용한다. 기존 캡 값으로 다시 제한되며 이미 시작한 실행은 시작 시 설정을 유지한다.
 
 - 로컬: 모달 접수 완료, 전역 toast 중복 방지/오류/취소/세션 만료, 상태별 버튼, 소유권 조회, durable dispatch/lease/revision/동의/예산/공개 복구 테스트.
 - 배포: PR 필수 CI → main Cloud Build → 웹 Ready/traffic 확인 → 같은 이미지로 Job 갱신 → 설정 활성화 → `diagnose-runtime` 확인.

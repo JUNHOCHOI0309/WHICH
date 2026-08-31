@@ -430,6 +430,7 @@ export type OpsModerationQueuePage = {
       killSwitch: boolean;
       canaryPercent: number;
       dailyCallCap: number;
+      dailyLimitsEnabled?: boolean;
       dailyCostMicrosCap: number;
       modelSnapshot: string;
       privacyGateAllowed: boolean;

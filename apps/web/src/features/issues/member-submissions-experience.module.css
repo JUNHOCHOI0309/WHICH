@@ -18,17 +18,8 @@
   justify-items: end;
   gap: 8px;
 }
-.publishedLink {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 44px;
-  padding: 10px 16px;
-  border: 1px solid var(--which-border-strong);
-  border-radius: 999px;
-  white-space: nowrap;
-  font-size: 0.78rem;
-  font-weight: 900;
+.submissionTimeline > .row[data-published="true"] {
+  grid-template-columns: minmax(0, 1fr) auto;
 }
 .submissionState small {
   color: var(--which-text-tertiary);

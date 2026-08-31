@@ -10,6 +10,7 @@ const runtime: ModerationProviderRuntimeDiagnostic = {
   killSwitch: false,
   canaryPercent: 1,
   dailyCallCap: 50,
+  dailyLimitsEnabled: true,
   dailyCostMicrosCap: 0,
   circuitWindowMinutes: 5,
   circuitMinimumCalls: 5,
@@ -50,6 +51,18 @@ function input(overrides: Record<string, unknown> = {}) {
 }
 
 describe("moderation operational health", () => {
+  it("does not report inactive daily ceilings as blockers while retaining usage metrics", () => {
+    const health = evaluateModerationOperationalHealth(
+      input({
+        runtime: { ...runtime, dailyLimitsEnabled: false },
+        callsToday: 1000,
+        costMicrosToday: 100000,
+      }),
+    );
+    expect(health.directUploadAllowed).toBe(true);
+    expect(health.alerts).toEqual([]);
+    expect(health.provider).toMatchObject({ dailyLimitsEnabled: false, callsToday: 1000 });
+  });
   it("reports bounded provider and worker metrics without pausing healthy uploads", () => {
     const health = evaluateModerationOperationalHealth(input());
     expect(health.directUploadAllowed).toBe(true);

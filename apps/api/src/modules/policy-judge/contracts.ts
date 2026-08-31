@@ -65,6 +65,10 @@ const configSchema = z.object({
   MODERATION_POLICY_JUDGE_RESPONSES_APPROVED: bool,
   MODERATION_POLICY_JUDGE_CANARY_PERCENT: z.coerce.number().int().min(0).max(100).default(0),
   MODERATION_POLICY_JUDGE_AUDIT_PERCENT: z.coerce.number().int().min(0).max(100).default(5),
+  MODERATION_DAILY_LIMITS_ENABLED: z
+    .enum(["true", "false"])
+    .default("true")
+    .transform((v) => v === "true"),
   MODERATION_POLICY_JUDGE_DAILY_CALL_CAP: z.coerce.number().int().min(0).max(100_000).default(0),
   MODERATION_POLICY_JUDGE_DAILY_COST_MICROS_CAP: z.coerce
     .number()
@@ -99,8 +103,9 @@ export function judgeDiagnostic(
                 ? "RESPONSES_APPROVAL_REQUIRED"
                 : config.MODERATION_POLICY_JUDGE_CANARY_PERCENT === 0
                   ? "CANARY_ZERO"
-                  : config.MODERATION_POLICY_JUDGE_DAILY_CALL_CAP === 0 ||
-                      config.MODERATION_POLICY_JUDGE_DAILY_COST_MICROS_CAP === 0
+                  : config.MODERATION_DAILY_LIMITS_ENABLED &&
+                      (config.MODERATION_POLICY_JUDGE_DAILY_CALL_CAP === 0 ||
+                        config.MODERATION_POLICY_JUDGE_DAILY_COST_MICROS_CAP === 0)
                     ? "BUDGET_ZERO"
                     : "SHADOW_READY";
   return {
@@ -112,6 +117,7 @@ export function judgeDiagnostic(
     reason,
     apiKeyConfigured: privacy.apiKeyConfigured,
     dailyCallCap: config.MODERATION_POLICY_JUDGE_DAILY_CALL_CAP,
+    dailyLimitsEnabled: config.MODERATION_DAILY_LIMITS_ENABLED,
     dailyCostMicrosCap: config.MODERATION_POLICY_JUDGE_DAILY_COST_MICROS_CAP,
     canaryPercent: config.MODERATION_POLICY_JUDGE_CANARY_PERCENT,
     auditPercent: config.MODERATION_POLICY_JUDGE_AUDIT_PERCENT,
