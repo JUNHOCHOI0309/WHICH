@@ -58,7 +58,7 @@
 }
 
 .imageChoice > .choiceMedia img {
-  object-fit: cover;
+  object-fit: contain;
 }
 
 .imageChoice > .choiceMedia .mediaExpandHint {
