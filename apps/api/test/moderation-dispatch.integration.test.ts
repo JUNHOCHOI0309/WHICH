@@ -23,6 +23,7 @@ import {
   type ModerationShadowAdapter,
 } from "../src/modules/moderation-dispatch/contracts.js";
 import { createModerationDispatcherService } from "../src/modules/moderation-dispatch/service.js";
+import { ModerationProviderCallError } from "../src/modules/moderation-providers/contracts.js";
 import { moderationProviderCacheHash } from "../src/modules/moderation-providers/input-binding.js";
 import { createTestDatabase } from "./helpers/test-database.js";
 
@@ -376,5 +377,36 @@ describe("Moderation Outbox Dispatcher and Shadow Worker", () => {
     await worker.dispatchBatch();
     expect(await worker.processBatch()).toMatchObject({ deadLettered: 1 });
     expect(await worker.listDeadLetters()).toHaveLength(1);
+  });
+
+  it("does not replay a non-retryable immutable input failure", async () => {
+    const { events } = await insertIssueTarget("1".repeat(64));
+    const adapter: ModerationShadowAdapter = {
+      provider: "TEST_PROVIDER_INPUT",
+      modelName: "shadow-moderator",
+      modelVersion: "v1",
+      cacheTtlMilliseconds: 60_000,
+      inspect: () =>
+        Promise.reject(
+          new ModerationProviderCallError("INPUT_UNAVAILABLE", "LOCAL_SCAN_PARTIAL", false),
+        ),
+    };
+    const worker = createModerationDispatcherService(testDatabase.database.db, adapter, {
+      ...options,
+      maxAttempts: 5,
+      providerGate: () => ({ allowed: true, reason: "TEST_GATE" }),
+    });
+    await worker.dispatchBatch();
+    expect(await worker.processBatch()).toMatchObject({ deadLettered: 1, retried: 0 });
+    const [run] = await testDatabase.database.db
+      .select()
+      .from(moderationRuns)
+      .where(eq(moderationRuns.sourceEventId, events.requestEvent.id));
+    expect(run).toMatchObject({
+      status: "DEAD_LETTERED",
+      attemptCount: 1,
+      errorCode: "PROVIDER_INPUT_UNAVAILABLE",
+      errorMessage: "INPUT_UNAVAILABLE:LOCAL_SCAN_PARTIAL",
+    });
   });
 });

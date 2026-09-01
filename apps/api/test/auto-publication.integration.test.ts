@@ -358,6 +358,32 @@ describe("explicit image publication pilot", () => {
     expect(row).toMatchObject({ status: "NEEDS_CHANGES", publishedIssueId: null });
     expect(row!.reviewNote).toContain("자동 검사를 완료하지 못했어요");
   });
+  it("explains an incomplete private OCR scan without exposing extracted text", async () => {
+    const f = await fixture();
+    await f.db
+      .update(schema.moderationRuns)
+      .set({
+        status: "DEAD_LETTERED",
+        errorCode: "PROVIDER_INPUT_UNAVAILABLE",
+        errorMessage: "INPUT_UNAVAILABLE:LOCAL_SCAN_PARTIAL",
+        deadLetteredAt: new Date(),
+      })
+      .where(eq(schema.moderationRuns.id, f.run.id));
+    await f.db
+      .insert(schema.outboxEvents)
+      .values(submissionWakeup(f.submission.id, f.submission.revision, true));
+    const wakeups = createSubmissionWakeups(f.db, [f.member.id]);
+    await wakeups.dispatch(async () => {});
+    const [request] = await wakeups.claimed();
+    await wakeups.finish(request!);
+    const [row] = await f.db
+      .select()
+      .from(schema.memberIssueSubmissions)
+      .where(eq(schema.memberIssueSubmissions.id, f.submission.id));
+    expect(row).toMatchObject({ status: "NEEDS_CHANGES", publishedIssueId: null });
+    expect(row!.reviewNote).toContain("이미지 속 문자 검사를 완료하지 못했어요");
+    expect(row!.reviewNote).not.toContain("LOCAL_SCAN");
+  });
   it("requires a claimed new submission wakeup for the automated job scope", async () => {
     const f = await fixture();
     const judge = createPolicyJudgeService({

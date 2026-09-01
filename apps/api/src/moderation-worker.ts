@@ -35,6 +35,7 @@ import {
 } from "./modules/issue-media/storage.js";
 import { createModerationDispatcherService } from "./modules/moderation-dispatch/service.js";
 import { createModerationProviderInputResolver } from "./modules/moderation-providers/input-resolver.js";
+import { requireCompletePrivateLocalScan } from "./modules/moderation-providers/local-scan-gate.js";
 import { createOpenAiModerationAdapter } from "./modules/moderation-providers/openai-moderation-adapter.js";
 import {
   createModerationProviderGate,
@@ -141,14 +142,7 @@ async function requirePilotAccess(target: Parameters<typeof resolveRawInput>[0])
 const resolveProviderInput: typeof resolveRawInput = async (target) => {
   await requirePilotAccess(target);
   const input = await resolveRawInput(target);
-  if (
-    pilotRuntime &&
-    (input.scope !== "SUBMISSION_REVISION" ||
-      input.images?.length !== 2 ||
-      input.embeddedText?.images.length !== 2 ||
-      input.embeddedText.images.some((image) => image.status !== "COMPLETE"))
-  )
-    throw new Error("COMPLETE_PRIVATE_LOCAL_SCAN_REQUIRED");
+  if (pilotRuntime) requireCompletePrivateLocalScan(input);
   await requirePilotAccess(target);
   return input;
 };

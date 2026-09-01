@@ -3,6 +3,7 @@ import {
   createLocalMediaSignalDetector,
   localMediaScannerConfig,
   createLocalEmbeddedTextExtractor,
+  shouldRetryEmbeddedTextScan,
 } from "../src/modules/issue-media/local-scan-detector.js";
 import {
   incompleteLocalScan,
@@ -20,6 +21,27 @@ const detector = (script: string, timeoutMs = 1000) =>
 afterEach(() => vi.unstubAllEnvs());
 
 describe("local scanner isolation and limits", () => {
+  it("retries only transient incomplete embedded-text engine output", () => {
+    const scan = incompleteLocalScan("ENGINE_FAILURE");
+    expect(
+      shouldRetryEmbeddedTextScan({
+        scan,
+        embeddedText: { version: "which-embedded-text-v1", status: "PARTIAL", text: "" },
+      }),
+    ).toBe(true);
+    expect(
+      shouldRetryEmbeddedTextScan({
+        scan,
+        embeddedText: { version: "which-embedded-text-v1", status: "WITHHELD_PII", text: "" },
+      }),
+    ).toBe(false);
+    expect(
+      shouldRetryEmbeddedTextScan({
+        scan: { ...scan, failureCode: "TIMEOUT" },
+        embeddedText: { version: "which-embedded-text-v1", status: "UNAVAILABLE", text: "" },
+      }),
+    ).toBe(false);
+  });
   it.each(["qr", "barcode", "incomplete"])("keeps %s evidence in private review", async (kind) => {
     const scan = incompleteLocalScan("ENGINE_FAILURE");
     delete scan.failureCode;
