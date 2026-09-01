@@ -177,24 +177,6 @@ describe("Luna pair policy Shadow", () => {
         ],
       },
     ],
-    [
-      "INCONSISTENT_ALLOW",
-      {
-        output: [
-          {
-            type: "message",
-            role: "assistant",
-            status: "completed",
-            content: [
-              {
-                type: "output_text",
-                text: JSON.stringify({ ...clearDecision, privacy_risk: "UNCERTAIN" }),
-              },
-            ],
-          },
-        ],
-      },
-    ],
   ] as const)("fails closed on %s", async (reason, overrides) => {
     const call = createLunaJudgeAdapter({
       apiKey: "fixture",
@@ -206,6 +188,43 @@ describe("Luna pair policy Shadow", () => {
     const result = await call(await prepareJudgeRequest(await pairInput(), "p"));
     expect(result).toMatchObject({ reason, decision: null });
     expect(JSON.stringify(result)).not.toContain("private leaked OCR");
+  });
+  it("downgrades a contradictory ALLOW to an explicit human review", async () => {
+    const call = createLunaJudgeAdapter({
+      apiKey: "fixture",
+      timeoutMs: 1000,
+      fetch: vi.fn<typeof fetch>().mockResolvedValue(
+        new Response(
+          JSON.stringify(
+            response({
+              output: [
+                {
+                  type: "message",
+                  role: "assistant",
+                  status: "completed",
+                  content: [
+                    {
+                      type: "output_text",
+                      text: JSON.stringify({ ...clearDecision, privacy_risk: "UNCERTAIN" }),
+                    },
+                  ],
+                },
+              ],
+            }),
+          ),
+        ),
+      ),
+    });
+    const result = await call(await prepareJudgeRequest(await pairInput(), "p"));
+    expect(result).toMatchObject({
+      reason: "INCONSISTENT_ALLOW_DOWNGRADED",
+      decision: {
+        decision: "REVIEW",
+        reason_codes: ["PRIVACY"],
+        privacy_risk: "UNCERTAIN",
+        needs_human: true,
+      },
+    });
   });
   it("retains unknown usage for network/HTTP errors without retry or leaking errors", async () => {
     const request = await prepareJudgeRequest(await pairInput(), "p");
