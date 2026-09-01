@@ -329,13 +329,16 @@ export function toSubmission(
     revision: row.revision,
     status: row.status as MemberIssueSubmission["status"],
     publishedIssueId: row.publishedIssueId,
-    publicationState: row.publishedIssueId
-      ? "PUBLISHED"
-      : row.status === "APPROVED"
-        ? "PROCESSING"
-        : row.status === "PENDING"
-          ? "PROCESSING"
-          : (row.status as "NEEDS_CHANGES" | "REJECTED" | "CANCELLED"),
+    publicationState:
+      row.status === "CANCELLED"
+        ? "CANCELLED"
+        : row.publishedIssueId
+          ? "PUBLISHED"
+          : row.status === "APPROVED"
+            ? "PROCESSING"
+            : row.status === "PENDING"
+              ? "PROCESSING"
+              : (row.status as "NEEDS_CHANGES" | "REJECTED" | "CANCELLED"),
     question: row.question,
     context: row.context,
     choiceA: row.choiceA,
@@ -397,8 +400,11 @@ export async function recordSubmissionTransition(
   action: string,
   memberId?: string,
 ) {
-  const summary =
-    row.status === "CANCELLED"
+  const removedPublishedIssue =
+    action === "PUBLISHED_ISSUE_REMOVED" && Boolean(row.publishedIssueId);
+  const summary = removedPublishedIssue
+    ? "게시된 질문을 삭제했어요."
+    : row.status === "CANCELLED"
       ? "질문 제출을 취소했어요."
       : row.status === "NEEDS_CHANGES"
         ? "게시 전에 질문 내용을 수정해 주세요."
@@ -409,16 +415,19 @@ export async function recordSubmissionTransition(
     targetId: row.publishedIssueId ?? row.id,
     policyVersion: "issue-submission-flow-v1",
     reasonCode: action,
-    actionType:
-      row.status === "CANCELLED"
+    actionType: removedPublishedIssue
+      ? "PUBLISHED_ISSUE_REMOVED"
+      : row.status === "CANCELLED"
         ? "SUBMISSION_CANCELLED"
         : row.status === "NEEDS_CHANGES"
           ? "SUBMISSION_NEEDS_CHANGES"
           : "ISSUE_PUBLISHED",
     summary,
-    nextStep: row.publishedIssueId
-      ? "내 질문에서 게시된 질문을 확인할 수 있어요."
-      : "작성 내용과 검수 이력은 보존되며 공개되지 않아요.",
+    nextStep: removedPublishedIssue
+      ? "공개 노출과 추가 투표는 중단됐으며 기존 참여 기록은 보존돼요."
+      : row.publishedIssueId
+        ? "내 질문에서 게시된 질문을 확인할 수 있어요."
+        : "작성 내용과 검수 이력은 보존되며 공개되지 않아요.",
     effectiveAt: new Date(),
   });
   await transaction.insert(moderationAuditEvents).values({
@@ -793,6 +802,81 @@ async function hardDeleteFailedSubmission(
   };
 }
 
+async function removePublishedIssue(transaction: Transaction, current: SubmissionRow) {
+  const issueId = current.publishedIssueId;
+  if (!issueId)
+    throw new IssueWriteError(
+      "ISSUE_SUBMISSION_NOT_DELETABLE",
+      409,
+      "게시된 질문을 찾지 못했어요.",
+    );
+
+  const now = new Date();
+  const [removedIssue] = await transaction
+    .update(issues)
+    .set({
+      lifecycle: "RETIRED",
+      visibility: "REMOVED",
+      participation: "VOTING_CLOSED",
+      feedEligibility: "EXCLUDED",
+      updatedAt: now,
+    })
+    .where(eq(issues.id, issueId))
+    .returning({ id: issues.id });
+  if (!removedIssue)
+    throw new IssueWriteError(
+      "ISSUE_SUBMISSION_NOT_DELETABLE",
+      409,
+      "게시된 질문을 찾지 못해 삭제하지 않았어요.",
+    );
+
+  const revision = current.revision + 1;
+  const [updated] = await transaction
+    .update(memberIssueSubmissions)
+    .set({
+      revision,
+      status: "CANCELLED",
+      reviewNote: null,
+      reviewedAt: now,
+      updatedAt: now,
+    })
+    .where(eq(memberIssueSubmissions.id, current.id))
+    .returning();
+  if (!updated)
+    throw new IssueWriteError("ISSUE_SUBMISSION_NOT_FOUND", 404, "제출한 질문을 찾지 못했어요.");
+
+  await transaction.insert(memberIssueSubmissionRevisions).values({
+    submissionId: updated.id,
+    memberId: updated.memberId,
+    revision,
+    idempotencyKey: randomUUID(),
+    question: updated.question,
+    context: updated.context,
+    contextMediaAssetId: updated.contextMediaAssetId,
+    choiceA: updated.choiceA,
+    choiceB: updated.choiceB,
+    choiceC: updated.choiceC,
+    choiceD: updated.choiceD,
+    mediaAssetAId: updated.mediaAssetAId,
+    mediaAssetBId: updated.mediaAssetBId,
+    mediaAssetCId: updated.mediaAssetCId,
+    mediaAssetDId: updated.mediaAssetDId,
+    interestCardCode: updated.interestCardCode,
+    contentHash: updated.contentHash,
+  });
+  await recordSubmissionTransition(
+    transaction,
+    updated,
+    "PUBLISHED_ISSUE_REMOVED",
+    current.memberId,
+  );
+  return {
+    submission: await submissionView(transaction, updated),
+    created: true,
+    deleted: true,
+  };
+}
+
 export function createIssueWriteService(
   database: Database["db"],
   storage: IssueMediaObjectStorage | null = null,
@@ -1129,9 +1213,16 @@ export function createIssueWriteService(
           );
         if (
           (command.action === "CANCEL" && current.status === "CANCELLED") ||
+          (command.action === "DELETE" &&
+            current.status === "CANCELLED" &&
+            current.publishedIssueId) ||
           (!["CANCEL", "DELETE"].includes(command.action) && current.publishedIssueId)
         ) {
-          return { submission: await submissionView(transaction, current), created: false };
+          return {
+            submission: await submissionView(transaction, current),
+            created: false,
+            ...(command.action === "DELETE" ? { deleted: true } : {}),
+          };
         }
         if (current.revision !== command.expectedRevision)
           throw new IssueWriteError(
@@ -1140,11 +1231,9 @@ export function createIssueWriteService(
             "질문이 변경되었어요. 최신 상태를 다시 확인해 주세요.",
           );
         if (command.action === "DELETE") {
+          if (current.publishedIssueId) return removePublishedIssue(transaction, current);
           const view = await submissionView(transaction, current);
-          if (
-            current.publishedIssueId ||
-            !["NEEDS_CHANGES", "REJECTED", "QUARANTINED"].includes(view.publicationState)
-          )
+          if (!["NEEDS_CHANGES", "REJECTED", "QUARANTINED"].includes(view.publicationState))
             throw new IssueWriteError(
               "ISSUE_SUBMISSION_NOT_DELETABLE",
               409,
