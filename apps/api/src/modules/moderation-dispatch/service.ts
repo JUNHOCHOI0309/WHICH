@@ -865,7 +865,11 @@ export function createModerationDispatcherService(
   async function failRun(run: typeof moderationRuns.$inferSelect, error: unknown) {
     if (!run.claimToken) return "STALE" as const;
     const failedAt = now();
-    const deadLettered = run.attemptCount >= options.maxAttempts;
+    // Input validation failures cannot recover by replaying the same immutable
+    // revision. Transient provider/network errors retain the configured retries.
+    const deadLettered =
+      (error instanceof ModerationProviderCallError && !error.retryable) ||
+      run.attemptCount >= options.maxAttempts;
     const [updated] = await database
       .update(moderationRuns)
       .set({

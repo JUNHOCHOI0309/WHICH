@@ -17,6 +17,10 @@ const MAX_ATTEMPTS = 5;
 type Wakeup = typeof outboxEvents.$inferSelect;
 const technicalFailure =
   "자동 검사를 완료하지 못했어요. 잠시 후 수정·이미지 변경으로 다시 제출하거나 이미지 없이 게시해 주세요.";
+const localScanIncomplete =
+  "이미지 속 문자 검사를 완료하지 못했어요. 더 선명한 이미지로 바꾸거나 이미지 없이 게시해 주세요.";
+const localScanPrivacy =
+  "이미지에서 개인정보일 수 있는 문자를 확인했어요. 개인정보를 가린 이미지로 바꾸거나 이미지 없이 게시해 주세요.";
 
 export function createSubmissionWakeups(
   database: Database["db"],
@@ -107,9 +111,16 @@ export function createSubmissionWakeups(
           options.exhausted ||
           run?.run.status === "DEAD_LETTERED" ||
           (judge && ["FAILED", "UNKNOWN"].includes(judge.status))
-        )
-          note = technicalFailure;
-        else if (
+        ) {
+          const failure = run?.run.errorMessage ?? "";
+          note = failure.includes("LOCAL_SCAN_PII_WITHHELD")
+            ? localScanPrivacy
+            : failure.includes("LOCAL_SCAN_PARTIAL") ||
+                failure.includes("LOCAL_SCAN_UNAVAILABLE") ||
+                failure.includes("LOCAL_SCAN_EVIDENCE_UNAVAILABLE")
+              ? localScanIncomplete
+              : technicalFailure;
+        } else if (
           run?.run.status === "SUCCEEDED" &&
           Array.isArray(run.run.result.signals) &&
           run.run.result.signals.some((s: unknown) =>

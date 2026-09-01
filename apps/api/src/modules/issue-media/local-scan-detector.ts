@@ -126,11 +126,23 @@ export function createLocalMediaSignalDetector(options: ScannerOptions): LocalMe
   };
 }
 
+export function shouldRetryEmbeddedTextScan(output: ScannerOutput) {
+  return (
+    "embeddedText" in output &&
+    output.scan.failureCode === "ENGINE_FAILURE" &&
+    ["PARTIAL", "UNAVAILABLE"].includes(output.embeddedText.status)
+  );
+}
+
 // A separate opt-in transient path; the ordinary upload inspector still cannot return OCR text.
 export function createLocalEmbeddedTextExtractor(options: ScannerOptions) {
   const scanner = createScanner(options, true);
   return async (bytes: Buffer): Promise<EmbeddedText> => {
-    const output = await scanner.inspect(bytes);
+    let output = await scanner.inspect(bytes);
+    // A child OCR engine can fail transiently during startup. Retry once in this
+    // bounded process instead of sending the whole submission through the
+    // minute-scale Cloud Run queue repeatedly.
+    if (shouldRetryEmbeddedTextScan(output)) output = await scanner.inspect(bytes);
     if (!("embeddedText" in output))
       return { version: EMBEDDED_TEXT_VERSION, status: "UNAVAILABLE", text: "" };
     const text = output.embeddedText;
