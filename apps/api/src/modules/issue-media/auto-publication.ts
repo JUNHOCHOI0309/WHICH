@@ -185,18 +185,30 @@ export function createAutoPublicationService(options: {
       )
       .where(inArray(issueMediaAssets.id, ids));
     const ordered = ids.map((id) => rows.find((r) => r.asset.id === id));
-    if (
-      ordered.some(
-        (r) =>
-          !r ||
-          r.asset.storageState !== "STAGED" ||
-          r.asset.moderationState !== "PENDING" ||
-          !r.asset.stagingObjectKey ||
-          r.version.hashAlgorithm !== "SHA256",
+    const reusable = ordered.map((row) => {
+      if (
+        !row ||
+        row.asset.processingState !== "READY" ||
+        !["ASSERTED", "CLEARED"].includes(row.asset.rightsState) ||
+        row.version.hashAlgorithm !== "SHA256"
       )
-    )
+        return null;
+      if (
+        row.asset.storageState === "STAGED" &&
+        row.asset.moderationState === "PENDING" &&
+        row.asset.stagingObjectKey
+      )
+        return { ...row, objectKey: row.asset.stagingObjectKey, alreadyPublished: false };
+      if (
+        row.asset.storageState === "PUBLISHED" &&
+        row.asset.moderationState === "APPROVED" &&
+        row.asset.publishedObjectKey
+      )
+        return { ...row, objectKey: row.asset.publishedObjectKey, alreadyPublished: true };
       return null;
-    const assets = ordered.map((r) => r!);
+    });
+    if (reusable.some((row) => !row)) return null;
+    const assets = reusable as Array<NonNullable<(typeof reusable)[number]>>;
     const [blocked] = await reader
       .select({ hash: issueMediaKnownBlockHashes.sha256 })
       .from(issueMediaKnownBlockHashes)
@@ -256,17 +268,24 @@ export function createAutoPublicationService(options: {
       return { status: "HELD", reason: "INPUT_CHANGED" };
     const bytes: Buffer[] = [];
     for (const row of initial.assets) {
-      const body = await storage!.read(row.asset.stagingObjectKey!);
+      const body = await storage!.read(row.objectKey);
       if (createHash("sha256").update(body).digest("hex") !== row.version.inputHash)
         return { status: "HELD", reason: "PIXEL_HASH_CHANGED" };
       bytes.push(body);
     }
     const attempt = randomUUID();
-    const plans = initial.assets.map(({ asset }) => ({
-      assetId: asset.id,
-      key: `issue-media/published/auto/${attempt}/${asset.id}.webp`,
-      privateKey: asset.stagingObjectKey!,
-    }));
+    const plans = initial.assets.flatMap((row, bytesIndex) =>
+      row.alreadyPublished
+        ? []
+        : [
+            {
+              assetId: row.asset.id,
+              key: `issue-media/published/auto/${attempt}/${row.asset.id}.webp`,
+              privateKey: row.objectKey,
+              bytesIndex,
+            },
+          ],
+    );
     // Write-ahead recovery: even a process crash or unknown DB commit leaves discoverable keys.
     // Every recovery operation takes the same submission lock as publication.
     const result = await database.transaction(async (tx) => {
@@ -277,8 +296,9 @@ export function createAutoPublicationService(options: {
         current.evaluation.cacheKey !== prepared.cacheKey ||
         current.assets.some(
           (r, i) =>
-            r.asset.id !== plans[i]!.assetId ||
-            r.asset.stagingObjectKey !== plans[i]!.privateKey ||
+            r.asset.id !== initial.assets[i]!.asset.id ||
+            r.objectKey !== initial.assets[i]!.objectKey ||
+            r.alreadyPublished !== initial.assets[i]!.alreadyPublished ||
             r.version.inputHash !== initial.assets[i]!.version.inputHash,
         )
       )
@@ -303,32 +323,33 @@ export function createAutoPublicationService(options: {
         return { status: "HELD", reason: "ACCESS_CHANGED" };
       // Deliberately committed on a separate connection, while the submission lock is held.
       // Recovery cannot overtake this attempt, and plans survive a rollback of publication.
-      await database.insert(moderationReconciliations).values(
-        plans.flatMap((p) => [
-          {
-            targetId: initial.source.target.id,
-            resourceType: "R2",
-            expectedReference: p.key,
-            observedReference: p.assetId,
-            status: "MISMATCH",
-            repairReference: PUBLIC_REPAIR,
-          },
-          {
-            targetId: initial.source.target.id,
-            resourceType: "R2",
-            expectedReference: p.privateKey,
-            observedReference: p.assetId,
-            status: "MISMATCH",
-            repairReference: PRIVATE_REPAIR,
-          },
-        ]),
-      );
-      for (let i = 0; i < plans.length; i++)
-        await storage!.preparePublication!(plans[i]!.key, bytes[i]!);
+      if (plans.length > 0)
+        await database.insert(moderationReconciliations).values(
+          plans.flatMap((p) => [
+            {
+              targetId: initial.source.target.id,
+              resourceType: "R2",
+              expectedReference: p.key,
+              observedReference: p.assetId,
+              status: "MISMATCH",
+              repairReference: PUBLIC_REPAIR,
+            },
+            {
+              targetId: initial.source.target.id,
+              resourceType: "R2",
+              expectedReference: p.privateKey,
+              observedReference: p.assetId,
+              status: "MISMATCH",
+              repairReference: PRIVATE_REPAIR,
+            },
+          ]),
+        );
+      for (const plan of plans)
+        await storage!.preparePublication!(plan.key, bytes[plan.bytesIndex]!);
       if (!enabled() || !(await judge.readCurrentSource(current.source.run.id, tx)))
         throw new Error("PUBLICATION_GATE_CHANGED");
-      for (const plan of plans)
-        await tx
+      for (const plan of plans) {
+        const updated = await tx
           .update(issueMediaAssets)
           .set({
             storageState: "PUBLISHED",
@@ -337,7 +358,17 @@ export function createAutoPublicationService(options: {
             publishedAt: now(),
             updatedAt: now(),
           })
-          .where(eq(issueMediaAssets.id, plan.assetId));
+          .where(
+            and(
+              eq(issueMediaAssets.id, plan.assetId),
+              eq(issueMediaAssets.storageState, "STAGED"),
+              eq(issueMediaAssets.moderationState, "PENDING"),
+              eq(issueMediaAssets.stagingObjectKey, plan.privateKey),
+            ),
+          )
+          .returning({ id: issueMediaAssets.id });
+        if (updated.length !== 1) throw new Error("PUBLICATION_ASSET_CHANGED");
+      }
       const published = await publishReviewedSubmission(
         tx,
         current.source.submission,

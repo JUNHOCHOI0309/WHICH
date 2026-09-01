@@ -534,18 +534,30 @@ export function createIssueMediaService(
       .where(eq(issueMediaAssets.sha256, processed.sha256))
       .limit(1);
     if (duplicate) {
+      const reusablePrivateAsset =
+        duplicate.processingState === "READY" &&
+        duplicate.moderationState === "PENDING" &&
+        duplicate.storageState === "STAGED" &&
+        Boolean(duplicate.stagingObjectKey) &&
+        ["ASSERTED", "CLEARED"].includes(duplicate.rightsState);
+      const reusablePublishedAsset =
+        duplicate.processingState === "READY" &&
+        duplicate.moderationState === "APPROVED" &&
+        duplicate.storageState === "PUBLISHED" &&
+        Boolean(duplicate.publishedObjectKey) &&
+        ["ASSERTED", "CLEARED"].includes(duplicate.rightsState);
       if (
         input.sourceType === "MEMBER_SUBMISSION" &&
         duplicate.sourceType === "MEMBER_SUBMISSION" &&
         duplicate.uploadedByMemberId === input.memberId &&
-        duplicate.storageState === "STAGED"
+        (reusablePrivateAsset || reusablePublishedAsset)
       ) {
         return mapAsset(duplicate, storage);
       }
       throw new IssueMediaError(
         "MEDIA_DUPLICATE",
         409,
-        `This exact image already exists as asset ${duplicate.id}.`,
+        "This exact image is already registered and cannot be reused by this account.",
       );
     }
     const id = randomUUID();

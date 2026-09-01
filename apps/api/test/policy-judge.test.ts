@@ -8,6 +8,7 @@ import {
   judgeCosts,
   judgeDiagnostic,
   POLICY_JUDGE_MODEL,
+  POLICY_JUDGE_PROFILE,
   policyJudgeConfig,
   sampleBucket,
 } from "../src/modules/policy-judge/contracts.js";
@@ -76,6 +77,16 @@ describe("Luna pair policy Shadow", () => {
       max_output_tokens: 384,
       text: { format: { type: "json_schema", strict: true } },
     });
+    expect(POLICY_JUDGE_PROFILE).toBe("which-luna-review-v4");
+    expect(prepared.body.instructions).toContain(
+      "Ordinary non-explicit swimwear, beachwear, sportswear and fashion images are not SEXUAL by themselves.",
+    );
+    expect(prepared.body.instructions).toContain(
+      "Do not use SEXUAL solely because an image shows legs, shoulders, midriff, cleavage, a tight or high-cut garment, or a conventional fashion pose.",
+    );
+    expect(prepared.body.instructions).toContain(
+      "Use SEXUAL for explicit nudity, visible genitals, anus or nipples, sexual acts, pornographic or fetish framing, or clearly sexualized focus on intimate areas.",
+    );
     const sent = prepared.body.input as Array<{
       content: Array<{ type: string; image_url?: string; detail?: string }>;
     }>;

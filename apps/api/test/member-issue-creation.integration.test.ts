@@ -456,7 +456,7 @@ describe("Member Issue creation v1", () => {
     expect(history.every((item) => item.publicationState === "PUBLISHED")).toBe(true);
   });
 
-  it("accepts only paired staged media owned by the submitting Member", async () => {
+  it("accepts paired staged media owned by the submitting Member", async () => {
     const session = await createSession("이미지 질문 회원");
     const mediaIds = [randomUUID(), randomUUID()];
     await database.db.insert(issueMediaAssets).values(
@@ -503,6 +503,52 @@ describe("Member Issue creation v1", () => {
     });
     expect(oneSided.statusCode).toBe(422);
     expect(oneSided.json()).toMatchObject({ code: "ISSUE_SUBMISSION_MEDIA_INVALID" });
+  });
+
+  it("accepts a previously published image pair owned by the submitting Member", async () => {
+    const session = await createSession("게시 이미지 재사용 회원");
+    const mediaIds = [randomUUID(), randomUUID()];
+    await database.db.insert(issueMediaAssets).values(
+      mediaIds.map((id) => ({
+        id,
+        uploadedByMemberId: session.member.id,
+        sourceType: "MEMBER_SUBMISSION",
+        rightsAttestation: "I own this image and allow reuse in another submitted question.",
+        rightsAttestedAt: new Date(),
+        sha256: id.replaceAll("-", "").repeat(2),
+        perceptualHash: id.replaceAll("-", "").slice(0, 16),
+        inputMimeType: "image/png",
+        inputByteSize: 100,
+        inputWidth: 10,
+        inputHeight: 10,
+        outputByteSize: 80,
+        outputWidth: 10,
+        outputHeight: 10,
+        moderationState: "APPROVED",
+        storageState: "PUBLISHED",
+        publishedObjectKey: `issue-media/published/${id}.webp`,
+        publishedAt: new Date(),
+      })),
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/member/issue-submissions",
+      headers: { authorization: `Bearer ${session.token}`, "idempotency-key": randomUUID() },
+      payload: {
+        ...createPayload("게시했던 이미지로 다시 질문해도 될까"),
+        mediaAssetAId: mediaIds[0],
+        mediaAssetBId: mediaIds[1],
+      },
+    });
+    expect(response.statusCode).toBe(201);
+    expect(response.json()).toMatchObject({
+      submission: {
+        status: "PENDING",
+        mediaAssetAId: mediaIds[0],
+        mediaAssetBId: mediaIds[1],
+      },
+    });
   });
 
   it("attaches the first A/B media pair to an unchanged pending submission", async () => {

@@ -9,7 +9,7 @@ export const POLICY_JUDGE_MODEL = "gpt-5.6-luna";
 // Responses retention differs from the original moderation-only notice. Never reuse v1 consent.
 export const POLICY_JUDGE_CONSENT_VERSION = "which-media-consent-v2";
 // Bump on prompt/schema/pricing/routing/derivative changes; never reuse an old approval profile.
-export const POLICY_JUDGE_PROFILE = "which-luna-review-v3";
+export const POLICY_JUDGE_PROFILE = "which-luna-review-v4";
 export const POLICY_JUDGE_PROVIDER = "OPENAI_POLICY_JUDGE";
 export const POLICY_JUDGE_MAX_OUTPUT = 384;
 export const POLICY_JUDGE_CACHE_TTL_MS = 24 * 60 * 60 * 1000;

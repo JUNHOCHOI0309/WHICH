@@ -84,8 +84,10 @@ export function evaluatePublicationReadiness(input: PublicationReadinessInput) {
     if (
       !asset ||
       asset.processingState !== "READY" ||
-      asset.moderationState !== "PENDING" ||
-      asset.storageState !== "STAGED"
+      !(
+        (asset.moderationState === "PENDING" && asset.storageState === "STAGED") ||
+        (asset.moderationState === "APPROVED" && asset.storageState === "PUBLISHED")
+      )
     )
       add("ASSET_NOT_PRIVATE_READY");
     if (!asset || !["ASSERTED", "CLEARED"].includes(asset.rightsState)) add("RIGHTS_UNAVAILABLE");
