@@ -56,6 +56,34 @@ describe("Member private profile experience", () => {
       "fetch",
       vi.fn(async (input: string | URL | Request) => {
         requests.push(String(input));
+        if (String(input) === "/api/issue-submissions?limit=3") {
+          return jsonResponse({
+            items: [
+              {
+                id: "submission-1",
+                revision: 2,
+                status: "NEEDS_CHANGES",
+                publicationState: "NEEDS_CHANGES",
+                publishedIssueId: null,
+                question: "주말에는 무엇을 할까요?",
+                context: null,
+                choiceA: "산책",
+                choiceB: "독서",
+                choiceC: null,
+                choiceD: null,
+                contextMediaAssetId: null,
+                mediaAssetAId: "a",
+                mediaAssetBId: "b",
+                mediaAssetCId: null,
+                mediaAssetDId: null,
+                interestCardCode: "DAILY_LIFE",
+                reviewNote: "이미지를 바꿔 주세요.",
+                submittedAt: "2026-08-21T09:00:00.000Z",
+                updatedAt: "2026-08-21T09:00:00.000Z",
+              },
+            ],
+          });
+        }
         return jsonResponse({
           member: {
             id: "member-1",
@@ -118,12 +146,25 @@ describe("Member private profile experience", () => {
       "href",
       "/me/votes",
     );
+    expect(screen.getByRole("heading", { name: "내 질문" })).toBeVisible();
+    expect(await screen.findByText("주말에는 무엇을 할까요?")).toBeVisible();
+    expect(screen.getByText("수정 필요")).toBeVisible();
+    expect(screen.getByText("수정본 2")).toBeVisible();
+    expect(screen.getByRole("link", { name: /내 질문에서 보기/ })).toHaveAttribute(
+      "href",
+      "/me/submissions",
+    );
+    expect(screen.getByRole("link", { name: /전체 내 질문 보기/ })).toHaveAttribute(
+      "href",
+      "/me/submissions",
+    );
     expect(screen.getByRole("link", { name: "프로필" })).toHaveAttribute("aria-current", "page");
     expect(
       screen.queryByRole("heading", { name: "이메일 로그인을 WHICH 계정에 연결해요." }),
     ).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "이메일 로그인 연결" })).not.toBeInTheDocument();
     expect(requests).toContain("/api/me?limit=3");
+    expect(requests).toContain("/api/issue-submissions?limit=3");
     expect(screen.queryByRole("heading", { name: "로그인 수단 연결" })).not.toBeInTheDocument();
   });
 
@@ -282,6 +323,13 @@ describe("Member private profile experience", () => {
 
     render(<MemberProfileExperience />);
 
+    expect(await screen.findByRole("heading", { name: "프로필 설정" })).toBeVisible();
+    expect(screen.getByText("공개 범위").querySelector("img")?.getAttribute("src")).toContain(
+      encodeURIComponent("/icons/locked.png"),
+    );
+    expect(
+      screen.getByRole("button", { name: "프로필 저장" }).querySelector("img")?.getAttribute("src"),
+    ).toContain(encodeURIComponent("/icons/diskette.png"));
     const handle = await screen.findByRole("textbox", { name: /Handle/ });
     fireEvent.change(handle, { target: { value: "question_maker" } });
     fireEvent.change(screen.getByRole("textbox", { name: /짧은 소개/ }), {

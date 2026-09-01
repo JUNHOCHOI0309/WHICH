@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  createCredentialMemberSession,
   createOAuthMemberSession,
   createProviderMemberSession,
   MemberIdentityLinkError,
@@ -60,6 +61,47 @@ describe("Provider member session bridge", () => {
         providerSubject: "naver-subject",
         displayName: "네이버 회원",
       },
+    ]);
+  });
+
+  it("retries credential login without a stale Guest Subject", async () => {
+    const requestBodies: Record<string, unknown>[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
+        requestBodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+        if (requestBodies.length === 1) {
+          return Response.json(
+            { code: "GUEST_SUBJECT_NOT_FOUND", message: "Guest subject not found." },
+            { status: 404 },
+          );
+        }
+        return Response.json(
+          { token: "credential-session", expiresAt: "2026-09-03T00:00:00.000Z" },
+          { status: 201 },
+        );
+      }),
+    );
+
+    await expect(
+      createCredentialMemberSession({
+        mode: "login",
+        email: "member@example.com",
+        password: "password",
+        anonymousSubjectId: guestSubjectId,
+      }),
+    ).resolves.toEqual({
+      token: "credential-session",
+      expiresAt: "2026-09-03T00:00:00.000Z",
+      memberId: undefined,
+    });
+    expect(requestBodies).toEqual([
+      {
+        email: "member@example.com",
+        password: "password",
+        anonymousSubjectId: guestSubjectId,
+      },
+      { email: "member@example.com", password: "password" },
     ]);
   });
 

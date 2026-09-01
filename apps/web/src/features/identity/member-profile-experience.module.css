@@ -1063,6 +1063,31 @@
   scroll-margin-top: 96px;
 }
 
+.voteHistory {
+  border-color: color-mix(in srgb, var(--which-cyan) 30%, var(--which-border));
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--which-cyan-soft) 72%, white),
+    var(--which-surface) 58%
+  );
+}
+
+.questionHistory {
+  border-color: color-mix(in srgb, var(--which-orange) 28%, var(--which-border));
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--which-orange-soft) 70%, white),
+    var(--which-surface) 58%
+  );
+}
+
+.voteHistory .voteCard,
+.questionHistory .voteCard,
+.voteHistory .empty,
+.questionHistory .empty {
+  background: color-mix(in srgb, var(--which-surface) 92%, transparent);
+}
+
 .historyHeading {
   display: flex;
   align-items: end;
@@ -1166,6 +1191,62 @@
   text-decoration: none;
   font-size: 0.8rem;
   font-weight: 850;
+}
+
+.questionChoices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin-top: auto;
+  color: var(--which-text-secondary);
+  font-size: 0.76rem;
+  line-height: 1.5;
+}
+
+.questionChoices span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.questionChoices b {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 23px;
+  height: 23px;
+  border-radius: 7px;
+  background: var(--which-cyan-soft);
+  color: var(--which-cyan-strong);
+  font-size: 0.68rem;
+}
+
+.questionChoices span:nth-child(2) b {
+  background: var(--which-orange-soft);
+  color: var(--which-orange-strong);
+}
+
+.questionStatus {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.questionStatus span {
+  border-radius: 999px;
+  background: var(--which-cyan-soft);
+  padding: 6px 9px;
+  color: var(--which-cyan-strong);
+  font-size: 0.68rem;
+  font-weight: 900;
+}
+
+.questionStatus small {
+  color: var(--which-text-tertiary);
+  font-size: 0.66rem;
 }
 
 .empty {

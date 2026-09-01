@@ -257,7 +257,7 @@ describe("IssueCreatorExperience", () => {
     expect(navigation.push).toHaveBeenCalledWith("/issues/library-issue-id");
   });
 
-  it("uploads an explanation image and trusted Member A/B images concurrently", async () => {
+  it("uploads an explanation image and trusted Member A/B images sequentially", async () => {
     const requests: string[] = [];
     let uploadCount = 0;
     let activeUploads = 0;
@@ -348,7 +348,7 @@ describe("IssueCreatorExperience", () => {
       expect.objectContaining({ id: "submission-1", revision: 2 }),
     ]);
     expect(requests.filter((url) => url === "/api/issue-submission-media")).toHaveLength(3);
-    expect(maximumActiveUploads).toBe(3);
+    expect(maximumActiveUploads).toBe(1);
     expect(requests.indexOf("/api/issue-submission-media")).toBeLessThan(
       requests.lastIndexOf("/api/issue-submission-media"),
     );
