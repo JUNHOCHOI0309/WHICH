@@ -35,6 +35,12 @@ const pending: MemberIssueSubmission = {
   submittedAt: "2026-08-30T00:00:00Z",
   updatedAt: "2026-08-30T00:00:00Z",
 };
+const needsChanges: MemberIssueSubmission = {
+  ...pending,
+  status: "NEEDS_CHANGES",
+  publicationState: "NEEDS_CHANGES",
+  reviewNote: "이미지 확인이 끝났어요. 수정 후 다시 제출해 주세요.",
+};
 beforeEach(() => {
   vi.clearAllMocks();
   api.loadMemberSubmissions.mockResolvedValue({ items: [pending] });
@@ -46,7 +52,7 @@ afterEach(() => {
 });
 
 describe("member submissions", () => {
-  it("shows a decorative spinner only while processing and removes it for a terminal result", async () => {
+  it("hides actions while AI review is processing and reveals them for a terminal result", async () => {
     api.loadMemberSubmissions.mockResolvedValueOnce({ items: [pending] }).mockResolvedValue({
       items: [
         {
@@ -60,10 +66,16 @@ describe("member submissions", () => {
     render(<MemberSubmissionsExperience />);
     const row = await screen.findByRole("article", { name: pending.question });
     expect(within(row).getByText("처리 중").querySelector('[aria-hidden="true"]')).not.toBeNull();
+    expect(within(row).queryByRole("button", { name: "이미지 수정" })).not.toBeInTheDocument();
+    expect(
+      within(row).queryByRole("button", { name: `${pending.question} 더보기` }),
+    ).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "새로고침" }));
     await within(row).findByText("수정 필요");
     expect(within(row).queryByText("처리 중")).not.toBeInTheDocument();
     expect(within(row).getByText("수정 필요").querySelector('[aria-hidden="true"]')).toBeNull();
+    expect(within(row).getByRole("button", { name: "이미지 수정" })).toBeVisible();
+    expect(within(row).getByRole("button", { name: `${pending.question} 더보기` })).toBeVisible();
   });
   it("shows the published-question link and delete.png control without review status", async () => {
     api.loadMemberSubmissions.mockResolvedValue({
@@ -205,6 +217,7 @@ describe("member submissions", () => {
     expect(
       within(row).getByText("이미지 수정을 눌러 필요한 이미지를 다시 선택해 주세요."),
     ).toBeVisible();
+    expect(within(row).getByRole("button", { name: "이미지 수정" })).toBeVisible();
     expect(within(row).getByRole("status").querySelector("img")?.getAttribute("src")).toContain(
       encodeURIComponent("/icons/attention.png"),
     );
@@ -353,22 +366,24 @@ describe("member submissions", () => {
     expect(screen.queryByLabelText(/현재 결과/)).not.toBeInTheDocument();
   });
   it("opens and dismisses the overflow menu while keeping image editing directly accessible", async () => {
+    api.loadMemberSubmissions.mockResolvedValue({ items: [needsChanges] });
     render(<MemberSubmissionsExperience creationEnabled />);
     const more = await screen.findByRole("button", { name: `${pending.question} 더보기` });
     expect(more).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByRole("button", { name: "제출 취소" })).not.toBeInTheDocument();
     fireEvent.click(more);
     expect(more).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByRole("menuitem", { name: "제출 취소" })).toBeVisible();
+    expect(screen.getByRole("menuitem", { name: "목록에서 삭제" })).toBeVisible();
     fireEvent.keyDown(document, { key: "Escape" });
     expect(more).toHaveAttribute("aria-expanded", "false");
     fireEvent.click(screen.getByRole("button", { name: "이미지 수정" }));
     expect(screen.getByLabelText("질문")).toBeVisible();
   });
   it("converts to text and removes pending controls after publication", async () => {
+    api.loadMemberSubmissions.mockResolvedValue({ items: [needsChanges] });
     api.actOnMemberSubmission.mockResolvedValue({
       submission: {
-        ...pending,
+        ...needsChanges,
         publicationState: "PUBLISHED",
         publishedIssueId: "published",
         status: "APPROVED",
@@ -379,7 +394,7 @@ describe("member submissions", () => {
     fireEvent.click(await screen.findByRole("button", { name: "이미지 없이 게시" }));
     await waitFor(() =>
       expect(api.actOnMemberSubmission).toHaveBeenCalledWith(
-        pending,
+        needsChanges,
         "TEXT_ONLY",
         undefined,
         undefined,
@@ -392,7 +407,8 @@ describe("member submissions", () => {
     expect(screen.queryByRole("button", { name: "제출 취소" })).not.toBeInTheDocument();
   });
   it("preserves both original assets when editing text only", async () => {
-    api.updateMemberSubmission.mockResolvedValue({ submission: { ...pending, revision: 3 } });
+    api.loadMemberSubmissions.mockResolvedValue({ items: [needsChanges] });
+    api.updateMemberSubmission.mockResolvedValue({ submission: { ...needsChanges, revision: 3 } });
     render(<MemberSubmissionsExperience />);
     fireEvent.click(await screen.findByRole("button", { name: "이미지 수정" }));
     fireEvent.change(screen.getByLabelText("질문"), {
@@ -414,7 +430,7 @@ describe("member submissions", () => {
   });
   it("preserves and edits every active choice in a four-choice submission", async () => {
     const fourChoice = {
-      ...pending,
+      ...needsChanges,
       choiceC: "영화",
       choiceD: "게임",
       mediaAssetCId: "c",
@@ -443,6 +459,7 @@ describe("member submissions", () => {
     );
   });
   it("renders newly added C and D choice fields before they have text", async () => {
+    api.loadMemberSubmissions.mockResolvedValue({ items: [needsChanges] });
     render(<MemberSubmissionsExperience />);
     fireEvent.click(await screen.findByRole("button", { name: "이미지 수정" }));
 
@@ -455,7 +472,7 @@ describe("member submissions", () => {
   });
   it("selects approved library images individually in A/B/C/D order", async () => {
     const fourChoice = {
-      ...pending,
+      ...needsChanges,
       choiceC: "영화",
       choiceD: "게임",
       mediaAssetCId: "c",

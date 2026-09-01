@@ -330,8 +330,8 @@ export function MemberSubmissionsExperience({
                 id="submission-history-information"
                 role="tooltip"
               >
-                최근 제출한 질문을 최대 20개까지 보여요. 이미지를 검사하는 동안에도 수정하거나
-                이미지 없이 게시할 수 있어요.
+                최근 제출한 질문을 최대 20개까지 보여요. AI 검수가 끝나면 상태에 맞는 수정·게시·삭제
+                버튼이 표시돼요.
               </p>
             </div>
             <button
@@ -369,8 +369,6 @@ export function MemberSubmissionsExperience({
         {screen === "ready" && visibleItems.length > 0 ? (
           <div className={styles.cardList}>
             {visibleItems.map((item) => {
-              const editable =
-                !item.publishedIssueId && ["PENDING", "NEEDS_CHANGES"].includes(item.status);
               const uploadIncomplete =
                 item.status === "PENDING" &&
                 item.publicationState === "PROCESSING" &&
@@ -384,6 +382,11 @@ export function MemberSubmissionsExperience({
               const outcome = submissionOutcome(item);
               const published = outcome === "published";
               const failed = outcome === "failed";
+              const editable =
+                uploadIncomplete ||
+                (failed &&
+                  !item.publishedIssueId &&
+                  ["PENDING", "NEEDS_CHANGES"].includes(item.status));
               const removable = failed && !item.publishedIssueId;
               const imageReviewFailed = failed && hasSubmissionMedia(item);
               const menuOpen = openMenuId === item.id;
