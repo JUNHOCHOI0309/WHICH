@@ -865,21 +865,37 @@ export function createModerationDispatcherService(
   async function failRun(run: typeof moderationRuns.$inferSelect, error: unknown) {
     if (!run.claimToken) return "STALE" as const;
     const failedAt = now();
-    // Input validation failures cannot recover by replaying the same immutable
-    // revision. Transient provider/network errors retain the configured retries.
+    // A rejected immutable input is a terminal user outcome, not an operational
+    // dead letter. Real non-retryable provider failures still trip fail-closed
+    // health protection, while transient failures retain configured retries.
+    const inputRejected =
+      error instanceof ModerationProviderCallError &&
+      error.kind === "INPUT_UNAVAILABLE" &&
+      !error.retryable;
     const deadLettered =
-      (error instanceof ModerationProviderCallError && !error.retryable) ||
-      run.attemptCount >= options.maxAttempts;
+      !inputRejected &&
+      ((error instanceof ModerationProviderCallError && !error.retryable) ||
+        run.attemptCount >= options.maxAttempts);
     const [updated] = await database
       .update(moderationRuns)
       .set({
-        status: deadLettered ? "DEAD_LETTERED" : "PENDING",
-        availableAt: deadLettered
-          ? failedAt
-          : new Date(failedAt.getTime() + retryDelay(run.attemptCount)),
+        status: inputRejected ? "SKIPPED" : deadLettered ? "DEAD_LETTERED" : "PENDING",
+        availableAt:
+          inputRejected || deadLettered
+            ? failedAt
+            : new Date(failedAt.getTime() + retryDelay(run.attemptCount)),
         claimToken: null,
         claimedAt: null,
         deadLetteredAt: deadLettered ? failedAt : null,
+        completedAt: inputRejected ? failedAt : null,
+        result: inputRejected
+          ? {
+              inputRejected: true,
+              reason: error.code,
+              shadow: true,
+              publicationChanged: false,
+            }
+          : run.result,
         errorCode:
           error instanceof ModerationProviderCallError
             ? `PROVIDER_${error.kind}`
@@ -895,7 +911,13 @@ export function createModerationDispatcherService(
         ),
       )
       .returning({ id: moderationRuns.id });
-    return updated ? (deadLettered ? "DEAD_LETTERED" : "RETRIED") : "STALE";
+    return updated
+      ? inputRejected
+        ? "SKIPPED"
+        : deadLettered
+          ? "DEAD_LETTERED"
+          : "RETRIED"
+      : "STALE";
   }
 
   return {
@@ -956,6 +978,7 @@ export function createModerationDispatcherService(
           else summary.skipped += 1;
         } catch (error) {
           const outcome = await failRun(run, error);
+          if (outcome === "SKIPPED") summary.skipped += 1;
           if (outcome === "RETRIED") summary.retried += 1;
           if (outcome === "DEAD_LETTERED") summary.deadLettered += 1;
         }
