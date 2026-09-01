@@ -62,7 +62,7 @@ const COLLAPSE_REPORTERS = 5;
 const HIDE_SCORE = 20;
 const HIDE_REPORTERS = 10;
 
-type EligibleVote = { id: string; issueVersion: number; choice: "A" | "B" };
+type EligibleVote = { id: string; issueVersion: number; choice: "A" | "B" | "C" | "D" };
 
 function hashToken(token: string) {
   return createHash("sha256").update(token).digest("hex");

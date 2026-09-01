@@ -1,6 +1,8 @@
+export type ChoiceCode = "A" | "B" | "C" | "D";
+
 export type IssueChoice = {
   id: string;
-  code: "A" | "B";
+  code: ChoiceCode;
   label: string;
   media: {
     url: string;
@@ -15,6 +17,8 @@ export type IssueTally = {
   resultVersion: number;
   acceptedA: number;
   acceptedB: number;
+  acceptedC?: number;
+  acceptedD?: number;
   displayedTotal: number;
   integrityState:
     "NORMAL" | "MONITORING" | "DEGRADED" | "UNDER_REVIEW" | "RESULT_LOCKED" | "CORRECTED";
@@ -27,6 +31,7 @@ export type PublicIssue = {
   version: number;
   question: string;
   context: string | null;
+  contextMedia?: IssueChoice["media"];
   publishedAt: string;
   categoryCode: string;
   experienceModeCode: string;
@@ -53,9 +58,15 @@ export type CreateIssueCommand = {
   context?: string | null;
   choiceA: string;
   choiceB: string;
+  choiceC?: string | null;
+  choiceD?: string | null;
+  contextMediaAssetId?: string | null;
   libraryPairId?: string | null;
+  libraryAssetIds?: string[] | null;
   mediaAssetAId?: string | null;
   mediaAssetBId?: string | null;
+  mediaAssetCId?: string | null;
+  mediaAssetDId?: string | null;
   interestCardCode: InterestCardCode;
 };
 
@@ -82,8 +93,13 @@ export type MemberIssueSubmission = {
   context: string | null;
   choiceA: string;
   choiceB: string;
+  choiceC?: string | null;
+  choiceD?: string | null;
+  contextMediaAssetId?: string | null;
   mediaAssetAId: string | null;
   mediaAssetBId: string | null;
+  mediaAssetCId?: string | null;
+  mediaAssetDId?: string | null;
   interestCardCode: InterestCardCode;
   reviewNote: string | null;
   submittedAt: string;
@@ -98,6 +114,7 @@ export type IssueMediaLibraryPair = {
   assets: Array<{
     id: string;
     side: "A" | "B";
+    mediaAssetId: string;
     url: string;
     altText: string;
     cropMode: "COVER" | "CONTAIN";
@@ -169,14 +186,14 @@ export type PublicIssueCatalog = {
   items: PublicIssueCatalogItem[];
 };
 
-export type CommentSide = "ALL" | "A" | "B";
+export type CommentSide = "ALL" | "A" | "B" | "C" | "D";
 export type CommentSort = "NEWEST" | "HELPFUL";
 export type CommentReportReason =
   "SPAM" | "HARASSMENT" | "HATE_OR_ABUSE" | "PERSONAL_INFORMATION" | "OTHER";
 
 export type PublicComment = {
   id: string;
-  choice: "A" | "B";
+  choice: ChoiceCode;
   author: { displayName: string; avatarUrl?: string | null };
   body: string;
   visibility: "VISIBLE" | "DEPRIORITIZED" | "COLLAPSED";
@@ -203,6 +220,8 @@ export type PublicCommentPage = {
 export type CommentHighlights = {
   A: PublicComment[];
   B: PublicComment[];
+  C: PublicComment[];
+  D: PublicComment[];
 };
 
 export type CommentWriteResponse = { comment: PublicComment };
@@ -235,7 +254,7 @@ export type VoteResponse = {
   voteId: string;
   issueId: string;
   issueVersion: number;
-  choice: "A" | "B";
+  choice: ChoiceCode;
   result: IssueTally;
   pointFeedback?: {
     amount: number;
@@ -249,8 +268,9 @@ export type MemberPrivateVote = {
   issueVersion: number;
   question: string;
   categoryCode: string;
-  choice: "A" | "B";
+  choice: ChoiceCode;
   choiceLabel: string;
+  choiceCount: number;
   acceptedAt: string;
   result: IssueTally;
 };
@@ -449,13 +469,13 @@ export type PublicShareCard = {
   version: "result_share_v1";
   channel: ShareChannel;
   shareType: "RESULT" | "RESULT_WITH_CHOICE";
-  sharedChoiceCode: "A" | "B" | null;
+  sharedChoiceCode: ChoiceCode | null;
   createdAt: string;
   issue: {
     id: string;
     version: number;
     question: string;
-    choices: Array<{ code: "A" | "B"; label: string }>;
+    choices: Array<{ code: ChoiceCode; label: string }>;
   };
   result: IssueTally;
 };

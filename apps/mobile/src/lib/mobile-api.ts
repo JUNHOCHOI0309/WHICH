@@ -139,6 +139,8 @@ export function createMobileApiClient(
         action: "TEXT_ONLY" | "APPROVED_LIBRARY" | "REPLACE_IMAGE" | "CANCEL_IMAGE";
         replacementAssetAId?: string;
         replacementAssetBId?: string;
+        replacementAssetCId?: string;
+        replacementAssetDId?: string;
       },
     ) {
       const response = await request(
@@ -214,8 +216,13 @@ export function createMobileApiClient(
         context: string | null;
         choiceA: string;
         choiceB: string;
+        choiceC?: string | null;
+        choiceD?: string | null;
+        contextMediaAssetId?: string | null;
         mediaAssetAId?: string | null;
         mediaAssetBId?: string | null;
+        mediaAssetCId?: string | null;
+        mediaAssetDId?: string | null;
         interestCardCode: InterestCardCode;
       },
     ) {
@@ -292,7 +299,10 @@ export function createMobileApiClient(
         context: string | null;
         choiceA: string;
         choiceB: string;
+        choiceC?: string | null;
+        choiceD?: string | null;
         libraryPairId?: string | null;
+        libraryAssetIds?: string[] | null;
         interestCardCode: InterestCardCode;
       },
     ) {
@@ -319,8 +329,13 @@ export function createMobileApiClient(
         context: string | null;
         choiceA: string;
         choiceB: string;
+        choiceC?: string | null;
+        choiceD?: string | null;
+        contextMediaAssetId?: string | null;
         mediaAssetAId?: string | null;
         mediaAssetBId?: string | null;
+        mediaAssetCId?: string | null;
+        mediaAssetDId?: string | null;
         interestCardCode: InterestCardCode;
       },
     ) {
@@ -564,7 +579,7 @@ export function createMobileApiClient(
       issueId: string;
       subjectId?: string;
       sessionToken?: string;
-      side?: "ALL" | "A" | "B";
+      side?: "ALL" | "A" | "B" | "C" | "D";
       view?: "NEWEST" | "HIGHLIGHT";
       cursor?: string;
       limit?: number;
@@ -817,7 +832,7 @@ export function createMobileApiClient(
       issueVersion: number;
       resultVersion: number;
       channel: ShareChannel;
-      sharedChoiceCode?: "A" | "B";
+      sharedChoiceCode?: "A" | "B" | "C" | "D";
     }) {
       const response = await request(
         `${baseUrl}/api/mobile/v1/issues/${encodeURIComponent(command.issueId)}/share-cards`,

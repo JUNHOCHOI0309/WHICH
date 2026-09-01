@@ -1,11 +1,13 @@
 import type { NextRequest, NextResponse } from "next/server";
 
+import { parseRecentLoginProvider, type RecentLoginProvider } from "../auth";
 import type { ApiErrorBody } from "../contracts";
 import { SOCIAL_SIGNUP_COOKIE } from "./member-auth";
 import { fetchReadWithRetry } from "./read-retry";
 
 export const GUEST_SUBJECT_COOKIE = "which_guest_subject";
 export const MEMBER_SESSION_COOKIE = "which_member_session";
+export const RECENT_LOGIN_PROVIDER_COOKIE = "which_recent_login_provider";
 
 const anonymousSubjectPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -133,6 +135,25 @@ export function clearMemberSessionCookie(response: NextResponse) {
     secure: secureAuthCookie(),
     path: "/",
     maxAge: 0,
+  });
+}
+
+export function recentLoginProviderCookie(value: string | null | undefined) {
+  return parseRecentLoginProvider(value);
+}
+
+export function setRecentLoginProviderCookie(
+  response: NextResponse,
+  provider: RecentLoginProvider,
+) {
+  response.cookies.set({
+    name: RECENT_LOGIN_PROVIDER_COOKIE,
+    value: provider,
+    httpOnly: true,
+    sameSite: "lax",
+    secure: secureAuthCookie(),
+    path: "/",
+    maxAge: 60 * 60 * 24 * 365,
   });
 }
 

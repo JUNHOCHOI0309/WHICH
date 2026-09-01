@@ -30,12 +30,23 @@ export const memberIssueSubmissions = pgTable(
     }),
     question: text("question").notNull(),
     context: text("context"),
+    contextMediaAssetId: uuid("context_media_asset_id").references(() => issueMediaAssets.id, {
+      onDelete: "restrict",
+    }),
     choiceA: text("choice_a").notNull(),
     choiceB: text("choice_b").notNull(),
+    choiceC: text("choice_c"),
+    choiceD: text("choice_d"),
     mediaAssetAId: uuid("media_asset_a_id").references(() => issueMediaAssets.id, {
       onDelete: "restrict",
     }),
     mediaAssetBId: uuid("media_asset_b_id").references(() => issueMediaAssets.id, {
+      onDelete: "restrict",
+    }),
+    mediaAssetCId: uuid("media_asset_c_id").references(() => issueMediaAssets.id, {
+      onDelete: "restrict",
+    }),
+    mediaAssetDId: uuid("media_asset_d_id").references(() => issueMediaAssets.id, {
       onDelete: "restrict",
     }),
     interestCardCode: varchar("interest_card_code", { length: 64 }).notNull(),
@@ -75,12 +86,23 @@ export const memberIssueSubmissionRevisions = pgTable(
     idempotencyKey: uuid("idempotency_key").notNull(),
     question: text("question").notNull(),
     context: text("context"),
+    contextMediaAssetId: uuid("context_media_asset_id").references(() => issueMediaAssets.id, {
+      onDelete: "restrict",
+    }),
     choiceA: text("choice_a").notNull(),
     choiceB: text("choice_b").notNull(),
+    choiceC: text("choice_c"),
+    choiceD: text("choice_d"),
     mediaAssetAId: uuid("media_asset_a_id").references(() => issueMediaAssets.id, {
       onDelete: "restrict",
     }),
     mediaAssetBId: uuid("media_asset_b_id").references(() => issueMediaAssets.id, {
+      onDelete: "restrict",
+    }),
+    mediaAssetCId: uuid("media_asset_c_id").references(() => issueMediaAssets.id, {
+      onDelete: "restrict",
+    }),
+    mediaAssetDId: uuid("media_asset_d_id").references(() => issueMediaAssets.id, {
       onDelete: "restrict",
     }),
     interestCardCode: varchar("interest_card_code", { length: 64 }).notNull(),

@@ -172,25 +172,40 @@ export function createModerationProviderInputResolver(input: {
           .limit(1);
         if (!submission || submission.contentHash !== target.normalizedInputHash)
           unavailable("SUBMISSION_VERSION_MISMATCH");
-        const ids = [submission.mediaAssetAId, submission.mediaAssetBId];
-        if (ids.some(Boolean) && (!ids.every(Boolean) || ids[0] === ids[1]))
-          unavailable("SUBMISSION_MEDIA_PAIR_INVALID");
-        // Bind both images to this immutable question revision, never an arbitrary linked revision.
+        const choices = [
+          submission.choiceA,
+          submission.choiceB,
+          submission.choiceC,
+          submission.choiceD,
+        ].filter((choice): choice is string => Boolean(choice));
+        const optionIds = [
+          submission.mediaAssetAId,
+          submission.mediaAssetBId,
+          submission.mediaAssetCId,
+          submission.mediaAssetDId,
+        ].slice(0, choices.length);
+        if (optionIds.some(Boolean) && !optionIds.every(Boolean))
+          unavailable("SUBMISSION_CHOICE_MEDIA_INVALID");
+        const ids = [submission.contextMediaAssetId, ...optionIds].filter((id): id is string =>
+          Boolean(id),
+        );
+        if (new Set(ids).size !== ids.length) unavailable("SUBMISSION_MEDIA_DUPLICATE");
+        // Bind every image to this immutable question revision, never an arbitrary linked revision.
         const resolvedImages = [];
         for (const id of ids) {
-          if (id) resolvedImages.push(await resolveImage(id, 1, undefined, submission.memberId));
+          resolvedImages.push(await resolveImage(id, 1, undefined, submission.memberId));
         }
         const images = resolvedImages.map((resolved) => resolved.image);
         const context = {
           question: redactProviderContext(submission.question),
-          choices: [submission.choiceA, submission.choiceB].map(redactProviderContext),
+          choices: choices.map(redactProviderContext),
           piiRedacted: true as const,
         };
         const text = normalizeText(
           [
             context.question,
             redactProviderContext(submission.context ?? ""),
-            ...context.choices.map((choice, index) => `${index === 0 ? "A" : "B"}: ${choice}`),
+            ...context.choices.map((choice, index) => `${["A", "B", "C", "D"][index]}: ${choice}`),
           ]
             .filter(Boolean)
             .join("\n"),
@@ -204,7 +219,7 @@ export function createModerationProviderInputResolver(input: {
             text,
             ...resolvedImages.map((resolved, index) =>
               resolved.embeddedText.text
-                ? `Image ${index === 0 ? "A" : "B"} extracted text: ${resolved.embeddedText.text}`
+                ? `Image ${index === 0 && submission.contextMediaAssetId ? "CONTEXT" : ["A", "B", "C", "D"][index - (submission.contextMediaAssetId ? 1 : 0)]} extracted text: ${resolved.embeddedText.text}`
                 : "",
             ),
           ]

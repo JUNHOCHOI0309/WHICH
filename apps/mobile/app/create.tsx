@@ -45,11 +45,25 @@ type Draft = {
   context: string;
   choiceA: string;
   choiceB: string;
+  choiceC?: string;
+  choiceD?: string;
+  mediaContext?: DraftMedia;
   mediaA?: DraftMedia;
   mediaB?: DraftMedia;
+  mediaC?: DraftMedia;
+  mediaD?: DraftMedia;
   libraryPairId?: string;
+  libraryAssetIds?: string[];
   interestCardCode: InterestCardCode | null;
 };
+type MediaTarget = "CONTEXT" | "A" | "B" | "C" | "D";
+const CHOICE_CODES = ["A", "B", "C", "D"] as const;
+const choiceKey = (code: (typeof CHOICE_CODES)[number]) =>
+  `choice${code}` as "choiceA" | "choiceB" | "choiceC" | "choiceD";
+const mediaKey = (target: MediaTarget) =>
+  target === "CONTEXT"
+    ? ("mediaContext" as const)
+    : (`media${target}` as "mediaA" | "mediaB" | "mediaC" | "mediaD");
 
 const emptyDraft = (): Draft => ({
   version: 1,
@@ -78,6 +92,12 @@ const statusLabel: Record<MemberIssueSubmission["status"], string> = {
   REJECTED: "반려",
   CANCELLED: "취소됨",
 };
+const libraryAssignmentStyle = {
+  A: { borderColor: colors.cyan, borderWidth: 2 },
+  B: { borderColor: colors.orange, borderWidth: 2 },
+  C: { borderColor: "#8467D7", borderWidth: 2 },
+  D: { borderColor: "#5D9C59", borderWidth: 2 },
+} as const;
 
 export default function CreateIssueScreen() {
   const [draft, setDraft] = useState<Draft>(emptyDraft);
@@ -127,32 +147,60 @@ export default function CreateIssueScreen() {
     return () => clearTimeout(timer);
   }, [draft, loading]);
 
+  const activeChoiceCodes = CHOICE_CODES.filter(
+    (code) => code === "A" || code === "B" || draft[choiceKey(code)] !== undefined,
+  );
+  const libraryAssets = useMemo(
+    () =>
+      library.flatMap((pair) =>
+        pair.assets.map((asset) => ({ ...asset, pairId: pair.id, pairTitle: pair.title })),
+      ),
+    [library],
+  );
+  const selectedLibraryAssetIds = draft.libraryAssetIds ?? [];
+
   const canSubmit = useMemo(() => {
-    const hasA = Boolean(draft.mediaA?.uri || draft.mediaA?.assetId);
-    const hasB = Boolean(draft.mediaB?.uri || draft.mediaB?.assetId);
-    const hasLibrary = Boolean(draft.libraryPairId);
+    const choiceValues = activeChoiceCodes.map((code) => draft[choiceKey(code)]?.trim() ?? "");
+    const choiceMedia = activeChoiceCodes.map((code) => draft[mediaKey(code)]);
+    const hasAnyChoiceMedia = choiceMedia.some((media) => Boolean(media?.uri || media?.assetId));
+    const hasAllChoiceMedia = choiceMedia.every((media) => Boolean(media?.uri || media?.assetId));
+    const hasContextMedia = Boolean(draft.mediaContext?.uri || draft.mediaContext?.assetId);
+    const hasLibrary = Boolean(draft.libraryPairId || selectedLibraryAssetIds.length);
     return (
       sessionToken &&
       draft.question.trim().length >= 5 &&
-      draft.choiceA.trim() &&
-      draft.choiceB.trim() &&
-      draft.choiceA.trim() !== draft.choiceB.trim() &&
+      choiceValues.every(Boolean) &&
+      new Set(choiceValues.map((value) => value.toLocaleLowerCase("ko"))).size ===
+        choiceValues.length &&
       draft.interestCardCode &&
-      hasA === hasB &&
-      !(hasLibrary && (hasA || hasB)) &&
-      (!hasA || mediaAccess?.allowed === true)
+      (!hasAnyChoiceMedia || hasAllChoiceMedia) &&
+      !(
+        hasLibrary &&
+        (hasAnyChoiceMedia ||
+          hasContextMedia ||
+          (draft.libraryPairId
+            ? activeChoiceCodes.length !== 2
+            : selectedLibraryAssetIds.length !== activeChoiceCodes.length))
+      ) &&
+      (!(hasAnyChoiceMedia || hasContextMedia) || mediaAccess?.allowed === true)
     );
-  }, [draft, mediaAccess?.allowed, sessionToken]);
+  }, [
+    activeChoiceCodes,
+    draft,
+    mediaAccess?.allowed,
+    selectedLibraryAssetIds.length,
+    sessionToken,
+  ]);
 
   async function persistDraft(next: Draft) {
     setDraft(next);
     await subjectStorage.setItem(DRAFT_KEY, JSON.stringify(next));
   }
 
-  async function chooseMedia(side: "A" | "B") {
+  async function chooseMedia(target: MediaTarget) {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert("사진 접근 권한", "선택지 이미지를 고르려면 사진 접근을 허용해 주세요.");
+      Alert.alert("사진 접근 권한", "질문 이미지를 고르려면 사진 접근을 허용해 주세요.");
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -177,22 +225,25 @@ export default function CreateIssueScreen() {
       uri: asset.uri,
       name:
         asset.fileName ??
-        `which-choice-${side.toLowerCase()}.${type === "image/png" ? "png" : type === "image/webp" ? "webp" : "jpg"}`,
+        `which-${target.toLowerCase()}.${type === "image/png" ? "png" : type === "image/webp" ? "webp" : "jpg"}`,
       type,
     };
     await persistDraft({
       ...draft,
       libraryPairId: undefined,
-      [side === "A" ? "mediaA" : "mediaB"]: media,
+      libraryAssetIds: undefined,
+      [mediaKey(target)]: media,
     });
   }
 
-  async function uploadDraftMedia(current: Draft, submissionId: string, side: "A" | "B") {
-    const key = side === "A" ? "mediaA" : "mediaB";
+  async function uploadDraftMedia(current: Draft, submissionId: string, target: MediaTarget) {
+    const key = mediaKey(target);
     const media = current[key];
     if (!media || media.assetId) return current;
     if (!media.uri || !media.name || !media.type) {
-      throw new Error(`${side} 선택지 이미지를 다시 선택해 주세요.`);
+      throw new Error(
+        `${target === "CONTEXT" ? "설명" : target + " 선택지"} 이미지를 다시 선택해 주세요.`,
+      );
     }
     const result = await mobileApi.uploadMemberIssueMedia(sessionToken!, submissionId, {
       uri: media.uri,
@@ -208,13 +259,22 @@ export default function CreateIssueScreen() {
     if (!sessionToken || !draft.interestCardCode || !canSubmit || submitting) return;
     setSubmitting(true);
     try {
-      if (!draft.submissionId && (draft.libraryPairId || (!draft.mediaA && !draft.mediaB))) {
+      const hasDirectMedia = Boolean(
+        draft.mediaContext || draft.mediaA || draft.mediaB || draft.mediaC || draft.mediaD,
+      );
+      if (
+        !draft.submissionId &&
+        (draft.libraryPairId || selectedLibraryAssetIds.length > 0 || !hasDirectMedia)
+      ) {
         const result = await mobileApi.createMemberIssue(sessionToken, draft.idempotencyKey, {
           question: draft.question,
           context: draft.context.trim() || null,
           choiceA: draft.choiceA,
           choiceB: draft.choiceB,
+          choiceC: draft.choiceC ?? null,
+          choiceD: draft.choiceD ?? null,
           libraryPairId: draft.libraryPairId,
+          libraryAssetIds: selectedLibraryAssetIds,
           interestCardCode: draft.interestCardCode,
         });
         await subjectStorage.removeItem(DRAFT_KEY);
@@ -223,7 +283,6 @@ export default function CreateIssueScreen() {
         router.replace("/issues/" + result.issue.id);
         return;
       }
-      const hasDirectMedia = Boolean(draft.mediaA || draft.mediaB);
       let prepared = draft;
       if (hasDirectMedia && !prepared.submissionId) {
         const base = await mobileApi.submitMemberIssue(sessionToken, prepared.idempotencyKey, {
@@ -231,8 +290,13 @@ export default function CreateIssueScreen() {
           context: prepared.context.trim() || null,
           choiceA: prepared.choiceA,
           choiceB: prepared.choiceB,
+          choiceC: prepared.choiceC ?? null,
+          choiceD: prepared.choiceD ?? null,
+          contextMediaAssetId: null,
           mediaAssetAId: null,
           mediaAssetBId: null,
+          mediaAssetCId: null,
+          mediaAssetDId: null,
           interestCardCode: prepared.interestCardCode!,
         });
         prepared = {
@@ -245,16 +309,24 @@ export default function CreateIssueScreen() {
       }
       if (hasDirectMedia && prepared.submissionId) {
         const submissionId = prepared.submissionId;
-        prepared = await uploadDraftMedia(prepared, submissionId, "A");
-        prepared = await uploadDraftMedia(prepared, submissionId, "B");
+        for (const target of ["CONTEXT", ...activeChoiceCodes] as MediaTarget[]) {
+          if (prepared[mediaKey(target)]) {
+            prepared = await uploadDraftMedia(prepared, submissionId, target);
+          }
+        }
       }
       const content = {
         question: prepared.question,
         context: prepared.context.trim() || null,
         choiceA: prepared.choiceA,
         choiceB: prepared.choiceB,
+        choiceC: prepared.choiceC ?? null,
+        choiceD: prepared.choiceD ?? null,
+        contextMediaAssetId: prepared.mediaContext?.assetId ?? null,
         mediaAssetAId: prepared.mediaA?.assetId ?? null,
         mediaAssetBId: prepared.mediaB?.assetId ?? null,
+        mediaAssetCId: prepared.mediaC?.assetId ?? null,
+        mediaAssetDId: prepared.mediaD?.assetId ?? null,
         interestCardCode: prepared.interestCardCode!,
       };
       const result =
@@ -338,8 +410,15 @@ export default function CreateIssueScreen() {
       context: submission.context ?? "",
       choiceA: submission.choiceA,
       choiceB: submission.choiceB,
+      choiceC: submission.choiceC ?? undefined,
+      choiceD: submission.choiceD ?? undefined,
+      mediaContext: submission.contextMediaAssetId
+        ? { assetId: submission.contextMediaAssetId }
+        : undefined,
       mediaA: submission.mediaAssetAId ? { assetId: submission.mediaAssetAId } : undefined,
       mediaB: submission.mediaAssetBId ? { assetId: submission.mediaAssetBId } : undefined,
+      mediaC: submission.mediaAssetCId ? { assetId: submission.mediaAssetCId } : undefined,
+      mediaD: submission.mediaAssetDId ? { assetId: submission.mediaAssetDId } : undefined,
       interestCardCode: submission.interestCardCode,
     });
     toast.info(`v${submission.revision} 수정 요청 내용을 편집합니다.`);
@@ -380,7 +459,7 @@ export default function CreateIssueScreen() {
             <Text style={styles.title}>
               {draft.submissionId
                 ? `v${draft.expectedRevision} 수정 요청을 반영해 주세요.`
-                : "둘 중 하나를 고르는 질문을 만들어 보세요."}
+                : "2~4개 중 하나를 고르는 질문을 만들어 보세요."}
             </Text>
             <Text style={styles.help}>제출 후 운영 검수를 통과해야 공개됩니다.</Text>
           </View>
@@ -401,37 +480,79 @@ export default function CreateIssueScreen() {
             value={draft.context}
           />
           <View style={styles.choiceRow}>
-            <Field
-              compact
-              label="A 선택지"
-              maxLength={50}
-              onChangeText={(choiceA) => setDraft((current) => ({ ...current, choiceA }))}
-              placeholder="숙소의 편안함"
-              value={draft.choiceA}
-            />
-            <Field
-              compact
-              label="B 선택지"
-              maxLength={50}
-              onChangeText={(choiceB) => setDraft((current) => ({ ...current, choiceB }))}
-              placeholder="먹거리 만족도"
-              value={draft.choiceB}
-            />
+            {activeChoiceCodes.map((code) => (
+              <Field
+                compact
+                key={code}
+                label={`${code} 선택지`}
+                maxLength={50}
+                onChangeText={(value) =>
+                  setDraft((current) => ({ ...current, [choiceKey(code)]: value }))
+                }
+                placeholder={`${code} 선택지를 적어 주세요`}
+                value={draft[choiceKey(code)] ?? ""}
+              />
+            ))}
+          </View>
+          <View style={styles.choiceActions}>
+            {activeChoiceCodes.length < 4 ? (
+              <Pressable
+                style={styles.secondaryButton}
+                onPress={() => {
+                  const code = CHOICE_CODES[activeChoiceCodes.length]!;
+                  setDraft((current) => ({
+                    ...current,
+                    [choiceKey(code)]: "",
+                    libraryPairId: undefined,
+                  }));
+                }}
+              >
+                <Text style={styles.secondaryButtonText}>+ 선택지 추가</Text>
+              </Pressable>
+            ) : null}
+            {activeChoiceCodes.length > 2 ? (
+              <Pressable
+                style={styles.secondaryButton}
+                onPress={() => {
+                  const code = activeChoiceCodes.at(-1)!;
+                  const next = { ...draft };
+                  delete next[choiceKey(code)];
+                  delete next[mediaKey(code)];
+                  next.libraryPairId = undefined;
+                  next.libraryAssetIds = selectedLibraryAssetIds.slice(
+                    0,
+                    activeChoiceCodes.length - 1,
+                  );
+                  setDraft(next);
+                }}
+              >
+                <Text style={styles.secondaryButtonText}>마지막 선택지 삭제</Text>
+              </Pressable>
+            ) : null}
           </View>
 
           {mediaAccess?.allowed ? (
-            <View style={styles.mediaRow}>
+            <>
               <ChoiceMedia
-                label="A 이미지 (선택)"
-                media={draft.mediaA}
-                onPress={() => void chooseMedia("A")}
+                wide
+                label="짧은 설명 이미지 (선택)"
+                media={draft.mediaContext}
+                onPress={() => void chooseMedia("CONTEXT")}
               />
-              <ChoiceMedia
-                label="B 이미지 (선택)"
-                media={draft.mediaB}
-                onPress={() => void chooseMedia("B")}
-              />
-            </View>
+              <View style={styles.mediaRow}>
+                {activeChoiceCodes.map((code) => (
+                  <ChoiceMedia
+                    key={code}
+                    label={`${code} 이미지 (선택)`}
+                    media={draft[mediaKey(code)]}
+                    onPress={() => void chooseMedia(code)}
+                  />
+                ))}
+              </View>
+              <Text style={styles.help}>
+                선택지 이미지를 넣을 때는 현재 선택지 모두에 첨부해 주세요.
+              </Text>
+            </>
           ) : null}
           <View style={styles.section}>
             <Text style={styles.fieldLabel}>이미지 방식</Text>
@@ -469,70 +590,123 @@ export default function CreateIssueScreen() {
                   setDraft((current) => ({
                     ...current,
                     libraryPairId: undefined,
+                    libraryAssetIds: undefined,
                     mediaA: undefined,
                     mediaB: undefined,
+                    mediaC: undefined,
+                    mediaD: undefined,
+                    mediaContext: undefined,
                   }))
                 }
-                style={[styles.chip, !draft.libraryPairId && styles.chipSelected]}
+                style={[
+                  styles.chip,
+                  !draft.libraryPairId &&
+                    selectedLibraryAssetIds.length === 0 &&
+                    styles.chipSelected,
+                ]}
               >
-                <Text style={[styles.chipText, !draft.libraryPairId && styles.chipTextSelected]}>
+                <Text
+                  style={[
+                    styles.chipText,
+                    !draft.libraryPairId &&
+                      selectedLibraryAssetIds.length === 0 &&
+                      styles.chipTextSelected,
+                  ]}
+                >
                   {mediaAccess?.allowed ? "텍스트 / 직접 업로드" : "텍스트만"}
                 </Text>
               </Pressable>
               <Pressable
-                disabled={library.length === 0}
+                disabled={libraryAssets.length === 0}
                 onPress={() =>
                   setDraft((current) => ({
                     ...current,
-                    libraryPairId: current.libraryPairId ?? library[0]?.id,
+                    libraryPairId: undefined,
+                    libraryAssetIds: current.libraryAssetIds ?? [],
                     mediaA: undefined,
                     mediaB: undefined,
+                    mediaC: undefined,
+                    mediaD: undefined,
+                    mediaContext: undefined,
                   }))
                 }
-                style={[styles.chip, library.length === 0 && styles.buttonDisabled]}
+                style={[
+                  styles.chip,
+                  libraryAssets.length === 0 && styles.buttonDisabled,
+                  selectedLibraryAssetIds.length > 0 && styles.chipSelected,
+                ]}
               >
                 <Text style={styles.chipText}>승인 이미지 Library</Text>
               </Pressable>
             </View>
-            {library.length ? (
+            {selectedLibraryAssetIds.length > 0 ? (
+              <Text style={styles.librarySelectionCount}>
+                선택한 순서대로 A/B/C/D · {selectedLibraryAssetIds.length}/
+                {activeChoiceCodes.length}
+              </Text>
+            ) : null}
+            {libraryAssets.length ? (
               <ScrollView
                 horizontal
                 contentContainerStyle={styles.libraryList}
                 showsHorizontalScrollIndicator={false}
               >
-                {library.map((pair) => (
-                  <Pressable
-                    key={pair.id}
-                    onPress={() =>
-                      setDraft((current) => ({
-                        ...current,
-                        libraryPairId: pair.id,
-                        mediaA: undefined,
-                        mediaB: undefined,
-                      }))
-                    }
-                    style={[
-                      styles.libraryCard,
-                      draft.libraryPairId === pair.id && styles.libraryCardSelected,
-                    ]}
-                  >
-                    <View style={styles.libraryImages}>
-                      {pair.assets.map((asset) => (
-                        <Image
-                          key={asset.id}
-                          source={{ uri: asset.url }}
-                          style={styles.libraryImage}
-                        />
-                      ))}
-                    </View>
-                    <Text numberOfLines={1} style={styles.libraryTitle}>
-                      {pair.title}
-                    </Text>
-                  </Pressable>
-                ))}
+                {libraryAssets.map((asset) => {
+                  const selectedIndex = selectedLibraryAssetIds.indexOf(asset.id);
+                  const assignment = selectedIndex >= 0 ? activeChoiceCodes[selectedIndex] : null;
+                  return (
+                    <Pressable
+                      accessibilityLabel={`${asset.pairTitle} · ${asset.altText}`}
+                      accessibilityState={{ selected: selectedIndex >= 0 }}
+                      key={asset.id}
+                      onPress={() => {
+                        if (selectedIndex >= 0) {
+                          setDraft((current) => ({
+                            ...current,
+                            libraryPairId: undefined,
+                            libraryAssetIds: selectedLibraryAssetIds.filter(
+                              (id) => id !== asset.id,
+                            ),
+                          }));
+                          return;
+                        }
+                        if (selectedLibraryAssetIds.length >= activeChoiceCodes.length) {
+                          toast.info("선택지 수만큼 골랐어요. 하나를 해제한 뒤 선택해 주세요.");
+                          return;
+                        }
+                        setDraft((current) => ({
+                          ...current,
+                          libraryPairId: undefined,
+                          libraryAssetIds: [...selectedLibraryAssetIds, asset.id],
+                          mediaA: undefined,
+                          mediaB: undefined,
+                          mediaC: undefined,
+                          mediaD: undefined,
+                          mediaContext: undefined,
+                        }));
+                      }}
+                      style={[styles.libraryCard, assignment && libraryAssignmentStyle[assignment]]}
+                    >
+                      <View style={styles.libraryImages}>
+                        <Image source={{ uri: asset.url }} style={styles.libraryImage} />
+                        {assignment ? (
+                          <View style={styles.libraryAssignmentBadge}>
+                            <Text style={styles.libraryAssignmentText}>{assignment}</Text>
+                          </View>
+                        ) : null}
+                      </View>
+                      <Text numberOfLines={1} style={styles.libraryTitle}>
+                        {asset.pairTitle}
+                      </Text>
+                      <Text numberOfLines={1} style={styles.libraryDescription}>
+                        {asset.altText}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
               </ScrollView>
             ) : (
-              <Text style={styles.help}>현재 사용할 수 있는 승인 이미지 쌍이 없습니다.</Text>
+              <Text style={styles.help}>현재 사용할 수 있는 승인 이미지가 없습니다.</Text>
             )}
           </View>
 
@@ -695,13 +869,15 @@ function ChoiceMedia({
   label,
   media,
   onPress,
+  wide = false,
 }: {
   label: string;
   media?: DraftMedia;
   onPress: () => void;
+  wide?: boolean;
 }) {
   return (
-    <Pressable onPress={onPress} style={styles.mediaPicker}>
+    <Pressable onPress={onPress} style={[styles.mediaPicker, wide && styles.mediaPickerWide]}>
       {media?.uri ? <Image source={{ uri: media.uri }} style={styles.mediaPreview} /> : null}
       <Text style={styles.mediaLabel}>{label}</Text>
       <Text style={styles.mediaState}>
@@ -738,7 +914,7 @@ const styles = StyleSheet.create({
   title: { color: colors.text, fontSize: 25, fontWeight: "900", lineHeight: 33 },
   help: { color: colors.textSecondary, fontSize: 13, lineHeight: 20 },
   field: { gap: 8 },
-  fieldCompact: { flex: 1 },
+  fieldCompact: { flexBasis: "47%", flexGrow: 1 },
   fieldLabel: { color: colors.text, fontSize: 13, fontWeight: "900" },
   input: {
     backgroundColor: colors.surface,
@@ -752,8 +928,18 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   inputMultiline: { minHeight: 92, textAlignVertical: "top" },
-  choiceRow: { flexDirection: "row", gap: 10 },
-  mediaRow: { flexDirection: "row", gap: 10 },
+  choiceRow: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  choiceActions: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  secondaryButton: {
+    backgroundColor: colors.surface,
+    borderColor: colors.borderStrong,
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 13,
+    paddingVertical: 9,
+  },
+  secondaryButtonText: { color: colors.textSecondary, fontSize: 12, fontWeight: "900" },
+  mediaRow: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   mediaModeRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   consentCard: {
     backgroundColor: colors.cyanSoft,
@@ -780,13 +966,15 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderStyle: "dashed",
     borderWidth: 1,
-    flex: 1,
+    flexBasis: "47%",
+    flexGrow: 1,
     gap: 5,
     justifyContent: "center",
     minHeight: 104,
     overflow: "hidden",
     padding: 10,
   },
+  mediaPickerWide: { flexBasis: "100%" },
   mediaPreview: { height: 104, width: "120%" },
   mediaLabel: { color: colors.text, fontSize: 12, fontWeight: "900" },
   mediaState: { color: colors.cyanStrong, fontSize: 11, fontWeight: "800" },
@@ -800,7 +988,6 @@ const styles = StyleSheet.create({
     padding: 8,
     width: 180,
   },
-  libraryCardSelected: { borderColor: colors.cyan, borderWidth: 2 },
   libraryImages: {
     borderRadius: 9,
     flexDirection: "row",
@@ -808,6 +995,22 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   libraryImage: { flex: 1, height: 92 },
+  libraryAssignmentBadge: {
+    alignItems: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.94)",
+    borderColor: colors.text,
+    borderRadius: 999,
+    borderWidth: 2,
+    height: 30,
+    justifyContent: "center",
+    left: 7,
+    position: "absolute",
+    top: 7,
+    width: 30,
+  },
+  libraryAssignmentText: { color: colors.text, fontSize: 13, fontWeight: "900" },
+  libraryDescription: { color: colors.textTertiary, fontSize: 11 },
+  librarySelectionCount: { color: colors.cyanStrong, fontSize: 12, fontWeight: "900" },
   libraryTitle: { color: colors.text, fontSize: 13, fontWeight: "900" },
   rightsRow: { alignItems: "center", flexDirection: "row", gap: 10 },
   checkbox: {

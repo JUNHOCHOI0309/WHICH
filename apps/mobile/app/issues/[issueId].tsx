@@ -3,6 +3,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Image,
   Pressable,
   ScrollView,
   Share,
@@ -414,6 +415,14 @@ export default function IssueScreen() {
           {issue.question}
         </Text>
         {issue.context ? <Text style={styles.context}>{issue.context}</Text> : null}
+        {issue.contextMedia ? (
+          <Image
+            accessibilityLabel={issue.contextMedia.altText}
+            resizeMode={issue.contextMedia.cropMode === "CONTAIN" ? "contain" : "cover"}
+            source={{ uri: issue.contextMedia.url }}
+            style={styles.contextMedia}
+          />
+        ) : null}
 
         <View style={styles.choices}>
           {issue.choices.map((choice) => (
@@ -449,10 +458,8 @@ export default function IssueScreen() {
               ) : null}
               <ChoiceMediaPair choices={issue.choices} onMediaLoad={recordMediaLoad} />
               <BalanceResultBar
-                aLabel={issue.choices.find((choice) => choice.code === "A")?.label ?? "A"}
-                bLabel={issue.choices.find((choice) => choice.code === "B")?.label ?? "B"}
-                acceptedA={result.acceptedA}
-                acceptedB={result.acceptedB}
+                choices={issue.choices}
+                result={result}
                 selectedChoice={completedVote?.choice ?? "A"}
               />
             </View>
@@ -569,6 +576,7 @@ const styles = StyleSheet.create({
   category: { color: colors.cyanStrong, fontSize: 12, fontWeight: "900", letterSpacing: 1 },
   question: { color: colors.text, fontSize: 27, fontWeight: "900", lineHeight: 35 },
   context: { color: colors.textSecondary, fontSize: 15, lineHeight: 23 },
+  contextMedia: { backgroundColor: colors.surface, borderRadius: 14, height: 300, width: "100%" },
   choices: { gap: 10, marginTop: 4 },
   choice: {
     alignItems: "center",

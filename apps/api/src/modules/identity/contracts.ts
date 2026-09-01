@@ -95,13 +95,16 @@ export type MemberVoteHistoryItem = {
   issueVersion: number;
   question: string;
   categoryCode: string;
-  choice: "A" | "B";
+  choice: "A" | "B" | "C" | "D";
   choiceLabel: string;
+  choiceCount: number;
   acceptedAt: string;
   result: {
     resultVersion: number;
     acceptedA: number;
     acceptedB: number;
+    acceptedC: number;
+    acceptedD: number;
     displayedTotal: number;
     integrityState:
       "NORMAL" | "MONITORING" | "DEGRADED" | "UNDER_REVIEW" | "RESULT_LOCKED" | "CORRECTED";
@@ -174,7 +177,7 @@ export type MemberVoteLookupResult = {
   voteId: string;
   issueId: string;
   issueVersion: number;
-  choice: "A" | "B";
+  choice: "A" | "B" | "C" | "D";
   result: MemberVoteHistoryItem["result"];
 };
 

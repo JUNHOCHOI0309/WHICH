@@ -101,7 +101,7 @@ export default function PrivacyPolicyPage() {
         </p>
         <ul>
           <li>
-            수신자·목적: OpenAI — 이미지 콘텐츠 안전 분류 및 A/B 질문 맥락 검증. 별도 학습 제공에
+            수신자·목적: OpenAI — 이미지 콘텐츠 안전 분류 및 선택형 질문 맥락 검증. 별도 학습 제공에
             동의하지 않는 한 API 입력·출력은 OpenAI 모델 학습에 사용되지 않습니다.
           </li>
           <li>

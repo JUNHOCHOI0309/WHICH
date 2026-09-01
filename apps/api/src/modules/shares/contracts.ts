@@ -10,7 +10,7 @@ export type CreateShareCardCommand = {
   issueVersion: number;
   resultVersion: number;
   channel: ShareChannel;
-  sharedChoiceCode?: "A" | "B";
+  sharedChoiceCode?: "A" | "B" | "C" | "D";
 };
 
 export type PublicShareCard = {
@@ -18,13 +18,13 @@ export type PublicShareCard = {
   version: typeof SHARE_VERSION;
   channel: ShareChannel;
   shareType: "RESULT" | "RESULT_WITH_CHOICE";
-  sharedChoiceCode: "A" | "B" | null;
+  sharedChoiceCode: "A" | "B" | "C" | "D" | null;
   createdAt: string;
   issue: {
     id: string;
     version: number;
     question: string;
-    choices: Array<{ code: "A" | "B"; label: string }>;
+    choices: Array<{ code: "A" | "B" | "C" | "D"; label: string }>;
   };
   result: VoteResult;
 };

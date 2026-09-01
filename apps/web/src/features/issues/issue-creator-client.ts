@@ -70,8 +70,10 @@ export async function uploadIssueSubmissionMedia(submissionId: string, file: Fil
 export async function attachIssueSubmissionMedia(
   submission: MemberIssueSubmission,
   command: CreateIssueCommand,
-  mediaAssetAId: string,
-  mediaAssetBId: string,
+  mediaAssets: Pick<
+    CreateIssueCommand,
+    "contextMediaAssetId" | "mediaAssetAId" | "mediaAssetBId" | "mediaAssetCId" | "mediaAssetDId"
+  >,
   idempotencyKey: string,
 ) {
   return responseBody<{ submission: MemberIssueSubmission; created: boolean }>(
@@ -85,8 +87,7 @@ export async function attachIssueSubmissionMedia(
       body: JSON.stringify({
         ...command,
         expectedRevision: submission.revision,
-        mediaAssetAId,
-        mediaAssetBId,
+        ...mediaAssets,
       }),
     }),
   );
@@ -146,12 +147,18 @@ export async function actOnMemberSubmission(
   submission: MemberIssueSubmission,
   action: "TEXT_ONLY" | "LIBRARY" | "CANCEL" | "CHECK",
   libraryPairId?: string,
+  libraryAssetIds?: string[],
 ) {
   return responseBody<{ submission: MemberIssueSubmission }>(
     await fetch(`/api/issue-submissions/${encodeURIComponent(submission.id)}/actions`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ action, expectedRevision: submission.revision, libraryPairId }),
+      body: JSON.stringify({
+        action,
+        expectedRevision: submission.revision,
+        libraryPairId,
+        libraryAssetIds,
+      }),
     }),
   );
 }

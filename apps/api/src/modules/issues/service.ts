@@ -23,6 +23,7 @@ import type { Database } from "../../database/client.js";
 import {
   issueChoices,
   issueChoiceMedia,
+  issueContextMedia,
   issueAuthors,
   issueInterestCards,
   issueMediaAssets,
@@ -121,33 +122,72 @@ async function withPublicChoiceMediaBatch<T extends IssueWithSourceMediaMode>(
       ),
     );
 
+  const contextRows = await database
+    .select({
+      issueId: issueContextMedia.issueId,
+      issueVersion: issueContextMedia.issueVersion,
+      altText: issueContextMedia.altText,
+      cropMode: issueContextMedia.cropMode,
+      objectKey: issueMediaAssets.publishedObjectKey,
+      width: issueMediaAssets.outputWidth,
+      height: issueMediaAssets.outputHeight,
+    })
+    .from(issueContextMedia)
+    .innerJoin(issueMediaAssets, eq(issueMediaAssets.id, issueContextMedia.mediaAssetId))
+    .where(
+      and(
+        or(
+          ...eligibleIssues.map((issue) =>
+            and(
+              eq(issueContextMedia.issueId, issue.id),
+              eq(issueContextMedia.issueVersion, issue.version),
+            ),
+          ),
+        ),
+        eq(issueMediaAssets.processingState, "READY"),
+        eq(issueMediaAssets.moderationState, "APPROVED"),
+        eq(issueMediaAssets.storageState, "PUBLISHED"),
+        inArray(issueMediaAssets.rightsState, ["ASSERTED", "CLEARED"]),
+        isNotNull(issueMediaAssets.publishedObjectKey),
+      ),
+    );
+
   const mediaByChoice = new Map(rows.map((row) => [row.choiceId, row]));
   return issuesToExpose.map((sourceIssue) => {
     const issue = withoutSourceMediaMode(sourceIssue);
     if (!eligibleIssues.some((eligible) => eligible.id === issue.id)) return issue;
-    if (
-      issue.choices.length !== 2 ||
-      issue.choices.some((choice) => !mediaByChoice.has(choice.id))
-    ) {
-      return issue;
-    }
+    const choiceMediaComplete = issue.choices.every((choice) => mediaByChoice.has(choice.id));
+    const contextRow = contextRows.find(
+      (row) => row.issueId === issue.id && row.issueVersion === issue.version,
+    );
 
     return {
       ...issue,
-      mediaMode: "OPTION_IMAGES" as const,
-      choices: issue.choices.map((choice) => {
-        const media = mediaByChoice.get(choice.id)!;
-        return {
-          ...choice,
-          media: {
-            url: publicUrl(media.objectKey!),
-            altText: media.altText,
-            cropMode: media.cropMode as "COVER" | "CONTAIN",
-            width: media.width,
-            height: media.height,
-          },
-        };
-      }),
+      mediaMode: contextRow || choiceMediaComplete ? ("OPTION_IMAGES" as const) : issue.mediaMode,
+      contextMedia: contextRow
+        ? {
+            url: publicUrl(contextRow.objectKey!),
+            altText: contextRow.altText,
+            cropMode: contextRow.cropMode as "COVER" | "CONTAIN",
+            width: contextRow.width,
+            height: contextRow.height,
+          }
+        : null,
+      choices: choiceMediaComplete
+        ? issue.choices.map((choice) => {
+            const media = mediaByChoice.get(choice.id)!;
+            return {
+              ...choice,
+              media: {
+                url: publicUrl(media.objectKey!),
+                altText: media.altText,
+                cropMode: media.cropMode as "COVER" | "CONTAIN",
+                width: media.width,
+                height: media.height,
+              },
+            };
+          })
+        : issue.choices,
     };
   });
 }
@@ -226,11 +266,15 @@ export function createIssueReadService(
           )
           .orderBy(issueChoices.code);
 
-        if (choices.length !== 2 || choices[0]?.code !== "A" || choices[1]?.code !== "B") {
+        if (
+          choices.length < 2 ||
+          choices.length > 4 ||
+          choices.some((choice, index) => choice.code !== (["A", "B", "C", "D"] as const)[index])
+        ) {
           throw new IssueReadError(
             "ISSUE_NOT_AVAILABLE",
             409,
-            "The requested Issue does not have a complete A/B Choice set.",
+            "The requested Issue does not have a complete 2-4 Choice set.",
           );
         }
 
@@ -270,6 +314,8 @@ export function createIssueReadService(
               resultVersion: aggregate.resultVersion,
               acceptedA: aggregate.acceptedACount,
               acceptedB: aggregate.acceptedBCount,
+              acceptedC: aggregate.acceptedCCount,
+              acceptedD: aggregate.acceptedDCount,
               displayedTotal: aggregate.displayedVoteCount,
               integrityState: aggregate.integrityState,
             };
@@ -281,6 +327,7 @@ export function createIssueReadService(
           version: version.version,
           question: version.question,
           context: version.context,
+          contextMedia: null,
           publishedAt: version.publishedAt.toISOString(),
           categoryCode: version.categoryCode,
           experienceModeCode: version.experienceModeCode,
@@ -407,7 +454,8 @@ export function createIssueReadService(
               .filter((choice) => choice.issueId === row.id && choice.issueVersion === row.version)
               .map(({ id, code, label }) => ({ id, code, label, media: null }));
             if (
-              issueChoicesForVersion.length !== 2 ||
+              issueChoicesForVersion.length < 2 ||
+              issueChoicesForVersion.length > 4 ||
               issueChoicesForVersion[0]?.code !== "A" ||
               issueChoicesForVersion[1]?.code !== "B" ||
               !row.publishedAt
@@ -420,6 +468,7 @@ export function createIssueReadService(
                 version: row.version,
                 question: row.question,
                 context: row.context,
+                contextMedia: null,
                 publishedAt: row.publishedAt.toISOString(),
                 categoryCode: row.categoryCode,
                 choices: issueChoicesForVersion,
@@ -798,6 +847,8 @@ export function createIssueReadService(
               viewableImpressions: Number(row.viewableImpressions),
               acceptedA: 0,
               acceptedB: 0,
+              acceptedC: 0,
+              acceptedD: 0,
               averageDecisionMs:
                 row.averageDecisionMs === null ? null : Number(row.averageDecisionMs),
               nextIssueOpens: Number(row.nextIssueOpens),
@@ -813,6 +864,8 @@ export function createIssueReadService(
               viewableImpressions: 0,
               acceptedA: 0,
               acceptedB: 0,
+              acceptedC: 0,
+              acceptedD: 0,
               averageDecisionMs: null,
               nextIssueOpens: 0,
               commentCompletions: 0,
@@ -822,6 +875,8 @@ export function createIssueReadService(
             };
             if (row.code === "A") current.acceptedA = Number(row.count);
             if (row.code === "B") current.acceptedB = Number(row.count);
+            if (row.code === "C") current.acceptedC = Number(row.count);
+            if (row.code === "D") current.acceptedD = Number(row.count);
             qualitySignals.set(key, current);
           }
         }
@@ -840,7 +895,7 @@ export function createIssueReadService(
             contentHash: row.contentHash,
             question: row.question,
             context: row.context,
-            choiceLabels: [labels[0] ?? "", labels[1] ?? ""] as [string, string],
+            choiceLabels: labels,
             qualitySignals: qualitySignals.get(`${row.id}:${row.version}`),
           };
         });
@@ -929,6 +984,7 @@ export function createIssueReadService(
           question: row.question,
           publishedAt: row.publishedAt!.toISOString(),
           categoryCode: row.categoryCode,
+          contextMedia: null,
           choices: choices
             .filter((choice) => choice.issueId === row.id && choice.issueVersion === row.version)
             .map(({ id, code, label }) => ({ id, code, label, media: null })),

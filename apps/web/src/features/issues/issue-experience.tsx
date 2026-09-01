@@ -361,6 +361,14 @@ export function IssueExperience({
           {issue.question}
         </h1>
         {issue.context ? <p className={styles.context}>{issue.context}</p> : null}
+        {issue.contextMedia ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            className={styles.contextMedia}
+            src={issue.contextMedia.url}
+            alt={issue.contextMedia.altText}
+          />
+        ) : null}
         {issue.author ? (
           <Link className={styles.authorLink} href={`/user/${issue.author.handle}`}>
             <span aria-hidden="true">
@@ -456,8 +464,6 @@ function ResultScreen({
 }) {
   const total = result.result.displayedTotal;
   const duplicate = result.outcome === "REJECTED_DUPLICATE";
-  const choiceA = issue.choices.find((choice) => choice.code === "A")?.label ?? "A";
-  const choiceB = issue.choices.find((choice) => choice.code === "B")?.label ?? "B";
 
   useEffect(() => {
     const resultOpenedAt = Date.now();
@@ -509,14 +515,22 @@ function ResultScreen({
           </Link>
         ) : null}
         <p className={styles.myVoteNotice}>
-          ✓ 당신은 “{result.choice === "A" ? choiceA : choiceB}”에 투표했어요.
+          ✓ 당신은 “
+          {issue.choices.find((choice) => choice.code === result.choice)?.label ?? result.choice}”에
+          투표했어요.
         </p>
+        {issue.contextMedia ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            className={styles.contextMedia}
+            src={issue.contextMedia.url}
+            alt={issue.contextMedia.altText}
+          />
+        ) : null}
         <ChoiceMediaPair choices={issue.choices} onMediaLoad={onMediaLoad} />
         <BalanceResultBar
-          aLabel={choiceA}
-          bLabel={choiceB}
-          acceptedA={result.result.acceptedA}
-          acceptedB={result.result.acceptedB}
+          choices={issue.choices}
+          result={result.result}
           selectedChoice={result.choice}
         />
         <p className={styles.totalCount}>현재 유효한 선택 {total.toLocaleString("ko-KR")}개</p>
@@ -2330,8 +2344,6 @@ function NextIssuePreview({
 
   const nextIssue = state.issue;
   const navigating = state.kind === "navigating";
-  const choiceA = nextIssue.choices[0];
-  const choiceB = nextIssue.choices[1];
 
   return (
     <aside
@@ -2355,14 +2367,12 @@ function NextIssuePreview({
           <span className={styles.nextIssueAction}>{navigating ? "이동 중…" : "다음 →"}</span>
         </span>
         <span className={styles.nextIssueChoices} aria-hidden="true">
-          <span>
-            <b>{choiceA?.code ?? "A"}</b>
-            <em title={choiceA?.label ?? "첫 번째 선택"}>{choiceA?.label ?? "첫 번째 선택"}</em>
-          </span>
-          <span>
-            <b>{choiceB?.code ?? "B"}</b>
-            <em title={choiceB?.label ?? "두 번째 선택"}>{choiceB?.label ?? "두 번째 선택"}</em>
-          </span>
+          {nextIssue.choices.map((choice) => (
+            <span key={choice.code}>
+              <b>{choice.code}</b>
+              <em title={choice.label}>{choice.label}</em>
+            </span>
+          ))}
         </span>
       </button>
     </aside>

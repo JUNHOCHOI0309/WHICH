@@ -43,6 +43,9 @@ export type PublicationReadinessInput = {
     publishedIssueId: string | null;
     mediaAssetAId: string | null;
     mediaAssetBId: string | null;
+    mediaAssetCId?: string | null;
+    mediaAssetDId?: string | null;
+    contextMediaAssetId?: string | null;
   } | null;
   assets: readonly ReadinessAsset[];
   findings: readonly ReadinessFinding[];
@@ -63,11 +66,17 @@ export function evaluatePublicationReadiness(input: PublicationReadinessInput) {
     blockers.push("SUBMISSION_BINDING_MISMATCH");
   if (submission?.status !== "PENDING" || submission?.publishedIssueId)
     blockers.push("SUBMISSION_NOT_PENDING");
-  const ids = [submission?.mediaAssetAId, submission?.mediaAssetBId];
-  if (!ids[0] || !ids[1] || ids[0] === ids[1]) blockers.push("IMAGE_PAIR_REQUIRED");
+  const mediaRefs = [
+    ["CONTEXT", submission?.contextMediaAssetId],
+    ["A", submission?.mediaAssetAId],
+    ["B", submission?.mediaAssetBId],
+    ["C", submission?.mediaAssetCId],
+    ["D", submission?.mediaAssetDId],
+  ].filter((entry): entry is [string, string] => Boolean(entry[1]));
+  const ids = mediaRefs.map(([, id]) => id);
+  if (ids.length === 0 || new Set(ids).size !== ids.length) blockers.push("IMAGE_PAIR_REQUIRED");
 
-  const assets = ids.map((id, index) => {
-    const side = index === 0 ? "A" : "B";
+  const assets = mediaRefs.map(([side, id]) => {
     const asset = input.assets.find((entry) => entry.id === id);
     const reasons: string[] = [];
     const add = (reason: string) => {
@@ -147,7 +156,7 @@ export function evaluatePublicationReadiness(input: PublicationReadinessInput) {
   if (
     input.providerResult.inputContractVersion !== MODERATION_PROVIDER_INPUT_VERSION ||
     input.providerResult.inputScope !== "SUBMISSION_REVISION" ||
-    input.providerResult.imageCount !== 2 ||
+    input.providerResult.imageCount !== ids.length ||
     !binding ||
     typeof binding !== "object" ||
     (binding as Record<string, unknown>).contractVersion !== MODERATION_PROVIDER_INPUT_VERSION ||
@@ -181,11 +190,11 @@ export function evaluatePublicationReadiness(input: PublicationReadinessInput) {
     if (!coverage || coverage.missingTextLabels.length) blockers.push("TEXT_COVERAGE_INCOMPLETE");
   }
   const embedded = embeddedTextEvidenceSchema.safeParse(input.providerResult.embeddedText);
-  if (!embedded.success || embedded.data.images.length !== 2)
+  if (!embedded.success || embedded.data.images.length !== ids.length)
     blockers.push("EMBEDDED_TEXT_EVIDENCE_MISSING");
   else
     embedded.data.images.forEach((image, index) => {
-      const side = index === 0 ? "A" : "B";
+      const side = mediaRefs[index]?.[0] ?? `IMAGE_${index + 1}`;
       const asset = input.assets.find((entry) => entry.id === ids[index]);
       if (!asset || image.normalizedHash !== asset.normalizedHash)
         blockers.push(`${side}_EMBEDDED_TEXT_BINDING_MISMATCH`);

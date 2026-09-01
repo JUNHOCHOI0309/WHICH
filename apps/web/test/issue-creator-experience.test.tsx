@@ -47,8 +47,13 @@ describe("IssueCreatorExperience", () => {
     render(<IssueCreatorExperience presentation="modal" onSubmitted={onSubmitted} />);
     const question = await screen.findByPlaceholderText("예: 퇴근 후 바로 잘까, 조금 더 놀까?");
     fireEvent.change(question, { target: { value: "오늘 저녁은 무엇을 먹을까" } });
-    fireEvent.change(screen.getByPlaceholderText("바로 자기"), { target: { value: "라면" } });
-    fireEvent.change(screen.getByPlaceholderText("조금 더 놀기"), { target: { value: "김밥" } });
+    fireEvent.change(screen.getByPlaceholderText("1번째 선택지를 적어 주세요"), {
+      target: { value: "라면" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("2번째 선택지를 적어 주세요"), {
+      target: { value: "김밥" },
+    });
+    expect(screen.getByRole("heading", { name: "오늘 저녁은 무엇을 먹을까" })).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "질문 게시" }));
     await screen.findByText("잠시 후 다시 시도해 주세요.");
     expect(onSubmitted).not.toHaveBeenCalled();
@@ -91,8 +96,12 @@ describe("IssueCreatorExperience", () => {
     const question = await screen.findByPlaceholderText("예: 퇴근 후 바로 잘까, 조금 더 놀까?");
     expect(screen.queryByText("24시간 최대 3개")).not.toBeInTheDocument();
     fireEvent.change(question, { target: { value: "오늘 저녁은 무엇을 먹을까" } });
-    fireEvent.change(screen.getByPlaceholderText("바로 자기"), { target: { value: "라면" } });
-    fireEvent.change(screen.getByPlaceholderText("조금 더 놀기"), { target: { value: "김밥" } });
+    fireEvent.change(screen.getByPlaceholderText("1번째 선택지를 적어 주세요"), {
+      target: { value: "라면" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("2번째 선택지를 적어 주세요"), {
+      target: { value: "김밥" },
+    });
     fireEvent.click(screen.getByRole("radio", { name: "음식" }));
     fireEvent.click(screen.getByRole("button", { name: "질문 게시" }));
 
@@ -105,6 +114,52 @@ describe("IssueCreatorExperience", () => {
     });
     expect(navigation.push).toHaveBeenCalledWith("/issues/new-issue-id");
     expect(window.sessionStorage.getItem("which_issue_draft_v1")).toBeNull();
+  });
+
+  it("adds choices in order up to four and submits C/D labels", async () => {
+    const submissions: Array<Record<string, unknown>> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = String(input);
+        if (url === "/api/member-session") return jsonResponse({ member: { status: "ACTIVE" } });
+        if (url === "/api/interests/cards") return jsonResponse(registry);
+        if (url === "/api/issues") {
+          submissions.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+          return jsonResponse({ created: true, issue: { id: "four-choice-issue" } }, 201);
+        }
+        throw new Error(`unexpected request: ${url}`);
+      }),
+    );
+    render(<IssueCreatorExperience />);
+
+    fireEvent.change(await screen.findByPlaceholderText("예: 퇴근 후 바로 잘까, 조금 더 놀까?"), {
+      target: { value: "가장 좋아하는 계절은 무엇인가요" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("1번째 선택지를 적어 주세요"), {
+      target: { value: "봄" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("2번째 선택지를 적어 주세요"), {
+      target: { value: "여름" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "+ 선택지 추가" }));
+    fireEvent.change(screen.getByPlaceholderText("3번째 선택지를 적어 주세요"), {
+      target: { value: "가을" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "+ 선택지 추가" }));
+    fireEvent.change(screen.getByPlaceholderText("4번째 선택지를 적어 주세요"), {
+      target: { value: "겨울" },
+    });
+    expect(screen.queryByRole("button", { name: "+ 선택지 추가" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "질문 게시" }));
+
+    await waitFor(() => expect(submissions).toHaveLength(1));
+    expect(submissions[0]).toMatchObject({
+      choiceA: "봄",
+      choiceB: "여름",
+      choiceC: "가을",
+      choiceD: "겨울",
+    });
   });
 
   it("publishes with one approved Library pair without requesting another review", async () => {
@@ -166,14 +221,25 @@ describe("IssueCreatorExperience", () => {
     fireEvent.change(await screen.findByPlaceholderText("예: 퇴근 후 바로 잘까, 조금 더 놀까?"), {
       target: { value: "쉬는 날에는 어디로 갈까" },
     });
-    fireEvent.change(screen.getByPlaceholderText("바로 자기"), {
+    fireEvent.change(screen.getByPlaceholderText("1번째 선택지를 적어 주세요"), {
       target: { value: "도시" },
     });
-    fireEvent.change(screen.getByPlaceholderText("조금 더 놀기"), {
+    fireEvent.change(screen.getByPlaceholderText("2번째 선택지를 적어 주세요"), {
       target: { value: "자연" },
     });
     fireEvent.click(screen.getByRole("button", { name: "승인 이미지 Library" }));
-    fireEvent.click(await screen.findByRole("button", { name: /도시와 자연/ }));
+    const city = await screen.findByRole("button", { name: "도시와 자연 · 도시 야경" });
+    const forest = screen.getByRole("button", { name: "도시와 자연 · 숲길" });
+    fireEvent.click(city);
+    expect(city).toHaveAttribute("data-assignment", "A");
+    fireEvent.click(forest);
+    expect(forest).toHaveAttribute("data-assignment", "B");
+    expect(screen.getByRole("heading", { name: "쉬는 날에는 어디로 갈까" })).toBeVisible();
+    fireEvent.click(city);
+    expect(city).not.toHaveAttribute("data-assignment");
+    expect(forest).toHaveAttribute("data-assignment", "A");
+    fireEvent.click(city);
+    expect(city).toHaveAttribute("data-assignment", "B");
     fireEvent.click(screen.getByRole("button", { name: "질문 게시" }));
 
     await waitFor(() => expect(submissions).toHaveLength(1));
@@ -181,14 +247,17 @@ describe("IssueCreatorExperience", () => {
       question: "쉬는 날에는 어디로 갈까",
       choiceA: "도시",
       choiceB: "자연",
-      libraryPairId: "1dcb8f5b-d722-45a6-a9d9-0bfb793af24e",
+      libraryAssetIds: [
+        "d521347b-a87c-4565-9a46-bd38274db0c4",
+        "a4c3de16-c9d2-43d5-a11a-f3a9b7fdfb78",
+      ],
     });
     expect(submissions[0]).not.toHaveProperty("mediaAssetAId");
     expect(submissions[0]).not.toHaveProperty("mediaAssetBId");
     expect(navigation.push).toHaveBeenCalledWith("/issues/library-issue-id");
   });
 
-  it("uploads a trusted Member A/B pair concurrently and attaches it to one pending submission", async () => {
+  it("uploads an explanation image and trusted Member A/B images concurrently", async () => {
     const requests: string[] = [];
     let uploadCount = 0;
     let activeUploads = 0;
@@ -254,14 +323,21 @@ describe("IssueCreatorExperience", () => {
     fireEvent.change(await screen.findByPlaceholderText("예: 퇴근 후 바로 잘까, 조금 더 놀까?"), {
       target: { value: "휴일에는 어디서 시간을 보낼까" },
     });
-    fireEvent.change(screen.getByPlaceholderText("바로 자기"), { target: { value: "도시" } });
-    fireEvent.change(screen.getByPlaceholderText("조금 더 놀기"), { target: { value: "자연" } });
+    fireEvent.change(screen.getByPlaceholderText("1번째 선택지를 적어 주세요"), {
+      target: { value: "도시" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("2번째 선택지를 적어 주세요"), {
+      target: { value: "자연" },
+    });
     fireEvent.click(await screen.findByRole("button", { name: "직접 업로드" }));
     const inputs = container.querySelectorAll<HTMLInputElement>('input[type="file"]');
     fireEvent.change(inputs[0]!, {
-      target: { files: [new File(["a"], "a.png", { type: "image/png" })] },
+      target: { files: [new File(["context"], "context.png", { type: "image/png" })] },
     });
     fireEvent.change(inputs[1]!, {
+      target: { files: [new File(["a"], "a.png", { type: "image/png" })] },
+    });
+    fireEvent.change(inputs[2]!, {
       target: { files: [new File(["b"], "b.png", { type: "image/png" })] },
     });
     fireEvent.click(screen.getByRole("button", { name: "질문 게시" }));
@@ -271,8 +347,8 @@ describe("IssueCreatorExperience", () => {
     expect(JSON.parse(window.sessionStorage.getItem("which:pending-submissions:v1")!)).toEqual([
       expect.objectContaining({ id: "submission-1", revision: 2 }),
     ]);
-    expect(requests.filter((url) => url === "/api/issue-submission-media")).toHaveLength(2);
-    expect(maximumActiveUploads).toBe(2);
+    expect(requests.filter((url) => url === "/api/issue-submission-media")).toHaveLength(3);
+    expect(maximumActiveUploads).toBe(3);
     expect(requests.indexOf("/api/issue-submission-media")).toBeLessThan(
       requests.lastIndexOf("/api/issue-submission-media"),
     );

@@ -187,6 +187,11 @@ describe("TikTok Web Login Kit", () => {
       secure: true,
       httpOnly: true,
     });
+    expect(response.cookies.get("which_recent_login_provider")).toMatchObject({
+      value: "tiktok",
+      secure: true,
+      httpOnly: true,
+    });
     expect(response.cookies.get(AUTH_FLOW_COOKIE)?.maxAge).toBe(0);
     expect(response.cookies.get(GUEST_SUBJECT_COOKIE)?.maxAge).toBe(0);
     expect(response.headers.get("set-cookie")).not.toMatch(

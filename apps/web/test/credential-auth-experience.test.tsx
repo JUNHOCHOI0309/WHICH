@@ -63,6 +63,38 @@ describe("Member credential authentication experience", () => {
     expect(screen.getAllByRole("link", { name: "로그인" })).toHaveLength(3);
   });
 
+  it("marks only the most recently used login provider", () => {
+    render(
+      <CredentialAuthExperience
+        mode="login"
+        returnTo="/me"
+        providers={{ naver: true, kakao: true, tiktok: true }}
+        recentLoginProvider="kakao"
+      />,
+    );
+
+    const recent = screen.getByRole("link", { name: "카카오로 계속하기, 최근 로그인" });
+    expect(recent).toHaveTextContent("최근 로그인");
+    expect(screen.getAllByText("최근 로그인")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "로그인" })).not.toHaveTextContent("최근 로그인");
+  });
+
+  it("marks email/password when it was used most recently", () => {
+    render(
+      <CredentialAuthExperience
+        mode="login"
+        returnTo="/me"
+        providers={{ naver: true, kakao: true }}
+        recentLoginProvider="email"
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "로그인, 최근 로그인" })).toHaveTextContent(
+      "최근 로그인",
+    );
+    expect(screen.getAllByText("최근 로그인")).toHaveLength(1);
+  });
+
   it("links signup consent to the published terms and privacy policy", () => {
     render(
       <CredentialAuthExperience
@@ -71,6 +103,13 @@ describe("Member credential authentication experience", () => {
         providers={{ naver: true, kakao: true }}
       />,
     );
+    expect(screen.getByRole("heading", { name: "회원가입" })).toBeVisible();
+    expect(screen.queryByText("빠르게 WHICH 계정을 만들어요.")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        "이메일과 비밀번호만 정하면 됩니다. Handle과 소개는 나중에 설정할 수 있어요.",
+      ),
+    ).not.toBeInTheDocument();
     expect(
       screen
         .getAllByRole("link", { name: "서비스 이용약관" })

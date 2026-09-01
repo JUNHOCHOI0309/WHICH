@@ -1,11 +1,18 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import { toast } from "@/components/feedback/toast-provider";
 import { WhichShell } from "@/components/layout/which-shell";
-import type { MemberPointShopView, MemberPrivateProfile, MemberPrivateVote } from "@/lib/contracts";
+import type {
+  ChoiceCode,
+  MemberPointShopView,
+  MemberPrivateProfile,
+  MemberPrivateVote,
+} from "@/lib/contracts";
 import { logoutMemberSession, MEMBER_LOGOUT_ERROR } from "@/lib/member-session";
 import { avatarFrameStyle, equippedShopItem, profileAccentStyle } from "@/lib/point-shop-cosmetics";
 
@@ -54,8 +61,15 @@ async function readProfile(cursor?: string) {
   return (await response.json()) as MemberPrivateProfile;
 }
 
-function resultPercent(vote: MemberPrivateVote, code: "A" | "B") {
-  const count = code === "A" ? vote.result.acceptedA : vote.result.acceptedB;
+function resultPercent(vote: MemberPrivateVote, code: ChoiceCode) {
+  const count = (
+    {
+      A: vote.result.acceptedA,
+      B: vote.result.acceptedB,
+      C: vote.result.acceptedC ?? 0,
+      D: vote.result.acceptedD ?? 0,
+    } as const
+  )[code];
   if (vote.result.displayedTotal === 0) return 0;
   return Math.round((count / vote.result.displayedTotal) * 100);
 }
@@ -79,6 +93,7 @@ export function MemberProfileExperience({
 }: {
   creationEnabled?: boolean;
 }) {
+  const router = useRouter();
   const [screen, setScreen] = useState<Screen>("loading");
   const [profile, setProfile] = useState<MemberPrivateProfile | null>(null);
   const [shop, setShop] = useState<MemberPointShopView | null>(null);
@@ -277,7 +292,14 @@ export function MemberProfileExperience({
                         <em>{resultPercent(vote, vote.choice)}%</em>
                       </div>
                       <Link href={`/issues/${vote.issueId}`}>
-                        최신 결과 보기 <span aria-hidden="true">↗</span>
+                        최신 결과 보기
+                        <Image
+                          src="/icons/double-chevron.png"
+                          width={24}
+                          height={24}
+                          alt=""
+                          aria-hidden="true"
+                        />
                       </Link>
                     </article>
                   ))}
@@ -296,7 +318,7 @@ export function MemberProfileExperience({
                 <p>PRIVACY BY DEFAULT</p>
                 <strong>선택 기록은 공개 프로필과 분리됩니다.</strong>
                 <span>
-                  댓글의 A/B 표시는 해당 질문 안에서만 보이며, 이 목록은 다른 사용자에게 제공되지
+                  댓글의 선택 표시는 해당 질문 안에서만 보이며, 이 목록은 다른 사용자에게 제공되지
                   않아요.
                 </span>
               </div>
@@ -307,9 +329,8 @@ export function MemberProfileExperience({
                   setLogoutPending(true);
                   void logoutMemberSession()
                     .then(() => {
-                      setProfile(null);
-                      setScreen("guest");
                       toast.success("로그아웃했어요.");
+                      router.replace("/");
                     })
                     .catch(() => toast.error(MEMBER_LOGOUT_ERROR))
                     .finally(() => setLogoutPending(false));

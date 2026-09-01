@@ -188,16 +188,25 @@ describe("WHICH-96 member moderation experience", () => {
       .returning();
     const first = await asset(member!.id, "d");
     const second = await asset(member!.id, "e");
+    const third = await asset(member!.id, "f");
+    const fourth = await asset(member!.id, "7");
+    const contextAsset = await asset(member!.id, "8");
     const submissionId = randomUUID();
     await database.db.insert(memberIssueSubmissions).values({
       id: submissionId,
       memberId: member!.id,
       idempotencyKey: randomUUID(),
       question: "이미지 없이 질문을 계속 검토할까요?",
+      context: "네 가지 선택지와 맥락 이미지가 있는 질문입니다.",
+      contextMediaAssetId: contextAsset.id,
       choiceA: "계속",
       choiceB: "취소",
+      choiceC: "보류",
+      choiceD: "다시 선택",
       mediaAssetAId: first.id,
       mediaAssetBId: second.id,
+      mediaAssetCId: third.id,
+      mediaAssetDId: fourth.id,
       interestCardCode: "DAILY_LIFE",
       contentHash: "f".repeat(64),
     });
@@ -213,7 +222,16 @@ describe("WHICH-96 member moderation experience", () => {
       .select()
       .from(memberIssueSubmissions)
       .where(eq(memberIssueSubmissions.id, submissionId));
-    expect(updated).toMatchObject({ revision: 2, mediaAssetAId: null, mediaAssetBId: null });
+    expect(updated).toMatchObject({
+      revision: 2,
+      choiceC: "보류",
+      choiceD: "다시 선택",
+      contextMediaAssetId: null,
+      mediaAssetAId: null,
+      mediaAssetBId: null,
+      mediaAssetCId: null,
+      mediaAssetDId: null,
+    });
     const [revision] = await database.db
       .select()
       .from(memberIssueSubmissionRevisions)
@@ -223,6 +241,14 @@ describe("WHICH-96 member moderation experience", () => {
           eq(memberIssueSubmissionRevisions.revision, 2),
         ),
       );
-    expect(revision).toMatchObject({ mediaAssetAId: null, mediaAssetBId: null });
+    expect(revision).toMatchObject({
+      choiceC: "보류",
+      choiceD: "다시 선택",
+      contextMediaAssetId: null,
+      mediaAssetAId: null,
+      mediaAssetBId: null,
+      mediaAssetCId: null,
+      mediaAssetDId: null,
+    });
   });
 });

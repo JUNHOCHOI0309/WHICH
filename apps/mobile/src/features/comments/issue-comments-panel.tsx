@@ -17,6 +17,7 @@ import { CommentCard } from "@/components/comments/comment-card";
 import { toast } from "@/components/feedback/toast";
 import type {
   CommentListView,
+  ChoiceCode,
   CommentReportReason,
   PublicComment,
   PublicIssue,
@@ -25,7 +26,7 @@ import type {
 import { guestSubjects, memberSessions, mobileApi } from "@/lib/runtime";
 import { colors } from "@/theme";
 
-type Side = "ALL" | "A" | "B";
+type Side = "ALL" | ChoiceCode;
 
 const reportReasons: { value: CommentReportReason; label: string }[] = [
   { value: "SPAM", label: "스팸·도배" },
@@ -337,35 +338,37 @@ export function IssueCommentsPanel({
         )}
 
         <View accessibilityLabel="댓글 선택지 필터" style={styles.filters}>
-          {(["ALL", "A", "B"] as const).map((item) => (
-            <Pressable
-              key={item}
-              accessibilityRole="button"
-              accessibilityState={{ selected: side === item }}
-              onPress={() => selectSide(item)}
-              style={[styles.filter, side === item && styles.filterActive]}
-            >
-              {item === "ALL" ? (
-                <Text style={[styles.filterText, side === item && styles.filterTextActive]}>
-                  전체
-                </Text>
-              ) : (
-                <View style={styles.filterLabel}>
-                  <Text
-                    style={[
-                      styles.filterChoice,
-                      item === "A" ? styles.filterChoiceA : styles.filterChoiceB,
-                    ]}
-                  >
-                    {item}
-                  </Text>
+          {(["ALL", ...(issue?.choices.map((choice) => choice.code) ?? ["A", "B"])] as Side[]).map(
+            (item) => (
+              <Pressable
+                key={item}
+                accessibilityRole="button"
+                accessibilityState={{ selected: side === item }}
+                onPress={() => selectSide(item)}
+                style={[styles.filter, side === item && styles.filterActive]}
+              >
+                {item === "ALL" ? (
                   <Text style={[styles.filterText, side === item && styles.filterTextActive]}>
-                    의견
+                    전체
                   </Text>
-                </View>
-              )}
-            </Pressable>
-          ))}
+                ) : (
+                  <View style={styles.filterLabel}>
+                    <Text
+                      style={[
+                        styles.filterChoice,
+                        item === "A" ? styles.filterChoiceA : styles.filterChoiceB,
+                      ]}
+                    >
+                      {item}
+                    </Text>
+                    <Text style={[styles.filterText, side === item && styles.filterTextActive]}>
+                      의견
+                    </Text>
+                  </View>
+                )}
+              </Pressable>
+            ),
+          )}
         </View>
 
         <View accessibilityLabel="댓글 정렬" style={styles.sortTabs}>

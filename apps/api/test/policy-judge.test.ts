@@ -3,6 +3,7 @@ import sharp from "sharp";
 import {
   createLunaJudgeAdapter,
   prepareJudgeRequest,
+  reconcileLowSexualDisagreement,
 } from "../src/modules/policy-judge/adapter.js";
 import {
   judgeCosts,
@@ -77,7 +78,7 @@ describe("Luna pair policy Shadow", () => {
       max_output_tokens: 384,
       text: { format: { type: "json_schema", strict: true } },
     });
-    expect(POLICY_JUDGE_PROFILE).toBe("which-luna-review-v4");
+    expect(POLICY_JUDGE_PROFILE).toBe("which-luna-review-v6");
     expect(prepared.body.instructions).toContain(
       "Ordinary non-explicit swimwear, beachwear, sportswear and fashion images are not SEXUAL by themselves.",
     );
@@ -100,6 +101,37 @@ describe("Luna pair policy Shadow", () => {
     }
     expect(prepared.reservedMicros).toBeGreaterThan(0);
     expect(input.images![0]!.width).toBe(1024);
+  });
+  it("clears only a low OpenAI image-sexual disagreement with otherwise safe Luna fields", () => {
+    const review = {
+      ...clearDecision,
+      decision: "REVIEW" as const,
+      reason_codes: ["SEXUAL" as const],
+      needs_human: true,
+    };
+    const lowSignal = {
+      providerLabel: "sexual",
+      rawScore: 0.003,
+      flagged: false,
+      calibratedBand: "LOW",
+      appliedModalities: ["TEXT", "IMAGE"],
+    };
+    expect(reconcileLowSexualDisagreement(review, [lowSignal])).toMatchObject({
+      reconciled: true,
+      decision: { decision: "ALLOW", reason_codes: ["NONE"], needs_human: false },
+    });
+    for (const blocked of [
+      { decision: review, signals: [{ ...lowSignal, rawScore: 0.011 }] },
+      { decision: review, signals: [{ ...lowSignal, flagged: true }] },
+      {
+        decision: { ...review, reason_codes: ["SEXUAL" as const, "SPAM" as const] },
+        signals: [lowSignal],
+      },
+      { decision: { ...review, pair_fairness: "UNBALANCED" as const }, signals: [lowSignal] },
+    ])
+      expect(reconcileLowSexualDisagreement(blocked.decision, blocked.signals).reconciled).toBe(
+        false,
+      );
   });
   it("binds cache to ordered images, question, OCR, and policy, never asset-only inputs", async () => {
     const input = await pairInput();

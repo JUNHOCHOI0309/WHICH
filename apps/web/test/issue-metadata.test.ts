@@ -103,4 +103,45 @@ describe("Issue search metadata", () => {
     expect(metadata.description).not.toContain("%");
     expect(metadata.robots).toMatchObject({ index: false, follow: true });
   });
+
+  it("includes every active choice in a four-choice result preview", async () => {
+    const fourChoiceIssue: PublicIssue = {
+      ...issue,
+      choices: [
+        ...issue.choices,
+        { id: "choice-c", code: "C", label: "영상으로 보기", media: null },
+        { id: "choice-d", code: "D", label: "직접 체험하기", media: null },
+      ],
+    };
+    mocks.readIssue.mockResolvedValue({ status: "available", value: fourChoiceIssue });
+    const share: PublicShareCard = {
+      id: "30000000-0000-4000-8000-000000000002",
+      version: "result_share_v1",
+      channel: "COPY",
+      shareType: "RESULT_WITH_CHOICE",
+      sharedChoiceCode: "D",
+      createdAt: "2026-08-29T00:01:00.000Z",
+      issue: {
+        id: issue.id,
+        version: issue.version,
+        question: issue.question,
+        choices: fourChoiceIssue.choices.map(({ code, label }) => ({ code, label })),
+      },
+      result: {
+        resultVersion: 1,
+        acceptedA: 4,
+        acceptedB: 3,
+        acceptedC: 2,
+        acceptedD: 1,
+        displayedTotal: 10,
+        integrityState: "NORMAL",
+      },
+    };
+    mocks.readShare.mockResolvedValue(Response.json(share));
+
+    const metadata = await generateMetadata(props({ share: share.id }));
+
+    expect(metadata.description).toContain("A 40% · B 30% · C 20% · D 10%");
+    expect(metadata.description).toContain("공유한 선택 D");
+  });
 });

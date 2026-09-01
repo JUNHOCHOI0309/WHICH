@@ -18,6 +18,7 @@ import {
   clearGuestSubjectCookie,
   GUEST_SUBJECT_COOKIE,
   setMemberSessionCookie,
+  setRecentLoginProviderCookie,
   setSocialSignupCookie,
   validGuestSubject,
 } from "@/lib/server/which-api";
@@ -150,6 +151,7 @@ export async function GET(request: Request) {
       new URL(withAuthOutcome(flow.returnTo, "success"), baseUrl),
     );
     setMemberSessionCookie(response, session.token, session.expiresAt);
+    setRecentLoginProviderCookie(response, "google");
     if (anonymousSubjectId) clearGuestSubjectCookie(response);
     clearFlowCookie(response);
     return response;

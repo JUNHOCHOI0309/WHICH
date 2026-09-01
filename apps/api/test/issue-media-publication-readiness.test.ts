@@ -144,6 +144,50 @@ describe("publication evidence readiness (observation only)", () => {
       ]),
     );
   });
+  it("binds provider and OCR evidence for every active four-choice image", () => {
+    const f = fixture();
+    const extraAssets = ["asset-c", "asset-d"].map((id, index) => ({
+      ...f.assets[index]!,
+      id,
+      sourceHash: String(index + 5).repeat(64),
+      normalizedHash: String(index + 7).repeat(64),
+    }));
+    f.assets = [...f.assets, ...extraAssets];
+    f.submission!.mediaAssetCId = "asset-c";
+    f.submission!.mediaAssetDId = "asset-d";
+    for (const asset of extraAssets) {
+      f.findings = [
+        ...f.findings,
+        ...f.findings
+          .filter((finding) => finding.mediaAssetId === "asset-a")
+          .map((finding) => ({
+            ...finding,
+            mediaAssetId: asset.id,
+            evidence: {
+              ...finding.evidence,
+              sourceSha256: asset.sourceHash,
+              normalizedSha256: asset.normalizedHash,
+            },
+          })),
+      ];
+    }
+    f.providerResult.imageCount = 4;
+    f.providerResult.embeddedText = {
+      version: EMBEDDED_TEXT_VERSION,
+      images: f.assets.map((asset) => ({
+        normalizedHash: asset.normalizedHash,
+        status: "COMPLETE",
+        characters: 0,
+      })),
+    };
+
+    const result = evaluatePublicationReadiness(f);
+
+    expect(result.blockers).not.toContain("PROVIDER_INPUT_BINDING_INVALID");
+    expect(result.blockers).not.toContain("EMBEDDED_TEXT_EVIDENCE_MISSING");
+    expect(result.blockers).toContain("C_VISUAL_ENGINE_NOT_IMPLEMENTED");
+    expect(result.blockers).toContain("D_VISUAL_ENGINE_NOT_IMPLEMENTED");
+  });
   it("does not interpret low provider scores and clean local scans as a calibrated clear decision", () => {
     const result = evaluatePublicationReadiness(fixture());
     expect(result).toMatchObject({ state: "PRIVATE_REVIEW_REQUIRED", executionAuthorized: false });

@@ -27,16 +27,22 @@ type TestIssue = {
   issueId: string;
   choiceAId: string;
   choiceBId: string;
+  choiceCId?: string;
+  choiceDId?: string;
 };
 
 let database: Database;
 let app: Awaited<ReturnType<typeof buildApp>>;
 let dropDatabase: () => Promise<void>;
 
-async function createIssue(options: { riskLevel?: "LOW" | "RESTRICTED" } = {}): Promise<TestIssue> {
+async function createIssue(
+  options: { riskLevel?: "LOW" | "RESTRICTED"; choiceCount?: 2 | 3 | 4 } = {},
+): Promise<TestIssue> {
   const issueId = randomUUID();
   const choiceAId = randomUUID();
   const choiceBId = randomUUID();
+  const choiceCId = options.choiceCount && options.choiceCount >= 3 ? randomUUID() : undefined;
+  const choiceDId = options.choiceCount === 4 ? randomUUID() : undefined;
 
   await database.db.insert(issues).values({
     id: issueId,
@@ -52,12 +58,20 @@ async function createIssue(options: { riskLevel?: "LOW" | "RESTRICTED" } = {}): 
     taxonomyVersion: "v1",
     publishedAt: new Date(),
   });
-  await database.db.insert(issueChoices).values([
-    { id: choiceAId, issueId, issueVersion: 1, code: "A", label: "Option A" },
-    { id: choiceBId, issueId, issueVersion: 1, code: "B", label: "Option B" },
-  ]);
+  await database.db
+    .insert(issueChoices)
+    .values([
+      { id: choiceAId, issueId, issueVersion: 1, code: "A", label: "Option A" },
+      { id: choiceBId, issueId, issueVersion: 1, code: "B", label: "Option B" },
+      ...(choiceCId
+        ? [{ id: choiceCId, issueId, issueVersion: 1, code: "C" as const, label: "Option C" }]
+        : []),
+      ...(choiceDId
+        ? [{ id: choiceDId, issueId, issueVersion: 1, code: "D" as const, label: "Option D" }]
+        : []),
+    ]);
 
-  return { issueId, choiceAId, choiceBId };
+  return { issueId, choiceAId, choiceBId, choiceCId, choiceDId };
 }
 
 async function createGuestSubject() {
@@ -190,6 +204,38 @@ describe("guest vote transaction", () => {
     expect(attempt?.analyticsSessionId).toBeNull();
     expect(storedVote?.analyticsSessionId).toBeNull();
     expect(event?.payload.data).toMatchObject({ analytics_session_id: null });
+  });
+
+  it("accepts and aggregates C/D votes for four-choice Issues", async () => {
+    const issue = await createIssue({ choiceCount: 4 });
+    const firstSubject = await createGuestSubject();
+    const secondSubject = await createGuestSubject();
+
+    const voteC = await submitVote({
+      idempotencyKey: randomUUID(),
+      anonymousSubjectId: firstSubject,
+      issueId: issue.issueId,
+      choiceId: issue.choiceCId!,
+    });
+    const voteD = await submitVote({
+      idempotencyKey: randomUUID(),
+      anonymousSubjectId: secondSubject,
+      issueId: issue.issueId,
+      choiceId: issue.choiceDId!,
+    });
+
+    expect(voteC.statusCode).toBe(201);
+    expect(voteD.statusCode).toBe(201);
+    expect(voteD.json()).toMatchObject({
+      outcome: "ACCEPTED",
+      result: {
+        acceptedA: 0,
+        acceptedB: 0,
+        acceptedC: 1,
+        acceptedD: 1,
+        displayedTotal: 2,
+      },
+    });
   });
 
   it("keeps the Vote link when the Analytics Session already exists", async () => {

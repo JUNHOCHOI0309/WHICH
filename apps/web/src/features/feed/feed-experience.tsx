@@ -449,8 +449,6 @@ function FeedCard({
   onRetryHighlights: () => void;
   onMediaLoad: (choice: IssueChoice, outcome: "SUCCESS" | "FAILURE") => void;
 }) {
-  const choiceA = issue.choices.find((choice) => choice.code === "A");
-  const choiceB = issue.choices.find((choice) => choice.code === "B");
   const pendingChoice =
     state.status === "SUBMITTING" || state.status === "ERROR" ? state.choice : null;
   const cardRef = useRef<HTMLElement | null>(null);
@@ -498,29 +496,28 @@ function FeedCard({
       <Link className={styles.questionLink} href={`/issues/${issue.id}`} onClick={onOpen}>
         <h2>{issue.question}</h2>
       </Link>
+      {issue.contextMedia ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          className={styles.contextMedia}
+          src={issue.contextMedia.url}
+          alt={issue.contextMedia.altText}
+        />
+      ) : null}
 
       {state.status !== "RESULT" ? (
         <div className={styles.choiceList}>
-          {choiceA ? (
+          {issue.choices.map((choice) => (
             <VoteChoiceRow
-              choice={choiceA}
-              selected={pendingChoice?.id === choiceA.id}
-              pending={state.status === "SUBMITTING" && pendingChoice?.id === choiceA.id}
+              key={choice.id}
+              choice={choice}
+              selected={pendingChoice?.id === choice.id}
+              pending={state.status === "SUBMITTING" && pendingChoice?.id === choice.id}
               disabled={state.status === "SUBMITTING"}
-              onMediaLoad={(outcome) => onMediaLoad(choiceA, outcome)}
+              onMediaLoad={(outcome) => onMediaLoad(choice, outcome)}
               onSelect={onChoose}
             />
-          ) : null}
-          {choiceB ? (
-            <VoteChoiceRow
-              choice={choiceB}
-              selected={pendingChoice?.id === choiceB.id}
-              pending={state.status === "SUBMITTING" && pendingChoice?.id === choiceB.id}
-              disabled={state.status === "SUBMITTING"}
-              onMediaLoad={(outcome) => onMediaLoad(choiceB, outcome)}
-              onSelect={onChoose}
-            />
-          ) : null}
+          ))}
         </div>
       ) : null}
 
@@ -544,19 +541,17 @@ function FeedCard({
         </div>
       ) : null}
 
-      {state.status === "RESULT" && choiceA && choiceB ? (
+      {state.status === "RESULT" ? (
         <div className={styles.cardResult}>
           <p className={styles.voteNotice}>
             {state.vote.outcome === "REJECTED_DUPLICATE"
               ? `처음 선택한 ${state.vote.choice}가 유지되고 있어요.`
               : `${state.vote.choice} 선택이 반영됐어요.`}
           </p>
-          <ChoiceMediaPair choices={[choiceA, choiceB]} onMediaLoad={onMediaLoad} />
+          <ChoiceMediaPair choices={issue.choices} onMediaLoad={onMediaLoad} />
           <BalanceResultBar
-            aLabel={choiceA.label}
-            bLabel={choiceB.label}
-            acceptedA={state.vote.result.acceptedA}
-            acceptedB={state.vote.result.acceptedB}
+            choices={issue.choices}
+            result={state.vote.result}
             selectedChoice={state.vote.choice}
             compact
           />
@@ -565,6 +560,7 @@ function FeedCard({
             loading={highlightState?.status === "LOADING"}
             error={highlightState?.status === "ERROR"}
             detailsHref={`/issues/${issue.id}#comment-title`}
+            choiceCodes={issue.choices.map((choice) => choice.code)}
             onRetry={onRetryHighlights}
           />
         </div>

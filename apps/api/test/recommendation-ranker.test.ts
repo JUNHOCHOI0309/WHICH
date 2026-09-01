@@ -70,6 +70,8 @@ describe("quality feed v1", () => {
         viewableImpressions: 100,
         acceptedA: 28,
         acceptedB: 24,
+        acceptedC: 0,
+        acceptedD: 0,
         averageDecisionMs: 5_000,
         nextIssueOpens: 30,
         commentCompletions: 8,
@@ -105,6 +107,8 @@ describe("quality feed v1", () => {
             viewableImpressions: 1_000,
             acceptedA: 10,
             acceptedB: 10,
+            acceptedC: 0,
+            acceptedD: 0,
             averageDecisionMs: 250,
             nextIssueOpens: 0,
             commentCompletions: 0,
@@ -124,6 +128,35 @@ describe("quality feed v1", () => {
     expect(lowConversion?.eligibilityReasons).toEqual(
       expect.arrayContaining(["EXCESSIVE_SKIP", "REPORT_RISK"]),
     );
+  });
+
+  it("counts C/D participation and balance for four-choice quality signals", () => {
+    const [ranked] = rankQualityIssues(
+      [
+        qualityIssue("four-choice", {
+          choiceLabels: ["첫째", "둘째", "셋째", "넷째"],
+          qualitySignals: {
+            viewableImpressions: 40,
+            acceptedA: 3,
+            acceptedB: 3,
+            acceptedC: 3,
+            acceptedD: 3,
+            averageDecisionMs: 4_000,
+            nextIssueOpens: 8,
+            commentCompletions: 2,
+            shareCompletions: 1,
+            skips: 2,
+            reports: 0,
+          },
+        }),
+      ],
+      ["DAILY_LIFE"],
+      "stable-seed",
+      now,
+    );
+
+    expect(ranked?.controversyEligible).toBe(true);
+    expect(ranked?.scoreComponents.behavior).toBeGreaterThan(0);
   });
 
   it("limits repeated topic, author and near-duplicate concentration", () => {

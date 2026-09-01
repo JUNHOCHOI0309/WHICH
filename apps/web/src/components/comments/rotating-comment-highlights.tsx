@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
 
-import type { CommentHighlights, PublicComment } from "@/lib/contracts";
+import type { ChoiceCode, CommentHighlights, PublicComment } from "@/lib/contracts";
 import { relativeTimeLabel } from "@/lib/relative-time";
 
 import styles from "./rotating-comment-highlights.module.css";
@@ -15,12 +15,14 @@ export function RotatingCommentHighlights({
   loading,
   error,
   detailsHref,
+  choiceCodes,
   onRetry,
 }: {
   highlights: CommentHighlights | null;
   loading: boolean;
   error: boolean;
   detailsHref: string;
+  choiceCodes: readonly ChoiceCode[];
   onRetry: () => void;
 }) {
   const [index, setIndex] = useState(0);
@@ -30,7 +32,7 @@ export function RotatingCommentHighlights({
   const [reducedMotion, setReducedMotion] = useState(false);
   const [announcement, setAnnouncement] = useState("");
   const titleId = useId();
-  const total = Math.max(highlights?.A.length ?? 0, highlights?.B.length ?? 0);
+  const total = Math.max(0, ...choiceCodes.map((code) => highlights?.[code].length ?? 0));
   const safeIndex = total > 0 ? index % total : 0;
 
   useEffect(() => {
@@ -71,11 +73,14 @@ export function RotatingCommentHighlights({
   );
 
   const comments = useMemo(
-    () => ({
-      A: highlights?.A.length ? (highlights.A[safeIndex % highlights.A.length] ?? null) : null,
-      B: highlights?.B.length ? (highlights.B[safeIndex % highlights.B.length] ?? null) : null,
-    }),
-    [highlights, safeIndex],
+    () =>
+      Object.fromEntries(
+        choiceCodes.map((code) => {
+          const choices = highlights?.[code] ?? [];
+          return [code, choices.length ? (choices[safeIndex % choices.length] ?? null) : null];
+        }),
+      ) as Partial<Record<ChoiceCode, PublicComment | null>>,
+    [choiceCodes, highlights, safeIndex],
   );
 
   if (loading) {
@@ -83,8 +88,9 @@ export function RotatingCommentHighlights({
       <section className={styles.wrap} aria-label="대표 댓글을 불러오는 중" aria-busy="true">
         <div className={styles.loadingLine} />
         <div className={styles.loadingCards}>
-          <div />
-          <div />
+          {choiceCodes.map((code) => (
+            <div key={code} />
+          ))}
         </div>
       </section>
     );
@@ -119,7 +125,7 @@ export function RotatingCommentHighlights({
       <header className={styles.header}>
         <div>
           <span>CHOICE VOICES</span>
-          <h3 id={titleId}>A·B 대표 댓글</h3>
+          <h3 id={titleId}>{choiceCodes.join("·")} 대표 댓글</h3>
         </div>
         <Link href={detailsHref}>전체 댓글</Link>
       </header>
@@ -129,8 +135,9 @@ export function RotatingCommentHighlights({
       ) : (
         <>
           <div className={styles.grid}>
-            <HighlightCard side="A" comment={comments.A} />
-            <HighlightCard side="B" comment={comments.B} />
+            {choiceCodes.map((code) => (
+              <HighlightCard key={code} side={code} comment={comments[code] ?? null} />
+            ))}
           </div>
           {total > 1 ? (
             <div className={styles.controls} aria-label="대표 댓글 순환 제어">
@@ -165,9 +172,16 @@ export function RotatingCommentHighlights({
   );
 }
 
-function HighlightCard({ side, comment }: { side: "A" | "B"; comment: PublicComment | null }) {
+const COMMENT_STYLE_BY_CODE: Record<ChoiceCode, string> = {
+  A: styles.commentA!,
+  B: styles.commentB!,
+  C: styles.commentC!,
+  D: styles.commentD!,
+};
+
+function HighlightCard({ side, comment }: { side: ChoiceCode; comment: PublicComment | null }) {
   return (
-    <article className={`${styles.comment} ${side === "A" ? styles.commentA : styles.commentB}`}>
+    <article className={`${styles.comment} ${COMMENT_STYLE_BY_CODE[side]}`}>
       <div className={styles.commentMeta}>
         <strong>{side}</strong>
         {comment ? <span>공감 {comment.reactions.helpfulCount}</span> : null}

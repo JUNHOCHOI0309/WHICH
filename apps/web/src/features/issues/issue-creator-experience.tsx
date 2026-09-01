@@ -7,6 +7,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "@/components/feedback/toast-provider";
 import type {
   CreateIssueCommand,
+  ChoiceCode,
   InterestCardRegistry,
   IssueMediaUploadAccess,
   IssueMediaLibraryPair,
@@ -30,7 +31,26 @@ const EMPTY_DRAFT: CreateIssueCommand = {
   context: "",
   choiceA: "",
   choiceB: "",
+  choiceC: null,
+  choiceD: null,
+  libraryAssetIds: [],
   interestCardCode: "DAILY_LIFE",
+};
+const CHOICE_CODES = ["A", "B", "C", "D"] as const;
+const CHOICE_FIELDS: Record<ChoiceCode, "choiceA" | "choiceB" | "choiceC" | "choiceD"> = {
+  A: "choiceA",
+  B: "choiceB",
+  C: "choiceC",
+  D: "choiceD",
+};
+const MEDIA_FIELDS: Record<
+  ChoiceCode,
+  "mediaAssetAId" | "mediaAssetBId" | "mediaAssetCId" | "mediaAssetDId"
+> = {
+  A: "mediaAssetAId",
+  B: "mediaAssetBId",
+  C: "mediaAssetCId",
+  D: "mediaAssetDId",
 };
 
 function initialDraft() {
@@ -69,18 +89,32 @@ export function IssueCreatorExperience({
   const [mediaAccess, setMediaAccess] = useState<IssueMediaUploadAccess | null>(null);
   const [libraryState, setLibraryState] = useState<"loading" | "ready" | "error">("loading");
   const [mediaMode, setMediaMode] = useState<"TEXT_ONLY" | "LIBRARY" | "DIRECT">(
-    initialDraft().libraryPairId ? "LIBRARY" : "TEXT_ONLY",
+    initialDraft().libraryPairId || initialDraft().libraryAssetIds?.length
+      ? "LIBRARY"
+      : "TEXT_ONLY",
   );
   const [draft, setDraft] = useState<CreateIssueCommand>(initialDraft);
   const [submitting, setSubmitting] = useState(false);
   const [acceptingMediaTerms, setAcceptingMediaTerms] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [directFiles, setDirectFiles] = useState<{ A: File | null; B: File | null }>({
+  const [directFiles, setDirectFiles] = useState<Record<"CONTEXT" | ChoiceCode, File | null>>({
+    CONTEXT: null,
     A: null,
     B: null,
+    C: null,
+    D: null,
   });
+  const directPreviewContext = useObjectUrl(directFiles.CONTEXT);
   const directPreviewA = useObjectUrl(directFiles.A);
   const directPreviewB = useObjectUrl(directFiles.B);
+  const directPreviewC = useObjectUrl(directFiles.C);
+  const directPreviewD = useObjectUrl(directFiles.D);
+  const directPreviews: Record<ChoiceCode, string | null> = {
+    A: directPreviewA,
+    B: directPreviewB,
+    C: directPreviewC,
+    D: directPreviewD,
+  };
   const pendingKey = useRef<string | null>(null);
   const submittingRef = useRef(false);
 
@@ -152,7 +186,21 @@ export function IssueCreatorExperience({
 
   const selectedLabel =
     registry.cards.find((card) => card.code === draft.interestCardCode)?.label ?? "생활";
-  const selectedPair = library.find((pair) => pair.id === draft.libraryPairId) ?? null;
+  const libraryAssets = library.flatMap((pair) =>
+    pair.assets.map((asset) => ({ ...asset, pairId: pair.id, pairTitle: pair.title })),
+  );
+  const selectedLibraryAssetIds = draft.libraryAssetIds ?? [];
+  const selectedLibraryAssets = selectedLibraryAssetIds.flatMap((id) => {
+    const asset = libraryAssets.find((candidate) => candidate.id === id);
+    return asset ? [asset] : [];
+  });
+  const activeChoiceCodes = CHOICE_CODES.filter((code) => {
+    if (code === "A" || code === "B") return true;
+    return draft[CHOICE_FIELDS[code]] !== null && draft[CHOICE_FIELDS[code]] !== undefined;
+  });
+  const hasAnyDirectFile = Object.values(directFiles).some(Boolean);
+  const hasAnyChoiceFile = activeChoiceCodes.some((code) => Boolean(directFiles[code]));
+  const hasCompleteChoiceFiles = activeChoiceCodes.every((code) => Boolean(directFiles[code]));
 
   return (
     <form
@@ -169,20 +217,50 @@ export function IssueCreatorExperience({
             const result = await createMemberIssue(draft, pendingKey.current!);
             return { kind: "PUBLISHED" as const, issueId: result.issue.id };
           }
-          if (!mediaAccess?.allowed || !directFiles.A || !directFiles.B) {
-            throw new Error("A와 B 이미지를 모두 선택해 주세요.");
+          if (
+            !mediaAccess?.allowed ||
+            !hasAnyDirectFile ||
+            (hasAnyChoiceFile && !hasCompleteChoiceFiles)
+          ) {
+            throw new Error("설명 이미지 또는 사용 중인 모든 선택지 이미지를 확인해 주세요.");
           }
-          const base = { ...draft, libraryPairId: null, mediaAssetAId: null, mediaAssetBId: null };
+          const base = {
+            ...draft,
+            libraryPairId: null,
+            libraryAssetIds: null,
+            contextMediaAssetId: null,
+            mediaAssetAId: null,
+            mediaAssetBId: null,
+            mediaAssetCId: null,
+            mediaAssetDId: null,
+          };
           const result = await submitMemberIssue(base, pendingKey.current!);
-          const [assetA, assetB] = await Promise.all([
-            uploadIssueSubmissionMedia(result.submission.id, directFiles.A),
-            uploadIssueSubmissionMedia(result.submission.id, directFiles.B),
-          ]);
+          const uploadTargets = (["CONTEXT", ...activeChoiceCodes] as const).filter((target) =>
+            Boolean(directFiles[target]),
+          );
+          const uploaded = await Promise.all(
+            uploadTargets.map(async (target) => ({
+              target,
+              asset: (await uploadIssueSubmissionMedia(result.submission.id, directFiles[target]!))
+                .asset,
+            })),
+          );
+          const mediaAssets: Pick<
+            CreateIssueCommand,
+            | "contextMediaAssetId"
+            | "mediaAssetAId"
+            | "mediaAssetBId"
+            | "mediaAssetCId"
+            | "mediaAssetDId"
+          > = {};
+          for (const item of uploaded) {
+            if (item.target === "CONTEXT") mediaAssets.contextMediaAssetId = item.asset.id;
+            else mediaAssets[MEDIA_FIELDS[item.target]] = item.asset.id;
+          }
           const attached = await attachIssueSubmissionMedia(
             result.submission,
             base,
-            assetA.asset.id,
-            assetB.asset.id,
+            mediaAssets,
             crypto.randomUUID(),
           );
           return { kind: "PENDING" as const, submission: attached.submission };
@@ -253,30 +331,55 @@ export function IssueCreatorExperience({
         </label>
 
         <div className={styles.choiceGrid}>
-          <label className={styles.choiceField} data-side="A">
-            <span>
-              <b>A</b> 첫 번째 선택
-            </span>
-            <input
-              value={draft.choiceA}
-              onChange={(event) => update("choiceA", event.target.value)}
-              maxLength={50}
-              placeholder="바로 자기"
-              required
-            />
-          </label>
-          <label className={styles.choiceField} data-side="B">
-            <span>
-              <b>B</b> 두 번째 선택
-            </span>
-            <input
-              value={draft.choiceB}
-              onChange={(event) => update("choiceB", event.target.value)}
-              maxLength={50}
-              placeholder="조금 더 놀기"
-              required
-            />
-          </label>
+          {activeChoiceCodes.map((code, index) => {
+            const field = CHOICE_FIELDS[code];
+            return (
+              <label className={styles.choiceField} data-side={code} key={code}>
+                <span>
+                  <b>{code}</b> {index + 1}번째 선택
+                </span>
+                <input
+                  value={draft[field] ?? ""}
+                  onChange={(event) => update(field, event.target.value)}
+                  maxLength={50}
+                  placeholder={`${index + 1}번째 선택지를 적어 주세요`}
+                  required
+                />
+              </label>
+            );
+          })}
+        </div>
+        <div className={styles.choiceControls}>
+          {activeChoiceCodes.length < 4 ? (
+            <button
+              type="button"
+              onClick={() => {
+                const nextCode = CHOICE_CODES[activeChoiceCodes.length]!;
+                update(CHOICE_FIELDS[nextCode], "");
+                update("libraryPairId", null);
+              }}
+            >
+              + 선택지 추가
+            </button>
+          ) : null}
+          {activeChoiceCodes.length > 2 ? (
+            <button
+              type="button"
+              onClick={() => {
+                const removed = activeChoiceCodes.at(-1)!;
+                update(CHOICE_FIELDS[removed], null);
+                update("libraryPairId", null);
+                update(
+                  "libraryAssetIds",
+                  selectedLibraryAssetIds.slice(0, activeChoiceCodes.length - 1),
+                );
+                setDirectFiles((current) => ({ ...current, [removed]: null }));
+              }}
+            >
+              마지막 선택지 삭제
+            </button>
+          ) : null}
+          <small>선택지는 2개부터 최대 4개까지 만들 수 있어요.</small>
         </div>
 
         <fieldset className={styles.mediaPicker}>
@@ -288,7 +391,8 @@ export function IssueCreatorExperience({
               onClick={() => {
                 setMediaMode("TEXT_ONLY");
                 update("libraryPairId", null);
-                setDirectFiles({ A: null, B: null });
+                update("libraryAssetIds", []);
+                setDirectFiles({ CONTEXT: null, A: null, B: null, C: null, D: null });
               }}
             >
               텍스트만
@@ -296,6 +400,7 @@ export function IssueCreatorExperience({
             <button
               type="button"
               data-active={mediaMode === "LIBRARY"}
+              title="검수가 끝난 이미지를 선택지 수만큼 고릅니다."
               onClick={() => setMediaMode("LIBRARY")}
             >
               승인 이미지 Library
@@ -312,6 +417,7 @@ export function IssueCreatorExperience({
               onClick={() => {
                 setMediaMode("DIRECT");
                 update("libraryPairId", null);
+                update("libraryAssetIds", []);
               }}
             >
               {mediaAccess?.allowed ? "직접 업로드" : "직접 업로드 · Pilot"}
@@ -352,43 +458,81 @@ export function IssueCreatorExperience({
           {mediaMode === "LIBRARY" ? (
             <div className={styles.libraryPanel}>
               <p>
-                출처와 사용 권리가 검증된 A/B 이미지 쌍입니다. 선택하면 추가 검수 없이 바로
-                게시돼요.
+                검수가 끝난 이미지를 선택지 수만큼 골라 주세요. 고른 순서대로 A/B/C/D가 배정되고,
+                같은 이미지를 다시 누르면 선택이 해제됩니다.
               </p>
+              <strong className={styles.librarySelectionCount}>
+                {selectedLibraryAssetIds.length}/{activeChoiceCodes.length} 선택
+              </strong>
               {libraryState === "loading" ? <span>Library를 불러오는 중…</span> : null}
               {libraryState === "error" ? <span>Library를 잠시 불러오지 못했습니다.</span> : null}
               {libraryState === "ready" && library.length === 0 ? (
-                <span>현재 사용할 수 있는 이미지 쌍이 없습니다.</span>
+                <span>현재 사용할 수 있는 이미지가 없습니다.</span>
               ) : null}
               <div className={styles.libraryGrid}>
-                {library.map((pair) => (
-                  <button
-                    type="button"
-                    key={pair.id}
-                    data-selected={draft.libraryPairId === pair.id}
-                    onClick={() => update("libraryPairId", pair.id)}
-                  >
-                    <span className={styles.libraryImages}>
-                      {pair.assets.map((asset) => (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img key={asset.id} src={asset.url} alt={asset.altText} />
-                      ))}
-                    </span>
-                    <b>{pair.title}</b>
-                    <small>{pair.topics.slice(0, 3).join(" · ") || pair.categoryCode}</small>
-                  </button>
-                ))}
+                {libraryAssets.map((asset) => {
+                  const selectedIndex = selectedLibraryAssetIds.indexOf(asset.id);
+                  const assignment = selectedIndex >= 0 ? activeChoiceCodes[selectedIndex] : null;
+                  return (
+                    <button
+                      type="button"
+                      key={asset.id}
+                      aria-label={`${asset.pairTitle} · ${asset.altText}`}
+                      data-selected={selectedIndex >= 0}
+                      data-assignment={assignment ?? undefined}
+                      onClick={() => {
+                        update("libraryPairId", null);
+                        if (selectedIndex >= 0) {
+                          update(
+                            "libraryAssetIds",
+                            selectedLibraryAssetIds.filter((id) => id !== asset.id),
+                          );
+                          return;
+                        }
+                        if (selectedLibraryAssetIds.length >= activeChoiceCodes.length) {
+                          toast.info(
+                            "선택지 수만큼 골랐어요. 다른 이미지를 해제한 뒤 선택해 주세요.",
+                          );
+                          return;
+                        }
+                        update("libraryAssetIds", [...selectedLibraryAssetIds, asset.id]);
+                      }}
+                    >
+                      <span className={styles.libraryAssetImage}>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={asset.url} alt={asset.altText} />
+                        {assignment ? <b>{assignment}</b> : null}
+                      </span>
+                      <strong>{asset.pairTitle}</strong>
+                      <small>{asset.altText}</small>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           ) : null}
           {mediaMode === "DIRECT" && mediaAccess?.allowed ? (
             <div className={styles.directUploadPanel}>
               <p>
-                JPG, PNG, WebP 이미지를 A/B 각각 선택하세요. 등록 즉시 비공개 안전 검사를 거치며,
-                통과한 질문만 공개됩니다.
+                설명 이미지는 단독으로 첨부할 수 있어요. 선택지 이미지도 넣는다면 현재 선택지 모두에
+                이미지를 골라 주세요. 등록 즉시 비공개 안전 검사를 거칩니다.
               </p>
               <div>
-                {(["A", "B"] as const).map((side) => (
+                <label data-side="CONTEXT">
+                  <b>설명</b>
+                  <span>{directFiles.CONTEXT?.name ?? "짧은 설명 이미지"}</span>
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    onChange={(event) =>
+                      setDirectFiles((current) => ({
+                        ...current,
+                        CONTEXT: event.target.files?.[0] ?? null,
+                      }))
+                    }
+                  />
+                </label>
+                {activeChoiceCodes.map((side) => (
                   <label key={side} data-side={side}>
                     <b>{side}</b>
                     <span>{directFiles[side]?.name ?? `${side} 선택 이미지`}</span>
@@ -434,41 +578,38 @@ export function IssueCreatorExperience({
         </div>
         <h2>{draft.question.trim() || "질문이 여기에 표시됩니다."}</h2>
         {draft.context?.trim() ? <p>{draft.context}</p> : null}
-        <div className={styles.previewChoice} data-side="A">
-          {selectedPair?.assets.find((asset) => asset.side === "A") ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={selectedPair.assets.find((asset) => asset.side === "A")!.url}
-              alt={selectedPair.assets.find((asset) => asset.side === "A")!.altText}
-            />
-          ) : directPreviewA ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={directPreviewA} alt="A 선택 이미지 미리보기" />
-          ) : null}
-          <b>A</b>
-          <span>{draft.choiceA || "첫 번째 선택"}</span>
-        </div>
-        <div className={styles.previewChoice} data-side="B">
-          {selectedPair?.assets.find((asset) => asset.side === "B") ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={selectedPair.assets.find((asset) => asset.side === "B")!.url}
-              alt={selectedPair.assets.find((asset) => asset.side === "B")!.altText}
-            />
-          ) : directPreviewB ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={directPreviewB} alt="B 선택 이미지 미리보기" />
-          ) : null}
-          <b>B</b>
-          <span>{draft.choiceB || "두 번째 선택"}</span>
-        </div>
+        {directPreviewContext ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            className={styles.previewContextImage}
+            src={directPreviewContext}
+            alt="짧은 설명 이미지 미리보기"
+          />
+        ) : null}
+        {activeChoiceCodes.map((code, index) => {
+          const libraryAsset = selectedLibraryAssets[index];
+          const preview = directPreviews[code];
+          return (
+            <div className={styles.previewChoice} data-side={code} key={code}>
+              {libraryAsset ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={libraryAsset.url} alt={libraryAsset.altText} />
+              ) : preview ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={preview} alt={`${code} 선택 이미지 미리보기`} />
+              ) : null}
+              <b>{code}</b>
+              <span>{draft[CHOICE_FIELDS[code]] || `${index + 1}번째 선택`}</span>
+            </div>
+          );
+        })}
       </section>
 
       <div className={styles.submitBar}>
         <p>
           {mediaMode === "DIRECT"
             ? "선택한 이미지는 비공개 안전 검사를 거친 뒤 공개됩니다."
-            : selectedPair
+            : selectedLibraryAssets.length === activeChoiceCodes.length
               ? "승인 Library 이미지와 함께 바로 피드에 표시됩니다."
               : "공개 후 바로 피드에 표시됩니다."}{" "}
           링크·정치·고위험 주제는 v1에서 게시할 수 없어요.
@@ -477,8 +618,10 @@ export function IssueCreatorExperience({
           type="submit"
           disabled={
             submitting ||
-            (mediaMode === "LIBRARY" && !draft.libraryPairId) ||
-            (mediaMode === "DIRECT" && (!directFiles.A || !directFiles.B))
+            (mediaMode === "LIBRARY" &&
+              selectedLibraryAssetIds.length !== activeChoiceCodes.length) ||
+            (mediaMode === "DIRECT" &&
+              (!hasAnyDirectFile || (hasAnyChoiceFile && !hasCompleteChoiceFiles)))
           }
         >
           {submitting ? "게시 요청 중…" : "질문 게시"}

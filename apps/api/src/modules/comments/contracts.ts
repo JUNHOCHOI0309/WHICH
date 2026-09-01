@@ -1,4 +1,4 @@
-export type CommentSide = "ALL" | "A" | "B";
+export type CommentSide = "ALL" | "A" | "B" | "C" | "D";
 export type CommentListView = "NEWEST" | "HIGHLIGHT";
 export type CommentListSort = "NEWEST" | "HELPFUL";
 export type CommentReportReason =
@@ -8,7 +8,7 @@ export type CommentReactionCode = "HELPFUL" | "DISLIKE";
 
 export type PublicComment = {
   id: string;
-  choice: "A" | "B";
+  choice: "A" | "B" | "C" | "D";
   author: { displayName: string; avatarUrl: string | null };
   body: string;
   visibility: "VISIBLE" | "DEPRIORITIZED" | "COLLAPSED";
@@ -35,6 +35,8 @@ export type PublicCommentPage = {
 export type CommentHighlights = {
   A: PublicComment[];
   B: PublicComment[];
+  C: PublicComment[];
+  D: PublicComment[];
 };
 
 export type GuestCommentQuery = {

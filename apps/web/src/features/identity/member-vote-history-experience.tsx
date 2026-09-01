@@ -1,10 +1,11 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { WhichShell } from "@/components/layout/which-shell";
-import type { MemberPrivateProfile, MemberPrivateVote } from "@/lib/contracts";
+import type { ChoiceCode, MemberPrivateProfile, MemberPrivateVote } from "@/lib/contracts";
 
 import styles from "./member-history-layout.module.css";
 import { MemberPointPanel } from "./member-point-panel";
@@ -21,8 +22,27 @@ async function readVoteHistory(cursor?: string) {
   return (await response.json()) as MemberPrivateProfile;
 }
 
-function resultPercent(vote: MemberPrivateVote, code: "A" | "B") {
-  const count = code === "A" ? vote.result.acceptedA : vote.result.acceptedB;
+const CHOICE_CODES = ["A", "B", "C", "D"] as const;
+const RESULT_COLOR: Record<ChoiceCode, string> = {
+  A: "var(--which-cyan)",
+  B: "var(--which-orange)",
+  C: "#8467d7",
+  D: "#5d9c59",
+};
+
+function resultCount(vote: MemberPrivateVote, code: ChoiceCode) {
+  return (
+    {
+      A: vote.result.acceptedA,
+      B: vote.result.acceptedB,
+      C: vote.result.acceptedC ?? 0,
+      D: vote.result.acceptedD ?? 0,
+    } satisfies Record<ChoiceCode, number>
+  )[code];
+}
+
+function resultPercent(vote: MemberPrivateVote, code: ChoiceCode) {
+  const count = resultCount(vote, code);
   if (vote.result.displayedTotal === 0) return 0;
   return Math.round((count / vote.result.displayedTotal) * 100);
 }
@@ -195,8 +215,12 @@ export function MemberVoteHistoryExperience({
                     </header>
                     <div className={styles.timeline}>
                       {votes.map((vote) => {
-                        const percentA = resultPercent(vote, "A");
-                        const percentB = resultPercent(vote, "B");
+                        const choiceCodes = CHOICE_CODES.slice(0, vote.choiceCount ?? 2);
+                        const results = choiceCodes.map((code) => ({
+                          code,
+                          count: resultCount(vote, code),
+                          percent: resultPercent(vote, code),
+                        }));
                         return (
                           <article className={styles.timelineItem} key={vote.voteId}>
                             <div className={styles.voteCopy}>
@@ -214,14 +238,27 @@ export function MemberVoteHistoryExperience({
                             </div>
                             <div
                               className={styles.result}
-                              aria-label={`현재 결과 A ${percentA}%, B ${percentB}%`}
+                              aria-label={`현재 결과 ${results
+                                .map(({ code, percent }) => `${code} ${percent}%`)
+                                .join(", ")}`}
                             >
                               <div className={styles.resultLabels}>
-                                <span>A {percentA}%</span>
-                                <span>B {percentB}%</span>
+                                {results.map(({ code, percent }) => (
+                                  <span data-choice={code} key={code}>
+                                    {code} {percent}%
+                                  </span>
+                                ))}
                               </div>
                               <div className={styles.resultBar} aria-hidden="true">
-                                <span style={{ width: `${percentA}%` }} />
+                                {results.map(({ code, count }) => (
+                                  <span
+                                    key={code}
+                                    style={{
+                                      backgroundColor: RESULT_COLOR[code],
+                                      flexGrow: count,
+                                    }}
+                                  />
+                                ))}
                               </div>
                               <small>
                                 현재 {vote.result.displayedTotal.toLocaleString("ko-KR")}표
@@ -231,7 +268,13 @@ export function MemberVoteHistoryExperience({
                               href={`/issues/${vote.issueId}`}
                               aria-label={`${vote.question} 최신 결과 보기`}
                             >
-                              ↗
+                              <Image
+                                src="/icons/double-chevron.png"
+                                width={24}
+                                height={24}
+                                alt=""
+                                aria-hidden="true"
+                              />
                             </Link>
                           </article>
                         );

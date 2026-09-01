@@ -10,7 +10,7 @@ const judgeReasonLabels: Partial<Record<JudgeReason, string>> = {
   SPAM: "광고·사기·스팸 가능성",
   RIGHTS_UNCERTAIN: "이미지 사용 권리 불확실",
   IRRELEVANT: "질문·선택지와 이미지의 관련성 부족",
-  PAIR_UNFAIR: "A/B 이미지를 공정하게 비교하기 어려움",
+  PAIR_UNFAIR: "선택지 이미지를 공정하게 비교하기 어려움",
   INSUFFICIENT_DETAIL: "화질·정보 부족으로 판정하기 어려움",
   UNCERTAIN: "검사 결과가 불확실함",
 };
@@ -21,7 +21,7 @@ const genericReviewNote =
 function actionableNote(labels: string[]) {
   const unique = [...new Set(labels)];
   if (!unique.length) return genericReviewNote;
-  return `A/B 이미지 중 하나 이상이 게시 기준을 통과하지 못했어요. 확인된 항목: ${unique.join(" · ")}. 이미지를 바꾸거나 이미지 없이 게시해 주세요.`;
+  return `선택한 이미지 중 하나 이상이 게시 기준을 통과하지 못했어요. 확인된 항목: ${unique.join(" · ")}. 이미지를 바꾸거나 이미지 없이 게시해 주세요.`;
 }
 
 export function policyJudgeReviewNote(input: unknown) {

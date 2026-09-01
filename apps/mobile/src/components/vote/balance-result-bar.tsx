@@ -1,6 +1,7 @@
 import { StyleSheet, Text, View } from "react-native";
 
 import { colors } from "@/theme";
+import type { ChoiceCode, IssueChoice, IssueTally } from "@/contracts";
 
 export function BalanceResultBar({
   aLabel,
@@ -8,55 +9,92 @@ export function BalanceResultBar({
   acceptedA,
   acceptedB,
   selectedChoice,
+  choices,
+  result,
 }: {
-  aLabel: string;
-  bLabel: string;
-  acceptedA: number;
-  acceptedB: number;
-  selectedChoice: "A" | "B";
+  aLabel?: string;
+  bLabel?: string;
+  acceptedA?: number;
+  acceptedB?: number;
+  selectedChoice: ChoiceCode;
+  choices?: IssueChoice[];
+  result?: IssueTally;
 }) {
-  const total = acceptedA + acceptedB;
-  const aRatio = total === 0 ? 0.5 : acceptedA / total;
-  const aPercent = total === 0 ? 0 : Math.round(aRatio * 100);
-  const bPercent = total === 0 ? 0 : 100 - aPercent;
+  const counts: Record<ChoiceCode, number> = {
+    A: result?.acceptedA ?? acceptedA ?? 0,
+    B: result?.acceptedB ?? acceptedB ?? 0,
+    C: result?.acceptedC ?? 0,
+    D: result?.acceptedD ?? 0,
+  };
+  const rows = choices?.length
+    ? choices.map((choice) => ({ ...choice, count: counts[choice.code] }))
+    : [
+        { id: "A", code: "A" as const, label: aLabel ?? "A", media: null, count: counts.A },
+        { id: "B", code: "B" as const, label: bLabel ?? "B", media: null, count: counts.B },
+      ];
+  const total = rows.reduce((sum, row) => sum + row.count, 0);
+  const percentages = rows.map((row) => (total === 0 ? 0 : Math.round((row.count / total) * 100)));
+  const aRatio = total === 0 ? 0.5 : counts.A / total;
 
   return (
     <View
       accessible
-      accessibilityLabel={`투표 결과, A ${aPercent}퍼센트, B ${bPercent}퍼센트`}
+      accessibilityLabel={`투표 결과, ${rows.map((row, index) => `${row.code} ${percentages[index]}퍼센트`).join(", ")}`}
       style={styles.result}
     >
-      <View style={styles.labels}>
-        <View style={styles.labelSide}>
-          <Text numberOfLines={2} style={styles.aLabel}>
-            {selectedChoice === "A" ? "✓ " : "A · "}
-            {aLabel}
-          </Text>
-          <Text style={styles.aPercent}>{aPercent}%</Text>
-          <Text style={styles.count}>{acceptedA.toLocaleString("ko-KR")}표</Text>
-        </View>
-        <View style={[styles.labelSide, styles.labelSideB]}>
-          <Text numberOfLines={2} style={styles.bLabel}>
-            {selectedChoice === "B" ? "✓ " : "B · "}
-            {bLabel}
-          </Text>
-          <Text style={styles.bPercent}>{bPercent}%</Text>
-          <Text style={styles.count}>{acceptedB.toLocaleString("ko-KR")}표</Text>
-        </View>
+      <View style={[styles.labels, rows.length > 2 && styles.labelsMulti]}>
+        {rows.map((row, index) => (
+          <View style={styles.labelSide} key={row.code}>
+            <Text numberOfLines={2} style={styles.choiceLabel}>
+              {selectedChoice === row.code ? "✓ " : `${row.code} · `}
+              {row.label}
+            </Text>
+            <Text style={[styles.choicePercent, { color: choiceColor(row.code) }]}>
+              {percentages[index]}%
+            </Text>
+            <Text style={styles.count}>{row.count.toLocaleString("ko-KR")}표</Text>
+            {rows.length > 2 ? (
+              <View style={styles.choiceTrack}>
+                <View
+                  style={[
+                    styles.choiceFill,
+                    {
+                      backgroundColor: choiceColor(row.code),
+                      width: `${percentages[index] ?? 0}%`,
+                    },
+                  ]}
+                />
+              </View>
+            ) : null}
+          </View>
+        ))}
       </View>
-      <View style={styles.track}>
-        <View style={[styles.trackA, { width: `${aRatio * 100}%` }]} />
-        <View style={[styles.seam, { left: `${aRatio * 100}%` }]} />
-      </View>
+      {rows.length === 2 ? (
+        <View style={styles.track}>
+          <View style={[styles.trackA, { width: `${aRatio * 100}%` }]} />
+          <View style={[styles.seam, { left: `${aRatio * 100}%` }]} />
+        </View>
+      ) : null}
       <Text style={styles.total}>{total.toLocaleString("ko-KR")}명 참여</Text>
     </View>
   );
 }
 
+function choiceColor(code: ChoiceCode) {
+  return code === "A"
+    ? colors.cyanStrong
+    : code === "B"
+      ? colors.orangeStrong
+      : code === "C"
+        ? "#8467D7"
+        : "#5D9C59";
+}
+
 const styles = StyleSheet.create({
   result: { gap: 11 },
   labels: { flexDirection: "row", gap: 14 },
-  labelSide: { flex: 1, gap: 3 },
+  labelsMulti: { flexWrap: "wrap" },
+  labelSide: { flexBasis: "45%", flexGrow: 1, gap: 3 },
   labelSideB: { alignItems: "flex-end" },
   aLabel: { color: colors.text, fontSize: 13, fontWeight: "800", lineHeight: 18 },
   bLabel: {
@@ -69,6 +107,10 @@ const styles = StyleSheet.create({
   aPercent: { color: colors.cyanStrong, fontSize: 23, fontWeight: "900" },
   bPercent: { color: colors.orangeStrong, fontSize: 23, fontWeight: "900" },
   count: { color: colors.textTertiary, fontSize: 11 },
+  choiceLabel: { color: colors.text, fontSize: 13, fontWeight: "800", lineHeight: 18 },
+  choicePercent: { fontSize: 23, fontWeight: "900" },
+  choiceTrack: { backgroundColor: colors.border, borderRadius: 999, height: 6, overflow: "hidden" },
+  choiceFill: { borderRadius: 999, height: "100%" },
   track: {
     backgroundColor: colors.orange,
     borderRadius: 999,

@@ -80,7 +80,11 @@ describe("member submissions", () => {
     render(<MemberSubmissionsExperience />);
     const row = await screen.findByRole("article", { name: pending.question });
     const link = within(row).getByRole("link", { name: `${pending.question} 게시된 질문 보기` });
-    expect(link).toHaveTextContent(/^↗$/);
+    expect(link).toHaveTextContent("");
+    expect(link.querySelector("img")?.getAttribute("src")).toContain(
+      encodeURIComponent("/icons/double-chevron.png"),
+    );
+    expect(link.querySelector("img")).toHaveAttribute("alt", "");
     expect(link).toHaveAttribute("href", "/issues/live");
     expect(row).toHaveAttribute("data-published", "true");
     expect(within(row).queryByText("글 바로가기")).not.toBeInTheDocument();
@@ -141,9 +145,13 @@ describe("member submissions", () => {
     expect(refresh).toHaveTextContent("");
     expect(refresh.querySelector("img")).toHaveAttribute("alt", "");
     expect(refresh.querySelector("img")).toHaveAttribute("width", "22");
-    expect(
-      within(refresh.parentElement!).getByText(/최근 제출한 질문을 최대 20개까지 보여요/),
-    ).toBeVisible();
+    const information = screen.getByRole("button", { name: "내 질문 안내" });
+    const tooltip = screen.getByRole("tooltip");
+    expect(information).toHaveAttribute("aria-describedby", tooltip.id);
+    expect(information.querySelector("img")?.getAttribute("src")).toContain(
+      encodeURIComponent("/icons/help.png"),
+    );
+    expect(tooltip).toHaveTextContent(/최근 제출한 질문을 최대 20개까지 보여요/);
 
     let resolveRefresh!: (result: { items: MemberIssueSubmission[] }) => void;
     api.loadMemberSubmissions.mockReturnValueOnce(
@@ -230,7 +238,12 @@ describe("member submissions", () => {
     fireEvent.click(await screen.findByRole("button", { name: `${pending.question} 관리` }));
     fireEvent.click(await screen.findByRole("button", { name: "이미지 없이 게시" }));
     await waitFor(() =>
-      expect(api.actOnMemberSubmission).toHaveBeenCalledWith(pending, "TEXT_ONLY", undefined),
+      expect(api.actOnMemberSubmission).toHaveBeenCalledWith(
+        pending,
+        "TEXT_ONLY",
+        undefined,
+        undefined,
+      ),
     );
     expect(await screen.findByRole("link", { name: /게시된 질문 보기/ })).toHaveAttribute(
       "href",
@@ -259,6 +272,97 @@ describe("member submissions", () => {
       ),
     );
     expect(api.uploadIssueSubmissionMedia).not.toHaveBeenCalled();
+  });
+  it("preserves and edits every active choice in a four-choice submission", async () => {
+    const fourChoice = {
+      ...pending,
+      choiceC: "영화",
+      choiceD: "게임",
+      mediaAssetCId: "c",
+      mediaAssetDId: "d",
+    };
+    api.loadMemberSubmissions.mockResolvedValue({ items: [fourChoice] });
+    api.updateMemberSubmission.mockResolvedValue({ submission: { ...fourChoice, revision: 3 } });
+    render(<MemberSubmissionsExperience />);
+    fireEvent.click(await screen.findByRole("button", { name: `${pending.question} 관리` }));
+    fireEvent.click(screen.getByRole("button", { name: "수정·이미지 변경" }));
+    fireEvent.change(screen.getByLabelText("C 선택지"), { target: { value: "영화관" } });
+    fireEvent.click(screen.getByRole("button", { name: "수정본 제출" }));
+
+    await waitFor(() =>
+      expect(api.updateMemberSubmission).toHaveBeenCalledWith(
+        expect.objectContaining({ revision: 2 }),
+        expect.objectContaining({
+          choiceC: "영화관",
+          choiceD: "게임",
+          mediaAssetAId: "a",
+          mediaAssetBId: "b",
+          mediaAssetCId: "c",
+          mediaAssetDId: "d",
+        }),
+        expect.any(String),
+      ),
+    );
+  });
+  it("selects approved library images individually in A/B/C/D order", async () => {
+    const fourChoice = {
+      ...pending,
+      choiceC: "영화",
+      choiceD: "게임",
+      mediaAssetCId: "c",
+      mediaAssetDId: "d",
+    };
+    api.loadMemberSubmissions.mockResolvedValue({ items: [fourChoice] });
+    api.loadIssueMediaLibrary.mockResolvedValue({
+      items: [
+        {
+          id: "pair-1",
+          title: "첫 묶음",
+          categoryCode: "LIFE",
+          topics: [],
+          usageCount: 0,
+          assets: [
+            { id: "library-1", side: "A", url: "/one.png", altText: "첫 번째 이미지" },
+            { id: "library-2", side: "B", url: "/two.png", altText: "두 번째 이미지" },
+          ],
+        },
+        {
+          id: "pair-2",
+          title: "둘째 묶음",
+          categoryCode: "LIFE",
+          topics: [],
+          usageCount: 0,
+          assets: [
+            { id: "library-3", side: "A", url: "/three.png", altText: "세 번째 이미지" },
+            { id: "library-4", side: "B", url: "/four.png", altText: "네 번째 이미지" },
+          ],
+        },
+      ],
+    });
+    api.actOnMemberSubmission.mockResolvedValue({
+      submission: {
+        ...fourChoice,
+        publicationState: "PUBLISHED",
+        publishedIssueId: "published-four",
+      },
+    });
+    render(<MemberSubmissionsExperience />);
+    fireEvent.click(await screen.findByRole("button", { name: `${pending.question} 관리` }));
+    fireEvent.click(screen.getByRole("button", { name: "Library로 교체" }));
+    for (const alt of ["첫 번째 이미지", "세 번째 이미지", "두 번째 이미지", "네 번째 이미지"]) {
+      const image = await screen.findByAltText(alt);
+      fireEvent.click(image.closest("button")!);
+    }
+    fireEvent.click(screen.getByRole("button", { name: "선택한 이미지로 게시" }));
+
+    await waitFor(() =>
+      expect(api.actOnMemberSubmission).toHaveBeenCalledWith(fourChoice, "LIBRARY", undefined, [
+        "library-1",
+        "library-3",
+        "library-2",
+        "library-4",
+      ]),
+    );
   });
   it("does not expose mutation controls on cancelled questions", async () => {
     api.loadMemberSubmissions.mockResolvedValue({

@@ -82,25 +82,31 @@ export function createOpenAiModerationAdapter(
     cacheProfile: `${options.cacheProfile ?? "default"}:per-image-v1`,
     accountsPerRequest: true,
     requestCount: (target) =>
-      target.privateObjectReference.startsWith("issue-submission://revision/") ? 2 : 1,
+      target.privateObjectReference.startsWith("issue-submission://revision/") ? 5 : 1,
     canReuseResult(result) {
+      const imageCount =
+        typeof result.imageCount === "number" && Number.isInteger(result.imageCount)
+          ? result.imageCount
+          : -1;
       if (
-        result.imageCount === 2 &&
-        (result.requestStrategy !== "PER_IMAGE_V1" || result.requestCount !== 2)
+        imageCount > 0 &&
+        (imageCount > 5 ||
+          result.requestStrategy !== "PER_IMAGE_V1" ||
+          result.requestCount !== imageCount)
       )
         return false;
-      if (!options.embeddedTextEnabled || result.imageCount === 0) return true;
+      if (!options.embeddedTextEnabled || imageCount === 0) return true;
       const parsed = embeddedTextEvidenceSchema.safeParse(result.embeddedText);
       return (
         parsed.success &&
-        parsed.data.images.length === result.imageCount &&
+        parsed.data.images.length === imageCount &&
         parsed.data.images.every((image) => image.status === "COMPLETE")
       );
     },
     async inspect(target, runRequest = (request) => request()) {
       const input = await options.resolveInput(target);
       const images = input.images ?? (input.image ? [input.image] : []);
-      if ((input.images && input.image) || images.length > 2) {
+      if ((input.images && input.image) || images.length > 5) {
         throw new ModerationProviderCallError("INPUT_UNAVAILABLE", "INVALID_IMAGE_INPUT", false);
       }
       if (!input.text && images.length === 0) {
@@ -114,7 +120,7 @@ export function createOpenAiModerationAdapter(
       const startedAt = performance.now();
       const responses: Array<z.infer<typeof responseSchema>> = [];
       // The moderation endpoint rejects multiple images with too_many_images.
-      // Repeat minimized context for each image; never drop B or merge images
+      // Repeat minimized context for each image; never drop later choices or merge images
       // into a lower-resolution contact sheet to fit a single request.
       for (const image of images.length ? images : [undefined]) {
         const requestInput: Array<Record<string, unknown>> = [];

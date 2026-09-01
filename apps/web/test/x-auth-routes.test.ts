@@ -117,6 +117,7 @@ describe("X OAuth routes", () => {
       "http://localhost:3000/issues/issue-1?auth=success#member-access",
     );
     expect(response.headers.get("set-cookie")).toContain("which_member_session=which-session");
+    expect(response.headers.get("set-cookie")).toContain("which_recent_login_provider=x");
     expect(response.headers.get("set-cookie")).toContain("which_guest_subject=");
     expect(response.headers.get("set-cookie")).toContain("Max-Age=0");
     expect(requests).toEqual([

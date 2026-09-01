@@ -195,7 +195,7 @@ export function evaluateModerationRuntimeGate(input: {
     return { allowed: false, reason: "DAILY_CALL_CAP_DISABLED" } as const;
   }
   const requiredCalls = input.requiredCalls ?? 1;
-  if (!Number.isInteger(requiredCalls) || requiredCalls < 1 || requiredCalls > 2) {
+  if (!Number.isInteger(requiredCalls) || requiredCalls < 1 || requiredCalls > 5) {
     return { allowed: false, reason: "INVALID_PROVIDER_REQUEST_COUNT" } as const;
   }
   if (

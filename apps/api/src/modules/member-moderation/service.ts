@@ -93,10 +93,15 @@ function noticeView(row: typeof memberModerationNotices.$inferSelect): MemberMod
 function contentHash(input: {
   question: string;
   context: string | null;
+  contextMediaAssetId: string | null;
   choiceA: string;
   choiceB: string;
+  choiceC: string | null;
+  choiceD: string | null;
   mediaAssetAId: string | null;
   mediaAssetBId: string | null;
+  mediaAssetCId: string | null;
+  mediaAssetDId: string | null;
   interestCardCode: string;
 }) {
   return createHash("sha256").update(JSON.stringify(input)).digest("hex");
@@ -290,8 +295,11 @@ export function createMemberModerationService(
                   and(
                     eq(memberIssueSubmissions.memberId, memberId),
                     or(
+                      inArray(memberIssueSubmissions.contextMediaAssetId, assetIds),
                       inArray(memberIssueSubmissions.mediaAssetAId, assetIds),
                       inArray(memberIssueSubmissions.mediaAssetBId, assetIds),
+                      inArray(memberIssueSubmissions.mediaAssetCId, assetIds),
+                      inArray(memberIssueSubmissions.mediaAssetDId, assetIds),
                     ),
                   ),
                 )
@@ -349,7 +357,12 @@ export function createMemberModerationService(
       );
       const assetViews: MemberModerationAsset[] = assets.map((asset) => {
         const submission = submissions.find(
-          (item) => item.mediaAssetAId === asset.id || item.mediaAssetBId === asset.id,
+          (item) =>
+            item.contextMediaAssetId === asset.id ||
+            item.mediaAssetAId === asset.id ||
+            item.mediaAssetBId === asset.id ||
+            item.mediaAssetCId === asset.id ||
+            item.mediaAssetDId === asset.id,
         );
         const decision = latestDecision.get(asset.id);
         const status: MemberModerationAsset["assetReview"]["status"] =
@@ -595,22 +608,31 @@ export function createMemberModerationService(
         }
         let mediaAssetAId: string | null = null;
         let mediaAssetBId: string | null = null;
+        let mediaAssetCId: string | null = null;
+        let mediaAssetDId: string | null = null;
         if (["APPROVED_LIBRARY", "REPLACE_IMAGE"].includes(input.action)) {
-          if (!input.replacementAssetAId || !input.replacementAssetBId) {
+          const replacementIds = [
+            input.replacementAssetAId,
+            input.replacementAssetBId,
+            ...(current.choiceC ? [input.replacementAssetCId] : []),
+            ...(current.choiceD ? [input.replacementAssetDId] : []),
+          ];
+          if (
+            replacementIds.some((id) => !id) ||
+            new Set(replacementIds).size !== replacementIds.length
+          ) {
             throw new MemberModerationError(
               "REPLACEMENT_PAIR_REQUIRED",
               422,
-              "A와 B 교체 이미지를 모두 선택해 주세요.",
+              "각 선택지에 사용할 서로 다른 교체 이미지를 모두 선택해 주세요.",
             );
           }
           const replacements = await transaction
             .select()
             .from(issueMediaAssets)
-            .where(
-              inArray(issueMediaAssets.id, [input.replacementAssetAId, input.replacementAssetBId]),
-            );
+            .where(inArray(issueMediaAssets.id, replacementIds as string[]));
           const valid =
-            replacements.length === 2 &&
+            replacements.length === replacementIds.length &&
             replacements.every((asset) =>
               input.action === "APPROVED_LIBRARY"
                 ? asset.sourceType === "OPERATOR_UPLOAD" &&
@@ -627,18 +649,25 @@ export function createMemberModerationService(
               422,
               "사용할 수 없는 교체 이미지입니다.",
             );
-          mediaAssetAId = input.replacementAssetAId;
-          mediaAssetBId = input.replacementAssetBId;
+          mediaAssetAId = input.replacementAssetAId ?? null;
+          mediaAssetBId = input.replacementAssetBId ?? null;
+          mediaAssetCId = current.choiceC ? (input.replacementAssetCId ?? null) : null;
+          mediaAssetDId = current.choiceD ? (input.replacementAssetDId ?? null) : null;
         }
         const revision = current.revision + 1;
         const now = new Date();
         const normalized = {
           question: current.question,
           context: current.context,
+          contextMediaAssetId: null,
           choiceA: current.choiceA,
           choiceB: current.choiceB,
+          choiceC: current.choiceC,
+          choiceD: current.choiceD,
           mediaAssetAId,
           mediaAssetBId,
+          mediaAssetCId,
+          mediaAssetDId,
           interestCardCode: current.interestCardCode,
         };
         await transaction
@@ -646,8 +675,11 @@ export function createMemberModerationService(
           .set({
             revision,
             status: "PENDING",
+            contextMediaAssetId: null,
             mediaAssetAId,
             mediaAssetBId,
+            mediaAssetCId,
+            mediaAssetDId,
             contentHash: contentHash(normalized),
             reviewNote: null,
             reviewedAt: null,
@@ -665,9 +697,13 @@ export function createMemberModerationService(
           contentHash: contentHash(normalized),
           submittedAt: now,
         });
-        const originalTargets = [current.mediaAssetAId, current.mediaAssetBId].filter(
-          (id): id is string => Boolean(id),
-        );
+        const originalTargets = [
+          current.contextMediaAssetId,
+          current.mediaAssetAId,
+          current.mediaAssetBId,
+          current.mediaAssetCId,
+          current.mediaAssetDId,
+        ].filter((id): id is string => Boolean(id));
         for (const targetId of originalTargets) {
           await transaction.insert(memberModerationNotices).values({
             memberId: input.memberId,

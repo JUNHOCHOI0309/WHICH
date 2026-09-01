@@ -138,7 +138,7 @@ export const issueMediaLibraryUsages = pgTable(
     ),
     index("issue_media_library_usages_pair_status_idx").on(table.pairId, table.status),
     index("issue_media_library_usages_asset_status_idx").on(table.libraryAssetId, table.status),
-    check("issue_media_library_usages_side_check", sql`${table.side} in ('A', 'B')`),
+    check("issue_media_library_usages_side_check", sql`${table.side} in ('A', 'B', 'C', 'D')`),
     check(
       "issue_media_library_usages_status_check",
       sql`${table.status} in ('ACTIVE', 'TEXT_FALLBACK', 'REPLACED')`,

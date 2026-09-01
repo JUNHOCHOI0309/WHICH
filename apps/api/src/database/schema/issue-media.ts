@@ -14,7 +14,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 import { members } from "./identity.js";
-import { issueChoices, issues } from "./issues.js";
+import { issueChoices, issues, issueVersions } from "./issues.js";
 
 export const issueMediaAssets = pgTable(
   "issue_media_assets",
@@ -138,7 +138,38 @@ export const issueChoiceMedia = pgTable(
       sql`char_length(${table.altText}) between 2 and 300`,
     ),
     check("issue_choice_media_crop_mode_check", sql`${table.cropMode} in ('COVER', 'CONTAIN')`),
-    check("issue_choice_media_position_check", sql`${table.displayPosition} between 0 and 1`),
+    check("issue_choice_media_position_check", sql`${table.displayPosition} between 0 and 3`),
+  ],
+);
+
+export const issueContextMedia = pgTable(
+  "issue_context_media",
+  {
+    issueId: uuid("issue_id").notNull(),
+    issueVersion: integer("issue_version").notNull(),
+    mediaAssetId: uuid("media_asset_id")
+      .notNull()
+      .references(() => issueMediaAssets.id, { onDelete: "restrict" }),
+    altText: varchar("alt_text", { length: 300 }).notNull(),
+    cropMode: varchar("crop_mode", { length: 16 }).default("CONTAIN").notNull(),
+    linkedByMemberId: uuid("linked_by_member_id")
+      .notNull()
+      .references(() => members.id, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.issueId, table.issueVersion], name: "issue_context_media_pk" }),
+    foreignKey({
+      columns: [table.issueId, table.issueVersion],
+      foreignColumns: [issueVersions.issueId, issueVersions.version],
+      name: "issue_context_media_issue_version_fk",
+    }).onDelete("cascade"),
+    check(
+      "issue_context_media_alt_text_check",
+      sql`char_length(${table.altText}) between 2 and 300`,
+    ),
+    check("issue_context_media_crop_mode_check", sql`${table.cropMode} in ('COVER', 'CONTAIN')`),
   ],
 );
 

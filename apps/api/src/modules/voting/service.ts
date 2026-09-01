@@ -75,6 +75,8 @@ function toVoteResult(aggregate: typeof voteAggregates.$inferSelect): VoteResult
     resultVersion: aggregate.resultVersion,
     acceptedA: aggregate.acceptedACount,
     acceptedB: aggregate.acceptedBCount,
+    acceptedC: aggregate.acceptedCCount,
+    acceptedD: aggregate.acceptedDCount,
     displayedTotal: aggregate.displayedVoteCount,
     integrityState: aggregate.integrityState,
   };
@@ -86,6 +88,8 @@ function toAggregateView(aggregate: typeof voteAggregates.$inferSelect): VoteAgg
     voteRequestCount: aggregate.voteRequestCount,
     acceptedACount: aggregate.acceptedACount,
     acceptedBCount: aggregate.acceptedBCount,
+    acceptedCCount: aggregate.acceptedCCount,
+    acceptedDCount: aggregate.acceptedDCount,
     acceptedVoteCount: aggregate.acceptedVoteCount,
     reviewVoteCount: aggregate.reviewVoteCount,
     rejectedDuplicateCount: aggregate.rejectedDuplicateCount,
@@ -101,6 +105,8 @@ function toSnapshotView(snapshot: typeof resultSnapshots.$inferSelect): VoteSnap
     resultVersion: snapshot.resultVersion,
     acceptedACount: snapshot.acceptedACount,
     acceptedBCount: snapshot.acceptedBCount,
+    acceptedCCount: snapshot.acceptedCCount,
+    acceptedDCount: snapshot.acceptedDCount,
     displayedVoteCount: snapshot.displayedVoteCount,
     integrityState: snapshot.integrityState,
   };
@@ -151,6 +157,8 @@ export function createGuestVoteService(database: Database["db"]): GuestVoteServi
           resultVersion: voteAggregates.resultVersion,
           acceptedA: voteAggregates.acceptedACount,
           acceptedB: voteAggregates.acceptedBCount,
+          acceptedC: voteAggregates.acceptedCCount,
+          acceptedD: voteAggregates.acceptedDCount,
           displayedTotal: voteAggregates.displayedVoteCount,
           resultIntegrityState: voteAggregates.integrityState,
         })
@@ -185,6 +193,8 @@ export function createGuestVoteService(database: Database["db"]): GuestVoteServi
           resultVersion: storedVote.resultVersion,
           acceptedA: storedVote.acceptedA,
           acceptedB: storedVote.acceptedB,
+          acceptedC: storedVote.acceptedC,
+          acceptedD: storedVote.acceptedD,
           displayedTotal: storedVote.displayedTotal,
           integrityState: storedVote.resultIntegrityState,
         },
@@ -267,6 +277,8 @@ export function createGuestVoteService(database: Database["db"]): GuestVoteServi
           voteRequestCount: 0,
           acceptedACount: 0,
           acceptedBCount: 0,
+          acceptedCCount: 0,
+          acceptedDCount: 0,
           acceptedVoteCount: 0,
           reviewVoteCount: 0,
           rejectedDuplicateCount: 0,
@@ -274,7 +286,7 @@ export function createGuestVoteService(database: Database["db"]): GuestVoteServi
           invalidatedVoteCount: 0,
           displayedVoteCount: 0,
         };
-        let acceptedWithoutBinaryChoice = 0;
+        let acceptedWithoutSupportedChoice = 0;
 
         for (const group of voteGroups) {
           source.voteRequestCount += group.count;
@@ -284,7 +296,9 @@ export function createGuestVoteService(database: Database["db"]): GuestVoteServi
               source.displayedVoteCount += group.count;
               if (group.choiceCode === "A") source.acceptedACount += group.count;
               else if (group.choiceCode === "B") source.acceptedBCount += group.count;
-              else acceptedWithoutBinaryChoice += group.count;
+              else if (group.choiceCode === "C") source.acceptedCCount += group.count;
+              else if (group.choiceCode === "D") source.acceptedDCount += group.count;
+              else acceptedWithoutSupportedChoice += group.count;
               break;
             case "REVIEW":
               source.reviewVoteCount += group.count;
@@ -305,12 +319,12 @@ export function createGuestVoteService(database: Database["db"]): GuestVoteServi
         const latestSnapshotBefore = latestSnapshot ? toSnapshotView(latestSnapshot) : null;
         const mismatches: VoteReconciliationMismatch[] = [];
 
-        if (acceptedWithoutBinaryChoice > 0) {
+        if (acceptedWithoutSupportedChoice > 0) {
           mismatches.push({
             target: "SOURCE",
-            field: "acceptedVotesWithBinaryChoice",
+            field: "acceptedVotesWithSupportedChoice",
             expected: source.acceptedVoteCount,
-            actual: source.acceptedVoteCount - acceptedWithoutBinaryChoice,
+            actual: source.acceptedVoteCount - acceptedWithoutSupportedChoice,
           });
         }
 
@@ -355,6 +369,20 @@ export function createGuestVoteService(database: Database["db"]): GuestVoteServi
           appendMismatch(
             mismatches,
             "LATEST_SNAPSHOT",
+            "acceptedCCount",
+            aggregateBefore.acceptedCCount,
+            latestSnapshotBefore.acceptedCCount,
+          );
+          appendMismatch(
+            mismatches,
+            "LATEST_SNAPSHOT",
+            "acceptedDCount",
+            aggregateBefore.acceptedDCount,
+            latestSnapshotBefore.acceptedDCount,
+          );
+          appendMismatch(
+            mismatches,
+            "LATEST_SNAPSHOT",
             "displayedVoteCount",
             aggregateBefore.displayedVoteCount,
             latestSnapshotBefore.displayedVoteCount,
@@ -394,7 +422,7 @@ export function createGuestVoteService(database: Database["db"]): GuestVoteServi
           return { ...baseResult, status: "MISMATCH_FOUND" as const, resultAfter: null };
         }
 
-        if (acceptedWithoutBinaryChoice > 0) {
+        if (acceptedWithoutSupportedChoice > 0) {
           const alreadyLocked =
             issueVersion.resultVisibility === "RESULT_LOCKED" &&
             (!aggregate || aggregate.integrityState === "RESULT_LOCKED");
@@ -472,6 +500,8 @@ export function createGuestVoteService(database: Database["db"]): GuestVoteServi
           resultVersion: nextResultVersion,
           acceptedACount: source.acceptedACount,
           acceptedBCount: source.acceptedBCount,
+          acceptedCCount: source.acceptedCCount,
+          acceptedDCount: source.acceptedDCount,
           displayedVoteCount: source.displayedVoteCount,
           integrityState: "CORRECTED",
           calculatedAt: checkedAt,
@@ -793,6 +823,8 @@ export function createGuestVoteService(database: Database["db"]): GuestVoteServi
 
         const acceptedAIncrement = outcome === "ACCEPTED" && effectiveChoice === "A" ? 1 : 0;
         const acceptedBIncrement = outcome === "ACCEPTED" && effectiveChoice === "B" ? 1 : 0;
+        const acceptedCIncrement = outcome === "ACCEPTED" && effectiveChoice === "C" ? 1 : 0;
+        const acceptedDIncrement = outcome === "ACCEPTED" && effectiveChoice === "D" ? 1 : 0;
         const acceptedIncrement = outcome === "ACCEPTED" ? 1 : 0;
         const duplicateIncrement = outcome === "REJECTED_DUPLICATE" ? 1 : 0;
 
@@ -805,6 +837,8 @@ export function createGuestVoteService(database: Database["db"]): GuestVoteServi
             voteRequestCount: 1,
             acceptedACount: acceptedAIncrement,
             acceptedBCount: acceptedBIncrement,
+            acceptedCCount: acceptedCIncrement,
+            acceptedDCount: acceptedDIncrement,
             acceptedVoteCount: acceptedIncrement,
             displayedVoteCount: acceptedIncrement,
             rejectedDuplicateCount: duplicateIncrement,
@@ -818,6 +852,8 @@ export function createGuestVoteService(database: Database["db"]): GuestVoteServi
               voteRequestCount: sql`${voteAggregates.voteRequestCount} + 1`,
               acceptedACount: sql`${voteAggregates.acceptedACount} + ${acceptedAIncrement}`,
               acceptedBCount: sql`${voteAggregates.acceptedBCount} + ${acceptedBIncrement}`,
+              acceptedCCount: sql`${voteAggregates.acceptedCCount} + ${acceptedCIncrement}`,
+              acceptedDCount: sql`${voteAggregates.acceptedDCount} + ${acceptedDIncrement}`,
               acceptedVoteCount: sql`${voteAggregates.acceptedVoteCount} + ${acceptedIncrement}`,
               displayedVoteCount: sql`${voteAggregates.displayedVoteCount} + ${acceptedIncrement}`,
               rejectedDuplicateCount: sql`${voteAggregates.rejectedDuplicateCount} + ${duplicateIncrement}`,
@@ -835,6 +871,8 @@ export function createGuestVoteService(database: Database["db"]): GuestVoteServi
           resultVersion: aggregate.resultVersion,
           acceptedACount: aggregate.acceptedACount,
           acceptedBCount: aggregate.acceptedBCount,
+          acceptedCCount: aggregate.acceptedCCount,
+          acceptedDCount: aggregate.acceptedDCount,
           displayedVoteCount: aggregate.displayedVoteCount,
           integrityState: aggregate.integrityState,
           calculatedAt: now,

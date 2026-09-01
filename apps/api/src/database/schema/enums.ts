@@ -1,6 +1,6 @@
 import { pgEnum } from "drizzle-orm/pg-core";
 
-export const choiceCodeEnum = pgEnum("choice_code", ["A", "B"]);
+export const choiceCodeEnum = pgEnum("choice_code", ["A", "B", "C", "D"]);
 export const issueLifecycleEnum = pgEnum("issue_lifecycle", [
   "PUBLISHED",
   "CLOSED",

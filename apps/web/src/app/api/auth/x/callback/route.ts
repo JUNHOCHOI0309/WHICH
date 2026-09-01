@@ -17,6 +17,7 @@ import {
   clearGuestSubjectCookie,
   GUEST_SUBJECT_COOKIE,
   setMemberSessionCookie,
+  setRecentLoginProviderCookie,
   setSocialSignupCookie,
   validGuestSubject,
 } from "@/lib/server/which-api";
@@ -103,6 +104,7 @@ export async function GET(request: Request) {
     }
     const response = redirectWithOutcome(baseUrl, flow.returnTo, "success");
     setMemberSessionCookie(response, session.token, session.expiresAt);
+    setRecentLoginProviderCookie(response, "x");
     if (anonymousSubjectId) clearGuestSubjectCookie(response);
     return response;
   } catch (error) {

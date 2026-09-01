@@ -13,7 +13,13 @@ const shareCardSchema = Type.Object({
   version: Type.Literal("result_share_v1"),
   channel: Type.Union(SHARE_CHANNELS.map((channel) => Type.Literal(channel))),
   shareType: Type.Union([Type.Literal("RESULT"), Type.Literal("RESULT_WITH_CHOICE")]),
-  sharedChoiceCode: Type.Union([Type.Literal("A"), Type.Literal("B"), Type.Null()]),
+  sharedChoiceCode: Type.Union([
+    Type.Literal("A"),
+    Type.Literal("B"),
+    Type.Literal("C"),
+    Type.Literal("D"),
+    Type.Null(),
+  ]),
   createdAt: Type.String({ format: "date-time" }),
   issue: Type.Object({
     id: uuidSchema,
@@ -21,16 +27,23 @@ const shareCardSchema = Type.Object({
     question: Type.String(),
     choices: Type.Array(
       Type.Object({
-        code: Type.Union([Type.Literal("A"), Type.Literal("B")]),
+        code: Type.Union([
+          Type.Literal("A"),
+          Type.Literal("B"),
+          Type.Literal("C"),
+          Type.Literal("D"),
+        ]),
         label: Type.String(),
       }),
-      { minItems: 2, maxItems: 2 },
+      { minItems: 2, maxItems: 4 },
     ),
   }),
   result: Type.Object({
     resultVersion: Type.Integer({ minimum: 1 }),
     acceptedA: Type.Integer({ minimum: 0 }),
     acceptedB: Type.Integer({ minimum: 0 }),
+    acceptedC: Type.Integer({ minimum: 0 }),
+    acceptedD: Type.Integer({ minimum: 0 }),
     displayedTotal: Type.Integer({ minimum: 0 }),
     integrityState: Type.Union([
       Type.Literal("NORMAL"),
@@ -81,7 +94,7 @@ export async function registerShareCardRoutes(
         issueVersion: number;
         resultVersion: number;
         channel: (typeof SHARE_CHANNELS)[number];
-        sharedChoiceCode?: "A" | "B";
+        sharedChoiceCode?: "A" | "B" | "C" | "D";
       };
     }>(
       "/v1/internal/issues/:issueId/share-cards",
@@ -97,7 +110,14 @@ export async function registerShareCardRoutes(
             issueVersion: Type.Integer({ minimum: 1 }),
             resultVersion: Type.Integer({ minimum: 1 }),
             channel: Type.Union(SHARE_CHANNELS.map((channel) => Type.Literal(channel))),
-            sharedChoiceCode: Type.Optional(Type.Union([Type.Literal("A"), Type.Literal("B")])),
+            sharedChoiceCode: Type.Optional(
+              Type.Union([
+                Type.Literal("A"),
+                Type.Literal("B"),
+                Type.Literal("C"),
+                Type.Literal("D"),
+              ]),
+            ),
           }),
           response: {
             201: shareCardSchema,

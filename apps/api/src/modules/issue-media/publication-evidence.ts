@@ -67,16 +67,24 @@ export function resolvePublicationEvidence(input: {
   if (access.member?.id !== snapshot.submission?.memberId || access.member?.status !== "ACTIVE")
     globalReasons.push("MEMBER_NOT_ACTIVE");
   const assetReasons = readiness.blockers.filter((code) =>
-    /^(A|B)_(ASSET_OWNERSHIP_INVALID|ASSET_NOT_PRIVATE_READY|ASSET_VERSION_MISSING)$/u.test(code),
+    /^(CONTEXT|A|B|C|D)_(ASSET_OWNERSHIP_INVALID|ASSET_NOT_PRIVATE_READY|ASSET_VERSION_MISSING)$/u.test(
+      code,
+    ),
   );
   globalReasons.push(...assetReasons);
-  const pair = [snapshot.submission?.mediaAssetAId, snapshot.submission?.mediaAssetBId].map((id) =>
-    snapshot.assets.find((asset) => asset.id === id),
-  );
-  const binding = pair.map((asset) =>
+  const media = [
+    snapshot.submission?.contextMediaAssetId,
+    snapshot.submission?.mediaAssetAId,
+    snapshot.submission?.mediaAssetBId,
+    snapshot.submission?.mediaAssetCId,
+    snapshot.submission?.mediaAssetDId,
+  ]
+    .filter((id): id is string => Boolean(id))
+    .map((id) => snapshot.assets.find((asset) => asset.id === id));
+  const binding = media.map((asset) =>
     asset ? [asset.id, asset.sourceHash, asset.normalizedHash] : null,
   );
-  if (pair.some((asset) => !asset || !/^[a-f0-9]{64}$/u.test(asset.sourceHash)))
+  if (media.some((asset) => !asset || !/^[a-f0-9]{64}$/u.test(asset.sourceHash)))
     globalReasons.push("SOURCE_HASH_INVALID");
 
   function add(
@@ -123,7 +131,7 @@ export function resolvePublicationEvidence(input: {
     /MEDIA_(SOURCE_SIGNATURE_DECODE_VERIFIED|NORMALIZED_WEBP_READY|HASHES_COMPUTED)_MISSING$/u,
   );
   const technicalRefs: string[] = [];
-  for (const asset of pair) {
+  for (const asset of media) {
     for (const code of [
       "MEDIA_SOURCE_SIGNATURE_DECODE_VERIFIED",
       "MEDIA_NORMALIZED_WEBP_READY",
@@ -167,7 +175,7 @@ export function resolvePublicationEvidence(input: {
     /_(LOCAL_ROUTE_MISSING_OR_AMBIGUOUS|LOCAL_RULE_GATE_NOT_ENFORCING|LOCAL_DETECTOR_UNREGISTERED|LOCAL_SCAN_FAILED|QR_SCAN_INCOMPLETE|BARCODE_SCAN_INCOMPLETE|OCR_SCAN_INCOMPLETE)$/u,
   );
   const localRefs: string[] = [];
-  for (const asset of pair) {
+  for (const asset of media) {
     const routes = snapshot.findings.filter(
       (f) =>
         asset &&
@@ -194,7 +202,7 @@ export function resolvePublicationEvidence(input: {
   if (
     snapshot.findings.some(
       (f) =>
-        pair.some((a) => a?.id === f.mediaAssetId) &&
+        media.some((a) => a?.id === f.mediaAssetId) &&
         ["MEDIA_QR_DETECTED", "MEDIA_BARCODE_DETECTED", "MEDIA_OCR_PII_DETECTED"].includes(f.code),
     )
   )
@@ -231,7 +239,7 @@ export function resolvePublicationEvidence(input: {
     "RIGHTS",
     findReasons(/_RIGHTS_UNAVAILABLE$/u),
     ISSUE_MEDIA_RULE_POLICY_VERSION,
-    pair.map((asset) => asset?.rightsState),
+    media.map((asset) => asset?.rightsState),
   );
 
   const cap = access.capability;

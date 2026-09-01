@@ -31,7 +31,11 @@
 }
 
 .modalForm .preview {
-  display: none;
+  display: block;
+  position: static;
+  margin: 0 26px 24px;
+  box-shadow: none;
+  padding: 20px;
 }
 
 .modalForm .submitBar {
@@ -185,6 +189,40 @@
   background: var(--which-orange-soft);
 }
 
+.choiceField[data-side="C"] {
+  background: #f3efff;
+}
+
+.choiceField[data-side="D"] {
+  background: #eef8ed;
+}
+
+.choiceControls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.choiceControls button {
+  min-height: 36px;
+  border: 1px solid var(--which-border-strong);
+  border-radius: 999px;
+  background: #fff;
+  padding: 0 13px;
+  color: var(--which-text-secondary);
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.choiceControls small {
+  color: var(--which-text-tertiary);
+  font-size: 0.72rem;
+}
+
 .choiceField b,
 .previewChoice b {
   width: 28px;
@@ -335,6 +373,20 @@
   border-color: var(--which-orange-strong);
 }
 
+.directUploadPanel label[data-side="C"] {
+  border-color: #8467d7;
+}
+
+.directUploadPanel label[data-side="D"] {
+  border-color: #5d9c59;
+}
+
+.directUploadPanel label[data-side="CONTEXT"] {
+  grid-column: 1 / -1;
+  border-color: var(--which-cyan-strong);
+  background: var(--which-cyan-soft);
+}
+
 .directUploadPanel label b {
   width: 30px;
   height: 30px;
@@ -371,6 +423,13 @@
   line-height: 1.55;
 }
 
+.librarySelectionCount {
+  display: block;
+  margin: -4px 0 12px;
+  color: var(--which-cyan-strong);
+  font-size: 0.76rem;
+}
+
 .libraryGrid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -390,26 +449,72 @@
   cursor: pointer;
 }
 
-.libraryGrid > button[data-selected="true"] {
+.libraryGrid > button[data-assignment="A"] {
   border-color: var(--which-cyan-strong);
   box-shadow: 0 0 0 3px var(--which-cyan-soft);
 }
 
-.libraryImages {
+.libraryGrid > button[data-assignment="B"] {
+  border-color: var(--which-orange-strong);
+  box-shadow: 0 0 0 3px var(--which-orange-soft);
+}
+
+.libraryGrid > button[data-assignment="C"] {
+  border-color: #8467d7;
+  box-shadow: 0 0 0 3px rgb(132 103 215 / 14%);
+}
+
+.libraryGrid > button[data-assignment="D"] {
+  border-color: #5d9c59;
+  box-shadow: 0 0 0 3px rgb(93 156 89 / 14%);
+}
+
+.libraryGrid > button[data-assignment="A"] .libraryAssetImage b {
+  color: var(--which-cyan-strong);
+}
+
+.libraryGrid > button[data-assignment="B"] .libraryAssetImage b {
+  color: var(--which-orange-strong);
+}
+
+.libraryGrid > button[data-assignment="C"] .libraryAssetImage b {
+  color: #8467d7;
+}
+
+.libraryGrid > button[data-assignment="D"] .libraryAssetImage b {
+  color: #5d9c59;
+}
+
+.libraryAssetImage {
+  position: relative;
   height: 84px;
   border-radius: 9px;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: block;
   overflow: hidden;
 }
 
-.libraryImages img {
+.libraryAssetImage img {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
 
-.libraryGrid b,
+.libraryAssetImage b {
+  position: absolute;
+  top: 7px;
+  left: 7px;
+  width: 28px;
+  height: 28px;
+  border: 2px solid currentColor;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 92%);
+  display: grid;
+  place-items: center;
+  color: var(--which-text);
+  font-size: 0.78rem;
+}
+
+.libraryGrid strong,
 .libraryGrid small {
   min-width: 0;
   overflow: hidden;
@@ -417,7 +522,7 @@
   white-space: nowrap;
 }
 
-.libraryGrid b {
+.libraryGrid strong {
   font-size: 0.78rem;
 }
 
@@ -496,6 +601,15 @@
   line-height: 1.6;
 }
 
+.previewContextImage {
+  width: 100%;
+  max-height: 300px;
+  margin: 0 0 18px;
+  border-radius: 14px;
+  object-fit: contain;
+  background: var(--which-surface-soft);
+}
+
 .previewChoice {
   min-height: 58px;
   border: 1px solid var(--which-border);
@@ -524,6 +638,14 @@
 
 .previewChoice[data-side="B"] {
   border-color: var(--which-orange-strong);
+}
+
+.previewChoice[data-side="C"] {
+  border-color: #8467d7;
+}
+
+.previewChoice[data-side="D"] {
+  border-color: #5d9c59;
 }
 
 .submitBar {

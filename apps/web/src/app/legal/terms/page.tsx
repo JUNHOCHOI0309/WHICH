@@ -24,8 +24,8 @@ export default function TermsPage() {
         <p>WHICH BETA TERMS · 2026-08-29</p>
         <h1>서비스 이용약관</h1>
         <p>
-          이 약관은 WHICH 프로젝트가 제공하는 질문, A/B 투표, 결과, 댓글, 계정 기능의 이용 조건을
-          정합니다.
+          이 약관은 WHICH 프로젝트가 제공하는 질문, 2~4지선다 투표, 결과, 댓글, 계정 기능의 이용
+          조건을 정합니다.
         </p>
         <h2>1. 계정과 Guest 이용</h2>
         <p>

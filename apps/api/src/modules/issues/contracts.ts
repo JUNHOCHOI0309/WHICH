@@ -1,9 +1,11 @@
 import type { FeedItemRecommendation, FeedRankingContext } from "../recommendations/contracts.js";
 import type { InterestCardCode } from "../interests/contracts.js";
 
+export type IssueChoiceCode = "A" | "B" | "C" | "D";
+
 export type PublicIssueChoice = {
   id: string;
-  code: "A" | "B";
+  code: IssueChoiceCode;
   label: string;
   media: {
     url: string;
@@ -18,6 +20,8 @@ export type PublicIssueTally = {
   resultVersion: number;
   acceptedA: number;
   acceptedB: number;
+  acceptedC: number;
+  acceptedD: number;
   displayedTotal: number;
   integrityState:
     "NORMAL" | "MONITORING" | "DEGRADED" | "UNDER_REVIEW" | "RESULT_LOCKED" | "CORRECTED";
@@ -28,6 +32,7 @@ export type PublicIssue = {
   version: number;
   question: string;
   context: string | null;
+  contextMedia?: PublicIssueChoice["media"];
   publishedAt: string;
   categoryCode: string;
   experienceModeCode: string;
@@ -74,7 +79,14 @@ export type PublicIssueFeed = {
 
 export type PublicIssueCatalogItem = Pick<
   PublicIssue,
-  "id" | "version" | "question" | "context" | "publishedAt" | "categoryCode" | "choices"
+  | "id"
+  | "version"
+  | "question"
+  | "context"
+  | "contextMedia"
+  | "publishedAt"
+  | "categoryCode"
+  | "choices"
 >;
 
 export type PublicIssueCatalog = {
@@ -105,9 +117,15 @@ export type CreateMemberIssueCommand = {
   context?: string | null;
   choiceA: string;
   choiceB: string;
+  choiceC?: string | null;
+  choiceD?: string | null;
+  contextMediaAssetId?: string | null;
   mediaAssetAId?: string | null;
   mediaAssetBId?: string | null;
+  mediaAssetCId?: string | null;
+  mediaAssetDId?: string | null;
   libraryPairId?: string | null;
+  libraryAssetIds?: string[] | null;
   interestCardCode: InterestCardCode;
 };
 
@@ -117,7 +135,7 @@ export type CreatedMemberIssue = {
     version: 1;
     question: string;
     context: string | null;
-    choices: [{ code: "A"; label: string }, { code: "B"; label: string }];
+    choices: Array<{ code: IssueChoiceCode; label: string }>;
     interestCardCode: InterestCardCode;
     publishedAt: string;
   };
@@ -131,6 +149,7 @@ export interface IssueWriteService {
     expectedRevision: number;
     action: "TEXT_ONLY" | "LIBRARY" | "CANCEL" | "CHECK";
     libraryPairId?: string;
+    libraryAssetIds?: string[];
   }): Promise<MemberIssueSubmissionResult>;
   createMemberIssue(command: CreateMemberIssueCommand): Promise<CreatedMemberIssue>;
   submitMemberIssue(command: CreateMemberIssueCommand): Promise<MemberIssueSubmissionResult>;
@@ -161,8 +180,13 @@ export type MemberIssueSubmission = {
   context: string | null;
   choiceA: string;
   choiceB: string;
+  choiceC: string | null;
+  choiceD: string | null;
+  contextMediaAssetId: string | null;
   mediaAssetAId: string | null;
   mediaAssetBId: string | null;
+  mediaAssetCId: string | null;
+  mediaAssetDId: string | null;
   interestCardCode: InterestCardCode;
   reviewNote: string | null;
   submittedAt: string;

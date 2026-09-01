@@ -1,6 +1,8 @@
+export type ChoiceCode = "A" | "B" | "C" | "D";
+
 export type IssueChoice = {
   id: string;
-  code: "A" | "B";
+  code: ChoiceCode;
   label: string;
   media: {
     url: string;
@@ -15,6 +17,8 @@ export type IssueTally = {
   resultVersion: number;
   acceptedA: number;
   acceptedB: number;
+  acceptedC?: number;
+  acceptedD?: number;
   displayedTotal: number;
   integrityState: string;
 };
@@ -26,6 +30,7 @@ export type PublicFeedIssue = {
   publishedAt: string;
   categoryCode: string;
   mediaMode: "TEXT_ONLY" | "OPTION_IMAGES";
+  contextMedia?: IssueChoice["media"];
   choices: IssueChoice[];
   recommendation: {
     requestId: string;
@@ -52,6 +57,7 @@ export type IssueMediaLibraryPair = {
   assets: {
     id: string;
     side: "A" | "B";
+    mediaAssetId: string;
     url: string;
     altText: string;
     cropMode: "COVER" | "CONTAIN";
@@ -88,7 +94,7 @@ export type VoteResponse = {
   voteId: string;
   issueId: string;
   issueVersion: number;
-  choice: "A" | "B";
+  choice: ChoiceCode;
   result: IssueTally;
   pointFeedback?: {
     amount: number;
@@ -178,8 +184,9 @@ export type MemberPrivateVote = {
   issueVersion: number;
   question: string;
   categoryCode: string;
-  choice: "A" | "B";
+  choice: ChoiceCode;
   choiceLabel: string;
+  choiceCount: number;
   acceptedAt: string;
   result: IssueTally;
 };
@@ -225,7 +232,7 @@ export type MemberAccountDeletionResult = {
 
 export type PublicComment = {
   id: string;
-  choice: "A" | "B";
+  choice: ChoiceCode;
   author: { displayName: string; avatarUrl?: string | null };
   body: string;
   visibility: "VISIBLE" | "DEPRIORITIZED" | "COLLAPSED";
@@ -248,6 +255,8 @@ export type CommentHighlight = PublicComment;
 export type CommentHighlights = {
   A: CommentHighlight[];
   B: CommentHighlight[];
+  C: CommentHighlight[];
+  D: CommentHighlight[];
 };
 
 export type PublicCommentPage = {
@@ -269,7 +278,7 @@ export type ShareCardResponse = {
     version: "result_share_v1";
     channel: ShareChannel;
     shareType: "RESULT" | "RESULT_WITH_CHOICE";
-    sharedChoiceCode: "A" | "B" | null;
+    sharedChoiceCode: ChoiceCode | null;
   };
   url: string;
 };
@@ -334,8 +343,13 @@ export type MemberIssueSubmission = {
   context: string | null;
   choiceA: string;
   choiceB: string;
+  choiceC?: string | null;
+  choiceD?: string | null;
+  contextMediaAssetId?: string | null;
   mediaAssetAId: string | null;
   mediaAssetBId: string | null;
+  mediaAssetCId?: string | null;
+  mediaAssetDId?: string | null;
   interestCardCode: InterestCardCode;
   reviewNote: string | null;
   submittedAt: string;

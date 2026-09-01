@@ -47,7 +47,7 @@ export const embeddedTextEvidenceSchema = z
           .strict(),
       )
       .min(1)
-      .max(2),
+      .max(5),
   })
   .strict();
 export type EmbeddedTextEvidence = z.infer<typeof embeddedTextEvidenceSchema>;

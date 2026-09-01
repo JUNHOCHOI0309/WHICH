@@ -68,6 +68,14 @@
   --comment-color: var(--which-orange);
 }
 
+.commentC {
+  --comment-color: #8467d7;
+}
+
+.commentD {
+  --comment-color: #5d9c59;
+}
+
 .commentMeta {
   display: flex;
   align-items: center;

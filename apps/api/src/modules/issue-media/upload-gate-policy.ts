@@ -45,7 +45,7 @@ export const unavailableLocalMediaSignalDetector: LocalMediaSignalDetector = {
 export const ISSUE_MEDIA_UPLOAD_LIMITS = {
   sessionTtlSeconds: 600,
   maximumBytes: 10 * 1024 * 1024,
-  // A direct Issue always contains one A/B pair, which the client uploads together.
+  // Uploads are sent sequentially; this guard only limits abandoned or overlapping sessions.
   maximumConcurrentSessions: 2,
 } as const;
 

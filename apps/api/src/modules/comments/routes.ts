@@ -9,7 +9,7 @@ const errorResponseSchema = Type.Object({ code: Type.String(), message: Type.Str
 
 const commentSchemaFields = {
   id: uuidSchema,
-  choice: Type.Union([Type.Literal("A"), Type.Literal("B")]),
+  choice: Type.Union([Type.Literal("A"), Type.Literal("B"), Type.Literal("C"), Type.Literal("D")]),
   author: Type.Object({
     displayName: Type.String(),
     avatarUrl: Type.Union([Type.String({ format: "uri" }), Type.Null()]),
@@ -58,12 +58,14 @@ const commentPageSchema = Type.Object({
 const commentHighlightsSchema = Type.Object({
   A: Type.Array(publicCommentReference),
   B: Type.Array(publicCommentReference),
+  C: Type.Array(publicCommentReference),
+  D: Type.Array(publicCommentReference),
 });
 
 type CommentRoute = {
   Params: { issueId: string };
   Querystring: {
-    side?: "ALL" | "A" | "B";
+    side?: "ALL" | "A" | "B" | "C" | "D";
     view?: "NEWEST" | "HIGHLIGHT";
     sort?: "NEWEST" | "HELPFUL";
     cursor?: string;
@@ -181,9 +183,16 @@ export async function registerCommentRoutes(
           params: Type.Object({ issueId: uuidSchema }),
           querystring: Type.Object({
             side: Type.Optional(
-              Type.Union([Type.Literal("ALL"), Type.Literal("A"), Type.Literal("B")], {
-                default: "ALL",
-              }),
+              Type.Union(
+                [
+                  Type.Literal("ALL"),
+                  Type.Literal("A"),
+                  Type.Literal("B"),
+                  Type.Literal("C"),
+                  Type.Literal("D"),
+                ],
+                { default: "ALL" },
+              ),
             ),
             view: Type.Optional(
               Type.Union([Type.Literal("NEWEST"), Type.Literal("HIGHLIGHT")], {
@@ -238,7 +247,7 @@ export async function registerCommentRoutes(
       {
         schema: {
           tags: ["comments"],
-          summary: "List representative A/B Comments after an accepted Vote",
+          summary: "List representative Comments for each Choice after an accepted Vote",
           params: Type.Object({ issueId: uuidSchema }),
           querystring: Type.Object({
             limitPerSide: Type.Optional(Type.Integer({ minimum: 1, maximum: 5, default: 5 })),
@@ -273,11 +282,13 @@ export async function registerCommentRoutes(
           view: "HIGHLIGHT" as const,
           limit,
         };
-        const [commentsA, commentsB] = await Promise.all([
+        const [commentsA, commentsB, commentsC, commentsD] = await Promise.all([
           service.listGuestComments({ ...query, side: "A" }),
           service.listGuestComments({ ...query, side: "B" }),
+          service.listGuestComments({ ...query, side: "C" }),
+          service.listGuestComments({ ...query, side: "D" }),
         ]);
-        return { A: commentsA.items, B: commentsB.items };
+        return { A: commentsA.items, B: commentsB.items, C: commentsC.items, D: commentsD.items };
       },
     );
 

@@ -30,7 +30,7 @@ export type ModerationProviderInput = {
     metadataStripped: true;
     reencoded: true;
   };
-  // Images are ordered A then B for a submission; an asset-only target has one image.
+  // Submission images are ordered CONTEXT (when present), then A/B/C/D; an asset-only target has one.
   images?: Array<NonNullable<ModerationProviderInput["image"]>>;
   scope?: "COMMENT_REVISION" | "ISSUE_SNAPSHOT" | "SUBMISSION_REVISION" | "ASSET_ONLY";
   context?: {

@@ -12,6 +12,7 @@ import {
   clearGuestSubjectCookie,
   GUEST_SUBJECT_COOKIE,
   setMemberSessionCookie,
+  setRecentLoginProviderCookie,
   validGuestSubject,
 } from "@/lib/server/which-api";
 
@@ -101,6 +102,7 @@ export async function POST(request: NextRequest) {
     }
     const response = NextResponse.json({ ok: true, returnTo: target });
     setMemberSessionCookie(response, session.token, session.expiresAt);
+    setRecentLoginProviderCookie(response, "email");
     if (anonymousSubjectId) clearGuestSubjectCookie(response);
     return response;
   } catch (error) {

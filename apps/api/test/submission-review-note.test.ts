@@ -19,7 +19,7 @@ describe("submission review notes", () => {
   it("explains a sexual-content block without exposing internal labels or scores", () => {
     const note = policyJudgeReviewNote(decision);
     expect(note).toContain("선정성 기준");
-    expect(note).toContain("A/B 이미지 중 하나 이상");
+    expect(note).toContain("선택한 이미지 중 하나 이상");
     expect(note).not.toContain("SEXUAL");
   });
 

@@ -2,9 +2,9 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { RotatingCommentHighlights } from "@/components/comments/rotating-comment-highlights";
-import type { CommentHighlights, PublicComment } from "@/lib/contracts";
+import type { ChoiceCode, CommentHighlights, PublicComment } from "@/lib/contracts";
 
-function comment(id: string, choice: "A" | "B", body: string): PublicComment {
+function comment(id: string, choice: ChoiceCode, body: string): PublicComment {
   return {
     id,
     choice,
@@ -25,6 +25,8 @@ function comment(id: string, choice: "A" | "B", body: string): PublicComment {
 const highlights: CommentHighlights = {
   A: [comment("a-1", "A", "A 첫 번째"), comment("a-2", "A", "A 두 번째")],
   B: [comment("b-1", "B", "B 첫 번째"), comment("b-2", "B", "B 두 번째")],
+  C: [],
+  D: [],
 };
 
 describe("RotatingCommentHighlights", () => {
@@ -57,6 +59,7 @@ describe("RotatingCommentHighlights", () => {
         loading={false}
         error={false}
         detailsHref="/issues/issue#comment-title"
+        choiceCodes={["A", "B"]}
         onRetry={vi.fn()}
       />,
     );
@@ -75,5 +78,28 @@ describe("RotatingCommentHighlights", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "이전 대표 댓글" }));
     expect(screen.getByText("A 첫 번째")).toBeInTheDocument();
+  });
+
+  it("shows representative comments for every active choice", () => {
+    render(
+      <RotatingCommentHighlights
+        highlights={{
+          A: [comment("a", "A", "A 의견")],
+          B: [comment("b", "B", "B 의견")],
+          C: [comment("c", "C", "C 의견")],
+          D: [comment("d", "D", "D 의견")],
+        }}
+        loading={false}
+        error={false}
+        detailsHref="/issues/issue#comment-title"
+        choiceCodes={["A", "B", "C", "D"]}
+        onRetry={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("heading", { name: "A·B·C·D 대표 댓글" })).toBeVisible();
+    for (const code of ["A", "B", "C", "D"] as const) {
+      expect(screen.getByText(`${code} 의견`)).toBeVisible();
+    }
   });
 });

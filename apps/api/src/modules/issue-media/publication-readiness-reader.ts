@@ -46,9 +46,13 @@ export async function readPublicationReadiness(
     .select()
     .from(memberIssueSubmissions)
     .where(eq(memberIssueSubmissions.id, input.submissionId));
-  const ids = [submission?.mediaAssetAId, submission?.mediaAssetBId].filter((id): id is string =>
-    Boolean(id),
-  );
+  const ids = [
+    submission?.contextMediaAssetId,
+    submission?.mediaAssetAId,
+    submission?.mediaAssetBId,
+    submission?.mediaAssetCId,
+    submission?.mediaAssetDId,
+  ].filter((id): id is string => Boolean(id));
   const assets = ids.length
     ? await database
         .select({
