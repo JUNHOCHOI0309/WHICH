@@ -153,6 +153,12 @@ describe("Issue media upload session service", () => {
     expect(session.objectKey).toContain(`${memberId}/${session.id}/source`);
     expect(session.token).toHaveLength(43);
 
+    const secondSession = await service.createSession({
+      memberId,
+      submissionId,
+      consentVersion: "which-media-consent-v1",
+      ipAddress: "203.0.113.6",
+    });
     await expect(
       service.createSession({
         memberId,
@@ -170,6 +176,14 @@ describe("Issue media upload session service", () => {
         byteSize: 1024,
       }),
     ).rejects.toMatchObject({ code: "MEDIA_UPLOAD_SESSION_INVALID" });
+    await expect(
+      service.consumeSession({
+        memberId,
+        sessionId: secondSession.id,
+        token: secondSession.token,
+        byteSize: 1024,
+      }),
+    ).resolves.toEqual({ objectKey: secondSession.objectKey });
     await expect(
       service.consumeSession({
         memberId,

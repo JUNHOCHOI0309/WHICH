@@ -45,7 +45,8 @@ export const unavailableLocalMediaSignalDetector: LocalMediaSignalDetector = {
 export const ISSUE_MEDIA_UPLOAD_LIMITS = {
   sessionTtlSeconds: 600,
   maximumBytes: 10 * 1024 * 1024,
-  maximumConcurrentSessions: 1,
+  // A direct Issue always contains one A/B pair, which the client uploads together.
+  maximumConcurrentSessions: 2,
 } as const;
 
 export type IssueMediaUploadGateReason =

@@ -188,9 +188,11 @@ describe("IssueCreatorExperience", () => {
     expect(navigation.push).toHaveBeenCalledWith("/issues/library-issue-id");
   });
 
-  it("uploads a trusted Member A/B pair sequentially and attaches it to one pending submission", async () => {
+  it("uploads a trusted Member A/B pair concurrently and attaches it to one pending submission", async () => {
     const requests: string[] = [];
     let uploadCount = 0;
+    let activeUploads = 0;
+    let maximumActiveUploads = 0;
     vi.stubGlobal("URL", {
       ...URL,
       createObjectURL: vi.fn((file: File) => `blob:${file.name}`),
@@ -228,7 +230,12 @@ describe("IssueCreatorExperience", () => {
         }
         if (url === "/api/issue-submission-media") {
           uploadCount += 1;
-          return jsonResponse({ asset: { id: `asset-${uploadCount}` } }, 201);
+          const assetId = `asset-${uploadCount}`;
+          activeUploads += 1;
+          maximumActiveUploads = Math.max(maximumActiveUploads, activeUploads);
+          await Promise.resolve();
+          activeUploads -= 1;
+          return jsonResponse({ asset: { id: assetId } }, 201);
         }
         if (url === "/api/issue-submissions/submission-1") {
           return jsonResponse({
@@ -265,6 +272,7 @@ describe("IssueCreatorExperience", () => {
       expect.objectContaining({ id: "submission-1", revision: 2 }),
     ]);
     expect(requests.filter((url) => url === "/api/issue-submission-media")).toHaveLength(2);
+    expect(maximumActiveUploads).toBe(2);
     expect(requests.indexOf("/api/issue-submission-media")).toBeLessThan(
       requests.lastIndexOf("/api/issue-submission-media"),
     );

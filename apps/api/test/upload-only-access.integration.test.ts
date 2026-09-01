@@ -150,6 +150,7 @@ describe("host-admin upload-only capability", () => {
     });
     const session = await gate().createSession(sessionInput);
     expect(session.maxBytes).toBe(10 * 1024 * 1024);
+    const secondSession = await gate().createSession(sessionInput);
     await expect(gate().createSession(sessionInput)).rejects.toMatchObject({
       reasons: ["CONCURRENT_SESSION_LIMIT"],
     });
@@ -157,6 +158,12 @@ describe("host-admin upload-only capability", () => {
       memberId: id,
       sessionId: session.id,
       token: session.token,
+      byteSize: 1024,
+    });
+    await gate().consumeSession({
+      memberId: id,
+      sessionId: secondSession.id,
+      token: secondSession.token,
       byteSize: 1024,
     });
     await decideUploadOnlyAccess(database.db, { ...args, action: "REVOKE" });

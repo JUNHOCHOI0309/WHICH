@@ -26,7 +26,7 @@ describe("Member Issue media upload gate", () => {
         hasActiveCapability: false,
         hasCurrentConsent: false,
         ownsSubmission: false,
-        activeSessions: 1,
+        activeSessions: 2,
       }),
     ).toMatchObject({
       allowed: false,
