@@ -224,7 +224,10 @@ export function IssueExperience({
 
     void ensureGuestSubject()
       .then(async () => {
-        const loadedIssue = initialIssue ?? (await loadPublicIssue(issueId, controller.signal));
+        // Discovery rendering deliberately omits personalized media. Once the browser has
+        // established its viewer identity, hydrate the interactive Issue from the public API
+        // instead of keeping the text-only server snapshot.
+        const loadedIssue = await loadPublicIssue(issueId, controller.signal);
         if (!active) return;
         setIssue(loadedIssue);
         const restoredResult = await restoreVoteResult(issueId, controller.signal);

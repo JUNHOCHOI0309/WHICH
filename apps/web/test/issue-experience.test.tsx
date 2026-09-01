@@ -79,12 +79,27 @@ describe("IssueExperience", () => {
     expect(screen.getByRole("status")).toHaveTextContent("참여 기록을 확인하고 있어요");
   });
 
-  it("restores participation without refetching server-provided question content", async () => {
+  it("hydrates server discovery content with viewer-eligible public media before voting", async () => {
+    const interactiveIssue: PublicIssue = {
+      ...issue,
+      mediaMode: "OPTION_IMAGES",
+      choices: issue.choices.map((choice) => ({
+        ...choice,
+        media: {
+          url: `https://issue-media.example/${choice.code}.webp`,
+          altText: `${choice.label} 이미지`,
+          cropMode: "CONTAIN" as const,
+          width: 1200,
+          height: 800,
+        },
+      })),
+    };
     const request = vi.fn(async (input: string | URL | Request) => {
       const url = String(input);
       if (url === "/api/guest-subjects") return jsonResponse({ status: "ready" });
+      if (url === `/api/issues/${ISSUE_ID}`) return jsonResponse(interactiveIssue);
       if (url.includes("vote-status")) return jsonResponse({ code: "VOTE_NOT_FOUND" }, 404);
-      return jsonResponse({});
+      throw new Error(`Unexpected request: ${url}`);
     });
     vi.stubGlobal("fetch", request);
 
@@ -93,8 +108,17 @@ describe("IssueExperience", () => {
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "A 선택, 아침형 인간" })).toBeEnabled();
     });
-    expect(request.mock.calls.some(([input]) => String(input) === `/api/issues/${ISSUE_ID}`)).toBe(
-      false,
+    expect(request).toHaveBeenCalledWith(
+      `/api/issues/${ISSUE_ID}`,
+      expect.objectContaining({ cache: "no-store" }),
+    );
+    expect(screen.getByAltText("아침형 인간 이미지")).toHaveAttribute(
+      "src",
+      "https://issue-media.example/A.webp",
+    );
+    expect(screen.getByAltText("저녁형 인간 이미지")).toHaveAttribute(
+      "src",
+      "https://issue-media.example/B.webp",
     );
   });
 
