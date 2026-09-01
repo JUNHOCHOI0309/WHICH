@@ -55,7 +55,8 @@ export function ChoiceMediaPair({
   choices: IssueChoice[];
   onMediaLoad?: (choice: IssueChoice, outcome: "SUCCESS" | "FAILURE") => void;
 }) {
-  if (choices.length !== 2 || choices.some((choice) => !choice.media)) return null;
+  if (choices.length < 2 || choices.length > 4 || choices.some((choice) => !choice.media))
+    return null;
   return (
     <div className={styles.mediaPair}>
       {choices.map((choice) => (
@@ -169,7 +170,7 @@ function MediaPreview({
         onClick={onClose}
         aria-label="이미지 확대 닫기"
       >
-        닫기 ×
+        <span aria-hidden="true">×</span>
       </button>
       {failed ? (
         <p role="status">이미지를 불러오지 못했어요. 닫고 다시 시도해 주세요.</p>

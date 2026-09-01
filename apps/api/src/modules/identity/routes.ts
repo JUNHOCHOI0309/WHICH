@@ -49,6 +49,8 @@ const resultSchema = Type.Object({
   resultVersion: Type.Integer({ minimum: 1 }),
   acceptedA: Type.Integer({ minimum: 0 }),
   acceptedB: Type.Integer({ minimum: 0 }),
+  acceptedC: Type.Integer({ minimum: 0 }),
+  acceptedD: Type.Integer({ minimum: 0 }),
   displayedTotal: Type.Integer({ minimum: 0 }),
   integrityState: Type.Union([
     Type.Literal("NORMAL"),
@@ -65,8 +67,9 @@ const privateVoteSchema = Type.Object({
   issueVersion: Type.Integer({ minimum: 1 }),
   question: Type.String(),
   categoryCode: Type.String(),
-  choice: Type.Union([Type.Literal("A"), Type.Literal("B")]),
+  choice: Type.Union([Type.Literal("A"), Type.Literal("B"), Type.Literal("C"), Type.Literal("D")]),
   choiceLabel: Type.String(),
+  choiceCount: Type.Integer({ minimum: 2, maximum: 4 }),
   acceptedAt: Type.String({ format: "date-time" }),
   result: resultSchema,
 });
@@ -135,7 +138,7 @@ const privateVoteLookupSchema = Type.Object({
   voteId: Type.String({ format: "uuid" }),
   issueId: Type.String({ format: "uuid" }),
   issueVersion: Type.Integer({ minimum: 1 }),
-  choice: Type.Union([Type.Literal("A"), Type.Literal("B")]),
+  choice: Type.Union([Type.Literal("A"), Type.Literal("B"), Type.Literal("C"), Type.Literal("D")]),
   result: resultSchema,
 });
 

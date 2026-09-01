@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { AccessibilityInfo, AppState, Pressable, StyleSheet, Text, View } from "react-native";
 
-import type { CommentHighlights } from "@/contracts";
+import type { ChoiceCode, CommentHighlights } from "@/contracts";
 import { colors } from "@/theme";
 
 import { CommentCard, EmptyCommentCard } from "./comment-card";
@@ -12,17 +12,19 @@ export function RotatingCommentHighlights({
   highlights,
   loading,
   error,
+  choiceCodes,
   onRetry,
 }: {
   highlights: CommentHighlights | null;
   loading: boolean;
   error: boolean;
+  choiceCodes: readonly ChoiceCode[];
   onRetry: () => void;
 }) {
   const [index, setIndex] = useState(0);
   const [reducedMotion, setReducedMotion] = useState(false);
   const [appActive, setAppActive] = useState(AppState.currentState === "active");
-  const total = Math.max(highlights?.A.length ?? 0, highlights?.B.length ?? 0);
+  const total = Math.max(0, ...choiceCodes.map((code) => highlights?.[code].length ?? 0));
   const safeIndex = total > 0 ? index % total : 0;
 
   useEffect(() => {
@@ -51,11 +53,14 @@ export function RotatingCommentHighlights({
   }, [appActive, reducedMotion, total]);
 
   const comments = useMemo(
-    () => ({
-      A: highlights?.A.length ? (highlights.A[safeIndex % highlights.A.length] ?? null) : null,
-      B: highlights?.B.length ? (highlights.B[safeIndex % highlights.B.length] ?? null) : null,
-    }),
-    [highlights, safeIndex],
+    () =>
+      Object.fromEntries(
+        choiceCodes.map((code) => {
+          const choices = highlights?.[code] ?? [];
+          return [code, choices.length ? (choices[safeIndex % choices.length] ?? null) : null];
+        }),
+      ) as Partial<Record<ChoiceCode, CommentHighlights[ChoiceCode][number] | null>>,
+    [choiceCodes, highlights, safeIndex],
   );
 
   if (loading) {
@@ -66,8 +71,9 @@ export function RotatingCommentHighlights({
         style={styles.wrap}
       >
         <View style={styles.loadingTitle} />
-        <View style={styles.loadingCard} />
-        <View style={styles.loadingCard} />
+        {choiceCodes.map((code) => (
+          <View key={code} style={styles.loadingCard} />
+        ))}
       </View>
     );
   }
@@ -91,15 +97,12 @@ export function RotatingCommentHighlights({
         <Text style={styles.empty}>아직 공개된 대표 댓글이 없어요. 첫 선택 이유를 남겨보세요.</Text>
       ) : (
         <>
-          {comments.A ? (
-            <CommentCard comment={comments.A} personal />
-          ) : (
-            <EmptyCommentCard personal side="A" />
-          )}
-          {comments.B ? (
-            <CommentCard comment={comments.B} personal />
-          ) : (
-            <EmptyCommentCard personal side="B" />
+          {choiceCodes.map((code) =>
+            comments[code] ? (
+              <CommentCard key={code} comment={comments[code]!} personal />
+            ) : (
+              <EmptyCommentCard key={code} personal side={code} />
+            ),
           )}
         </>
       )}

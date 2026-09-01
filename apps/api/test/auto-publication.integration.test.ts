@@ -718,7 +718,7 @@ describe("explicit image publication pilot", () => {
     expect(row?.attemptCount).toBe(0);
     expect(adapter.inspect).not.toHaveBeenCalled();
   });
-  it("rejects conflicting ALLOW labels and mismatched A/B bindings", async () => {
+  it("rejects conflicting ALLOW labels and mismatched image bindings", async () => {
     const f = await fixture();
     const input = {
       result: f.safety,
@@ -738,6 +738,25 @@ describe("explicit image publication pilot", () => {
     expect(
       clearPublicationEvidence({ ...input, imageHashes: [...input.imageHashes].reverse() }),
     ).toBe(false);
+    const fourHashes = ["a", "b", "c", "d"].map((value) => value.repeat(64));
+    expect(
+      clearPublicationEvidence({
+        ...input,
+        result: {
+          ...f.safety,
+          imageCount: 4,
+          embeddedText: {
+            version: EMBEDDED_TEXT_VERSION,
+            images: fourHashes.map((normalizedHash) => ({
+              normalizedHash,
+              status: "COMPLETE",
+              characters: 0,
+            })),
+          },
+        },
+        imageHashes: fourHashes,
+      }),
+    ).toBe(true);
   });
   it("serializes overlapping runtime processes and releases the lock on failure", async () => {
     const db = testDb.database.db;

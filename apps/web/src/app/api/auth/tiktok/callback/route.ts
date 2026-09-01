@@ -25,6 +25,7 @@ import {
   clearGuestSubjectCookie,
   MEMBER_SESSION_COOKIE,
   setMemberSessionCookie,
+  setRecentLoginProviderCookie,
   setSocialSignupCookie,
 } from "@/lib/server/which-api";
 
@@ -101,6 +102,7 @@ export async function GET(request: Request) {
     }
     const response = fail(flow.returnTo, "success");
     setMemberSessionCookie(response, session.token, session.expiresAt);
+    setRecentLoginProviderCookie(response, "tiktok");
     if (flow.anonymousSubjectId) clearGuestSubjectCookie(response);
     return response;
   } catch (error) {

@@ -179,32 +179,42 @@
 
 .resultLabels {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   gap: 12px;
   font-size: 0.76rem;
   font-weight: 950;
 }
 
-.resultLabels span:first-child {
+.resultLabels span[data-choice="A"] {
   color: var(--which-cyan-strong);
 }
 
-.resultLabels span:last-child {
+.resultLabels span[data-choice="B"] {
   color: var(--which-orange-strong);
+}
+
+.resultLabels span[data-choice="C"] {
+  color: #6d50bf;
+}
+
+.resultLabels span[data-choice="D"] {
+  color: #477d43;
 }
 
 .resultBar {
   height: 7px;
+  display: flex;
   margin-top: 8px;
   border-radius: 999px;
-  background: var(--which-orange);
+  background: var(--which-surface-subtle);
   overflow: hidden;
 }
 
 .resultBar span {
+  flex-basis: 0;
   min-width: 0;
   height: 100%;
-  background: var(--which-cyan);
   display: block;
 }
 

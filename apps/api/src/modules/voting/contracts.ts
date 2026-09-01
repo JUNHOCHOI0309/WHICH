@@ -6,6 +6,8 @@ export type VoteResult = {
   resultVersion: number;
   acceptedA: number;
   acceptedB: number;
+  acceptedC: number;
+  acceptedD: number;
   displayedTotal: number;
   integrityState:
     "NORMAL" | "MONITORING" | "DEGRADED" | "UNDER_REVIEW" | "RESULT_LOCKED" | "CORRECTED";
@@ -17,7 +19,7 @@ export type GuestVoteResponse = {
   voteId: string;
   issueId: string;
   issueVersion: number;
-  choice: "A" | "B";
+  choice: "A" | "B" | "C" | "D";
   result: VoteResult;
 };
 
@@ -47,6 +49,8 @@ export type VoteLedgerCounts = {
   voteRequestCount: number;
   acceptedACount: number;
   acceptedBCount: number;
+  acceptedCCount: number;
+  acceptedDCount: number;
   acceptedVoteCount: number;
   reviewVoteCount: number;
   rejectedDuplicateCount: number;
@@ -64,6 +68,8 @@ export type VoteSnapshotView = {
   resultVersion: number;
   acceptedACount: number;
   acceptedBCount: number;
+  acceptedCCount: number;
+  acceptedDCount: number;
   displayedVoteCount: number;
   integrityState: VoteResult["integrityState"];
 };

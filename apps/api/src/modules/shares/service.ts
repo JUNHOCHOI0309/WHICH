@@ -27,7 +27,7 @@ type ShareRow = {
   id: string;
   version: string;
   channel: string;
-  sharedChoiceCode: "A" | "B" | null;
+  sharedChoiceCode: "A" | "B" | "C" | "D" | null;
   createdAt: Date;
   issueId: string;
   issueVersion: number;
@@ -35,6 +35,8 @@ type ShareRow = {
   resultVersion: number;
   acceptedA: number;
   acceptedB: number;
+  acceptedC: number;
+  acceptedD: number;
   displayedTotal: number;
   integrityState:
     "NORMAL" | "MONITORING" | "DEGRADED" | "UNDER_REVIEW" | "RESULT_LOCKED" | "CORRECTED";
@@ -42,7 +44,7 @@ type ShareRow = {
 
 function publicShareCard(
   row: ShareRow,
-  choices: Array<{ code: "A" | "B"; label: string }>,
+  choices: Array<{ code: "A" | "B" | "C" | "D"; label: string }>,
 ): PublicShareCard {
   return {
     id: row.id,
@@ -61,6 +63,8 @@ function publicShareCard(
       resultVersion: row.resultVersion,
       acceptedA: row.acceptedA,
       acceptedB: row.acceptedB,
+      acceptedC: row.acceptedC,
+      acceptedD: row.acceptedD,
       displayedTotal: row.displayedTotal,
       integrityState: row.integrityState,
     },
@@ -99,6 +103,8 @@ export function createShareCardService(
         resultVersion: resultSnapshots.resultVersion,
         acceptedA: resultSnapshots.acceptedACount,
         acceptedB: resultSnapshots.acceptedBCount,
+        acceptedC: resultSnapshots.acceptedCCount,
+        acceptedD: resultSnapshots.acceptedDCount,
         displayedTotal: resultSnapshots.displayedVoteCount,
         integrityState: resultSnapshots.integrityState,
       })
@@ -127,7 +133,7 @@ export function createShareCardService(
       throw new ShareCardError("SHARE_CARD_NOT_FOUND", 404, "The Share Card was not found.");
     }
     const choices = await getChoices(row.issueId, row.issueVersion);
-    if (choices.length !== 2) {
+    if (choices.length < 2 || choices.length > 4) {
       throw new ShareCardError("SHARE_CARD_NOT_FOUND", 404, "The Share Card was not found.");
     }
     return publicShareCard(row, choices);

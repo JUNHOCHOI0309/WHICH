@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { Database } from "../../database/client.js";
 import {
@@ -20,7 +20,11 @@ import {
 import type { ModerationProviderInput } from "../moderation-providers/contracts.js";
 import type { ModerationProviderRuntimeConfig } from "../moderation-providers/runtime-gate.js";
 import { embeddedTextEvidenceSchema } from "../issue-media/embedded-text.js";
-import { createLunaJudgeAdapter, prepareJudgeRequest } from "./adapter.js";
+import {
+  createLunaJudgeAdapter,
+  prepareJudgeRequest,
+  reconcileLowSexualDisagreement,
+} from "./adapter.js";
 import {
   judgeCosts,
   judgeDiagnostic,
@@ -35,11 +39,25 @@ import { hasClaimedWakeup } from "../moderation-dispatch/submission-wakeup-event
 const safetySchema = z.object({
   provider: z.literal("OPENAI_MODERATION"),
   inputScope: z.literal("SUBMISSION_REVISION"),
-  imageCount: z.literal(2),
+  imageCount: z.number().int().min(1).max(5),
   abstained: z.literal(false),
   modelSnapshot: z.string(),
   embeddedText: embeddedTextEvidenceSchema,
   signals: z.array(z.object({ flagged: z.boolean(), rawScore: z.number().min(0).max(1) })).min(1),
+});
+
+const consensusEvidenceSchema = z.object({
+  signals: z
+    .array(
+      z.object({
+        providerLabel: z.string(),
+        rawScore: z.number().min(0).max(1),
+        flagged: z.boolean(),
+        calibratedBand: z.string(),
+        appliedModalities: z.array(z.string()),
+      }),
+    )
+    .min(1),
 });
 
 export function createPolicyJudgeService(options: {
@@ -123,9 +141,13 @@ export function createPolicyJudgeService(options: {
         .from(memberIssueSubmissions)
         .where(eq(memberIssueSubmissions.id, row.submission.id))
         .for("update");
-      const ids = [row.submission.mediaAssetAId, row.submission.mediaAssetBId].filter(
-        (v): v is string => Boolean(v),
-      );
+      const ids = [
+        row.submission.contextMediaAssetId,
+        row.submission.mediaAssetAId,
+        row.submission.mediaAssetBId,
+        row.submission.mediaAssetCId,
+        row.submission.mediaAssetDId,
+      ].filter((v): v is string => Boolean(v));
       if (ids.length)
         await reader
           .select({ id: issueMediaAssets.id })
@@ -174,14 +196,29 @@ export function createPolicyJudgeService(options: {
       submission.publishedIssueId
     )
       return null;
-    const ids = [submission.mediaAssetAId, submission.mediaAssetBId];
-    if (!ids[0] || !ids[1] || ids[0] === ids[1]) return null;
+    const choices = [
+      submission.choiceA,
+      submission.choiceB,
+      submission.choiceC,
+      submission.choiceD,
+    ].filter((choice): choice is string => Boolean(choice));
+    const optionIds = [
+      submission.mediaAssetAId,
+      submission.mediaAssetBId,
+      submission.mediaAssetCId,
+      submission.mediaAssetDId,
+    ].slice(0, choices.length);
+    if (optionIds.some(Boolean) && !optionIds.every(Boolean)) return null;
+    const ids = [submission.contextMediaAssetId, ...optionIds].filter((id): id is string =>
+      Boolean(id),
+    );
+    if (ids.length === 0 || new Set(ids).size !== ids.length) return null;
     const assets = await reader
       .select()
       .from(issueMediaAssets)
-      .where(inArray(issueMediaAssets.id, ids as string[]));
+      .where(inArray(issueMediaAssets.id, ids));
     if (
-      assets.length !== 2 ||
+      assets.length !== ids.length ||
       assets.some(
         (a) =>
           a.uploadedByMemberId !== submission.memberId ||
@@ -221,7 +258,10 @@ export function createPolicyJudgeService(options: {
       return ledger.skip(sourceRunId, "SAFETY_EVIDENCE_REQUIRED");
     if (safety.data.signals.some((s) => s.flagged))
       return ledger.skip(sourceRunId, "SAFETY_REVIEW_REQUIRED");
-    if (safety.data.embeddedText.images.some((i) => i.status !== "COMPLETE"))
+    if (
+      safety.data.embeddedText.images.length !== safety.data.imageCount ||
+      safety.data.embeddedText.images.some((i) => i.status !== "COMPLETE")
+    )
       return ledger.skip(sourceRunId, "LOCAL_EVIDENCE_INCOMPLETE");
     if (
       sampleBucket(row.run.normalizedInputHash, POLICY_JUDGE_PROFILE) >=
@@ -267,20 +307,27 @@ export function createPolicyJudgeService(options: {
       reason: "REQUEST_OUTCOME_UNKNOWN",
       latencyMs: 0,
     }));
+    const consensusEvidence = consensusEvidenceSchema.safeParse(row.run.result);
+    const consensus =
+      result.decision && consensusEvidence.success
+        ? reconcileLowSexualDisagreement(result.decision, consensusEvidence.data.signals)
+        : null;
+    const finalDecision = consensus?.decision ?? result.decision;
+    const finalReason = consensus?.reconciled ? "LOW_SEXUAL_DISAGREEMENT_CLEARED" : result.reason;
     const costs = result.usage ? judgeCosts(result.usage) : undefined;
     const status = !result.usage
       ? "UNKNOWN"
-      : !result.decision
+      : !finalDecision
         ? "FAILED"
-        : result.decision.decision === "ABSTAIN"
+        : finalDecision.decision === "ABSTAIN"
           ? "ABSTAINED"
           : "SUCCEEDED";
     const finished = await ledger.finish({
       id: reservation.job.id,
       status,
-      reason: result.reason,
-      result: result.decision
-        ? { decision: result.decision, model: gate.model, profile: POLICY_JUDGE_PROFILE }
+      reason: finalReason,
+      result: finalDecision
+        ? { decision: finalDecision, model: gate.model, profile: POLICY_JUDGE_PROFILE }
         : {},
       ...costs,
       inputTokens: result.usage?.input_tokens,
@@ -289,7 +336,7 @@ export function createPolicyJudgeService(options: {
       policyVersion: row.run.policyVersion,
       isCurrent: async (tx) => Boolean(await readSource(sourceRunId, tx, true)),
     });
-    return { status: finished, reason: result.reason };
+    return { status: finished, reason: finalReason };
   }
 
   async function runBatch(limit = 10) {
@@ -323,7 +370,12 @@ export function createPolicyJudgeService(options: {
           eq(moderationRuns.modelProvider, "OPENAI_MODERATION"),
           eq(moderationTargets.targetType, "ISSUE_VERSION"),
           inArray(memberIssueSubmissions.status, ["PENDING", "NEEDS_CHANGES"]),
-          sql`${memberIssueSubmissions.mediaAssetAId} is not null`,
+          or(
+            sql`${memberIssueSubmissions.contextMediaAssetId} is not null`,
+            sql`${memberIssueSubmissions.mediaAssetAId} is not null`,
+            sql`${memberIssueSubmissions.mediaAssetCId} is not null`,
+            sql`${memberIssueSubmissions.mediaAssetDId} is not null`,
+          ),
           isNull(policyJudgeEvaluations.id),
         ),
       )

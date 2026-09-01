@@ -180,6 +180,8 @@ export async function registerMemberModerationRoutes(
         action: "TEXT_ONLY" | "APPROVED_LIBRARY" | "REPLACE_IMAGE" | "CANCEL_IMAGE";
         replacementAssetAId?: string;
         replacementAssetBId?: string;
+        replacementAssetCId?: string;
+        replacementAssetDId?: string;
       };
     }>(
       "/v1/me/moderation/submissions/:submissionId/asset-alternative",
@@ -198,6 +200,8 @@ export async function registerMemberModerationRoutes(
               ]),
               replacementAssetAId: Type.Optional(Type.String({ format: "uuid" })),
               replacementAssetBId: Type.Optional(Type.String({ format: "uuid" })),
+              replacementAssetCId: Type.Optional(Type.String({ format: "uuid" })),
+              replacementAssetDId: Type.Optional(Type.String({ format: "uuid" })),
             },
             { additionalProperties: false },
           ),

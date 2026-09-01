@@ -22,6 +22,8 @@ export const voteAggregates = pgTable(
     voteRequestCount: integer("vote_request_count").default(0).notNull(),
     acceptedACount: integer("accepted_a_count").default(0).notNull(),
     acceptedBCount: integer("accepted_b_count").default(0).notNull(),
+    acceptedCCount: integer("accepted_c_count").default(0).notNull(),
+    acceptedDCount: integer("accepted_d_count").default(0).notNull(),
     acceptedVoteCount: integer("accepted_vote_count").default(0).notNull(),
     reviewVoteCount: integer("review_vote_count").default(0).notNull(),
     rejectedDuplicateCount: integer("rejected_duplicate_count").default(0).notNull(),
@@ -43,8 +45,9 @@ export const voteAggregates = pgTable(
     check(
       "vote_aggregates_counts_check",
       sql`${table.voteRequestCount} >= 0 and ${table.acceptedACount} >= 0 and ${table.acceptedBCount} >= 0
+        and ${table.acceptedCCount} >= 0 and ${table.acceptedDCount} >= 0
         and ${table.reviewVoteCount} >= 0 and ${table.rejectedDuplicateCount} >= 0 and ${table.rejectedAbuseCount} >= 0
-        and ${table.invalidatedVoteCount} >= 0 and ${table.acceptedVoteCount} = ${table.acceptedACount} + ${table.acceptedBCount}
+        and ${table.invalidatedVoteCount} >= 0 and ${table.acceptedVoteCount} = ${table.acceptedACount} + ${table.acceptedBCount} + ${table.acceptedCCount} + ${table.acceptedDCount}
         and ${table.displayedVoteCount} = ${table.acceptedVoteCount}`,
     ),
   ],
@@ -59,6 +62,8 @@ export const resultSnapshots = pgTable(
     resultVersion: integer("result_version").notNull(),
     acceptedACount: integer("accepted_a_count").notNull(),
     acceptedBCount: integer("accepted_b_count").notNull(),
+    acceptedCCount: integer("accepted_c_count").default(0).notNull(),
+    acceptedDCount: integer("accepted_d_count").default(0).notNull(),
     displayedVoteCount: integer("displayed_vote_count").notNull(),
     integrityState: resultIntegrityStateEnum("integrity_state").notNull(),
     calculatedAt: timestamp("calculated_at", { withTimezone: true }).defaultNow().notNull(),
@@ -76,7 +81,7 @@ export const resultSnapshots = pgTable(
     ),
     check(
       "result_snapshots_counts_check",
-      sql`${table.resultVersion} > 0 and ${table.acceptedACount} >= 0 and ${table.acceptedBCount} >= 0 and ${table.displayedVoteCount} = ${table.acceptedACount} + ${table.acceptedBCount}`,
+      sql`${table.resultVersion} > 0 and ${table.acceptedACount} >= 0 and ${table.acceptedBCount} >= 0 and ${table.acceptedCCount} >= 0 and ${table.acceptedDCount} >= 0 and ${table.displayedVoteCount} = ${table.acceptedACount} + ${table.acceptedBCount} + ${table.acceptedCCount} + ${table.acceptedDCount}`,
     ),
   ],
 );

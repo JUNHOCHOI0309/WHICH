@@ -1,0 +1,2 @@
+ALTER TABLE "issue_media_library_usages" DROP CONSTRAINT "issue_media_library_usages_side_check";--> statement-breakpoint
+ALTER TABLE "issue_media_library_usages" ADD CONSTRAINT "issue_media_library_usages_side_check" CHECK ("issue_media_library_usages"."side" in ('A', 'B', 'C', 'D'));

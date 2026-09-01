@@ -102,11 +102,53 @@
 .noteRow {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  justify-content: flex-end;
+  gap: 4px;
 }
-.noteRow .note {
-  min-width: 0;
+.information {
+  position: relative;
+}
+.page .informationButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 10px;
+  border-color: transparent;
+  background: transparent;
+}
+.page .informationButton:hover,
+.page .informationButton:focus-visible {
+  background: var(--which-cyan-soft);
+}
+.informationTooltip {
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + 8px);
+  right: 0;
+  width: min(320px, calc(100vw - 48px));
+  box-sizing: border-box;
+  padding: 12px 14px;
+  border: 1px solid var(--which-border-strong);
+  border-radius: 12px;
+  background: var(--which-surface);
+  box-shadow: 0 12px 28px rgb(20 38 44 / 14%);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-4px);
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease,
+    visibility 140ms ease;
+  pointer-events: none;
+}
+.information:hover .informationTooltip,
+.information:focus-within .informationTooltip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
 }
 .choices {
   display: grid;
@@ -207,7 +249,41 @@
   background: #f1f6f8;
   margin-bottom: 8px;
 }
+
+.libraryGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.libraryAsset {
+  padding: 10px;
+  border: 1px solid var(--which-border);
+  border-radius: 12px;
+  background: var(--which-surface);
+  color: var(--which-text-secondary);
+  cursor: pointer;
+  text-align: left;
+}
+
+.libraryAsset[data-selected="true"] {
+  border: 2px solid var(--which-cyan);
+  color: var(--which-cyan-strong);
+}
+
+.libraryAsset figure {
+  display: grid;
+  gap: 8px;
+}
+
+.libraryAsset img {
+  margin: 0;
+}
 @media (max-width: 760px) {
+  .libraryGrid {
+    grid-template-columns: 1fr;
+  }
+
   .submissionTimeline > .row {
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 14px;

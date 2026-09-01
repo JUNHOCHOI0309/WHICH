@@ -185,6 +185,15 @@
   word-break: keep-all;
 }
 
+.contextMedia {
+  width: 100%;
+  max-height: 360px;
+  margin: 14px 0;
+  border-radius: 14px;
+  object-fit: contain;
+  background: var(--which-surface-soft);
+}
+
 .choiceList {
   display: grid;
   gap: 10px;

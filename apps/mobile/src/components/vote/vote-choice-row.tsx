@@ -59,7 +59,8 @@ export function ChoiceMediaPair({
   choices: IssueChoice[];
   onMediaLoad?: (choice: IssueChoice, outcome: "SUCCESS" | "FAILURE") => void;
 }) {
-  if (choices.length !== 2 || choices.some((choice) => !choice.media)) return null;
+  if (choices.length < 2 || choices.length > 4 || choices.some((choice) => !choice.media))
+    return null;
   return (
     <View style={styles.mediaPair}>
       {choices.map((choice) => (

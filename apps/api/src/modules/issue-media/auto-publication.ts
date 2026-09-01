@@ -64,7 +64,7 @@ const safetySchema = normalizedResultSchema.extend({
   provider: z.literal("OPENAI_MODERATION"),
   modality: z.literal("TEXT_AND_IMAGE"),
   inputScope: z.literal("SUBMISSION_REVISION"),
-  imageCount: z.literal(2),
+  imageCount: z.number().int().min(1).max(5),
   embeddedText: embeddedTextEvidenceSchema,
   inputBinding: z.object({
     contractVersion: z.literal(MODERATION_PROVIDER_INPUT_VERSION),
@@ -99,8 +99,10 @@ export function clearPublicationEvidence(input: {
     coverage.missingImageLabels.length === 0 &&
     coverage.missingTextLabels.length === 0 &&
     s.signals.every((v) => !v.flagged && v.calibratedBand === "LOW" && v.rawScore < 0.1) &&
-    input.imageHashes.length === 2 &&
-    s.embeddedText.images.length === 2 &&
+    input.imageHashes.length >= 1 &&
+    input.imageHashes.length <= 5 &&
+    s.imageCount === input.imageHashes.length &&
+    s.embeddedText.images.length === input.imageHashes.length &&
     s.embeddedText.images.every(
       (v, i) => v.status === "COMPLETE" && v.normalizedHash === input.imageHashes[i],
     ) &&
@@ -171,7 +173,14 @@ export function createAutoPublicationService(options: {
       !config.ISSUE_MEDIA_AUTO_PUBLICATION_MEMBER_IDS.includes(source.submission.memberId)
     )
       return null;
-    const ids = [source.submission.mediaAssetAId!, source.submission.mediaAssetBId!];
+    const ids = [
+      source.submission.contextMediaAssetId,
+      source.submission.mediaAssetAId,
+      source.submission.mediaAssetBId,
+      source.submission.mediaAssetCId,
+      source.submission.mediaAssetDId,
+    ].filter((id): id is string => Boolean(id));
+    if (ids.length === 0 || new Set(ids).size !== ids.length) return null;
     const rows = await reader
       .select({ asset: issueMediaAssets, version: issueMediaAssetVersions })
       .from(issueMediaAssets)

@@ -232,11 +232,43 @@ describe("OpenAI moderation Shadow adapter", () => {
         ...target,
         privateObjectReference: "issue-submission://revision/example/1",
       }),
-    ).toBe(2);
+    ).toBe(5);
     expect(adapter.requestCount?.(target)).toBe(1);
     expect(adapter.canReuseResult?.({ imageCount: 2 })).toBe(false);
     expect(adapter.canReuseResult?.(inspected.result)).toBe(true);
     expect(JSON.stringify(inspected)).not.toContain("base64");
+  });
+
+  it("moderates four ordered choice images with one accounted request per image", async () => {
+    const fourImageInput: ModerationProviderInput = {
+      ...pairInput,
+      images: ["QQ==", "Qg==", "Qw==", "RA=="].map((bytes) => ({
+        dataUrl: `data:image/webp;base64,${bytes}`,
+        mimeType: "image/webp",
+        width: 128,
+        height: 128,
+        byteLength: 1,
+        metadataStripped: true,
+        reencoded: true,
+      })),
+    };
+    const fetchImpl = vi.fn(() => Promise.resolve(providerResponse()));
+    const adapter = createOpenAiModerationAdapter({
+      apiKey: "test-key",
+      fetchImpl,
+      resolveInput: () => Promise.resolve(fourImageInput),
+    });
+    let audited = 0;
+
+    const inspected = await adapter.inspect(target, async (request) => {
+      audited += 1;
+      return request();
+    });
+
+    expect(audited).toBe(4);
+    expect(fetchImpl).toHaveBeenCalledTimes(4);
+    expect(inspected.result).toMatchObject({ imageCount: 4, requestCount: 4 });
+    expect(adapter.canReuseResult?.(inspected.result)).toBe(true);
   });
 
   it.each(["HTTP", "SCHEMA", "MODEL", "LABELS"])(
@@ -427,7 +459,7 @@ describe("moderation provider privacy controls", () => {
         requiredCalls: 2,
       }),
     ).toEqual({ allowed: true, reason: "SHADOW_CANARY_ALLOWED" });
-    for (const requiredCalls of [0, -1, 3, NaN])
+    for (const requiredCalls of [0, -1, 6, NaN])
       expect(
         evaluateModerationRuntimeGate({
           config,

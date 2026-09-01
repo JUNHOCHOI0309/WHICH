@@ -370,6 +370,8 @@ describe("Guest Issue read API", () => {
         resultVersion: 4,
         acceptedA: 4,
         acceptedB: 3,
+        acceptedC: 0,
+        acceptedD: 0,
         displayedTotal: 7,
         integrityState: "NORMAL",
       },

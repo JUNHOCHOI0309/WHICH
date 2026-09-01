@@ -16,6 +16,8 @@ const resultSchema = Type.Object({
   resultVersion: Type.Integer({ minimum: 1 }),
   acceptedA: Type.Integer({ minimum: 0 }),
   acceptedB: Type.Integer({ minimum: 0 }),
+  acceptedC: Type.Integer({ minimum: 0 }),
+  acceptedD: Type.Integer({ minimum: 0 }),
   displayedTotal: Type.Integer({ minimum: 0 }),
   integrityState: Type.Union([
     Type.Literal("NORMAL"),
@@ -33,7 +35,7 @@ const voteResponseSchema = Type.Object({
   voteId: uuidSchema,
   issueId: uuidSchema,
   issueVersion: Type.Integer({ minimum: 1 }),
-  choice: Type.Union([Type.Literal("A"), Type.Literal("B")]),
+  choice: Type.Union([Type.Literal("A"), Type.Literal("B"), Type.Literal("C"), Type.Literal("D")]),
   result: resultSchema,
 });
 
@@ -52,6 +54,8 @@ const ledgerCountsSchema = Type.Object({
   voteRequestCount: Type.Integer({ minimum: 0 }),
   acceptedACount: Type.Integer({ minimum: 0 }),
   acceptedBCount: Type.Integer({ minimum: 0 }),
+  acceptedCCount: Type.Integer({ minimum: 0 }),
+  acceptedDCount: Type.Integer({ minimum: 0 }),
   acceptedVoteCount: Type.Integer({ minimum: 0 }),
   reviewVoteCount: Type.Integer({ minimum: 0 }),
   rejectedDuplicateCount: Type.Integer({ minimum: 0 }),
@@ -70,6 +74,8 @@ const snapshotViewSchema = Type.Object({
   resultVersion: Type.Integer({ minimum: 1 }),
   acceptedACount: Type.Integer({ minimum: 0 }),
   acceptedBCount: Type.Integer({ minimum: 0 }),
+  acceptedCCount: Type.Integer({ minimum: 0 }),
+  acceptedDCount: Type.Integer({ minimum: 0 }),
   displayedVoteCount: Type.Integer({ minimum: 0 }),
   integrityState: resultSchema.properties.integrityState,
 });

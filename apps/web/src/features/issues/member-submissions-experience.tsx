@@ -5,7 +5,7 @@ import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "@/components/feedback/toast-provider";
 import { WhichShell } from "@/components/layout/which-shell";
-import type { IssueMediaLibraryPair, MemberIssueSubmission } from "@/lib/contracts";
+import type { ChoiceCode, IssueMediaLibraryPair, MemberIssueSubmission } from "@/lib/contracts";
 import { MemberProfileTabs } from "../identity/member-profile-tabs";
 import { MemberPointPanel } from "../identity/member-point-panel";
 import historyStyles from "../identity/member-history-layout.module.css";
@@ -29,6 +29,31 @@ const labels = {
   CANCELLED: "취소됨",
 };
 
+const CHOICE_CODES = ["A", "B", "C", "D"] as const;
+const CHOICE_FIELD: Record<ChoiceCode, "choiceA" | "choiceB" | "choiceC" | "choiceD"> = {
+  A: "choiceA",
+  B: "choiceB",
+  C: "choiceC",
+  D: "choiceD",
+};
+const MEDIA_FIELD: Record<
+  ChoiceCode,
+  "mediaAssetAId" | "mediaAssetBId" | "mediaAssetCId" | "mediaAssetDId"
+> = {
+  A: "mediaAssetAId",
+  B: "mediaAssetBId",
+  C: "mediaAssetCId",
+  D: "mediaAssetDId",
+};
+
+function emptyFiles(): Record<ChoiceCode, File | null> {
+  return { A: null, B: null, C: null, D: null };
+}
+
+function submissionChoiceCodes(submission: MemberIssueSubmission) {
+  return CHOICE_CODES.filter((code) => Boolean(submission[CHOICE_FIELD[code]]));
+}
+
 export function MemberSubmissionsExperience({
   creationEnabled = false,
 }: {
@@ -40,9 +65,10 @@ export function MemberSubmissionsExperience({
   const busyRef = useRef(false);
   const [editing, setEditing] = useState<MemberIssueSubmission | null>(null);
   const [managingId, setManagingId] = useState<string | null>(null);
-  const [files, setFiles] = useState<{ a: File | null; b: File | null }>({ a: null, b: null });
+  const [files, setFiles] = useState<Record<ChoiceCode, File | null>>(emptyFiles);
   const [libraryTarget, setLibraryTarget] = useState<MemberIssueSubmission | null>(null);
   const [library, setLibrary] = useState<IssueMediaLibraryPair[]>([]);
+  const [librarySelections, setLibrarySelections] = useState<string[]>([]);
   const key = useRef("");
   const groups = useMemo(() => {
     const months = new Map<string, MemberIssueSubmission[]>();
@@ -104,15 +130,17 @@ export function MemberSubmissionsExperience({
     setItems((current) => current.map((row) => (row.id === item.id ? item : row)));
     setEditing(null);
     setLibraryTarget(null);
-    setFiles({ a: null, b: null });
+    setFiles(emptyFiles());
+    setLibrarySelections([]);
   }
   async function action(
     item: MemberIssueSubmission,
     kind: "TEXT_ONLY" | "LIBRARY" | "CANCEL" | "CHECK",
     pairId?: string,
+    libraryAssetIds?: string[],
   ) {
     await run(async () => {
-      const result = await actOnMemberSubmission(item, kind, pairId);
+      const result = await actOnMemberSubmission(item, kind, pairId, libraryAssetIds);
       if (submissionOutcome(result.submission) !== "processing") forgetSubmission(item.id);
       replace(result.submission);
       toast.success(
@@ -126,16 +154,31 @@ export function MemberSubmissionsExperience({
   }
   async function save() {
     if (!editing) return;
-    if (Boolean(files.a) !== Boolean(files.b))
-      return toast.error("새 이미지는 A와 B를 함께 선택해 주세요.");
+    const choiceCodes = submissionChoiceCodes(editing);
+    const hasOptionImages = choiceCodes.some(
+      (code) => Boolean(files[code]) || Boolean(editing[MEDIA_FIELD[code]]),
+    );
+    if (
+      hasOptionImages &&
+      choiceCodes.some((code) => !files[code] && !editing[MEDIA_FIELD[code]])
+    ) {
+      return toast.error("선택지 이미지는 사용 중인 모든 선택지에 함께 등록해 주세요.");
+    }
     await run(async () => {
-      let mediaAssetAId = editing.mediaAssetAId;
-      let mediaAssetBId = editing.mediaAssetBId;
-      if (files.a && files.b) {
-        // Sequential uploads preserve the single-active-session guard and failure handling.
-        mediaAssetAId = (await uploadIssueSubmissionMedia(editing.id, files.a)).asset.id;
-        mediaAssetBId = (await uploadIssueSubmissionMedia(editing.id, files.b)).asset.id;
+      const mediaAssetIds: Record<ChoiceCode, string | null> = {
+        A: editing.mediaAssetAId,
+        B: editing.mediaAssetBId,
+        C: editing.mediaAssetCId ?? null,
+        D: editing.mediaAssetDId ?? null,
+      };
+      for (const code of choiceCodes) {
+        const file = files[code];
+        if (file) {
+          // Sequential uploads preserve the single-active-session guard and failure handling.
+          mediaAssetIds[code] = (await uploadIssueSubmissionMedia(editing.id, file)).asset.id;
+        }
       }
+      const replacingOptionImages = choiceCodes.some((code) => Boolean(files[code]));
       const result = await updateMemberSubmission(
         editing,
         {
@@ -143,9 +186,14 @@ export function MemberSubmissionsExperience({
           context: editing.context || null,
           choiceA: editing.choiceA,
           choiceB: editing.choiceB,
+          choiceC: editing.choiceC ?? null,
+          choiceD: editing.choiceD ?? null,
           interestCardCode: editing.interestCardCode,
-          mediaAssetAId,
-          mediaAssetBId,
+          contextMediaAssetId: replacingOptionImages ? null : (editing.contextMediaAssetId ?? null),
+          mediaAssetAId: mediaAssetIds.A,
+          mediaAssetBId: mediaAssetIds.B,
+          mediaAssetCId: mediaAssetIds.C,
+          mediaAssetDId: mediaAssetIds.D,
         },
         key.current,
       );
@@ -175,10 +223,24 @@ export function MemberSubmissionsExperience({
         </header>
         <MemberProfileTabs active="submissions" />
         <div className={styles.noteRow}>
-          <p className={styles.note}>
-            최근 제출한 질문을 최대 20개까지 보여요. 이미지를 검사하는 동안에도 수정하거나 이미지
-            없이 게시할 수 있어요.
-          </p>
+          <div className={styles.information}>
+            <button
+              type="button"
+              className={styles.informationButton}
+              aria-label="내 질문 안내"
+              aria-describedby="submission-history-information"
+            >
+              <Image src="/icons/help.png" width={22} height={22} alt="" />
+            </button>
+            <p
+              className={`${styles.note} ${styles.informationTooltip}`}
+              id="submission-history-information"
+              role="tooltip"
+            >
+              최근 제출한 질문을 최대 20개까지 보여요. 이미지를 검사하는 동안에도 수정하거나 이미지
+              없이 게시할 수 있어요.
+            </p>
+          </div>
           <button
             type="button"
             className={styles.refreshButton}
@@ -252,12 +314,11 @@ export function MemberSubmissionsExperience({
                           <h3>{item.question}</h3>
                           {item.context ? <p className={styles.context}>{item.context}</p> : null}
                           <div className={styles.choiceSummary}>
-                            <span>
-                              <b>A</b> {item.choiceA}
-                            </span>
-                            <span>
-                              <b>B</b> {item.choiceB}
-                            </span>
+                            {submissionChoiceCodes(item).map((code) => (
+                              <span key={code}>
+                                <b>{code}</b> {item[CHOICE_FIELD[code]]}
+                              </span>
+                            ))}
                           </div>
                         </div>
                         {!published ? (
@@ -277,7 +338,13 @@ export function MemberSubmissionsExperience({
                             title="게시된 질문 보기"
                             href={`/issues/${item.publishedIssueId}`}
                           >
-                            <span aria-hidden="true">↗</span>
+                            <Image
+                              src="/icons/double-chevron.png"
+                              width={24}
+                              height={24}
+                              alt=""
+                              aria-hidden="true"
+                            />
                           </Link>
                         ) : null}
                         {editable && !failed ? (
@@ -309,7 +376,7 @@ export function MemberSubmissionsExperience({
                               onClick={() => {
                                 setEditing({ ...item });
                                 setLibraryTarget(null);
-                                setFiles({ a: null, b: null });
+                                setFiles(emptyFiles());
                                 key.current = crypto.randomUUID();
                               }}
                             >
@@ -331,6 +398,7 @@ export function MemberSubmissionsExperience({
                                   const result = await loadIssueMediaLibrary();
                                   setLibrary(result.items);
                                   setLibraryTarget(item);
+                                  setLibrarySelections([]);
                                   setEditing(null);
                                 })
                               }
@@ -394,17 +462,17 @@ export function MemberSubmissionsExperience({
                               />
                             </label>
                             <div className={styles.choices}>
-                              {(["A", "B"] as const).map((side) => (
-                                <label key={side}>
-                                  {side} 선택지
+                              {submissionChoiceCodes(editing).map((code) => (
+                                <label key={code}>
+                                  {code} 선택지
                                   <input
                                     required
                                     maxLength={50}
-                                    value={side === "A" ? editing.choiceA : editing.choiceB}
+                                    value={editing[CHOICE_FIELD[code]] ?? ""}
                                     onChange={(event) => {
                                       setEditing({
                                         ...editing,
-                                        [side === "A" ? "choiceA" : "choiceB"]: event.target.value,
+                                        [CHOICE_FIELD[code]]: event.target.value,
                                       });
                                       key.current = crypto.randomUUID();
                                     }}
@@ -417,9 +485,9 @@ export function MemberSubmissionsExperience({
                               권한과 안전 검사가 필요해요.
                             </p>
                             <div className={styles.choices}>
-                              {(["a", "b"] as const).map((side) => (
-                                <label key={side}>
-                                  {side.toUpperCase()} 새 이미지
+                              {submissionChoiceCodes(editing).map((code) => (
+                                <label key={code}>
+                                  {code} 새 이미지
                                   <input
                                     disabled={busy}
                                     type="file"
@@ -427,7 +495,7 @@ export function MemberSubmissionsExperience({
                                     onChange={(event) => {
                                       setFiles((current) => ({
                                         ...current,
-                                        [side]: event.target.files?.[0] ?? null,
+                                        [code]: event.target.files?.[0] ?? null,
                                       }));
                                       key.current = crypto.randomUUID();
                                     }}
@@ -454,34 +522,80 @@ export function MemberSubmissionsExperience({
                             {!library.length ? (
                               <p>지금 사용할 수 있는 Library 이미지가 없어요.</p>
                             ) : (
-                              library.map((pair) => (
+                              <>
+                                <p className={styles.note}>
+                                  이미지가 선택된 순서대로 {submissionChoiceCodes(item).join(" · ")}
+                                  에 배치돼요. 서로 다른 묶음의 이미지도 함께 고를 수 있어요.
+                                </p>
+                                <div className={styles.libraryGrid}>
+                                  {library.flatMap((pair) =>
+                                    pair.assets.map((asset) => {
+                                      const selectedIndex = librarySelections.indexOf(asset.id);
+                                      const selectedCode =
+                                        selectedIndex >= 0
+                                          ? submissionChoiceCodes(item)[selectedIndex]
+                                          : null;
+                                      return (
+                                        <button
+                                          aria-pressed={selectedIndex >= 0}
+                                          className={styles.libraryAsset}
+                                          data-selected={selectedIndex >= 0 || undefined}
+                                          disabled={busy}
+                                          key={asset.id}
+                                          type="button"
+                                          onClick={() => {
+                                            setLibrarySelections((current) => {
+                                              if (current.includes(asset.id))
+                                                return current.filter((id) => id !== asset.id);
+                                              if (
+                                                current.length >= submissionChoiceCodes(item).length
+                                              ) {
+                                                toast.error(
+                                                  `이미지는 ${submissionChoiceCodes(item).length}개까지 고를 수 있어요.`,
+                                                );
+                                                return current;
+                                              }
+                                              return [...current, asset.id];
+                                            });
+                                          }}
+                                        >
+                                          <figure>
+                                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                                            <img src={asset.url} alt={asset.altText} />
+                                            <figcaption>
+                                              {selectedCode ? `${selectedCode} · ` : ""}
+                                              {pair.title} · {asset.altText}
+                                            </figcaption>
+                                          </figure>
+                                        </button>
+                                      );
+                                    }),
+                                  )}
+                                </div>
                                 <button
-                                  disabled={busy}
-                                  key={pair.id}
+                                  className={styles.primary}
+                                  disabled={
+                                    busy ||
+                                    librarySelections.length !== submissionChoiceCodes(item).length
+                                  }
+                                  type="button"
                                   onClick={() => {
                                     if (window.confirm("선택한 Library 이미지로 바로 게시할까요?"))
-                                      void action(item, "LIBRARY", pair.id);
+                                      void action(item, "LIBRARY", undefined, librarySelections);
                                   }}
                                 >
-                                  <strong>{pair.title}</strong>
-                                  <div className={styles.choices}>
-                                    {pair.assets.map((asset) => (
-                                      <figure key={asset.id}>
-                                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                                        <img src={asset.url} alt={asset.altText} />
-                                        <figcaption>
-                                          {asset.side} · {asset.altText}
-                                          {asset.attributionText
-                                            ? ` · ${asset.attributionText}`
-                                            : ""}
-                                        </figcaption>
-                                      </figure>
-                                    ))}
-                                  </div>
+                                  선택한 이미지로 게시
                                 </button>
-                              ))
+                              </>
                             )}
-                            <button disabled={busy} onClick={() => setLibraryTarget(null)}>
+                            <button
+                              disabled={busy}
+                              type="button"
+                              onClick={() => {
+                                setLibraryTarget(null);
+                                setLibrarySelections([]);
+                              }}
+                            >
                               접기
                             </button>
                           </section>

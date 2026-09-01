@@ -67,7 +67,7 @@ describe("explicit daily limit opt-out", () => {
     expect(
       gate({ ...provider(), evidence: { ...provider().evidence, dpaExecuted: false } }).allowed,
     ).toBe(false);
-    expect(gate(provider(), { requiredCalls: 3 }).reason).toBe("INVALID_PROVIDER_REQUEST_COUNT");
+    expect(gate(provider(), { requiredCalls: 6 }).reason).toBe("INVALID_PROVIDER_REQUEST_COUNT");
     expect(gate(provider(), { recentCalls: 6, recentFailures: 6 }).reason).toBe(
       "PROVIDER_CIRCUIT_OPEN",
     );

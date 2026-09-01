@@ -14,9 +14,18 @@ import {
   clearGuestSubjectCookie,
   clearSocialSignupCookie,
   setMemberSessionCookie,
+  setRecentLoginProviderCookie,
 } from "@/lib/server/which-api";
 
 export const runtime = "nodejs";
+
+const recentLoginProviders = {
+  GOOGLE: "google",
+  X: "x",
+  NAVER: "naver",
+  KAKAO: "kakao",
+  TIKTOK: "tiktok",
+} as const;
 
 export async function POST(request: NextRequest) {
   if (request.headers.get("x-which-csrf") !== "member-auth") {
@@ -101,6 +110,7 @@ export async function POST(request: NextRequest) {
     }
     const response = NextResponse.json({ ok: true, returnTo });
     setMemberSessionCookie(response, session.token, session.expiresAt);
+    setRecentLoginProviderCookie(response, recentLoginProviders[ticket.provider]);
     clearSocialSignupCookie(response);
     if (ticket.anonymousSubjectId) clearGuestSubjectCookie(response);
     return response;

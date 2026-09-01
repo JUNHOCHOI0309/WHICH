@@ -171,6 +171,9 @@ export function createModerationDispatcherService(
             memberId: memberIssueSubmissionRevisions.memberId,
             mediaAssetAId: memberIssueSubmissionRevisions.mediaAssetAId,
             mediaAssetBId: memberIssueSubmissionRevisions.mediaAssetBId,
+            mediaAssetCId: memberIssueSubmissionRevisions.mediaAssetCId,
+            mediaAssetDId: memberIssueSubmissionRevisions.mediaAssetDId,
+            contextMediaAssetId: memberIssueSubmissionRevisions.contextMediaAssetId,
             currentHash: memberIssueSubmissions.contentHash,
             currentRevision: memberIssueSubmissions.revision,
             status: memberIssueSubmissions.status,
@@ -197,17 +200,21 @@ export function createModerationDispatcherService(
         ) {
           return { exists: true, staleReason: "TARGET_REFERENCE_MISMATCH" } as const;
         }
-        const assetIds = [submission.mediaAssetAId, submission.mediaAssetBId].filter(
-          (id): id is string => Boolean(id),
-        );
+        const assetIds = [
+          submission.contextMediaAssetId,
+          submission.mediaAssetAId,
+          submission.mediaAssetBId,
+          submission.mediaAssetCId,
+          submission.mediaAssetDId,
+        ].filter((id): id is string => Boolean(id));
         if (assetIds.length) {
           const assets = await reader
             .select()
             .from(issueMediaAssets)
             .where(inArray(issueMediaAssets.id, assetIds));
           if (
-            new Set(assetIds).size !== 2 ||
-            assets.length !== 2 ||
+            new Set(assetIds).size !== assetIds.length ||
+            assets.length !== assetIds.length ||
             assets.some(
               (asset) =>
                 asset.uploadedByMemberId !== submission.memberId ||
@@ -612,7 +619,7 @@ export function createModerationDispatcherService(
     }
 
     const runRequest: ModerationProviderRequestExecutor = async (request) => {
-      // Recheck immediately before every HTTP request, including image B.
+      // Recheck immediately before every HTTP request, including every subsequent image.
       const requestGate = await options.providerGate?.({ ...adapterInput, requiredCalls: 1 });
       if (!requestGate?.allowed)
         throw new ModerationProviderCallError(
@@ -710,9 +717,13 @@ export function createModerationDispatcherService(
           .from(memberIssueSubmissions)
           .where(eq(memberIssueSubmissions.id, target.targetId))
           .for("update");
-        const ids = [submission?.mediaAssetAId, submission?.mediaAssetBId].filter(
-          (id): id is string => Boolean(id),
-        );
+        const ids = [
+          submission?.contextMediaAssetId,
+          submission?.mediaAssetAId,
+          submission?.mediaAssetBId,
+          submission?.mediaAssetCId,
+          submission?.mediaAssetDId,
+        ].filter((id): id is string => Boolean(id));
         if (ids.length)
           await transaction
             .select({ id: issueMediaAssets.id })

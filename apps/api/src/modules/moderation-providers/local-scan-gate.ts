@@ -3,7 +3,13 @@ import { ModerationProviderCallError } from "./contracts.js";
 
 export function requireCompletePrivateLocalScan(input: ModerationProviderInput) {
   const statuses = input.embeddedText?.images.map((image) => image.status) ?? [];
-  if (input.scope !== "SUBMISSION_REVISION" || input.images?.length !== 2 || statuses.length !== 2)
+  const imageCount = input.images?.length ?? 0;
+  if (
+    input.scope !== "SUBMISSION_REVISION" ||
+    imageCount < 1 ||
+    imageCount > 5 ||
+    statuses.length !== imageCount
+  )
     throw new ModerationProviderCallError(
       "INPUT_UNAVAILABLE",
       "LOCAL_SCAN_EVIDENCE_UNAVAILABLE",

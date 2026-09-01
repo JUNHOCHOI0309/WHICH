@@ -1,4 +1,4 @@
-import type { PublicShareCard, ShareChannel } from "@/lib/contracts";
+import type { ChoiceCode, PublicShareCard, ShareChannel } from "@/lib/contracts";
 import { authBaseUrl, internalAuthSecret } from "@/lib/server/member-auth";
 import { fetchWhichApi } from "@/lib/server/which-api";
 
@@ -9,7 +9,7 @@ export async function createResultShareCard(
     issueVersion: number;
     resultVersion: number;
     channel: ShareChannel;
-    sharedChoiceCode?: "A" | "B";
+    sharedChoiceCode?: ChoiceCode;
   },
 ) {
   const upstream = await fetchWhichApi(

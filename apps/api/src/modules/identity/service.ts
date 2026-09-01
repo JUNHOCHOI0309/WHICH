@@ -321,12 +321,15 @@ type PrivateVoteRow = {
   issue_version: number;
   question: string;
   category_code: string;
-  choice: "A" | "B";
+  choice: "A" | "B" | "C" | "D";
   choice_label: string;
+  choice_count: number;
   accepted_at: Date | string;
   result_version: number;
   accepted_a: number;
   accepted_b: number;
+  accepted_c: number;
+  accepted_d: number;
   displayed_total: number;
   result_integrity_state: MemberVoteHistoryItem["result"]["integrityState"];
 };
@@ -341,11 +344,14 @@ function toPrivateVoteItem(row: PrivateVoteRow): MemberVoteHistoryItem {
     categoryCode: row.category_code,
     choice: row.choice,
     choiceLabel: row.choice_label,
+    choiceCount: row.choice_count,
     acceptedAt: acceptedAt.toISOString(),
     result: {
       resultVersion: row.result_version,
       acceptedA: row.accepted_a,
       acceptedB: row.accepted_b,
+      acceptedC: row.accepted_c,
+      acceptedD: row.accepted_d,
       displayedTotal: row.displayed_total,
       integrityState: row.result_integrity_state,
     },
@@ -398,10 +404,18 @@ async function privateVoteRows(
       iv.primary_category_code as category_code,
       ic.choice_code as choice,
       ic.label as choice_label,
+      (
+        select count(*)::int
+        from issue_choices all_choices
+        where all_choices.issue_id = cv.issue_id
+          and all_choices.issue_version = cv.issue_version
+      ) as choice_count,
       cv.accepted_at,
       va.result_version,
       va.accepted_a_count as accepted_a,
       va.accepted_b_count as accepted_b,
+      va.accepted_c_count as accepted_c,
+      va.accepted_d_count as accepted_d,
       va.displayed_vote_count as displayed_total,
       va.integrity_state as result_integrity_state
     from canonical_votes cv
@@ -864,12 +878,16 @@ export function createMemberIdentityService(
 
               const aDecrement = duplicate.choiceCode === "A" ? 1 : 0;
               const bDecrement = duplicate.choiceCode === "B" ? 1 : 0;
+              const cDecrement = duplicate.choiceCode === "C" ? 1 : 0;
+              const dDecrement = duplicate.choiceCode === "D" ? 1 : 0;
               const [aggregate] = await transaction
                 .update(voteAggregates)
                 .set({
                   resultVersion: sql`${voteAggregates.resultVersion} + 1`,
                   acceptedACount: sql`${voteAggregates.acceptedACount} - ${aDecrement}`,
                   acceptedBCount: sql`${voteAggregates.acceptedBCount} - ${bDecrement}`,
+                  acceptedCCount: sql`${voteAggregates.acceptedCCount} - ${cDecrement}`,
+                  acceptedDCount: sql`${voteAggregates.acceptedDCount} - ${dDecrement}`,
                   acceptedVoteCount: sql`${voteAggregates.acceptedVoteCount} - 1`,
                   invalidatedVoteCount: sql`${voteAggregates.invalidatedVoteCount} + 1`,
                   displayedVoteCount: sql`${voteAggregates.displayedVoteCount} - 1`,
@@ -893,6 +911,8 @@ export function createMemberIdentityService(
                 resultVersion: aggregate.resultVersion,
                 acceptedACount: aggregate.acceptedACount,
                 acceptedBCount: aggregate.acceptedBCount,
+                acceptedCCount: aggregate.acceptedCCount,
+                acceptedDCount: aggregate.acceptedDCount,
                 displayedVoteCount: aggregate.displayedVoteCount,
                 integrityState: aggregate.integrityState,
                 calculatedAt: now,

@@ -5,7 +5,7 @@ import { useState } from "react";
 
 import { toast } from "@/components/feedback/toast-provider";
 import { WhichAsideCard, WhichShell } from "@/components/layout/which-shell";
-import { loginHref } from "@/lib/auth";
+import { loginHref, type RecentLoginProvider } from "@/lib/auth";
 import {
   NEW_PASSWORD_MAX_LENGTH,
   NEW_PASSWORD_MIN_LENGTH,
@@ -41,10 +41,12 @@ export function CredentialAuthExperience({
   mode,
   returnTo,
   providers,
+  recentLoginProvider = null,
 }: {
   mode: "login" | "signup";
   returnTo: string;
   providers: ProviderFlags;
+  recentLoginProvider?: RecentLoginProvider | null;
 }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -77,20 +79,15 @@ export function CredentialAuthExperience({
           <p className={styles.eyebrow}>ONE ACCOUNT, MANY WAYS IN</p>
           <h1>
             {isSignup ? (
-              "빠르게 WHICH 계정을 만들어요."
+              "회원가입"
             ) : (
               <>
                 <span className={styles.wordmarkAccent}>W</span>HICH
               </>
             )}
           </h1>
-          <p className={styles.description}>
-            {isSignup
-              ? "이메일과 비밀번호만 정하면 됩니다. Handle과 소개는 나중에 설정할 수 있어요."
-              : "이메일·비밀번호 또는 연결해 둔 소셜 수단 중 편한 방법을 선택하세요."}
-          </p>
-
           <form
+            className={isSignup ? styles.signupForm : styles.loginForm}
             onSubmit={(event) => {
               event.preventDefault();
               const policyError = isSignup ? newPasswordPolicyError(password) : null;
@@ -158,8 +155,17 @@ export function CredentialAuthExperience({
                 </span>
               </label>
             ) : null}
-            <button type="submit" disabled={pending}>
-              {pending ? "처리 중…" : isSignup ? "WHICH 계정 만들기" : "로그인"}
+            <button
+              type="submit"
+              disabled={pending}
+              aria-label={
+                !isSignup && recentLoginProvider === "email" ? "로그인, 최근 로그인" : undefined
+              }
+            >
+              <span>{pending ? "처리 중…" : isSignup ? "WHICH 계정 만들기" : "로그인"}</span>
+              {!isSignup && recentLoginProvider === "email" ? (
+                <span className={styles.recentLoginBadge}>최근 로그인</span>
+              ) : null}
             </button>
           </form>
 
@@ -181,21 +187,30 @@ export function CredentialAuthExperience({
           <div className={styles.social} aria-label="소셜 로그인">
             {social
               .filter((provider) => provider.enabled)
-              .map((provider) => (
-                <a
-                  key={provider.id}
-                  href={loginHref(provider.id, returnTo)}
-                  data-provider={provider.id}
-                >
-                  {provider.id === "tiktok" ? (
-                    <span>
-                      <span className={styles.tiktokWordmark}>TikTok</span>으로 계속하기
-                    </span>
-                  ) : (
-                    provider.label
-                  )}
-                </a>
-              ))}
+              .map((provider) => {
+                const recent = !isSignup && recentLoginProvider === provider.id;
+                return (
+                  <a
+                    key={provider.id}
+                    href={loginHref(provider.id, returnTo)}
+                    data-provider={provider.id}
+                    aria-label={recent ? `${provider.label}, 최근 로그인` : provider.label}
+                  >
+                    {provider.id === "tiktok" ? (
+                      <span>
+                        <span className={styles.tiktokWordmark}>TikTok</span>으로 계속하기
+                      </span>
+                    ) : (
+                      <span>{provider.label}</span>
+                    )}
+                    {recent ? (
+                      <span className={styles.recentLoginBadge} aria-hidden="true">
+                        최근 로그인
+                      </span>
+                    ) : null}
+                  </a>
+                );
+              })}
           </div>
 
           <p className={styles.switch}>

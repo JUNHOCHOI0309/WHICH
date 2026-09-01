@@ -46,7 +46,8 @@ export function issueIsIndexable(issue: Pick<PublicIssue, "question" | "context"
     question.length >= 10 &&
     context.length >= 12 &&
     combinedLength >= 36 &&
-    issue.choices.length === 2 &&
+    issue.choices.length >= 2 &&
+    issue.choices.length <= 4 &&
     labels.every((label) => label.length >= 2) &&
     new Set(labels.map((label) => label.toLocaleLowerCase("ko-KR"))).size === labels.length
   );

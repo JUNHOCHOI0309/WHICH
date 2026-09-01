@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { MemberVoteHistoryExperience } from "@/features/identity/member-vote-history-experience";
+import type { ChoiceCode } from "@/lib/contracts";
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -10,7 +11,19 @@ function jsonResponse(body: unknown, status = 200) {
   });
 }
 
-function vote(voteId: string, acceptedAt: string, question: string, choice: "A" | "B" = "A") {
+function vote(
+  voteId: string,
+  acceptedAt: string,
+  question: string,
+  choice: ChoiceCode = "A",
+  choiceCount = 2,
+) {
+  const labels: Record<ChoiceCode, string> = {
+    A: "바로 하기",
+    B: "나중에 하기",
+    C: "잠깐 쉬기",
+    D: "도움 요청하기",
+  };
   return {
     voteId,
     issueId: "591f2e90-996a-50c5-af46-967dd0793000",
@@ -18,13 +31,16 @@ function vote(voteId: string, acceptedAt: string, question: string, choice: "A" 
     question,
     categoryCode: "DAILY_LIFE",
     choice,
-    choiceLabel: choice === "A" ? "바로 하기" : "나중에 하기",
+    choiceLabel: labels[choice],
+    choiceCount,
     acceptedAt,
     result: {
       resultVersion: 2,
       acceptedA: 6,
       acceptedB: 4,
-      displayedTotal: 10,
+      acceptedC: choiceCount >= 3 ? 3 : 0,
+      acceptedD: choiceCount >= 4 ? 2 : 0,
+      displayedTotal: choiceCount === 4 ? 15 : choiceCount === 3 ? 13 : 10,
       integrityState: "NORMAL",
     },
   };
@@ -102,7 +118,10 @@ describe("Member vote history experience", () => {
         }
         if (url.includes("cursor=cursor-1")) {
           return jsonResponse(
-            profile([vote("vote-3", "2026-07-20T09:00:00.000Z", "휴가는 산 vs 바다")], null),
+            profile(
+              [vote("vote-3", "2026-07-20T09:00:00.000Z", "휴가는 어떤 방식이 좋을까", "D", 4)],
+              null,
+            ),
           );
         }
         return jsonResponse(
@@ -126,6 +145,11 @@ describe("Member vote history experience", () => {
     expect(screen.getByRole("heading", { name: "2026년 7월" })).toBeVisible();
     expect(screen.getAllByLabelText("현재 결과 A 60%, B 40%")).toHaveLength(2);
     expect(screen.getByText("A · 바로 하기")).toBeVisible();
+    const resultLinks = screen.getAllByRole("link", { name: /최신 결과 보기/ });
+    expect(resultLinks).toHaveLength(2);
+    expect(resultLinks[0]?.querySelector("img")?.getAttribute("src")).toContain(
+      encodeURIComponent("/icons/double-chevron.png"),
+    );
     expect(screen.getByRole("link", { name: "투표 기록" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("link", { name: "내 질문" })).toHaveAttribute(
       "href",
@@ -140,7 +164,9 @@ describe("Member vote history experience", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "이전 기록 더 보기" }));
 
-    expect(await screen.findByText("휴가는 산 vs 바다")).toBeVisible();
+    expect(await screen.findByText("휴가는 어떤 방식이 좋을까")).toBeVisible();
+    expect(screen.getByLabelText("현재 결과 A 40%, B 27%, C 20%, D 13%")).toBeVisible();
+    expect(screen.getByText("D · 도움 요청하기")).toBeVisible();
     await waitFor(() => expect(requests).toContain("/api/me?limit=20&cursor=cursor-1"));
     expect(screen.queryByRole("button", { name: "이전 기록 더 보기" })).not.toBeInTheDocument();
   }, 15_000);

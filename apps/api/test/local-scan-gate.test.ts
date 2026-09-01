@@ -12,24 +12,31 @@ const image = {
   metadataStripped: true as const,
   reencoded: true as const,
 };
-const input = (status: "COMPLETE" | "PARTIAL" | "UNAVAILABLE" | "WITHHELD_PII") =>
+const input = (status: "COMPLETE" | "PARTIAL" | "UNAVAILABLE" | "WITHHELD_PII", imageCount = 2) =>
   ({
     targetType: "ISSUE_VERSION",
     scope: "SUBMISSION_REVISION",
     modality: "TEXT_AND_IMAGE",
-    images: [image, image],
+    images: Array.from({ length: imageCount }, () => image),
     embeddedText: {
       version: EMBEDDED_TEXT_VERSION,
-      images: [
-        { normalizedHash: "a".repeat(64), status: "COMPLETE", characters: 0 },
-        { normalizedHash: "b".repeat(64), status, characters: 0 },
-      ],
+      images: Array.from({ length: imageCount }, (_, index) => ({
+        normalizedHash: String(index).repeat(64),
+        status: index === imageCount - 1 ? status : "COMPLETE",
+        characters: 0,
+      })),
     },
   }) satisfies ModerationProviderInput;
 
 describe("private local scan publication gate", () => {
-  it("accepts only a complete two-image scan", () => {
-    expect(() => requireCompletePrivateLocalScan(input("COMPLETE"))).not.toThrow();
+  it.each([1, 2, 4, 5])("accepts a complete %s-image submission scan", (imageCount) => {
+    expect(() => requireCompletePrivateLocalScan(input("COMPLETE", imageCount))).not.toThrow();
+  });
+
+  it.each([0, 6])("rejects an unsupported %s-image submission", (imageCount) => {
+    expect(() => requireCompletePrivateLocalScan(input("COMPLETE", imageCount))).toThrow(
+      "INPUT_UNAVAILABLE:LOCAL_SCAN_EVIDENCE_UNAVAILABLE",
+    );
   });
 
   it.each([

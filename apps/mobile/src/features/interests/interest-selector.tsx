@@ -195,7 +195,7 @@ export function InterestSelector({
         {mode === "prompt" ? "다음 질문을 더 잘 골라드릴까요?" : "관심 주제 설정"}
       </Text>
       <Text style={styles.description}>
-        관심 주제를 3개 이상 골라주세요. A/B 선택 방향은 관심 성향으로 저장하지 않아요.
+        관심 주제를 3개 이상 골라주세요. 각 질문의 선택 방향은 관심 성향으로 저장하지 않아요.
       </Text>
       <View style={styles.grid}>
         {registry.cards.map((card) => {

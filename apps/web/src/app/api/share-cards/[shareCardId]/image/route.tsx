@@ -1,9 +1,27 @@
 import { ImageResponse } from "next/og";
 
-import type { PublicShareCard } from "@/lib/contracts";
+import type { ChoiceCode, PublicShareCard } from "@/lib/contracts";
 import { readResultShareCard } from "@/lib/server/result-sharing";
 
 export const runtime = "nodejs";
+
+const RESULT_COLORS: Record<ChoiceCode, string> = {
+  A: "#14c8d4",
+  B: "#ff8a3d",
+  C: "#9b7be8",
+  D: "#72b96c",
+};
+
+function choiceCount(card: PublicShareCard, code: ChoiceCode) {
+  return (
+    {
+      A: card.result.acceptedA,
+      B: card.result.acceptedB,
+      C: card.result.acceptedC ?? 0,
+      D: card.result.acceptedD ?? 0,
+    } satisfies Record<ChoiceCode, number>
+  )[code];
+}
 
 type RouteContext = { params: Promise<{ shareCardId: string }> };
 
@@ -13,10 +31,10 @@ export async function GET(_request: Request, context: RouteContext) {
   if (!upstream.ok) return new Response(null, { status: upstream.status });
   const card = (await upstream.json()) as PublicShareCard;
   const total = card.result.displayedTotal;
-  const aPercent = total === 0 ? 0 : Math.round((card.result.acceptedA / total) * 100);
-  const bPercent = 100 - aPercent;
-  const choiceA = card.issue.choices.find((choice) => choice.code === "A")?.label ?? "A";
-  const choiceB = card.issue.choices.find((choice) => choice.code === "B")?.label ?? "B";
+  const results = card.issue.choices.map((choice) => ({
+    ...choice,
+    percent: total === 0 ? 0 : Math.round((choiceCount(card, choice.code) / total) * 100),
+  }));
 
   return new ImageResponse(
     <div
@@ -48,33 +66,27 @@ export async function GET(_request: Request, context: RouteContext) {
         <div style={{ fontSize: 54, fontWeight: 900, lineHeight: 1.12, letterSpacing: "-2px" }}>
           {card.issue.question}
         </div>
-        <div style={{ display: "flex", gap: 18 }}>
-          <div
-            style={{
-              flex: 1,
-              display: "flex",
-              flexDirection: "column",
-              background: "#14c8d4",
-              color: "#061923",
-              padding: "24px 28px",
-            }}
-          >
-            <span style={{ fontSize: 24, fontWeight: 800 }}>A · {choiceA}</span>
-            <span style={{ fontSize: 58, fontWeight: 900 }}>{aPercent}%</span>
-          </div>
-          <div
-            style={{
-              flex: 1,
-              display: "flex",
-              flexDirection: "column",
-              background: "#ff8a3d",
-              color: "#061923",
-              padding: "24px 28px",
-            }}
-          >
-            <span style={{ fontSize: 24, fontWeight: 800 }}>B · {choiceB}</span>
-            <span style={{ fontSize: 58, fontWeight: 900 }}>{bPercent}%</span>
-          </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 18 }}>
+          {results.map((choice) => (
+            <div
+              key={choice.code}
+              style={{
+                flex: results.length > 2 ? "1 1 46%" : 1,
+                display: "flex",
+                flexDirection: "column",
+                background: RESULT_COLORS[choice.code],
+                color: "#061923",
+                padding: results.length > 2 ? "16px 22px" : "24px 28px",
+              }}
+            >
+              <span style={{ fontSize: results.length > 2 ? 20 : 24, fontWeight: 800 }}>
+                {choice.code} · {choice.label}
+              </span>
+              <span style={{ fontSize: results.length > 2 ? 40 : 58, fontWeight: 900 }}>
+                {choice.percent}%
+              </span>
+            </div>
+          ))}
         </div>
       </div>
       <div

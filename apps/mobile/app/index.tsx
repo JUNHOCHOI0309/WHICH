@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Image,
   Pressable,
   RefreshControl,
   StyleSheet,
@@ -548,8 +549,6 @@ function VoteFeedCard({
   onRetryHighlights: () => void;
   onMediaLoad: (choice: IssueChoice, outcome: "SUCCESS" | "FAILURE") => void;
 }) {
-  const choiceA = issue.choices.find((choice) => choice.code === "A");
-  const choiceB = issue.choices.find((choice) => choice.code === "B");
   const pending = state.status === "SUBMITTING" || state.status === "ERROR" ? state.choice : null;
 
   return (
@@ -565,29 +564,28 @@ function VoteFeedCard({
       <Pressable accessibilityRole="link" onPress={onOpen}>
         <Text style={styles.question}>{issue.question}</Text>
       </Pressable>
+      {issue.contextMedia ? (
+        <Image
+          accessibilityLabel={issue.contextMedia.altText}
+          resizeMode={issue.contextMedia.cropMode === "CONTAIN" ? "contain" : "cover"}
+          source={{ uri: issue.contextMedia.url }}
+          style={styles.contextMedia}
+        />
+      ) : null}
 
       {state.status !== "RESULT" ? (
         <View style={styles.choices}>
-          {choiceA ? (
+          {issue.choices.map((choice) => (
             <VoteChoiceRow
-              choice={choiceA}
-              selected={pending?.id === choiceA.id}
-              pending={state.status === "SUBMITTING" && pending?.id === choiceA.id}
+              key={choice.id}
+              choice={choice}
+              selected={pending?.id === choice.id}
+              pending={state.status === "SUBMITTING" && pending?.id === choice.id}
               disabled={state.status === "SUBMITTING"}
-              onMediaLoad={(outcome) => onMediaLoad(choiceA, outcome)}
+              onMediaLoad={(outcome) => onMediaLoad(choice, outcome)}
               onPress={onChoose}
             />
-          ) : null}
-          {choiceB ? (
-            <VoteChoiceRow
-              choice={choiceB}
-              selected={pending?.id === choiceB.id}
-              pending={state.status === "SUBMITTING" && pending?.id === choiceB.id}
-              disabled={state.status === "SUBMITTING"}
-              onMediaLoad={(outcome) => onMediaLoad(choiceB, outcome)}
-              onPress={onChoose}
-            />
-          ) : null}
+          ))}
         </View>
       ) : null}
 
@@ -615,25 +613,24 @@ function VoteFeedCard({
         </View>
       ) : null}
 
-      {state.status === "RESULT" && choiceA && choiceB ? (
+      {state.status === "RESULT" ? (
         <View style={styles.resultArea}>
           <Text accessibilityLiveRegion="polite" style={styles.notice}>
             {state.vote.outcome === "REJECTED_DUPLICATE"
               ? `처음 선택한 ${state.vote.choice}가 유지되고 있어요.`
               : `${state.vote.choice} 선택이 반영됐어요.`}
           </Text>
-          <ChoiceMediaPair choices={[choiceA, choiceB]} onMediaLoad={onMediaLoad} />
+          <ChoiceMediaPair choices={issue.choices} onMediaLoad={onMediaLoad} />
           <BalanceResultBar
-            aLabel={choiceA.label}
-            bLabel={choiceB.label}
-            acceptedA={state.vote.result.acceptedA}
-            acceptedB={state.vote.result.acceptedB}
+            choices={issue.choices}
+            result={state.vote.result}
             selectedChoice={state.vote.choice}
           />
           <RotatingCommentHighlights
             error={highlightsState?.error ?? false}
             highlights={highlightsState?.data ?? null}
             loading={highlightsState?.loading ?? true}
+            choiceCodes={issue.choices.map((choice) => choice.code)}
             onRetry={onRetryHighlights}
           />
         </View>
@@ -699,6 +696,7 @@ const styles = StyleSheet.create({
   category: { color: colors.cyanStrong, fontSize: 11, fontWeight: "900", letterSpacing: 0.6 },
   date: { color: colors.textTertiary, fontSize: 11, fontWeight: "700" },
   question: { color: colors.text, fontSize: 18, fontWeight: "900", lineHeight: 25 },
+  contextMedia: { backgroundColor: colors.surface, borderRadius: 14, height: 260, width: "100%" },
   choices: { gap: 9 },
   notice: {
     backgroundColor: colors.cyanSoft,

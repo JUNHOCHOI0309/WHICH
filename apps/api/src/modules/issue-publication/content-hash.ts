@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 export type HashableIssueChoice = {
   id: string;
-  code: "A" | "B";
+  code: "A" | "B" | "C" | "D";
   label: string;
 };
 

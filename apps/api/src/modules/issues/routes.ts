@@ -16,6 +16,8 @@ const tallySchema = Type.Object({
   resultVersion: Type.Integer({ minimum: 1 }),
   acceptedA: Type.Integer({ minimum: 0 }),
   acceptedB: Type.Integer({ minimum: 0 }),
+  acceptedC: Type.Optional(Type.Integer({ minimum: 0 })),
+  acceptedD: Type.Optional(Type.Integer({ minimum: 0 })),
   displayedTotal: Type.Integer({ minimum: 0 }),
   integrityState: Type.Union([
     Type.Literal("NORMAL"),
@@ -29,7 +31,7 @@ const tallySchema = Type.Object({
 
 const choiceSchema = Type.Object({
   id: uuidSchema,
-  code: Type.Union([Type.Literal("A"), Type.Literal("B")]),
+  code: Type.Union([Type.Literal("A"), Type.Literal("B"), Type.Literal("C"), Type.Literal("D")]),
   label: Type.String(),
   media: Type.Union([
     Type.Object({
@@ -48,11 +50,12 @@ const issueResponseSchema = Type.Object({
   version: Type.Integer({ minimum: 1 }),
   question: Type.String(),
   context: Type.Union([Type.String(), Type.Null()]),
+  contextMedia: Type.Optional(Type.Union([choiceSchema.properties.media, Type.Null()])),
   publishedAt: Type.String({ format: "date-time" }),
   categoryCode: Type.String(),
   experienceModeCode: Type.String(),
   mediaMode: Type.Union([Type.Literal("TEXT_ONLY"), Type.Literal("OPTION_IMAGES")]),
-  choices: Type.Array(choiceSchema, { minItems: 2, maxItems: 2 }),
+  choices: Type.Array(choiceSchema, { minItems: 2, maxItems: 4 }),
   author: Type.Union([
     Type.Object({
       displayName: Type.String(),
@@ -85,7 +88,7 @@ const feedResponseSchema = Type.Object({
       publishedAt: Type.String({ format: "date-time" }),
       categoryCode: Type.String(),
       mediaMode: Type.Union([Type.Literal("TEXT_ONLY"), Type.Literal("OPTION_IMAGES")]),
-      choices: Type.Array(choiceSchema, { minItems: 2, maxItems: 2 }),
+      choices: Type.Array(choiceSchema, { minItems: 2, maxItems: 4 }),
       recommendation: Type.Object({
         requestId: uuidSchema,
         score: Type.Integer({ minimum: 0 }),
@@ -143,9 +146,10 @@ const publicIssueCatalogResponseSchema = Type.Object({
       version: Type.Integer({ minimum: 1 }),
       question: Type.String(),
       context: Type.Union([Type.String(), Type.Null()]),
+      contextMedia: Type.Optional(Type.Union([choiceSchema.properties.media, Type.Null()])),
       publishedAt: Type.String({ format: "date-time" }),
       categoryCode: Type.String(),
-      choices: Type.Array(choiceSchema, { minItems: 2, maxItems: 2 }),
+      choices: Type.Array(choiceSchema, { minItems: 2, maxItems: 4 }),
     }),
     { maxItems: 500 },
   ),
@@ -172,9 +176,15 @@ type IssueCreateRoute = {
     context?: string | null;
     choiceA: string;
     choiceB: string;
+    choiceC?: string | null;
+    choiceD?: string | null;
+    contextMediaAssetId?: string | null;
     mediaAssetAId?: string | null;
     mediaAssetBId?: string | null;
+    mediaAssetCId?: string | null;
+    mediaAssetDId?: string | null;
     libraryPairId?: string | null;
+    libraryAssetIds?: string[] | null;
     interestCardCode: (typeof INTEREST_CARD_CODES)[number];
   };
 };
@@ -209,8 +219,13 @@ const memberIssueSubmissionSchema = Type.Object({
   context: Type.Union([Type.String(), Type.Null()]),
   choiceA: Type.String(),
   choiceB: Type.String(),
+  choiceC: Type.Union([Type.String(), Type.Null()]),
+  choiceD: Type.Union([Type.String(), Type.Null()]),
+  contextMediaAssetId: Type.Union([uuidSchema, Type.Null()]),
   mediaAssetAId: Type.Union([uuidSchema, Type.Null()]),
   mediaAssetBId: Type.Union([uuidSchema, Type.Null()]),
+  mediaAssetCId: Type.Union([uuidSchema, Type.Null()]),
+  mediaAssetDId: Type.Union([uuidSchema, Type.Null()]),
   interestCardCode: Type.Union(INTEREST_CARD_CODES.map((code) => Type.Literal(code))),
   reviewNote: Type.Union([Type.String(), Type.Null()]),
   submittedAt: Type.String({ format: "date-time" }),
@@ -222,8 +237,13 @@ const memberIssueSubmissionBodySchema = Type.Object({
   context: Type.Optional(Type.Union([Type.String({ maxLength: 500 }), Type.Null()])),
   choiceA: Type.String({ minLength: 1, maxLength: 100 }),
   choiceB: Type.String({ minLength: 1, maxLength: 100 }),
+  choiceC: Type.Optional(Type.Union([Type.String({ minLength: 1, maxLength: 100 }), Type.Null()])),
+  choiceD: Type.Optional(Type.Union([Type.String({ minLength: 1, maxLength: 100 }), Type.Null()])),
+  contextMediaAssetId: Type.Optional(Type.Union([uuidSchema, Type.Null()])),
   mediaAssetAId: Type.Optional(Type.Union([uuidSchema, Type.Null()])),
   mediaAssetBId: Type.Optional(Type.Union([uuidSchema, Type.Null()])),
+  mediaAssetCId: Type.Optional(Type.Union([uuidSchema, Type.Null()])),
+  mediaAssetDId: Type.Optional(Type.Union([uuidSchema, Type.Null()])),
   interestCardCode: Type.Union(INTEREST_CARD_CODES.map((code) => Type.Literal(code))),
 });
 
@@ -270,6 +290,7 @@ export async function registerIssueRoutes(
           expectedRevision: number;
           action: "TEXT_ONLY" | "LIBRARY" | "CANCEL" | "CHECK";
           libraryPairId?: string;
+          libraryAssetIds?: string[];
         };
       }>(
         "/v1/member/issue-submissions/:submissionId/actions",
@@ -283,6 +304,9 @@ export async function registerIssueRoutes(
                   ["TEXT_ONLY", "LIBRARY", "CANCEL", "CHECK"].map((value) => Type.Literal(value)),
                 ),
                 libraryPairId: Type.Optional(uuidSchema),
+                libraryAssetIds: Type.Optional(
+                  Type.Array(uuidSchema, { minItems: 2, maxItems: 4, uniqueItems: true }),
+                ),
               },
               { additionalProperties: false },
             ),
@@ -452,7 +476,7 @@ export async function registerIssueRoutes(
         {
           schema: {
             tags: ["issues"],
-            summary: "Create and publish one safe Member-authored A/B Issue",
+            summary: "Create and publish one safe Member-authored 2-4 choice Issue",
             headers: Type.Object(
               {
                 authorization: Type.Optional(Type.String({ minLength: 8, maxLength: 4096 })),
@@ -465,7 +489,19 @@ export async function registerIssueRoutes(
               context: Type.Optional(Type.Union([Type.String({ maxLength: 500 }), Type.Null()])),
               choiceA: Type.String({ minLength: 1, maxLength: 100 }),
               choiceB: Type.String({ minLength: 1, maxLength: 100 }),
+              choiceC: Type.Optional(
+                Type.Union([Type.String({ minLength: 1, maxLength: 100 }), Type.Null()]),
+              ),
+              choiceD: Type.Optional(
+                Type.Union([Type.String({ minLength: 1, maxLength: 100 }), Type.Null()]),
+              ),
               libraryPairId: Type.Optional(Type.Union([uuidSchema, Type.Null()])),
+              libraryAssetIds: Type.Optional(
+                Type.Union([
+                  Type.Array(uuidSchema, { minItems: 2, maxItems: 4, uniqueItems: true }),
+                  Type.Null(),
+                ]),
+              ),
               interestCardCode: Type.Union(INTEREST_CARD_CODES.map((code) => Type.Literal(code))),
             }),
             response: {

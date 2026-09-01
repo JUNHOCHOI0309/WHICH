@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 
 import { StructuredData } from "@/components/search/structured-data";
 import { IssueExperience } from "@/features/issues/issue-experience";
-import type { PublicShareCard } from "@/lib/contracts";
+import type { ChoiceCode, PublicShareCard } from "@/lib/contracts";
 import {
   canonicalUrl,
   issueCanonicalPath,
@@ -20,6 +20,24 @@ type IssuePageProps = {
 };
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function resultShareDescription(card: PublicShareCard) {
+  const counts: Record<ChoiceCode, number> = {
+    A: card.result.acceptedA,
+    B: card.result.acceptedB,
+    C: card.result.acceptedC ?? 0,
+    D: card.result.acceptedD ?? 0,
+  };
+  const total = card.result.displayedTotal;
+  const result = card.issue.choices
+    .map((choice) => {
+      const percent = total === 0 ? 0 : Math.round((counts[choice.code] / total) * 100);
+      return `${choice.code} ${percent}%`;
+    })
+    .join(" · ");
+  const selected = card.sharedChoiceCode ? ` · 공유한 선택 ${card.sharedChoiceCode}` : "";
+  return `${result}${selected}. 먼저 골라보고 결과를 확인하세요.`;
+}
 
 function unavailableMetadata(): Metadata {
   return {
@@ -85,10 +103,7 @@ export async function generateMetadata({
     if (!response.ok) return base;
     const card = (await response.json()) as PublicShareCard;
     if (card.issue.id !== issue.id || card.issue.version !== issue.version) return base;
-    const total = card.result.displayedTotal;
-    const aPercent = total === 0 ? 0 : Math.round((card.result.acceptedA / total) * 100);
-    const selected = card.sharedChoiceCode ? ` · 공유한 선택 ${card.sharedChoiceCode}` : "";
-    const shareDescription = `A ${aPercent}% · B ${100 - aPercent}%${selected}. 먼저 골라보고 결과를 확인하세요.`;
+    const shareDescription = resultShareDescription(card);
     return {
       ...base,
       description: shareDescription,

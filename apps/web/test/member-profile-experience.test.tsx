@@ -11,6 +11,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ToastProvider } from "@/components/feedback/toast-provider";
 import { MemberProfileExperience } from "@/features/identity/member-profile-experience";
 
+const navigation = vi.hoisted(() => ({ replace: vi.fn() }));
+
+vi.mock("next/navigation", () => ({ useRouter: () => navigation }));
+
 function render(ui: ReactElement) {
   return testingRender(<ToastProvider>{ui}</ToastProvider>);
 }
@@ -24,6 +28,7 @@ function jsonResponse(body: unknown, status = 200) {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  navigation.replace.mockReset();
   window.history.replaceState({}, "", "/");
 });
 
@@ -100,9 +105,13 @@ describe("Member private profile experience", () => {
     expect(screen.getByText("아침형 인간 vs 저녁형 인간")).toBeVisible();
     expect(screen.getByText("저녁형 인간")).toBeVisible();
     expect(screen.getByText("60%")).toBeVisible();
-    expect(screen.getByRole("link", { name: /최신 결과 보기/ })).toHaveAttribute(
+    const latestResultLink = screen.getByRole("link", { name: /최신 결과 보기/ });
+    expect(latestResultLink).toHaveAttribute(
       "href",
       "/issues/591f2e90-996a-50c5-af46-967dd0793000",
+    );
+    expect(latestResultLink.querySelector("img")?.getAttribute("src")).toContain(
+      encodeURIComponent("/icons/double-chevron.png"),
     );
     expect(screen.getByText("선택 기록은 공개 프로필과 분리됩니다.")).toBeVisible();
     expect(screen.getByRole("link", { name: /전체 투표 기록 보기/ })).toHaveAttribute(
@@ -288,7 +297,7 @@ describe("Member private profile experience", () => {
     );
   });
 
-  it("clears the private view after logout", async () => {
+  it("returns home after logout", async () => {
     const requests: Array<{ url: string; init?: RequestInit }> = [];
     vi.stubGlobal(
       "fetch",
@@ -313,7 +322,8 @@ describe("Member private profile experience", () => {
     render(<MemberProfileExperience />);
     fireEvent.click(await screen.findByRole("button", { name: "로그아웃" }));
 
-    await waitFor(() => expect(screen.getByText("로그인하면 내 선택이 이어져요.")).toBeVisible());
+    await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith("/"));
+    expect(screen.queryByText("로그인하면 내 선택이 이어져요.")).not.toBeInTheDocument();
     const logoutRequest = requests.find((request) => request.init?.method === "DELETE");
     expect(logoutRequest?.url).toBe("/api/member-session");
     expect(logoutRequest?.init).toMatchObject({

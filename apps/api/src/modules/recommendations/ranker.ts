@@ -182,6 +182,8 @@ function qualityScore(
     viewableImpressions: 0,
     acceptedA: 0,
     acceptedB: 0,
+    acceptedC: 0,
+    acceptedD: 0,
     averageDecisionMs: null,
     nextIssueOpens: 0,
     commentCompletions: 0,
@@ -189,7 +191,15 @@ function qualityScore(
     skips: 0,
     reports: 0,
   };
-  const acceptedVotes = signals.acceptedA + signals.acceptedB;
+  const choiceLabels = issue.choiceLabels ?? [];
+  const activeChoiceCount = Math.max(2, Math.min(4, choiceLabels.length || 2));
+  const choiceCounts = [
+    signals.acceptedA,
+    signals.acceptedB,
+    signals.acceptedC,
+    signals.acceptedD,
+  ].slice(0, activeChoiceCount);
+  const acceptedVotes = choiceCounts.reduce((total, count) => total + count, 0);
   const confidence = signals.viewableImpressions / (signals.viewableImpressions + 30);
   const voteRate = rate(acceptedVotes, signals.viewableImpressions);
   const nextRate = rate(signals.nextIssueOpens, acceptedVotes);
@@ -205,11 +215,11 @@ function qualityScore(
       : signals.averageDecisionMs >= 900 && signals.averageDecisionMs <= 45_000
         ? 1
         : 0.25;
-  const [choiceA = "", choiceB = ""] = issue.choiceLabels ?? [];
+  const choiceLengths = choiceLabels.map((label) => label.length);
   const choiceParity =
-    Math.max(choiceA.length, choiceB.length) === 0
+    choiceLengths.length === 0 || Math.max(...choiceLengths) === 0
       ? 0
-      : 1 - Math.min(1, Math.abs(choiceA.length - choiceB.length) / 24);
+      : 1 - Math.min(1, (Math.max(...choiceLengths) - Math.min(...choiceLengths)) / 24);
   const components: QualityScoreComponents = {
     interest: clamp(rawInterest / 10, 0, 100),
     freshness: clamp(100 - ageHours / 3, 0, 100),
@@ -235,7 +245,9 @@ function qualityScore(
   if (signals.reports >= 3 && reportRate >= 0.08) eligibilityReasons.push("REPORT_RISK");
   const qualityEligible = eligibilityReasons.length === 0;
   const balance =
-    acceptedVotes === 0 ? 0 : 1 - Math.abs(signals.acceptedA - signals.acceptedB) / acceptedVotes;
+    acceptedVotes === 0
+      ? 0
+      : 1 - (Math.max(...choiceCounts) - Math.min(...choiceCounts)) / acceptedVotes;
   const controversyEligible =
     qualityEligible &&
     signals.viewableImpressions >= 20 &&

@@ -14,6 +14,7 @@ const vote = {
   categoryCode: "LIFE",
   choice: "B" as const,
   choiceLabel: "두 번째 선택",
+  choiceCount: 2,
   acceptedAt: "2026-08-27T00:00:00.000Z",
   result: {
     resultVersion: 7,

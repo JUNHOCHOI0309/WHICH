@@ -7,6 +7,7 @@ import {
   issueAuthors,
   issueChoiceMedia,
   issueChoices,
+  issueContextMedia,
   issueInterestCards,
   issueMediaAssets,
   issueMediaLibraryAssets,
@@ -99,6 +100,11 @@ export function normalizeCommand(command: CreateMemberIssueCommand) {
   const context = command.context ? normalizeInline(command.context) : null;
   const choiceA = normalizeInline(command.choiceA);
   const choiceB = normalizeInline(command.choiceB);
+  const choiceC = command.choiceC ? normalizeInline(command.choiceC) : null;
+  const choiceD = command.choiceD ? normalizeInline(command.choiceD) : null;
+  const choices = [choiceA, choiceB, choiceC, choiceD].filter((choice): choice is string =>
+    Boolean(choice),
+  );
 
   if (question && !/[?？]$/u.test(question)) question = `${question}?`;
 
@@ -107,38 +113,57 @@ export function normalizeCommand(command: CreateMemberIssueCommand) {
     (context !== null && invalidLength(context, 1, 240)) ||
     invalidLength(choiceA, 1, 50) ||
     invalidLength(choiceB, 1, 50) ||
-    choiceA.localeCompare(choiceB, "ko", { sensitivity: "base" }) === 0 ||
+    (choiceC !== null && invalidLength(choiceC, 1, 50)) ||
+    (choiceD !== null && invalidLength(choiceD, 1, 50)) ||
+    (choiceD !== null && choiceC === null) ||
+    new Set(choices.map((choice) => choice.toLocaleLowerCase("ko"))).size !== choices.length ||
     !INTEREST_CARD_CODES.includes(command.interestCardCode)
   ) {
     throw new IssueWriteError(
       "INVALID_ISSUE_CONTENT",
       422,
-      "질문, 설명, A/B 선택지와 관심 주제를 다시 확인해 주세요.",
+      "질문, 설명, 2~4개 선택지와 관심 주제를 다시 확인해 주세요.",
     );
   }
 
   const mediaAssetAId = command.mediaAssetAId ?? null;
   const mediaAssetBId = command.mediaAssetBId ?? null;
+  const mediaAssetCId = command.mediaAssetCId ?? null;
+  const mediaAssetDId = command.mediaAssetDId ?? null;
+  const contextMediaAssetId = command.contextMediaAssetId ?? null;
   const libraryPairId = command.libraryPairId ?? null;
+  const libraryAssetIds = command.libraryAssetIds ?? [];
+  const optionAssetIds = [mediaAssetAId, mediaAssetBId, mediaAssetCId, mediaAssetDId];
+  const activeOptionAssetIds = optionAssetIds.slice(0, choices.length);
+  const hasOptionImages = activeOptionAssetIds.some(Boolean);
   if (
-    Boolean(mediaAssetAId) !== Boolean(mediaAssetBId) ||
-    (mediaAssetAId !== null && mediaAssetAId === mediaAssetBId)
+    (hasOptionImages && activeOptionAssetIds.some((id) => !id)) ||
+    optionAssetIds.slice(choices.length).some(Boolean) ||
+    new Set(activeOptionAssetIds.filter(Boolean)).size !==
+      activeOptionAssetIds.filter(Boolean).length ||
+    (contextMediaAssetId !== null && activeOptionAssetIds.includes(contextMediaAssetId))
   ) {
     throw new IssueWriteError(
       "ISSUE_SUBMISSION_MEDIA_INVALID",
       422,
-      "선택지 이미지는 A와 B를 함께 등록하고 서로 다른 이미지를 사용해 주세요.",
+      "선택지 이미지는 사용 중인 모든 선택지에 함께 등록하고 서로 다른 이미지를 사용해 주세요.",
     );
   }
-  if (libraryPairId && (mediaAssetAId || mediaAssetBId)) {
+  if (
+    (libraryPairId && choices.length !== 2) ||
+    (libraryAssetIds.length > 0 && libraryAssetIds.length !== choices.length) ||
+    new Set(libraryAssetIds).size !== libraryAssetIds.length ||
+    (libraryPairId && libraryAssetIds.length > 0) ||
+    ((libraryPairId || libraryAssetIds.length > 0) && (hasOptionImages || contextMediaAssetId))
+  ) {
     throw new IssueWriteError(
       "ISSUE_SUBMISSION_MEDIA_INVALID",
       422,
-      "Library 이미지와 직접 업로드 이미지는 한 질문에서 함께 사용할 수 없어요.",
+      "Library 이미지는 선택지 수만큼 고르고 직접 업로드 이미지와 함께 사용할 수 없어요.",
     );
   }
 
-  const combined = [question, context, choiceA, choiceB].filter(Boolean).join(" ");
+  const combined = [question, context, ...choices].filter(Boolean).join(" ");
   const commonRules = evaluateTextRules({
     value: combined,
     minimumLength: 1,
@@ -163,9 +188,15 @@ export function normalizeCommand(command: CreateMemberIssueCommand) {
     context,
     choiceA,
     choiceB,
+    choiceC,
+    choiceD,
+    contextMediaAssetId,
     mediaAssetAId,
     mediaAssetBId,
+    mediaAssetCId,
+    mediaAssetDId,
     libraryPairId,
+    libraryAssetIds,
     interestCardCode: command.interestCardCode,
   };
 }
@@ -212,6 +243,48 @@ async function requirePublishedLibraryPair(
     );
   }
   return rows.sort((left, right) => left.libraryAsset.side.localeCompare(right.libraryAsset.side));
+}
+
+async function requirePublishedLibraryAssets(
+  database: Pick<Database["db"], "select">,
+  libraryAssetIds: string[],
+) {
+  const now = new Date();
+  const rows = await database
+    .select({
+      pair: issueMediaLibraryPairs,
+      libraryAsset: issueMediaLibraryAssets,
+      mediaAsset: issueMediaAssets,
+    })
+    .from(issueMediaLibraryAssets)
+    .innerJoin(
+      issueMediaLibraryPairs,
+      eq(issueMediaLibraryPairs.id, issueMediaLibraryAssets.pairId),
+    )
+    .innerJoin(issueMediaAssets, eq(issueMediaAssets.id, issueMediaLibraryAssets.mediaAssetId))
+    .where(inArray(issueMediaLibraryAssets.id, libraryAssetIds));
+  const byId = new Map(rows.map((row) => [row.libraryAsset.id, row]));
+  const ordered = libraryAssetIds.map((id) => byId.get(id));
+  if (
+    ordered.some(
+      (row) =>
+        !row ||
+        row.pair.status !== "PUBLISHED" ||
+        (row.libraryAsset.expiresAt !== null && row.libraryAsset.expiresAt <= now) ||
+        row.mediaAsset.processingState !== "READY" ||
+        row.mediaAsset.moderationState !== "APPROVED" ||
+        row.mediaAsset.storageState !== "PUBLISHED" ||
+        !["ASSERTED", "CLEARED"].includes(row.mediaAsset.rightsState) ||
+        !row.mediaAsset.publishedObjectKey,
+    )
+  ) {
+    throw new IssueWriteError(
+      "ISSUE_LIBRARY_ASSET_UNAVAILABLE",
+      422,
+      "선택한 Library 이미지가 만료·회수되었거나 현재 게시할 수 없는 상태예요.",
+    );
+  }
+  return ordered as Array<NonNullable<(typeof ordered)[number]>>;
 }
 
 export async function requireActiveMember(
@@ -261,8 +334,13 @@ export function toSubmission(
     context: row.context,
     choiceA: row.choiceA,
     choiceB: row.choiceB,
+    choiceC: row.choiceC,
+    choiceD: row.choiceD,
+    contextMediaAssetId: row.contextMediaAssetId,
     mediaAssetAId: row.mediaAssetAId,
     mediaAssetBId: row.mediaAssetBId,
+    mediaAssetCId: row.mediaAssetCId,
+    mediaAssetDId: row.mediaAssetDId,
     interestCardCode: row.interestCardCode as InterestCardCode,
     reviewNote: row.reviewNote,
     submittedAt: row.submittedAt.toISOString(),
@@ -279,7 +357,13 @@ async function submissionView(
 ): Promise<MemberIssueSubmission> {
   const view = toSubmission(row);
   if (row.status === "CANCELLED") return view;
-  const ids = [row.mediaAssetAId, row.mediaAssetBId].filter((id): id is string => Boolean(id));
+  const ids = [
+    row.contextMediaAssetId,
+    row.mediaAssetAId,
+    row.mediaAssetBId,
+    row.mediaAssetCId,
+    row.mediaAssetDId,
+  ].filter((id): id is string => Boolean(id));
   if (ids.length === 0) return view;
   const assets = await database
     .select()
@@ -348,12 +432,14 @@ export async function publishReviewedSubmission(
   current: SubmissionRow,
   action = "REVIEWED_MEDIA_PUBLISHED",
 ): Promise<SubmissionRow> {
-  if (
-    current.status !== "PENDING" ||
-    current.publishedIssueId ||
-    !current.mediaAssetAId ||
-    !current.mediaAssetBId
-  )
+  const requestedAssetIds = [
+    current.contextMediaAssetId,
+    current.mediaAssetAId,
+    current.mediaAssetBId,
+    current.mediaAssetCId,
+    current.mediaAssetDId,
+  ].filter((id): id is string => Boolean(id));
+  if (current.status !== "PENDING" || current.publishedIssueId || requestedAssetIds.length === 0)
     return current;
   const [member] = await transaction
     .select({ status: members.status })
@@ -363,11 +449,11 @@ export async function publishReviewedSubmission(
   const assets = await transaction
     .select()
     .from(issueMediaAssets)
-    .where(inArray(issueMediaAssets.id, [current.mediaAssetAId, current.mediaAssetBId]))
+    .where(inArray(issueMediaAssets.id, requestedAssetIds))
     .orderBy(issueMediaAssets.id)
     .for("update");
   if (
-    assets.length !== 2 ||
+    assets.length !== requestedAssetIds.length ||
     assets.some(
       (asset) =>
         asset.uploadedByMemberId !== current.memberId ||
@@ -402,16 +488,12 @@ export async function publishReviewedSubmission(
     await recordSubmissionTransition(transaction, updated!, "TEXT_POLICY_RECHECK");
     return updated!;
   }
-  const ordered = [
-    assets.find((asset) => asset.id === current.mediaAssetAId)!,
-    assets.find((asset) => asset.id === current.mediaAssetBId)!,
-  ];
   const result = await publishMemberIssue(
     transaction,
     current.memberId,
     current.id,
     normalized,
-    ordered,
+    assets,
   );
   const [updated] = await transaction
     .update(memberIssueSubmissions)
@@ -437,6 +519,9 @@ export async function reconcileReviewedIssueSubmissions(database: Database["db"]
         or(
           eq(memberIssueSubmissions.mediaAssetAId, assetId),
           eq(memberIssueSubmissions.mediaAssetBId, assetId),
+          eq(memberIssueSubmissions.mediaAssetCId, assetId),
+          eq(memberIssueSubmissions.mediaAssetDId, assetId),
+          eq(memberIssueSubmissions.contextMediaAssetId, assetId),
         ),
       ),
     );
@@ -503,7 +588,7 @@ async function requireOwnedSubmissionMedia(
 export function createIssueWriteService(database: Database["db"]): IssueWriteService {
   return {
     async submitMemberIssue(command) {
-      if (command.libraryPairId) {
+      if (command.libraryPairId || command.libraryAssetIds?.length) {
         throw new IssueWriteError(
           "ISSUE_SUBMISSION_MEDIA_INVALID",
           422,
@@ -522,8 +607,11 @@ export function createIssueWriteService(database: Database["db"]): IssueWriteSer
           sql`select pg_advisory_xact_lock(hashtextextended(${`which:member-issue:${session.memberId}`}, 0))`,
         );
         await requireOwnedSubmissionMedia(transaction, session.memberId, [
+          normalized.contextMediaAssetId,
           normalized.mediaAssetAId,
           normalized.mediaAssetBId,
+          normalized.mediaAssetCId,
+          normalized.mediaAssetDId,
         ]);
 
         const [existing] = await transaction
@@ -555,10 +643,15 @@ export function createIssueWriteService(database: Database["db"]): IssueWriteSer
             idempotencyKey: command.idempotencyKey,
             question: normalized.question,
             context: normalized.context,
+            contextMediaAssetId: normalized.contextMediaAssetId,
             choiceA: normalized.choiceA,
             choiceB: normalized.choiceB,
+            choiceC: normalized.choiceC,
+            choiceD: normalized.choiceD,
             mediaAssetAId: normalized.mediaAssetAId,
             mediaAssetBId: normalized.mediaAssetBId,
+            mediaAssetCId: normalized.mediaAssetCId,
+            mediaAssetDId: normalized.mediaAssetDId,
             interestCardCode: normalized.interestCardCode,
             contentHash,
           })
@@ -571,10 +664,15 @@ export function createIssueWriteService(database: Database["db"]): IssueWriteSer
           idempotencyKey: command.idempotencyKey,
           question: normalized.question,
           context: normalized.context,
+          contextMediaAssetId: normalized.contextMediaAssetId,
           choiceA: normalized.choiceA,
           choiceB: normalized.choiceB,
+          choiceC: normalized.choiceC,
+          choiceD: normalized.choiceD,
           mediaAssetAId: normalized.mediaAssetAId,
           mediaAssetBId: normalized.mediaAssetBId,
+          mediaAssetCId: normalized.mediaAssetCId,
+          mediaAssetDId: normalized.mediaAssetDId,
           interestCardCode: normalized.interestCardCode,
           contentHash,
         });
@@ -593,7 +691,13 @@ export function createIssueWriteService(database: Database["db"]): IssueWriteSer
             ...submissionWakeup(
               submissionId,
               1,
-              Boolean(normalized.mediaAssetAId && normalized.mediaAssetBId),
+              Boolean(
+                normalized.contextMediaAssetId ||
+                normalized.mediaAssetAId ||
+                normalized.mediaAssetBId ||
+                normalized.mediaAssetCId ||
+                normalized.mediaAssetDId,
+              ),
             ),
           ]);
         return { submission: toSubmission(created!), created: true };
@@ -601,7 +705,7 @@ export function createIssueWriteService(database: Database["db"]): IssueWriteSer
     },
 
     async resubmitMemberIssue(command: ResubmitMemberIssueCommand) {
-      if (command.libraryPairId) {
+      if (command.libraryPairId || command.libraryAssetIds?.length) {
         throw new IssueWriteError(
           "ISSUE_SUBMISSION_MEDIA_INVALID",
           422,
@@ -617,8 +721,11 @@ export function createIssueWriteService(database: Database["db"]): IssueWriteSer
           sql`select pg_advisory_xact_lock(hashtextextended(${`which:member-issue-submission:${command.submissionId}`}, 0))`,
         );
         await requireOwnedSubmissionMedia(transaction, session.memberId, [
+          normalized.contextMediaAssetId,
           normalized.mediaAssetAId,
           normalized.mediaAssetBId,
+          normalized.mediaAssetCId,
+          normalized.mediaAssetDId,
         ]);
 
         const [idempotentRevision] = await transaction
@@ -703,10 +810,15 @@ export function createIssueWriteService(database: Database["db"]): IssueWriteSer
             status: "PENDING",
             question: normalized.question,
             context: normalized.context,
+            contextMediaAssetId: normalized.contextMediaAssetId,
             choiceA: normalized.choiceA,
             choiceB: normalized.choiceB,
+            choiceC: normalized.choiceC,
+            choiceD: normalized.choiceD,
             mediaAssetAId: normalized.mediaAssetAId,
             mediaAssetBId: normalized.mediaAssetBId,
+            mediaAssetCId: normalized.mediaAssetCId,
+            mediaAssetDId: normalized.mediaAssetDId,
             interestCardCode: normalized.interestCardCode,
             contentHash,
             reviewNote: null,
@@ -724,10 +836,15 @@ export function createIssueWriteService(database: Database["db"]): IssueWriteSer
           idempotencyKey: command.idempotencyKey,
           question: normalized.question,
           context: normalized.context,
+          contextMediaAssetId: normalized.contextMediaAssetId,
           choiceA: normalized.choiceA,
           choiceB: normalized.choiceB,
+          choiceC: normalized.choiceC,
+          choiceD: normalized.choiceD,
           mediaAssetAId: normalized.mediaAssetAId,
           mediaAssetBId: normalized.mediaAssetBId,
+          mediaAssetCId: normalized.mediaAssetCId,
+          mediaAssetDId: normalized.mediaAssetDId,
           interestCardCode: normalized.interestCardCode,
           contentHash,
           submittedAt: now,
@@ -748,7 +865,13 @@ export function createIssueWriteService(database: Database["db"]): IssueWriteSer
             ...submissionWakeup(
               current.id,
               revision,
-              Boolean(normalized.mediaAssetAId && normalized.mediaAssetBId),
+              Boolean(
+                normalized.contextMediaAssetId ||
+                normalized.mediaAssetAId ||
+                normalized.mediaAssetBId ||
+                normalized.mediaAssetCId ||
+                normalized.mediaAssetDId,
+              ),
             ),
           ]);
         return { submission: toSubmission(updated!), created: true };
@@ -820,11 +943,15 @@ export function createIssueWriteService(database: Database["db"]): IssueWriteSer
         let publishedIssueId: string | null = null;
         let contentHash = current.contentHash;
         if (command.action !== "CANCEL") {
-          if (command.action === "LIBRARY" && !command.libraryPairId)
+          if (
+            command.action === "LIBRARY" &&
+            !command.libraryPairId &&
+            !command.libraryAssetIds?.length
+          )
             throw new IssueWriteError(
               "ISSUE_LIBRARY_PAIR_UNAVAILABLE",
               422,
-              "승인된 Library 이미지 쌍을 선택해 주세요.",
+              "선택지 수에 맞는 승인된 Library 이미지를 골라 주세요.",
             );
           const normalized = normalizeCommand({
             ...current,
@@ -832,8 +959,13 @@ export function createIssueWriteService(database: Database["db"]): IssueWriteSer
             idempotencyKey: current.id,
             mediaAssetAId: null,
             mediaAssetBId: null,
+            mediaAssetCId: null,
+            mediaAssetDId: null,
+            contextMediaAssetId: null,
             interestCardCode: current.interestCardCode as InterestCardCode,
             libraryPairId: command.action === "LIBRARY" ? command.libraryPairId : null,
+            libraryAssetIds:
+              command.action === "LIBRARY" ? (command.libraryAssetIds ?? null) : null,
           });
           contentHash = createHash("sha256").update(JSON.stringify(normalized)).digest("hex");
           const result = await publishMemberIssue(
@@ -853,6 +985,9 @@ export function createIssueWriteService(database: Database["db"]): IssueWriteSer
             contentHash,
             mediaAssetAId: command.action === "CANCEL" ? current.mediaAssetAId : null,
             mediaAssetBId: command.action === "CANCEL" ? current.mediaAssetBId : null,
+            mediaAssetCId: command.action === "CANCEL" ? current.mediaAssetCId : null,
+            mediaAssetDId: command.action === "CANCEL" ? current.mediaAssetDId : null,
+            contextMediaAssetId: command.action === "CANCEL" ? current.contextMediaAssetId : null,
             reviewNote: null,
             reviewedAt: now,
             updatedAt: now,
@@ -866,10 +1001,15 @@ export function createIssueWriteService(database: Database["db"]): IssueWriteSer
           idempotencyKey: randomUUID(),
           question: current.question,
           context: current.context,
+          contextMediaAssetId: updated!.contextMediaAssetId,
           choiceA: current.choiceA,
           choiceB: current.choiceB,
+          choiceC: current.choiceC,
+          choiceD: current.choiceD,
           mediaAssetAId: updated!.mediaAssetAId,
           mediaAssetBId: updated!.mediaAssetBId,
+          mediaAssetCId: updated!.mediaAssetCId,
+          mediaAssetDId: updated!.mediaAssetDId,
           interestCardCode: current.interestCardCode,
           contentHash,
         });
@@ -880,7 +1020,13 @@ export function createIssueWriteService(database: Database["db"]): IssueWriteSer
 
     async createMemberIssue(command): Promise<CreatedMemberIssue> {
       const normalized = normalizeCommand(command);
-      if (normalized.mediaAssetAId || normalized.mediaAssetBId) {
+      if (
+        normalized.contextMediaAssetId ||
+        normalized.mediaAssetAId ||
+        normalized.mediaAssetBId ||
+        normalized.mediaAssetCId ||
+        normalized.mediaAssetDId
+      ) {
         throw new IssueWriteError(
           "ISSUE_SUBMISSION_MEDIA_INVALID",
           422,
@@ -904,10 +1050,15 @@ export function createIssueWriteService(database: Database["db"]): IssueWriteSer
         const content = {
           question: normalized.question,
           context: normalized.context,
+          contextMediaAssetId: null,
           choiceA: normalized.choiceA,
           choiceB: normalized.choiceB,
+          choiceC: normalized.choiceC,
+          choiceD: normalized.choiceD,
           mediaAssetAId: null,
           mediaAssetBId: null,
+          mediaAssetCId: null,
+          mediaAssetDId: null,
           interestCardCode: normalized.interestCardCode,
         };
         const [record] = await transaction
@@ -965,15 +1116,25 @@ export async function publishMemberIssue(
 
   const libraryRows = normalized.libraryPairId
     ? await requirePublishedLibraryPair(transaction, normalized.libraryPairId)
-    : [];
+    : normalized.libraryAssetIds.length > 0
+      ? await requirePublishedLibraryAssets(transaction, normalized.libraryAssetIds)
+      : [];
 
   const issueId = deterministicUuid(`${memberId}:${idempotencyKey}:issue`);
-  const choiceAId = deterministicUuid(`${memberId}:${idempotencyKey}:choice:a`);
-  const choiceBId = deterministicUuid(`${memberId}:${idempotencyKey}:choice:b`);
-  const choices = [
-    { id: choiceAId, code: "A" as const, label: normalized.choiceA },
-    { id: choiceBId, code: "B" as const, label: normalized.choiceB },
-  ];
+  const codes = ["A", "B", "C", "D"] as const;
+  const labels = [normalized.choiceA, normalized.choiceB, normalized.choiceC, normalized.choiceD];
+  const choices = codes.flatMap((code, index) => {
+    const label = labels[index];
+    return label
+      ? [
+          {
+            id: deterministicUuid(`${memberId}:${idempotencyKey}:choice:${code.toLowerCase()}`),
+            code,
+            label,
+          },
+        ]
+      : [];
+  });
   const contentHash = computeIssueContentHash({
     question: normalized.question,
     context: normalized.context ?? "",
@@ -1002,16 +1163,27 @@ export async function publishMemberIssue(
     .limit(1);
 
   if (existing) {
-    const [existingLibrary] = await transaction
-      .select({ pairId: issueMediaLibraryUsages.pairId })
+    const existingLibrary = await transaction
+      .select({
+        pairId: issueMediaLibraryUsages.pairId,
+        libraryAssetId: issueMediaLibraryUsages.libraryAssetId,
+        side: issueMediaLibraryUsages.side,
+      })
       .from(issueMediaLibraryUsages)
       .where(eq(issueMediaLibraryUsages.issueId, issueId))
-      .limit(1);
+      .orderBy(issueMediaLibraryUsages.side);
+    const expectedLibraryMatches = normalized.libraryPairId
+      ? existingLibrary.length === 2 &&
+        existingLibrary.every((usage) => usage.pairId === normalized.libraryPairId)
+      : normalized.libraryAssetIds.length > 0
+        ? existingLibrary.map((usage) => usage.libraryAssetId).join(":") ===
+          normalized.libraryAssetIds.join(":")
+        : existingLibrary.length === 0;
     if (
       existing.memberId !== memberId ||
       existing.contentHash !== contentHash ||
       existing.interestCardCode !== normalized.interestCardCode ||
-      (existingLibrary?.pairId ?? null) !== normalized.libraryPairId
+      !expectedLibraryMatches
     ) {
       throw new IssueWriteError(
         "IDEMPOTENCY_CONFLICT",
@@ -1025,10 +1197,7 @@ export async function publishMemberIssue(
         version: ISSUE_VERSION,
         question: existing.question,
         context: existing.context,
-        choices: [
-          { code: "A", label: normalized.choiceA },
-          { code: "B", label: normalized.choiceB },
-        ],
+        choices: choices.map(({ code, label }) => ({ code, label })),
         interestCardCode: normalized.interestCardCode,
         publishedAt: existing.publishedAt!.toISOString(),
       },
@@ -1056,7 +1225,9 @@ export async function publishMemberIssue(
     primaryCategoryCode: PRIMARY_CATEGORY_BY_CARD[normalized.interestCardCode],
     experienceModeCode: EXPERIENCE_MODE,
     mediaMode:
-      libraryRows.length === 2 || directAssets.length === 2 ? "OPTION_IMAGES" : "TEXT_ONLY",
+      libraryRows.length === choices.length || directAssets.length > 0
+        ? "OPTION_IMAGES"
+        : "TEXT_ONLY",
     taxonomyVersion: INTEREST_TAXONOMY_VERSION,
     publishedAt: now,
   });
@@ -1069,51 +1240,67 @@ export async function publishMemberIssue(
       label: choice.label,
     })),
   );
-  if (libraryRows.length === 2) {
-    const choiceBySide = { A: choices[0]!, B: choices[1]! };
+  if (libraryRows.length === choices.length) {
     await transaction.insert(issueChoiceMedia).values(
-      libraryRows.map(({ libraryAsset, mediaAsset }) => {
-        const side = libraryAsset.side as "A" | "B";
+      libraryRows.map(({ libraryAsset, mediaAsset }, index) => {
+        const choice = choices[index]!;
         return {
           issueId,
           issueVersion: ISSUE_VERSION,
-          choiceId: choiceBySide[side].id,
+          choiceId: choice.id,
           mediaAssetId: mediaAsset.id,
           altText: libraryAsset.altText,
           cropMode: libraryAsset.cropMode,
-          displayPosition: side === "A" ? 0 : 1,
+          displayPosition: index,
           linkedByMemberId: memberId,
         };
       }),
     );
     await transaction.insert(issueMediaLibraryUsages).values(
-      libraryRows.map(({ libraryAsset }) => {
-        const side = libraryAsset.side as "A" | "B";
+      libraryRows.map(({ pair, libraryAsset }, index) => {
+        const choice = choices[index]!;
         return {
-          pairId: normalized.libraryPairId!,
+          pairId: pair.id,
           libraryAssetId: libraryAsset.id,
           issueId,
           issueVersion: ISSUE_VERSION,
-          choiceId: choiceBySide[side].id,
-          side,
+          choiceId: choice.id,
+          side: choice.code,
           selectedByMemberId: memberId,
         };
       }),
     );
   }
-  if (directAssets.length === 2) {
+  const assetById = new Map(directAssets.map((asset) => [asset.id, asset]));
+  const directChoiceAssetIds = [
+    normalized.mediaAssetAId,
+    normalized.mediaAssetBId,
+    normalized.mediaAssetCId,
+    normalized.mediaAssetDId,
+  ].slice(0, choices.length);
+  if (directChoiceAssetIds.every((assetId) => assetId && assetById.has(assetId))) {
     await transaction.insert(issueChoiceMedia).values(
-      directAssets.map((asset, index) => ({
+      directChoiceAssetIds.map((assetId, index) => ({
         issueId,
         issueVersion: ISSUE_VERSION,
         choiceId: choices[index]!.id,
-        mediaAssetId: asset.id,
+        mediaAssetId: assetId!,
         altText: choices[index]!.label,
         cropMode: "CONTAIN" as const,
         displayPosition: index,
         linkedByMemberId: memberId,
       })),
     );
+  }
+  if (normalized.contextMediaAssetId && assetById.has(normalized.contextMediaAssetId)) {
+    await transaction.insert(issueContextMedia).values({
+      issueId,
+      issueVersion: ISSUE_VERSION,
+      mediaAssetId: normalized.contextMediaAssetId,
+      altText: normalized.context || `${normalized.question} 설명 이미지`,
+      cropMode: "CONTAIN",
+      linkedByMemberId: memberId,
+    });
   }
   const sealedSnapshot = await sealIssueVersionSnapshot(transaction, issueId, ISSUE_VERSION);
   const moderationEvents = createModerationSubmissionEvents({
@@ -1145,6 +1332,8 @@ export async function publishMemberIssue(
     resultVersion: 1,
     acceptedACount: 0,
     acceptedBCount: 0,
+    acceptedCCount: 0,
+    acceptedDCount: 0,
     displayedVoteCount: 0,
     integrityState: "NORMAL",
   });
@@ -1168,9 +1357,13 @@ export async function publishMemberIssue(
       data: {
         issue_id: issueId,
         issue_version: ISSUE_VERSION,
-        source: normalized.libraryPairId ? "MEMBER_LIBRARY_CREATION" : "MEMBER_CREATION",
+        source:
+          normalized.libraryPairId || normalized.libraryAssetIds.length > 0
+            ? "MEMBER_LIBRARY_CREATION"
+            : "MEMBER_CREATION",
         content_hash: contentHash,
         library_pair_id: normalized.libraryPairId,
+        library_asset_ids: normalized.libraryAssetIds,
       },
     },
   });
@@ -1181,10 +1374,7 @@ export async function publishMemberIssue(
       version: ISSUE_VERSION,
       question: normalized.question,
       context: normalized.context,
-      choices: [
-        { code: "A", label: normalized.choiceA },
-        { code: "B", label: normalized.choiceB },
-      ],
+      choices: choices.map(({ code, label }) => ({ code, label })),
       interestCardCode: normalized.interestCardCode,
       publishedAt: now.toISOString(),
     },

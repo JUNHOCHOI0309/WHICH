@@ -25,6 +25,8 @@ export type IssueQualitySignals = {
   viewableImpressions: number;
   acceptedA: number;
   acceptedB: number;
+  acceptedC: number;
+  acceptedD: number;
   averageDecisionMs: number | null;
   nextIssueOpens: number;
   commentCompletions: number;
@@ -76,7 +78,7 @@ export type RankableIssue = {
   contentHash?: string;
   question?: string;
   context?: string | null;
-  choiceLabels?: [string, string];
+  choiceLabels?: string[];
   qualitySignals?: IssueQualitySignals;
 };
 

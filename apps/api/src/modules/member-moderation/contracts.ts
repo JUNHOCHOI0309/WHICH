@@ -111,5 +111,7 @@ export interface MemberModerationService {
     action: "TEXT_ONLY" | "APPROVED_LIBRARY" | "REPLACE_IMAGE" | "CANCEL_IMAGE";
     replacementAssetAId?: string;
     replacementAssetBId?: string;
+    replacementAssetCId?: string;
+    replacementAssetDId?: string;
   }): Promise<{ updated: true; revision: number }>;
 }

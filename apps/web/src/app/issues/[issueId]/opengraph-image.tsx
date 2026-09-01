@@ -6,6 +6,7 @@ export const alt = "WHICH 질문";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const choiceColors = { A: "#0aa9bd", B: "#ff6b35", C: "#8467d7", D: "#5d9c59" } as const;
 
 function compact(value: string) {
   return value.replace(/\s+/g, " ").trim();
@@ -29,14 +30,13 @@ export default async function IssueOpenGraphImage({
     : { status: "missing" as const };
   const issue = read.status === "available" ? read.value : null;
   const question = truncate(issue?.question ?? "당신의 선택은 어느 쪽인가요?", 64);
-  const choiceA = truncate(
-    issue?.choices.find((choice) => choice.code === "A")?.label ?? "A 선택",
-    36,
-  );
-  const choiceB = truncate(
-    issue?.choices.find((choice) => choice.code === "B")?.label ?? "B 선택",
-    36,
-  );
+  const choices = issue?.choices.map((choice) => ({
+    ...choice,
+    label: truncate(choice.label, 36),
+  })) ?? [
+    { code: "A" as const, label: "A 선택" },
+    { code: "B" as const, label: "B 선택" },
+  ];
 
   return new ImageResponse(
     <div
@@ -73,39 +73,26 @@ export default async function IssueOpenGraphImage({
           {question}
         </span>
       </div>
-      <div style={{ display: "flex", gap: 20 }}>
-        <div
-          style={{
-            flex: 1,
-            display: "flex",
-            alignItems: "center",
-            gap: 18,
-            border: "3px solid #16bfd1",
-            borderRadius: 20,
-            padding: "20px 24px",
-            fontSize: 25,
-            fontWeight: 800,
-          }}
-        >
-          <span style={{ color: "#0aa9bd" }}>A</span>
-          <span>{choiceA}</span>
-        </div>
-        <div
-          style={{
-            flex: 1,
-            display: "flex",
-            alignItems: "center",
-            gap: 18,
-            border: "3px solid #ff6b35",
-            borderRadius: 20,
-            padding: "20px 24px",
-            fontSize: 25,
-            fontWeight: 800,
-          }}
-        >
-          <span style={{ color: "#ff6b35" }}>B</span>
-          <span>{choiceB}</span>
-        </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
+        {choices.map((choice) => (
+          <div
+            key={choice.code}
+            style={{
+              flex: choices.length > 2 ? "1 1 46%" : 1,
+              display: "flex",
+              alignItems: "center",
+              gap: 18,
+              border: `3px solid ${choiceColors[choice.code]}`,
+              borderRadius: 20,
+              padding: choices.length > 2 ? "14px 20px" : "20px 24px",
+              fontSize: choices.length > 2 ? 21 : 25,
+              fontWeight: 800,
+            }}
+          >
+            <span style={{ color: choiceColors[choice.code] }}>{choice.code}</span>
+            <span>{choice.label}</span>
+          </div>
+        ))}
       </div>
     </div>,
     size,

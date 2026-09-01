@@ -92,7 +92,7 @@ export async function createResultShareCard(command: {
   issueVersion: number;
   resultVersion: number;
   channel: ShareChannel;
-  sharedChoiceCode?: "A" | "B";
+  sharedChoiceCode?: import("@/lib/contracts").ChoiceCode;
 }) {
   const response = await fetch(`/api/issues/${encodeURIComponent(command.issueId)}/share-cards`, {
     method: "POST",
