@@ -47,9 +47,9 @@ steps:
       - --project=$PROJECT_ID
       - --region=${_REGION}
       - --image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_ARTIFACT_REPOSITORY}/${_IMAGE_NAME}:$COMMIT_SHA
-      # This is the only runtime setting changed by the pipeline. Existing
-      # secret mounts, VPC egress, ingress and worker controls are retained.
-      - --update-env-vars=RELEASE_ID=$COMMIT_SHA
+      # Keep upload-time local evidence enabled on every production revision.
+      # Deployment overrides win over the imported legacy runtime secret.
+      - --update-env-vars=RELEASE_ID=$COMMIT_SHA,ISSUE_MEDIA_LOCAL_SCANNER_MODE=LOCAL,ISSUE_MEDIA_LOCAL_SCANNER_TIMEOUT_MS=30000
       - --quiet
 
 images:
