@@ -174,8 +174,10 @@ export function IssueCreatorExperience({
           }
           const base = { ...draft, libraryPairId: null, mediaAssetAId: null, mediaAssetBId: null };
           const result = await submitMemberIssue(base, pendingKey.current!);
-          const assetA = await uploadIssueSubmissionMedia(result.submission.id, directFiles.A);
-          const assetB = await uploadIssueSubmissionMedia(result.submission.id, directFiles.B);
+          const [assetA, assetB] = await Promise.all([
+            uploadIssueSubmissionMedia(result.submission.id, directFiles.A),
+            uploadIssueSubmissionMedia(result.submission.id, directFiles.B),
+          ]);
           const attached = await attachIssueSubmissionMedia(
             result.submission,
             base,
