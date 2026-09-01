@@ -159,6 +159,18 @@ describe("publication evidence readiness (observation only)", () => {
     expect(result.providerCoverage?.missingImageLabels).toEqual([]);
   });
 
+  it("keeps previously published owned assets eligible for a new contextual review", () => {
+    const f = fixture();
+    for (const asset of f.assets) {
+      asset.moderationState = "APPROVED";
+      asset.storageState = "PUBLISHED";
+    }
+    const result = evaluatePublicationReadiness(f);
+    expect(result.blockers).not.toContain("A_ASSET_NOT_PRIVATE_READY");
+    expect(result.blockers).not.toContain("B_ASSET_NOT_PRIVATE_READY");
+    expect(result.executionAuthorized).toBe(false);
+  });
+
   it.each([
     [
       "missing submission",

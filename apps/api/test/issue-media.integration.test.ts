@@ -579,6 +579,44 @@ describe("operator Issue media foundation", () => {
     ).rejects.toMatchObject({ code: "MEDIA_FORMAT_UNSUPPORTED" });
   });
 
+  it("reuses the same Member-owned asset before and after publication", async () => {
+    const storage = new FakeIssueMediaStorage();
+    const service = createIssueMediaService(database.db, storage);
+    const bytes = await image("png", { r: 31, g: 32, b: 33 });
+    const input = {
+      memberId: regularMemberId,
+      rightsAttestation: "I own this image and allow editorial review and publication.",
+      declaredMimeType: "image/png" as const,
+      bytes,
+    };
+
+    const staged = await service.stageMemberAsset(input);
+    const reusedStaged = await service.stageMemberAsset(input);
+    expect(reusedStaged).toMatchObject({ id: staged.id, storageState: "STAGED" });
+
+    const published = await service.approveAndPublish({
+      memberId: operatorId,
+      assetId: staged.id,
+    });
+    const reusedPublished = await service.stageMemberAsset(input);
+    expect(reusedPublished).toMatchObject({
+      id: staged.id,
+      storageState: "PUBLISHED",
+      moderationState: "APPROVED",
+    });
+    expect(reusedPublished.publishedUrl).toBe(published?.publishedUrl);
+    expect(storage.operations.filter((operation) => operation.startsWith("stage:"))).toHaveLength(
+      1,
+    );
+
+    await expect(
+      service.stageMemberAsset({ ...input, memberId: operatorId }),
+    ).rejects.toMatchObject({
+      code: "MEDIA_DUPLICATE",
+      message: "This exact image is already registered and cannot be reused by this account.",
+    } satisfies Partial<IssueMediaError>);
+  }, 10_000);
+
   it("stages privately, publishes, links exactly one asset per choice, and rolls back to text", async () => {
     const storage = new FakeIssueMediaStorage();
     const service = createIssueMediaService(database.db, storage);

@@ -470,6 +470,8 @@ async function requireOwnedSubmissionMedia(
         moderationState: issueMediaAssets.moderationState,
         storageState: issueMediaAssets.storageState,
         rightsState: issueMediaAssets.rightsState,
+        stagingObjectKey: issueMediaAssets.stagingObjectKey,
+        publishedObjectKey: issueMediaAssets.publishedObjectKey,
       })
       .from(issueMediaAssets)
       .where(eq(issueMediaAssets.id, assetId))
@@ -479,14 +481,20 @@ async function requireOwnedSubmissionMedia(
       asset.uploadedByMemberId !== memberId ||
       asset.sourceType !== "MEMBER_SUBMISSION" ||
       asset.processingState !== "READY" ||
-      asset.moderationState !== "PENDING" ||
-      asset.storageState !== "STAGED" ||
-      asset.rightsState !== "ASSERTED"
+      !["ASSERTED", "CLEARED"].includes(asset.rightsState) ||
+      !(
+        (asset.moderationState === "PENDING" &&
+          asset.storageState === "STAGED" &&
+          Boolean(asset.stagingObjectKey)) ||
+        (asset.moderationState === "APPROVED" &&
+          asset.storageState === "PUBLISHED" &&
+          Boolean(asset.publishedObjectKey))
+      )
     ) {
       throw new IssueWriteError(
         "ISSUE_SUBMISSION_MEDIA_INVALID",
         422,
-        "선택지 이미지가 현재 계정의 검수 대기 상태인지 확인해 주세요.",
+        "선택지 이미지가 현재 계정의 검수 가능 상태인지 확인해 주세요.",
       );
     }
   }

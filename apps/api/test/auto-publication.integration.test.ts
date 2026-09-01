@@ -442,6 +442,62 @@ describe("explicit image publication pilot", () => {
     ).toBe(true);
     expect(await f.service.process(f.evaluation.id)).toMatchObject({ status: "HELD" });
   });
+  it("reuses an already published owned pair without writing duplicate R2 objects", async () => {
+    const f = await fixture();
+    const publishedKeys: string[] = [];
+    for (const asset of f.assets) {
+      const privateKey = asset.stagingObjectKey!;
+      const body = f.objects.get(privateKey)!;
+      const publishedKey = `issue-media/published/${asset.id}.webp`;
+      f.objects.set(publishedKey, body);
+      f.objects.delete(privateKey);
+      publishedKeys.push(publishedKey);
+      await f.db
+        .update(schema.issueMediaAssets)
+        .set({
+          storageState: "PUBLISHED",
+          moderationState: "APPROVED",
+          stagingObjectKey: null,
+          publishedObjectKey: publishedKey,
+          publishedAt: new Date(),
+        })
+        .where(eq(schema.issueMediaAssets.id, asset.id));
+    }
+
+    expect(await f.service.process(f.evaluation.id)).toMatchObject({ status: "PUBLISHED" });
+    expect(f.storage.preparePublication).not.toHaveBeenCalled();
+    expect([...f.objects.keys()].sort()).toEqual(publishedKeys.sort());
+    const [submission] = await f.db
+      .select()
+      .from(schema.memberIssueSubmissions)
+      .where(eq(schema.memberIssueSubmissions.id, f.submission.id));
+    expect(submission).toMatchObject({ status: "APPROVED" });
+    expect(submission?.publishedIssueId).toBeTruthy();
+  });
+  it("publishes only the private side when a pair mixes reused and new assets", async () => {
+    const f = await fixture();
+    const reused = f.assets[0]!;
+    const privateKey = reused.stagingObjectKey!;
+    const publishedKey = `issue-media/published/${reused.id}.webp`;
+    f.objects.set(publishedKey, f.objects.get(privateKey)!);
+    f.objects.delete(privateKey);
+    await f.db
+      .update(schema.issueMediaAssets)
+      .set({
+        storageState: "PUBLISHED",
+        moderationState: "APPROVED",
+        stagingObjectKey: null,
+        publishedObjectKey: publishedKey,
+        publishedAt: new Date(),
+      })
+      .where(eq(schema.issueMediaAssets.id, reused.id));
+
+    expect(await f.service.process(f.evaluation.id)).toMatchObject({ status: "PUBLISHED" });
+    expect(f.storage.preparePublication).toHaveBeenCalledTimes(1);
+    expect(
+      [...f.objects.keys()].filter((key) => key.startsWith("issue-media/published/")),
+    ).toHaveLength(2);
+  });
   it.each([
     "revision",
     "cancel",
