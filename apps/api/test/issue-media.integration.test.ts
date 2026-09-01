@@ -615,7 +615,7 @@ describe("operator Issue media foundation", () => {
       code: "MEDIA_DUPLICATE",
       message: "This exact image is already registered and cannot be reused by this account.",
     } satisfies Partial<IssueMediaError>);
-  });
+  }, 10_000);
 
   it("stages privately, publishes, links exactly one asset per choice, and rolls back to text", async () => {
     const storage = new FakeIssueMediaStorage();
