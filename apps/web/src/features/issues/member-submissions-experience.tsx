@@ -427,19 +427,6 @@ export function MemberSubmissionsExperience({
                   ) : null}
                   {published ? (
                     <div className={styles.publishedActions}>
-                      <Link
-                        aria-label={`${item.question} 게시된 질문 보기`}
-                        title="게시된 질문 보기"
-                        href={`/issues/${item.publishedIssueId}`}
-                      >
-                        <Image
-                          src="/icons/double-chevron.png"
-                          width={24}
-                          height={24}
-                          alt=""
-                          aria-hidden="true"
-                        />
-                      </Link>
                       <button
                         className={styles.publishedDeleteButton}
                         type="button"
@@ -463,6 +450,19 @@ export function MemberSubmissionsExperience({
                           aria-hidden="true"
                         />
                       </button>
+                      <Link
+                        aria-label={`${item.question} 게시된 질문 보기`}
+                        title="게시된 질문 보기"
+                        href={`/issues/${item.publishedIssueId}`}
+                      >
+                        <Image
+                          src="/icons/double-chevron.png"
+                          width={24}
+                          height={24}
+                          alt=""
+                          aria-hidden="true"
+                        />
+                      </Link>
                     </div>
                   ) : null}
                   {failed || uploadIncomplete ? (

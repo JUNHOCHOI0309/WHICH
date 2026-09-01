@@ -93,6 +93,8 @@ describe("member submissions", () => {
     expect(remove.querySelector("img")?.getAttribute("src")).toContain(
       encodeURIComponent("/icons/delete.png"),
     );
+    expect(remove.parentElement?.firstElementChild).toBe(remove);
+    expect(remove.parentElement?.lastElementChild).toBe(link);
     expect(
       within(row).queryByText(/수정본|게시 완료|internal review note/),
     ).not.toBeInTheDocument();
