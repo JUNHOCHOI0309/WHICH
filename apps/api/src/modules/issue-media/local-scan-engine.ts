@@ -21,6 +21,14 @@ const languagePath = (code: "eng" | "kor") =>
     `${code}.traineddata.gz`,
   );
 
+export function isIncompleteOcrPass(input: { text: string; confidence: number }) {
+  // Tesseract confidence describes recognition quality, not whether the engine
+  // completed. A valid low-confidence pass is still usable evidence and must
+  // not turn a clear image into an operationally incomplete scan. Keep PARTIAL
+  // for malformed engine output or text that exceeds the bounded projection.
+  return input.text.length > 16_000 || !Number.isFinite(input.confidence);
+}
+
 export async function localScanResources() {
   const paths = [
     require.resolve("zxing-wasm/reader/zxing_reader.wasm"),
@@ -102,10 +110,7 @@ export async function scanLocalImage(
       });
       const { data } = await worker.recognize(png, {}, { text: true });
       completedLanguages += 1;
-      partial ||=
-        data.text.length > 16_000 ||
-        !Number.isFinite(data.confidence) ||
-        (data.text.trim().length > 0 && data.confidence < 50);
+      partial ||= isIncompleteOcrPass(data);
       result.ocr.piiKinds = [...new Set([...result.ocr.piiKinds, ...detectOcrPiiKinds(data.text)])];
       if (receiveText) extracted.push(data.text.slice(0, 16_000));
     } catch {

@@ -9,6 +9,7 @@ import {
   incompleteLocalScan,
   LOCAL_SCAN_MAX_BYTES,
 } from "../src/modules/issue-media/local-scan-contract.js";
+import { isIncompleteOcrPass } from "../src/modules/issue-media/local-scan-engine.js";
 
 const scriptUrl = new URL("../src/local-media-scanner.ts", import.meta.url);
 const detector = (script: string, timeoutMs = 1000) =>
@@ -21,6 +22,12 @@ const detector = (script: string, timeoutMs = 1000) =>
 afterEach(() => vi.unstubAllEnvs());
 
 describe("local scanner isolation and limits", () => {
+  it("does not confuse finite low-confidence OCR with an incomplete engine pass", () => {
+    expect(isIncompleteOcrPass({ text: "SILVER 30% GOLD 10%", confidence: 31 })).toBe(false);
+    expect(isIncompleteOcrPass({ text: "", confidence: 0 })).toBe(false);
+    expect(isIncompleteOcrPass({ text: "x".repeat(16_001), confidence: 90 })).toBe(true);
+    expect(isIncompleteOcrPass({ text: "visible", confidence: Number.NaN })).toBe(true);
+  });
   it("retries only transient incomplete embedded-text engine output", () => {
     const scan = incompleteLocalScan("ENGINE_FAILURE");
     expect(
