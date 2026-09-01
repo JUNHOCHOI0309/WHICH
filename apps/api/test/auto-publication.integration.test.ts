@@ -363,10 +363,16 @@ describe("explicit image publication pilot", () => {
     await f.db
       .update(schema.moderationRuns)
       .set({
-        status: "DEAD_LETTERED",
+        status: "SKIPPED",
         errorCode: "PROVIDER_INPUT_UNAVAILABLE",
         errorMessage: "INPUT_UNAVAILABLE:LOCAL_SCAN_PARTIAL",
-        deadLetteredAt: new Date(),
+        result: {
+          inputRejected: true,
+          reason: "LOCAL_SCAN_PARTIAL",
+          shadow: true,
+          publicationChanged: false,
+        },
+        completedAt: new Date(),
       })
       .where(eq(schema.moderationRuns.id, f.run.id));
     await f.db

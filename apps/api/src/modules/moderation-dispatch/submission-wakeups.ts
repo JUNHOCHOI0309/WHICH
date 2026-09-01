@@ -107,12 +107,17 @@ export function createSubmissionWakeups(
           String(run?.run.result.reason),
         );
         let note: string | undefined;
+        const inputRejected =
+          run?.run.status === "SKIPPED" && run.run.result.inputRejected === true;
         if (
           options.exhausted ||
           run?.run.status === "DEAD_LETTERED" ||
+          inputRejected ||
           (judge && ["FAILED", "UNKNOWN"].includes(judge.status))
         ) {
-          const failure = run?.run.errorMessage ?? "";
+          const resultReason =
+            typeof run?.run.result.reason === "string" ? run.run.result.reason : "";
+          const failure = `${run?.run.errorMessage ?? ""}:${resultReason}`;
           note = failure.includes("LOCAL_SCAN_PII_WITHHELD")
             ? localScanPrivacy
             : failure.includes("LOCAL_SCAN_PARTIAL") ||

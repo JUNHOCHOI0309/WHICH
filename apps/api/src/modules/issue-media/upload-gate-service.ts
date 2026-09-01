@@ -428,7 +428,7 @@ export function createIssueMediaUploadGateService(
         throw new IssueMediaUploadGateError(
           "MEDIA_UPLOAD_NOT_AVAILABLE",
           403,
-          "New image uploads are temporarily paused while moderation capacity recovers.",
+          "이미지 안전 검사 시스템을 점검하고 있어 새 이미지 업로드를 잠시 중단했어요. 잠시 후 다시 시도해 주세요.",
           ["MODERATION_CAPACITY_PAUSED"],
         );
       }
