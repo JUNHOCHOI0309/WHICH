@@ -1,6 +1,7 @@
 "use client";
 
 import type { FormEvent } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -23,6 +24,7 @@ export function MemberPublicProfileSettings({
   );
   const [saving, setSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const handleValid = /^[A-Za-z0-9_]{3,30}$/u.test(handle);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -68,7 +70,7 @@ export function MemberPublicProfileSettings({
       <div className={styles.heading}>
         <div>
           <p>PUBLIC CREATOR PROFILE</p>
-          <h2 id="public-profile-title">질문을 만드는 나를 소개해요.</h2>
+          <h2 id="public-profile-title">프로필 설정</h2>
         </div>
         {value?.publicUrl ? <Link href={value.publicUrl}>공개 화면 보기 ↗</Link> : null}
       </div>
@@ -76,8 +78,8 @@ export function MemberPublicProfileSettings({
       <form onSubmit={(event) => void submit(event)}>
         <label>
           <span>Handle</span>
-          <div className={styles.handleField}>
-            <strong>@</strong>
+          <div className={styles.handleField} data-valid={handleValid || undefined}>
+            <strong className={styles.handleAt}>@</strong>
             <input
               autoCapitalize="none"
               autoComplete="username"
@@ -89,6 +91,9 @@ export function MemberPublicProfileSettings({
               onChange={(event) => setHandle(event.target.value)}
               placeholder="question_maker"
             />
+            <span className={styles.handleCheck} aria-hidden="true">
+              {handleValid ? "✓" : ""}
+            </span>
           </div>
           <small>영문·숫자·밑줄 3~30자, 대소문자는 구분하지 않아요.</small>
         </label>
@@ -105,7 +110,17 @@ export function MemberPublicProfileSettings({
         </label>
 
         <fieldset>
-          <legend>공개 범위</legend>
+          <legend>
+            <Image
+              className={styles.lockIcon}
+              src="/icons/locked.png"
+              width={22}
+              height={22}
+              alt=""
+              aria-hidden="true"
+            />
+            공개 범위
+          </legend>
           <label>
             <input
               checked={visibility === "PUBLIC"}
@@ -129,6 +144,14 @@ export function MemberPublicProfileSettings({
         <div className={styles.actions}>
           <span role={errorMessage ? "alert" : undefined}>{errorMessage}</span>
           <button disabled={saving} type="submit">
+            <Image
+              className={styles.saveIcon}
+              src="/icons/diskette.png"
+              width={18}
+              height={18}
+              alt=""
+              aria-hidden="true"
+            />
             {saving ? "저장 중…" : "프로필 저장"}
           </button>
         </div>

@@ -9,6 +9,7 @@ import { toast } from "@/components/feedback/toast-provider";
 import { WhichShell } from "@/components/layout/which-shell";
 import type {
   ChoiceCode,
+  MemberIssueSubmission,
   MemberPointShopView,
   MemberPrivateProfile,
   MemberPrivateVote,
@@ -61,6 +62,14 @@ async function readProfile(cursor?: string) {
   return (await response.json()) as MemberPrivateProfile;
 }
 
+async function readRecentSubmissions() {
+  const response = await fetch("/api/issue-submissions?limit=3", { cache: "no-store" });
+  if (response.status === 401) return [];
+  if (!response.ok) throw new Error("Submission read failed");
+  const body = (await response.json()) as { items?: MemberIssueSubmission[] };
+  return Array.isArray(body.items) ? body.items : [];
+}
+
 function resultPercent(vote: MemberPrivateVote, code: ChoiceCode) {
   const count = (
     {
@@ -88,6 +97,32 @@ function participatedLabel(value: string) {
   }).format(new Date(value));
 }
 
+const SUBMISSION_STATUS_LABELS = {
+  PROCESSING: "처리 중",
+  PUBLISHED: "게시 완료",
+  NEEDS_CHANGES: "수정 필요",
+  REJECTED: "게시 불가",
+  QUARANTINED: "공개 보류",
+} as const;
+
+function submissionStatusLabel(submission: MemberIssueSubmission) {
+  if (submission.publishedIssueId) return SUBMISSION_STATUS_LABELS.PUBLISHED;
+  const state = submission.publicationState;
+  if (state && state !== "CANCELLED") return SUBMISSION_STATUS_LABELS[state];
+  return submission.status === "NEEDS_CHANGES" || submission.status === "REJECTED"
+    ? SUBMISSION_STATUS_LABELS[submission.status]
+    : SUBMISSION_STATUS_LABELS.PROCESSING;
+}
+
+function submissionChoices(submission: MemberIssueSubmission) {
+  return [
+    ["A", submission.choiceA],
+    ["B", submission.choiceB],
+    ["C", submission.choiceC],
+    ["D", submission.choiceD],
+  ].filter((choice): choice is [string, string] => Boolean(choice[1]));
+}
+
 export function MemberProfileExperience({
   creationEnabled = false,
 }: {
@@ -96,6 +131,7 @@ export function MemberProfileExperience({
   const router = useRouter();
   const [screen, setScreen] = useState<Screen>("loading");
   const [profile, setProfile] = useState<MemberPrivateProfile | null>(null);
+  const [submissions, setSubmissions] = useState<MemberIssueSubmission[] | null>(null);
   const [shop, setShop] = useState<MemberPointShopView | null>(null);
   const [logoutPending, setLogoutPending] = useState(false);
   const [accountDeletionOpen, setAccountDeletionOpen] = useState(false);
@@ -141,6 +177,21 @@ export function MemberProfileExperience({
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (screen !== "ready" || !profile) return;
+    let active = true;
+    void readRecentSubmissions()
+      .then((items) => {
+        if (active) setSubmissions(items.filter((item) => item.status !== "CANCELLED").slice(0, 3));
+      })
+      .catch(() => {
+        if (active) setSubmissions([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [profile, screen]);
 
   useEffect(() => {
     let active = true;
@@ -262,7 +313,10 @@ export function MemberProfileExperience({
               }
             />
 
-            <section className={styles.history} aria-labelledby="history-title">
+            <section
+              className={`${styles.history} ${styles.voteHistory}`}
+              aria-labelledby="history-title"
+            >
               <div className={styles.historyHeading}>
                 <div>
                   <p>VOTE HISTORY</p>
@@ -309,6 +363,73 @@ export function MemberProfileExperience({
               {profile.votes.items.length > 0 ? (
                 <Link className={styles.viewAllLink} href="/me/votes">
                   전체 투표 기록 보기 <span aria-hidden="true">→</span>
+                </Link>
+              ) : null}
+            </section>
+
+            <section
+              className={`${styles.history} ${styles.questionHistory}`}
+              aria-labelledby="questions-title"
+            >
+              <div className={styles.historyHeading}>
+                <div>
+                  <p>MY QUESTIONS</p>
+                  <h2 id="questions-title">내 질문</h2>
+                </div>
+                <span>본인에게만 보여요</span>
+              </div>
+
+              {submissions === null ? (
+                <div className={styles.empty} aria-busy="true" aria-live="polite">
+                  <h3>내 질문을 불러오고 있어요.</h3>
+                </div>
+              ) : submissions.length === 0 ? (
+                <div className={styles.empty}>
+                  <h3>아직 만든 질문이 없어요.</h3>
+                  <p>질문을 만들면 게시 상태와 선택지를 이곳에서 확인할 수 있어요.</p>
+                  {creationEnabled ? <Link href="/create">질문 만들기</Link> : null}
+                </div>
+              ) : (
+                <div className={styles.voteGrid}>
+                  {submissions.map((submission) => (
+                    <article className={styles.voteCard} key={submission.id}>
+                      <div className={styles.voteMeta}>
+                        <span>{submission.interestCardCode.replaceAll("_", " ")}</span>
+                        <time dateTime={submission.submittedAt}>
+                          {participatedLabel(submission.submittedAt)}
+                        </time>
+                      </div>
+                      <h3>{submission.question}</h3>
+                      <div className={styles.questionChoices}>
+                        {submissionChoices(submission).map(([code, label]) => (
+                          <span key={code}>
+                            <b>{code}</b>
+                            {label}
+                          </span>
+                        ))}
+                      </div>
+                      <div className={styles.questionStatus}>
+                        <span>{submissionStatusLabel(submission)}</span>
+                        <small>수정본 {submission.revision}</small>
+                      </div>
+                      <Link href="/me/submissions">
+                        내 질문에서 보기
+                        <Image
+                          src="/icons/double-chevron.png"
+                          width={24}
+                          height={24}
+                          alt=""
+                          aria-hidden="true"
+                        />
+                      </Link>
+                    </article>
+                  ))}
+                </div>
+              )}
+
+              {submissions && submissions.length > 0 ? (
+                <Link className={styles.viewAllLink} href="/me/submissions">
+                  전체 내 질문 보기 <span aria-hidden="true">→</span>
                 </Link>
               ) : null}
             </section>

@@ -238,13 +238,20 @@ export function IssueCreatorExperience({
           const uploadTargets = (["CONTEXT", ...activeChoiceCodes] as const).filter((target) =>
             Boolean(directFiles[target]),
           );
-          const uploaded = await Promise.all(
-            uploadTargets.map(async (target) => ({
+          // The API deliberately allows only two native image-processing jobs at once.
+          // A single issue can contain a context image plus A-D, so upload this draft in
+          // order instead of making the third image compete with its own request.
+          const uploaded: Array<{
+            target: (typeof uploadTargets)[number];
+            asset: { id: string };
+          }> = [];
+          for (const target of uploadTargets) {
+            uploaded.push({
               target,
               asset: (await uploadIssueSubmissionMedia(result.submission.id, directFiles[target]!))
                 .asset,
-            })),
-          );
+            });
+          }
           const mediaAssets: Pick<
             CreateIssueCommand,
             | "contextMediaAssetId"

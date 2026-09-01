@@ -928,11 +928,17 @@ export function createIssueWriteService(database: Database["db"]): IssueWriteSer
             409,
             "질문이 변경되었어요. 최신 상태를 다시 확인해 주세요.",
           );
-        if (current.publishedIssueId || !["PENDING", "NEEDS_CHANGES"].includes(current.status))
+        const allowedStatuses =
+          command.action === "CANCEL"
+            ? ["PENDING", "NEEDS_CHANGES", "REJECTED"]
+            : ["PENDING", "NEEDS_CHANGES"];
+        if (current.publishedIssueId || !allowedStatuses.includes(current.status))
           throw new IssueWriteError(
             "ISSUE_SUBMISSION_NOT_EDITABLE",
             409,
-            "처리 중인 비공개 질문에서만 사용할 수 있어요.",
+            command.action === "CANCEL"
+              ? "게시되지 않은 질문만 목록에서 제거할 수 있어요."
+              : "처리 중인 비공개 질문에서만 사용할 수 있어요.",
           );
         if (command.action === "CHECK") {
           const updated = await publishReviewedSubmission(transaction, current);

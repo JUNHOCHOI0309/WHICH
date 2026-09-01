@@ -109,6 +109,13 @@ function requireSessionResponse(result: { upstream: Response; body: SessionApiRe
   };
 }
 
+function guestLinkCanBeSkipped(result: { upstream: Response; body: SessionApiResponse }) {
+  return (
+    (result.upstream.status === 404 && result.body.code === "GUEST_SUBJECT_NOT_FOUND") ||
+    (result.upstream.status === 409 && result.body.code === "GUEST_ALREADY_LINKED")
+  );
+}
+
 export async function createCredentialMemberSession(input: {
   mode: "login" | "signup";
   email: string;
@@ -117,23 +124,39 @@ export async function createCredentialMemberSession(input: {
   authRequestKey?: string;
 }) {
   if (input.mode === "login") {
-    return requireSessionResponse(await requestCredentialSession(input));
+    let result = await requestCredentialSession(input);
+    if (input.anonymousSubjectId && guestLinkCanBeSkipped(result)) {
+      result = await requestCredentialSession({ ...input, anonymousSubjectId: null });
+    }
+    return requireSessionResponse(result);
   }
   const displayName = input.email.split("@", 1)[0] || "WHICH 회원";
-  return requireSessionResponse(
-    await requestMemberSession(
+  let result = await requestMemberSession(
+    {
+      provider: "EMAIL",
+      providerSubject: input.email,
+      displayName,
+      anonymousSubjectId: input.anonymousSubjectId,
+      authRequestKey: input.authRequestKey,
+    },
+    true,
+    true,
+    { email: input.email, password: input.password },
+  );
+  if (input.anonymousSubjectId && guestLinkCanBeSkipped(result)) {
+    result = await requestMemberSession(
       {
         provider: "EMAIL",
         providerSubject: input.email,
         displayName,
-        anonymousSubjectId: input.anonymousSubjectId,
         authRequestKey: input.authRequestKey,
       },
-      true,
+      false,
       true,
       { email: input.email, password: input.password },
-    ),
-  );
+    );
+  }
+  return requireSessionResponse(result);
 }
 
 export async function completeSocialSignup(input: {
@@ -200,11 +223,7 @@ export async function completeSocialSignup(input: {
 export async function createProviderMemberSession(input: SessionInput) {
   let result = await requestMemberSession(input, true);
 
-  if (
-    input.anonymousSubjectId &&
-    result.upstream.status === 409 &&
-    result.body.code === "GUEST_ALREADY_LINKED"
-  ) {
+  if (input.anonymousSubjectId && guestLinkCanBeSkipped(result)) {
     result = await requestMemberSession(input, false);
   }
 
@@ -234,11 +253,7 @@ export async function createOAuthMemberSession(flow: AuthFlow, input: SocialSess
     if (result.upstream.status === 409 && result.body.code === "IDENTITY_SIGNUP_REQUIRED") {
       return { kind: "signup", input } satisfies OAuthMemberSessionResult;
     }
-    if (
-      input.anonymousSubjectId &&
-      result.upstream.status === 409 &&
-      result.body.code === "GUEST_ALREADY_LINKED"
-    ) {
+    if (input.anonymousSubjectId && guestLinkCanBeSkipped(result)) {
       result = await requestMemberSession(input, false, false);
     }
     if (!result.upstream.ok || !result.body.token || !result.body.expiresAt) {

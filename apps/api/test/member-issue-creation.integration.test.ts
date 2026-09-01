@@ -252,6 +252,24 @@ describe("Member Issue creation v1", () => {
         mediaAssetBId: randomUUID(),
       }),
     ).rejects.toMatchObject({ code: "ISSUE_SUBMISSION_MEDIA_INVALID" });
+
+    const rejected = (await writer.submitMemberIssue({ ...command, idempotencyKey: randomUUID() }))
+      .submission;
+    await database.db
+      .update(memberIssueSubmissions)
+      .set({ status: "REJECTED", reviewNote: "게시 기준을 통과하지 못했어요." })
+      .where(eq(memberIssueSubmissions.id, rejected.id));
+    const removed = await writer.actOnMemberIssueSubmission({
+      sessionToken: session.token,
+      submissionId: rejected.id,
+      expectedRevision: rejected.revision,
+      action: "CANCEL",
+    });
+    expect(removed.submission).toMatchObject({
+      status: "CANCELLED",
+      publicationState: "CANCELLED",
+      publishedIssueId: null,
+    });
   });
 
   it("waits for both images, publishes once after approval, and never publishes a cancelled submission", async () => {
