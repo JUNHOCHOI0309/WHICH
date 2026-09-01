@@ -19,6 +19,9 @@ export type IssueWriteErrorCode =
   | "ISSUE_SUBMISSION_NOT_FOUND"
   | "ISSUE_SUBMISSION_REVISION_CONFLICT"
   | "ISSUE_SUBMISSION_NOT_EDITABLE"
+  | "ISSUE_SUBMISSION_NOT_DELETABLE"
+  | "ISSUE_SUBMISSION_STORAGE_UNAVAILABLE"
+  | "ISSUE_SUBMISSION_STORAGE_DELETE_FAILED"
   | "ISSUE_SUBMISSION_MEDIA_INVALID"
   | "ISSUE_LIBRARY_PAIR_UNAVAILABLE"
   | "ISSUE_LIBRARY_ASSET_UNAVAILABLE"
@@ -27,7 +30,7 @@ export type IssueWriteErrorCode =
 export class IssueWriteError extends Error {
   constructor(
     public readonly code: IssueWriteErrorCode,
-    public readonly statusCode: 400 | 401 | 404 | 409 | 422 | 429,
+    public readonly statusCode: 400 | 401 | 404 | 409 | 422 | 429 | 503,
     message: string,
   ) {
     super(message);

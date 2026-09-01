@@ -203,20 +203,26 @@ export function MemberSubmissionsExperience({
   }
   async function action(
     item: MemberIssueSubmission,
-    kind: "TEXT_ONLY" | "LIBRARY" | "CANCEL" | "CHECK",
+    kind: "TEXT_ONLY" | "LIBRARY" | "CANCEL" | "DELETE" | "CHECK",
     pairId?: string,
     libraryAssetIds?: string[],
   ) {
     await run(async () => {
-      const removingFailedSubmission = kind === "CANCEL" && submissionOutcome(item) === "failed";
       const result = await actOnMemberSubmission(item, kind, pairId, libraryAssetIds);
+      if (result.deleted) {
+        setItems((current) => current.filter((row) => row.id !== item.id));
+        setEditing(null);
+        setOpenMenuId(null);
+        setLibraryTarget(null);
+        forgetSubmission(item.id);
+        toast.success("게시 실패한 질문과 연결된 데이터를 삭제했어요.");
+        return;
+      }
       if (submissionOutcome(result.submission) !== "processing") forgetSubmission(item.id);
       replace(result.submission);
       toast.success(
         kind === "CANCEL"
-          ? removingFailedSubmission
-            ? "게시 실패한 질문을 목록에서 삭제했어요."
-            : "제출을 취소했어요."
+          ? "제출을 취소했어요."
           : result.submission.publishedIssueId
             ? "질문이 게시되었어요."
             : "최신 상태를 확인했어요.",
@@ -555,11 +561,11 @@ export function MemberSubmissionsExperience({
                                 if (
                                   window.confirm(
                                     failed
-                                      ? "게시 실패한 질문을 내 질문 목록에서 삭제할까요? 검수 이력은 안전을 위해 보존됩니다."
+                                      ? "게시 실패한 질문을 삭제할까요? 질문 DB 기록과 다른 곳에서 사용하지 않는 업로드 이미지도 함께 삭제되며 복구할 수 없습니다."
                                       : "이 질문 제출을 취소할까요? 취소한 제출은 다시 게시되지 않아요.",
                                   )
                                 )
-                                  void action(item, "CANCEL");
+                                  void action(item, failed ? "DELETE" : "CANCEL");
                               }}
                             >
                               <Image

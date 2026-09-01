@@ -147,7 +147,7 @@ export interface IssueWriteService {
     sessionToken: string;
     submissionId: string;
     expectedRevision: number;
-    action: "TEXT_ONLY" | "LIBRARY" | "CANCEL" | "CHECK";
+    action: "TEXT_ONLY" | "LIBRARY" | "CANCEL" | "DELETE" | "CHECK";
     libraryPairId?: string;
     libraryAssetIds?: string[];
   }): Promise<MemberIssueSubmissionResult>;
@@ -196,4 +196,5 @@ export type MemberIssueSubmission = {
 export type MemberIssueSubmissionResult = {
   submission: MemberIssueSubmission;
   created: boolean;
+  deleted?: boolean;
 };
