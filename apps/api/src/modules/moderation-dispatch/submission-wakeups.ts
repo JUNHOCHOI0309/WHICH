@@ -11,6 +11,7 @@ import {
 import { recordSubmissionTransition } from "../issues/creation-service.js";
 import { POLICY_JUDGE_PROFILE } from "../policy-judge/contracts.js";
 import { SUBMISSION_WAKEUP } from "./submission-wakeup-event.js";
+import { policyJudgeReviewNote, safetySignalReviewNote } from "./submission-review-note.js";
 
 const LEASE_MS = 12 * 60_000; // Longer than the Job's 10 minute hard timeout.
 const MAX_ATTEMPTS = 5;
@@ -132,22 +133,13 @@ export function createSubmissionWakeups(
             Boolean(s && typeof s === "object" && (s as { flagged?: boolean }).flagged),
           )
         )
-          note =
-            "이미지 안전 검사에서 검토가 필요한 내용이 발견되어 게시하지 못했어요. 이미지와 질문 내용을 수정해 주세요.";
+          note = safetySignalReviewNote(run.run.result.signals);
         else if (
           judge &&
           !["RUNNING", "STALE"].includes(judge.status) &&
           !options.publicationRetryable
         ) {
-          const decision = judge.result.decision as { reason_codes?: string[] } | undefined;
-          const reasons = decision?.reason_codes ?? [];
-          note = reasons.includes("IRRELEVANT")
-            ? "이미지와 질문·선택지의 관련성을 확인하지 못했어요. 내용에 맞는 이미지로 바꿔 주세요."
-            : reasons.includes("PRIVACY")
-              ? "이미지에 개인정보가 포함될 가능성이 있어 게시하지 못했어요. 개인정보를 가린 이미지로 바꿔 주세요."
-              : reasons.includes("PAIR_UNFAIR")
-                ? "두 선택지의 이미지를 공정하게 비교하기 어려워요. 선택지에 맞는 이미지로 바꿔 주세요."
-                : "이미지의 안전성·질문과의 관련성을 충분히 확인하지 못해 공개를 보류했어요. 질문이나 이미지를 수정하거나 이미지 없이 게시할 수 있어요.";
+          note = policyJudgeReviewNote(judge.result.decision);
         }
         if (note) {
           await needsChanges(tx, submission, note);

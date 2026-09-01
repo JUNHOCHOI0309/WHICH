@@ -320,7 +320,7 @@ describe("explicit image publication pilot", () => {
       .from(schema.memberIssueSubmissions)
       .where(eq(schema.memberIssueSubmissions.id, f.submission.id));
     expect(row).toMatchObject({ status: "NEEDS_CHANGES", publishedIssueId: null });
-    expect(row!.reviewNote).toContain("충분히 확인하지 못해");
+    expect(row!.reviewNote).toContain("화질·정보 부족");
     expect(
       await f.db
         .select()
