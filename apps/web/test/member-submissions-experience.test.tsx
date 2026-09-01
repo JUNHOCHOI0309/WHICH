@@ -65,7 +65,7 @@ describe("member submissions", () => {
     expect(within(row).queryByText("처리 중")).not.toBeInTheDocument();
     expect(within(row).getByText("수정 필요").querySelector('[aria-hidden="true"]')).toBeNull();
   });
-  it("shows only the published-question link without review status or controls", async () => {
+  it("shows the published-question link and delete.png control without review status", async () => {
     api.loadMemberSubmissions.mockResolvedValue({
       items: [
         {
@@ -88,10 +88,48 @@ describe("member submissions", () => {
     expect(link).toHaveAttribute("href", "/issues/live");
     expect(row).toHaveAttribute("data-published", "true");
     expect(within(row).queryByText("글 바로가기")).not.toBeInTheDocument();
-    expect(within(row).queryByRole("button")).not.toBeInTheDocument();
+    const remove = within(row).getByRole("button", { name: `${pending.question} 삭제` });
+    expect(remove).toHaveTextContent("");
+    expect(remove.querySelector("img")?.getAttribute("src")).toContain(
+      encodeURIComponent("/icons/delete.png"),
+    );
     expect(
       within(row).queryByText(/수정본|게시 완료|internal review note/),
     ).not.toBeInTheDocument();
+  });
+  it("removes a published question after confirmation", async () => {
+    const published = {
+      ...pending,
+      status: "APPROVED" as const,
+      publicationState: "PUBLISHED" as const,
+      publishedIssueId: "live",
+    };
+    api.loadMemberSubmissions.mockResolvedValue({ items: [published] });
+    api.actOnMemberSubmission.mockResolvedValue({
+      submission: {
+        ...published,
+        revision: published.revision + 1,
+        status: "CANCELLED",
+        publicationState: "CANCELLED",
+      },
+      deleted: true,
+    });
+    render(<MemberSubmissionsExperience />);
+    const row = await screen.findByRole("article", { name: pending.question });
+    fireEvent.click(within(row).getByRole("button", { name: `${pending.question} 삭제` }));
+    await waitFor(() =>
+      expect(api.actOnMemberSubmission).toHaveBeenCalledWith(
+        published,
+        "DELETE",
+        undefined,
+        undefined,
+      ),
+    );
+    expect(window.confirm).toHaveBeenCalledWith(
+      "게시된 질문을 삭제할까요? 공개 화면과 피드에서 즉시 내려가며 기존 투표·댓글 기록은 보존됩니다.",
+    );
+    expect(screen.queryByRole("article", { name: pending.question })).not.toBeInTheDocument();
+    expect(screen.getByText("아직 제출한 질문이 없어요.")).toBeVisible();
   });
   it("shows the failure warning with primary actions and an overflow menu", async () => {
     api.loadMemberSubmissions.mockResolvedValue({

@@ -215,7 +215,11 @@ export function MemberSubmissionsExperience({
         setOpenMenuId(null);
         setLibraryTarget(null);
         forgetSubmission(item.id);
-        toast.success("게시 실패한 질문과 연결된 데이터를 삭제했어요.");
+        toast.success(
+          item.publishedIssueId
+            ? "게시된 질문을 삭제했어요. 기존 참여 기록은 안전하게 보존돼요."
+            : "게시 실패한 질문과 연결된 데이터를 삭제했어요.",
+        );
         return;
       }
       if (submissionOutcome(result.submission) !== "processing") forgetSubmission(item.id);
@@ -422,19 +426,44 @@ export function MemberSubmissionsExperience({
                     </div>
                   ) : null}
                   {published ? (
-                    <Link
-                      aria-label={`${item.question} 게시된 질문 보기`}
-                      title="게시된 질문 보기"
-                      href={`/issues/${item.publishedIssueId}`}
-                    >
-                      <Image
-                        src="/icons/double-chevron.png"
-                        width={24}
-                        height={24}
-                        alt=""
-                        aria-hidden="true"
-                      />
-                    </Link>
+                    <div className={styles.publishedActions}>
+                      <Link
+                        aria-label={`${item.question} 게시된 질문 보기`}
+                        title="게시된 질문 보기"
+                        href={`/issues/${item.publishedIssueId}`}
+                      >
+                        <Image
+                          src="/icons/double-chevron.png"
+                          width={24}
+                          height={24}
+                          alt=""
+                          aria-hidden="true"
+                        />
+                      </Link>
+                      <button
+                        className={styles.publishedDeleteButton}
+                        type="button"
+                        aria-label={`${item.question} 삭제`}
+                        title="게시된 질문 삭제"
+                        disabled={busy}
+                        onClick={() => {
+                          if (
+                            window.confirm(
+                              "게시된 질문을 삭제할까요? 공개 화면과 피드에서 즉시 내려가며 기존 투표·댓글 기록은 보존됩니다.",
+                            )
+                          )
+                            void action(item, "DELETE");
+                        }}
+                      >
+                        <Image
+                          src="/icons/delete.png"
+                          width={20}
+                          height={20}
+                          alt=""
+                          aria-hidden="true"
+                        />
+                      </button>
+                    </div>
                   ) : null}
                   {failed || uploadIncomplete ? (
                     <div className={styles.reviewWarning} role="status">

@@ -70,23 +70,45 @@
   font-size: 0.68rem;
 }
 
-.submissionCard > a {
+.publishedActions {
+  display: flex;
+  align-self: start;
+  gap: 8px;
+}
+
+.publishedActions > a,
+.page .publishedDeleteButton {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  align-self: start;
   width: 44px;
   height: 44px;
+  min-height: 44px;
+  box-sizing: border-box;
+  padding: 10px;
   border-radius: 50%;
+}
+
+.publishedActions > a {
   background: var(--which-cyan-soft);
   transition:
     background 140ms ease,
     transform 140ms ease;
 }
 
-.submissionCard > a:hover {
+.publishedActions > a:hover {
   background: color-mix(in srgb, var(--which-cyan) 20%, white);
   transform: translateX(2px);
+}
+
+.page .publishedDeleteButton {
+  border-color: transparent;
+  background: #fff2f2;
+}
+
+.page .publishedDeleteButton:hover:not(:disabled) {
+  border-color: color-mix(in srgb, #ef4444 24%, white);
+  background: #ffe8e8;
 }
 
 .actions {

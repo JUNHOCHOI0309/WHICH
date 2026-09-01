@@ -16,6 +16,7 @@ import {
   issueMediaLibraryPairs,
   issueMediaLibraryUsages,
   issueVersions,
+  issues,
   memberIssueSubmissionRevisions,
   memberIssueSubmissions,
   memberModerationNotices,
@@ -161,7 +162,7 @@ describe("Member Issue creation v1", () => {
       typeof response.json<{ submission: MemberIssueSubmission }>().submission.publishedIssueId,
     ).toBe("string");
   });
-  it("publishes a pending text conversion once and permits further questions", async () => {
+  it("publishes once, lets the author remove the public question, and preserves its records", async () => {
     const session = await createSession();
     const writer = createIssueWriteService(database.db);
     const command = {
@@ -187,13 +188,33 @@ describe("Member Issue creation v1", () => {
     expect(results[0].submission.publishedIssueId).toBe(results[1].submission.publishedIssueId);
     expect(results.map((result) => result.created).sort()).toEqual([false, true]);
     expect(results[0].submission.publicationState).toBe("PUBLISHED");
-    await expect(
-      writer.actOnMemberIssueSubmission({
-        ...action,
-        expectedRevision: results[0].submission.revision,
-        action: "DELETE",
-      }),
-    ).rejects.toMatchObject({ code: "ISSUE_SUBMISSION_NOT_DELETABLE" });
+    const issueId = results[0].submission.publishedIssueId!;
+    const removed = await writer.actOnMemberIssueSubmission({
+      ...action,
+      expectedRevision: results[0].submission.revision,
+      action: "DELETE",
+    });
+    expect(removed).toMatchObject({
+      created: true,
+      deleted: true,
+      submission: {
+        status: "CANCELLED",
+        publicationState: "CANCELLED",
+        publishedIssueId: issueId,
+        revision: results[0].submission.revision + 1,
+      },
+    });
+    expect(await database.db.select().from(issues).where(eq(issues.id, issueId))).toMatchObject([
+      {
+        lifecycle: "RETIRED",
+        visibility: "REMOVED",
+        participation: "VOTING_CLOSED",
+        feedEligibility: "EXCLUDED",
+      },
+    ]);
+    await expect(createIssueReadService(database.db).getGuestIssue(issueId)).rejects.toMatchObject({
+      code: "ISSUE_NOT_AVAILABLE",
+    });
     expect(
       await database.db
         .select()
@@ -201,11 +222,24 @@ describe("Member Issue creation v1", () => {
         .where(eq(issueAuthors.memberId, session.member.id)),
     ).toHaveLength(1);
     expect(
+      await database.db.select().from(issueVersions).where(eq(issueVersions.issueId, issueId)),
+    ).toHaveLength(1);
+    expect(
+      await database.db.select().from(issueChoices).where(eq(issueChoices.issueId, issueId)),
+    ).toHaveLength(2);
+    expect(
       await database.db
         .select()
         .from(memberModerationNotices)
         .where(eq(memberModerationNotices.memberId, session.member.id)),
-    ).toHaveLength(1);
+    ).toHaveLength(2);
+    await expect(
+      writer.actOnMemberIssueSubmission({
+        ...action,
+        expectedRevision: results[0].submission.revision,
+        action: "DELETE",
+      }),
+    ).resolves.toMatchObject({ created: false, deleted: true });
     await expect(
       writer.createMemberIssue({ ...command, idempotencyKey: randomUUID() }),
     ).resolves.toMatchObject({ created: true });
