@@ -145,11 +145,11 @@ export async function updateMemberSubmission(
 
 export async function actOnMemberSubmission(
   submission: MemberIssueSubmission,
-  action: "TEXT_ONLY" | "LIBRARY" | "CANCEL" | "CHECK",
+  action: "TEXT_ONLY" | "LIBRARY" | "CANCEL" | "DELETE" | "CHECK",
   libraryPairId?: string,
   libraryAssetIds?: string[],
 ) {
-  return responseBody<{ submission: MemberIssueSubmission }>(
+  return responseBody<{ submission: MemberIssueSubmission; deleted?: boolean }>(
     await fetch(`/api/issue-submissions/${encodeURIComponent(submission.id)}/actions`, {
       method: "POST",
       headers: { "content-type": "application/json" },

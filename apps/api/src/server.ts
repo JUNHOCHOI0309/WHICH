@@ -91,7 +91,7 @@ const app = await buildApp(config, {
     },
   }),
   ...(config.environment !== "production" || config.featureFlags.creatorSubmissions
-    ? { issueWriter: createIssueWriteService(database.db) }
+    ? { issueWriter: createIssueWriteService(database.db, issueMediaStorage) }
     : {}),
   guestVotes: createGuestVoteService(database.db),
   commentReader: commentService,

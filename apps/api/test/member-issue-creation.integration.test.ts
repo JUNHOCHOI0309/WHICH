@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { buildApp } from "../src/app.js";
@@ -31,6 +31,7 @@ import {
 import type { MemberIssueSubmission } from "../src/modules/issues/contracts.js";
 import { createIssueReadService } from "../src/modules/issues/service.js";
 import { createMemberIdentityService } from "../src/modules/identity/service.js";
+import type { IssueMediaObjectStorage } from "../src/modules/issue-media/contracts.js";
 import { createGuestVoteService } from "../src/modules/voting/service.js";
 import { createTestDatabase } from "./helpers/test-database.js";
 
@@ -186,6 +187,13 @@ describe("Member Issue creation v1", () => {
     expect(results[0].submission.publishedIssueId).toBe(results[1].submission.publishedIssueId);
     expect(results.map((result) => result.created).sort()).toEqual([false, true]);
     expect(results[0].submission.publicationState).toBe("PUBLISHED");
+    await expect(
+      writer.actOnMemberIssueSubmission({
+        ...action,
+        expectedRevision: results[0].submission.revision,
+        action: "DELETE",
+      }),
+    ).rejects.toMatchObject({ code: "ISSUE_SUBMISSION_NOT_DELETABLE" });
     expect(
       await database.db
         .select()
@@ -263,13 +271,28 @@ describe("Member Issue creation v1", () => {
       sessionToken: session.token,
       submissionId: rejected.id,
       expectedRevision: rejected.revision,
-      action: "CANCEL",
+      action: "DELETE",
     });
-    expect(removed.submission).toMatchObject({
-      status: "CANCELLED",
-      publicationState: "CANCELLED",
-      publishedIssueId: null,
+    expect(removed).toMatchObject({
+      deleted: true,
+      submission: {
+        status: "CANCELLED",
+        publicationState: "CANCELLED",
+        publishedIssueId: null,
+      },
     });
+    expect(
+      await database.db
+        .select()
+        .from(memberIssueSubmissions)
+        .where(eq(memberIssueSubmissions.id, rejected.id)),
+    ).toHaveLength(0);
+    expect(
+      await database.db
+        .select()
+        .from(memberIssueSubmissionRevisions)
+        .where(eq(memberIssueSubmissionRevisions.submissionId, rejected.id)),
+    ).toHaveLength(0);
   });
 
   it("waits for both images, publishes once after approval, and never publishes a cancelled submission", async () => {
@@ -359,6 +382,207 @@ describe("Member Issue creation v1", () => {
         .from(issueAuthors)
         .where(eq(issueAuthors.memberId, session.member.id)),
     ).toHaveLength(1);
+  });
+
+  it("hard-deletes failed submission rows, exclusive media metadata, and R2 objects", async () => {
+    const session = await createSession();
+    const purged: string[] = [];
+    const storage = {
+      purge: (keys: Array<string | null | undefined>) => {
+        purged.push(...keys.filter((key): key is string => Boolean(key)));
+        return Promise.resolve();
+      },
+    } as IssueMediaObjectStorage;
+    const writer = createIssueWriteService(database.db, storage);
+    const mediaIds = [randomUUID(), randomUUID()];
+    await database.db.insert(issueMediaAssets).values(
+      mediaIds.map((id, index) => ({
+        id,
+        uploadedByMemberId: session.member.id,
+        sourceType: "MEMBER_SUBMISSION",
+        rightsAttestation: "Current signup image processing consent applies to this image.",
+        rightsAttestedAt: new Date(),
+        sha256: id.replaceAll("-", "").repeat(2),
+        perceptualHash: String(index + 5).repeat(16),
+        inputMimeType: "image/png",
+        inputByteSize: 100,
+        inputWidth: 10,
+        inputHeight: 10,
+        outputByteSize: 80,
+        outputWidth: 10,
+        outputHeight: 10,
+        stagingObjectKey: `issue-media/staging/${id}.webp`,
+        stagedAt: new Date(),
+      })),
+    );
+    const submission = (
+      await writer.submitMemberIssue({
+        ...createPayload("삭제할 이미지 질문은 무엇일까"),
+        interestCardCode: "DAILY_LIFE" as const,
+        sessionToken: session.token,
+        idempotencyKey: randomUUID(),
+        mediaAssetAId: mediaIds[0],
+        mediaAssetBId: mediaIds[1],
+      })
+    ).submission;
+    await database.db
+      .update(issueMediaAssets)
+      .set({ moderationState: "REJECTED" })
+      .where(eq(issueMediaAssets.id, mediaIds[0]!));
+    const result = await writer.actOnMemberIssueSubmission({
+      sessionToken: session.token,
+      submissionId: submission.id,
+      expectedRevision: submission.revision,
+      action: "DELETE",
+    });
+    expect(result.deleted).toBe(true);
+    expect(purged.sort()).toEqual(mediaIds.map((id) => `issue-media/staging/${id}.webp`).sort());
+    expect(
+      await database.db
+        .select()
+        .from(memberIssueSubmissions)
+        .where(eq(memberIssueSubmissions.id, submission.id)),
+    ).toHaveLength(0);
+    expect(
+      await database.db
+        .select()
+        .from(issueMediaAssets)
+        .where(eq(issueMediaAssets.id, mediaIds[0]!)),
+    ).toHaveLength(0);
+    expect(
+      await database.db
+        .select()
+        .from(issueMediaAssets)
+        .where(eq(issueMediaAssets.id, mediaIds[1]!)),
+    ).toHaveLength(0);
+  });
+
+  it("keeps submission and media rows when R2 object deletion fails", async () => {
+    const session = await createSession();
+    const storage = {
+      purge: (keys: Array<string | null | undefined>) => {
+        expect(keys).toHaveLength(1);
+        return Promise.reject(new Error("R2 unavailable"));
+      },
+    } as IssueMediaObjectStorage;
+    const writer = createIssueWriteService(database.db, storage);
+    const mediaId = randomUUID();
+    await database.db.insert(issueMediaAssets).values({
+      id: mediaId,
+      uploadedByMemberId: session.member.id,
+      sourceType: "MEMBER_SUBMISSION",
+      rightsAttestation: "Current signup image processing consent applies to this image.",
+      rightsAttestedAt: new Date(),
+      sha256: mediaId.replaceAll("-", "").repeat(2),
+      perceptualHash: "f".repeat(16),
+      inputMimeType: "image/png",
+      inputByteSize: 100,
+      inputWidth: 10,
+      inputHeight: 10,
+      outputByteSize: 80,
+      outputWidth: 10,
+      outputHeight: 10,
+      stagingObjectKey: `issue-media/staging/${mediaId}.webp`,
+      stagedAt: new Date(),
+    });
+    const submission = (
+      await writer.submitMemberIssue({
+        ...createPayload("삭제 실패 시 보존할 질문은 무엇일까"),
+        interestCardCode: "DAILY_LIFE" as const,
+        sessionToken: session.token,
+        idempotencyKey: randomUUID(),
+        contextMediaAssetId: mediaId,
+      })
+    ).submission;
+    await database.db
+      .update(issueMediaAssets)
+      .set({ moderationState: "REJECTED" })
+      .where(eq(issueMediaAssets.id, mediaId));
+
+    await expect(
+      writer.actOnMemberIssueSubmission({
+        sessionToken: session.token,
+        submissionId: submission.id,
+        expectedRevision: submission.revision,
+        action: "DELETE",
+      }),
+    ).rejects.toMatchObject({ code: "ISSUE_SUBMISSION_STORAGE_DELETE_FAILED" });
+    expect(
+      await database.db
+        .select()
+        .from(memberIssueSubmissions)
+        .where(eq(memberIssueSubmissions.id, submission.id)),
+    ).toHaveLength(1);
+    expect(
+      await database.db.select().from(issueMediaAssets).where(eq(issueMediaAssets.id, mediaId)),
+    ).toHaveLength(1);
+  });
+
+  it("does not purge an image that another submission still references", async () => {
+    const session = await createSession();
+    const purged: string[] = [];
+    const storage = {
+      purge: (keys: Array<string | null | undefined>) => {
+        purged.push(...keys.filter((key): key is string => Boolean(key)));
+        return Promise.resolve();
+      },
+    } as IssueMediaObjectStorage;
+    const writer = createIssueWriteService(database.db, storage);
+    const mediaIds = [randomUUID(), randomUUID()];
+    await database.db.insert(issueMediaAssets).values(
+      mediaIds.map((id, index) => ({
+        id,
+        uploadedByMemberId: session.member.id,
+        sourceType: "MEMBER_SUBMISSION",
+        rightsAttestation: "Current signup image processing consent applies to this image.",
+        rightsAttestedAt: new Date(),
+        sha256: id.replaceAll("-", "").repeat(2),
+        perceptualHash: String(index + 7).repeat(16),
+        inputMimeType: "image/png",
+        inputByteSize: 100,
+        inputWidth: 10,
+        inputHeight: 10,
+        outputByteSize: 80,
+        outputWidth: 10,
+        outputHeight: 10,
+        stagingObjectKey: `issue-media/staging/${id}.webp`,
+        stagedAt: new Date(),
+      })),
+    );
+    const payload = {
+      ...createPayload("공유 이미지 질문은 무엇일까"),
+      interestCardCode: "DAILY_LIFE" as const,
+      sessionToken: session.token,
+      mediaAssetAId: mediaIds[0],
+      mediaAssetBId: mediaIds[1],
+    };
+    const first = (await writer.submitMemberIssue({ ...payload, idempotencyKey: randomUUID() }))
+      .submission;
+    const second = (await writer.submitMemberIssue({ ...payload, idempotencyKey: randomUUID() }))
+      .submission;
+    await database.db
+      .update(issueMediaAssets)
+      .set({ moderationState: "REJECTED" })
+      .where(eq(issueMediaAssets.id, mediaIds[0]!));
+    await writer.actOnMemberIssueSubmission({
+      sessionToken: session.token,
+      submissionId: first.id,
+      expectedRevision: first.revision,
+      action: "DELETE",
+    });
+    expect(purged).toEqual([]);
+    expect(
+      await database.db
+        .select()
+        .from(memberIssueSubmissions)
+        .where(eq(memberIssueSubmissions.id, second.id)),
+    ).toHaveLength(1);
+    expect(
+      await database.db
+        .select()
+        .from(issueMediaAssets)
+        .where(inArray(issueMediaAssets.id, mediaIds)),
+    ).toHaveLength(2);
   });
 
   it("reuses one approved Library pair across multiple immediately published Issues", async () => {

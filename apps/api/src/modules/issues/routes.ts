@@ -288,7 +288,7 @@ export async function registerIssueRoutes(
         Params: { submissionId: string };
         Body: {
           expectedRevision: number;
-          action: "TEXT_ONLY" | "LIBRARY" | "CANCEL" | "CHECK";
+          action: "TEXT_ONLY" | "LIBRARY" | "CANCEL" | "DELETE" | "CHECK";
           libraryPairId?: string;
           libraryAssetIds?: string[];
         };
@@ -301,7 +301,9 @@ export async function registerIssueRoutes(
               {
                 expectedRevision: Type.Integer({ minimum: 1 }),
                 action: Type.Union(
-                  ["TEXT_ONLY", "LIBRARY", "CANCEL", "CHECK"].map((value) => Type.Literal(value)),
+                  ["TEXT_ONLY", "LIBRARY", "CANCEL", "DELETE", "CHECK"].map((value) =>
+                    Type.Literal(value),
+                  ),
                 ),
                 libraryPairId: Type.Optional(uuidSchema),
                 libraryAssetIds: Type.Optional(
@@ -314,11 +316,13 @@ export async function registerIssueRoutes(
               200: Type.Object({
                 submission: memberIssueSubmissionSchema,
                 created: Type.Boolean(),
+                deleted: Type.Optional(Type.Boolean()),
               }),
               401: errorResponseSchema,
               404: errorResponseSchema,
               409: errorResponseSchema,
               422: errorResponseSchema,
+              503: errorResponseSchema,
               500: errorResponseSchema,
             },
           },

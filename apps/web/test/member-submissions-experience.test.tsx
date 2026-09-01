@@ -207,7 +207,7 @@ describe("member submissions", () => {
     fireEvent.change(search, { target: { value: "없는 검색어" } });
     expect(screen.getByText("검색 결과가 없어요.")).toBeVisible();
   });
-  it("removes a failed question from the visible list while preserving it as cancelled", async () => {
+  it("hard-deletes a failed question from the visible list", async () => {
     const failed = {
       ...pending,
       status: "REJECTED" as const,
@@ -216,6 +216,7 @@ describe("member submissions", () => {
     api.loadMemberSubmissions.mockResolvedValue({ items: [failed] });
     api.actOnMemberSubmission.mockResolvedValue({
       submission: { ...failed, revision: 3, status: "CANCELLED", publicationState: "CANCELLED" },
+      deleted: true,
     });
     render(<MemberSubmissionsExperience />);
     const row = await screen.findByRole("article", { name: pending.question });
@@ -224,7 +225,7 @@ describe("member submissions", () => {
     await waitFor(() =>
       expect(api.actOnMemberSubmission).toHaveBeenCalledWith(
         failed,
-        "CANCEL",
+        "DELETE",
         undefined,
         undefined,
       ),

@@ -1,18 +1,23 @@
 import { createHash, randomUUID } from "node:crypto";
 
-import { and, desc, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, ne, or, sql } from "drizzle-orm";
 
 import type { Database } from "../../database/client.js";
 import {
   issueAuthors,
   issueChoiceMedia,
+  issueChoiceMediaRevisions,
   issueChoices,
   issueContextMedia,
   issueInterestCards,
   issueMediaAssets,
+  issueMediaAssetVersions,
   issueMediaLibraryAssets,
   issueMediaLibraryPairs,
   issueMediaLibraryUsages,
+  issueMediaReviewDecisions,
+  issueMediaRightsRequests,
+  issueMediaUploadSessions,
   memberIssueSubmissionRevisions,
   memberIssueSubmissions,
   memberModerationNotices,
@@ -43,6 +48,7 @@ import { evaluateTextRules, normalizeModerationText } from "../moderation/rule-e
 import { createModerationSubmissionEvents } from "../moderation-dispatch/contracts.js";
 import { submissionWakeup } from "../moderation-dispatch/submission-wakeup-event.js";
 import { IssueWriteError } from "./errors.js";
+import type { IssueMediaObjectStorage } from "../issue-media/contracts.js";
 
 const ISSUE_VERSION = 1 as const;
 const EXPERIENCE_MODE = "PLAYFUL_QUICK";
@@ -585,7 +591,212 @@ async function requireOwnedSubmissionMedia(
   }
 }
 
-export function createIssueWriteService(database: Database["db"]): IssueWriteService {
+const submissionAssetColumns = (row: {
+  contextMediaAssetId: string | null;
+  mediaAssetAId: string | null;
+  mediaAssetBId: string | null;
+  mediaAssetCId: string | null;
+  mediaAssetDId: string | null;
+}) =>
+  [
+    row.contextMediaAssetId,
+    row.mediaAssetAId,
+    row.mediaAssetBId,
+    row.mediaAssetCId,
+    row.mediaAssetDId,
+  ].filter((id): id is string => Boolean(id));
+
+async function isAssetReferencedByOtherContent(
+  transaction: Transaction,
+  assetId: string,
+  submissionId: string,
+) {
+  const [otherSubmission] = await transaction
+    .select({ id: memberIssueSubmissions.id })
+    .from(memberIssueSubmissions)
+    .where(
+      and(
+        ne(memberIssueSubmissions.id, submissionId),
+        or(
+          eq(memberIssueSubmissions.contextMediaAssetId, assetId),
+          eq(memberIssueSubmissions.mediaAssetAId, assetId),
+          eq(memberIssueSubmissions.mediaAssetBId, assetId),
+          eq(memberIssueSubmissions.mediaAssetCId, assetId),
+          eq(memberIssueSubmissions.mediaAssetDId, assetId),
+        ),
+      ),
+    )
+    .limit(1);
+  if (otherSubmission) return true;
+  const [otherRevision] = await transaction
+    .select({ id: memberIssueSubmissionRevisions.id })
+    .from(memberIssueSubmissionRevisions)
+    .where(
+      and(
+        ne(memberIssueSubmissionRevisions.submissionId, submissionId),
+        or(
+          eq(memberIssueSubmissionRevisions.contextMediaAssetId, assetId),
+          eq(memberIssueSubmissionRevisions.mediaAssetAId, assetId),
+          eq(memberIssueSubmissionRevisions.mediaAssetBId, assetId),
+          eq(memberIssueSubmissionRevisions.mediaAssetCId, assetId),
+          eq(memberIssueSubmissionRevisions.mediaAssetDId, assetId),
+        ),
+      ),
+    )
+    .limit(1);
+  if (otherRevision) return true;
+  const [choiceLink] = await transaction
+    .select({ id: issueChoiceMedia.mediaAssetId })
+    .from(issueChoiceMedia)
+    .where(eq(issueChoiceMedia.mediaAssetId, assetId))
+    .limit(1);
+  if (choiceLink) return true;
+  const [contextLink] = await transaction
+    .select({ id: issueContextMedia.mediaAssetId })
+    .from(issueContextMedia)
+    .where(eq(issueContextMedia.mediaAssetId, assetId))
+    .limit(1);
+  if (contextLink) return true;
+  const [libraryLink] = await transaction
+    .select({ id: issueMediaLibraryAssets.id })
+    .from(issueMediaLibraryAssets)
+    .where(eq(issueMediaLibraryAssets.mediaAssetId, assetId))
+    .limit(1);
+  if (libraryLink) return true;
+  const [publishedRevision] = await transaction
+    .select({ id: issueChoiceMediaRevisions.issueId })
+    .from(issueChoiceMediaRevisions)
+    .where(eq(issueChoiceMediaRevisions.mediaAssetId, assetId))
+    .limit(1);
+  return Boolean(publishedRevision);
+}
+
+async function hardDeleteFailedSubmission(
+  transaction: Transaction,
+  current: SubmissionRow,
+  storage: IssueMediaObjectStorage | null,
+) {
+  const revisions = await transaction
+    .select({
+      contextMediaAssetId: memberIssueSubmissionRevisions.contextMediaAssetId,
+      mediaAssetAId: memberIssueSubmissionRevisions.mediaAssetAId,
+      mediaAssetBId: memberIssueSubmissionRevisions.mediaAssetBId,
+      mediaAssetCId: memberIssueSubmissionRevisions.mediaAssetCId,
+      mediaAssetDId: memberIssueSubmissionRevisions.mediaAssetDId,
+    })
+    .from(memberIssueSubmissionRevisions)
+    .where(eq(memberIssueSubmissionRevisions.submissionId, current.id));
+  const candidateIds = [
+    ...new Set([current, ...revisions].flatMap((row) => submissionAssetColumns(row))),
+  ];
+  const exclusiveAssets: Array<typeof issueMediaAssets.$inferSelect> = [];
+  const sharedObjectKeys = new Set<string>();
+  for (const assetId of candidateIds) {
+    const [asset] = await transaction
+      .select()
+      .from(issueMediaAssets)
+      .where(
+        and(
+          eq(issueMediaAssets.id, assetId),
+          eq(issueMediaAssets.uploadedByMemberId, current.memberId),
+          eq(issueMediaAssets.sourceType, "MEMBER_SUBMISSION"),
+        ),
+      )
+      .for("update");
+    if (!asset) continue;
+    if (await isAssetReferencedByOtherContent(transaction, assetId, current.id)) {
+      for (const key of [
+        asset.stagingObjectKey,
+        asset.publishedObjectKey,
+        asset.quarantinedObjectKey,
+      ])
+        if (key) sharedObjectKeys.add(key);
+    } else {
+      exclusiveAssets.push(asset);
+    }
+  }
+  const uploadSessions = await transaction
+    .select({ objectKey: issueMediaUploadSessions.objectKey })
+    .from(issueMediaUploadSessions)
+    .where(eq(issueMediaUploadSessions.submissionId, current.id));
+  const objectKeys = [
+    ...new Set(
+      [
+        ...uploadSessions
+          .map((row) => row.objectKey)
+          .filter((objectKey) => !sharedObjectKeys.has(objectKey)),
+        ...exclusiveAssets.flatMap((asset) => [
+          asset.stagingObjectKey,
+          asset.publishedObjectKey,
+          asset.quarantinedObjectKey,
+        ]),
+      ].filter((key): key is string => Boolean(key)),
+    ),
+  ];
+  if (objectKeys.length > 0) {
+    if (!storage)
+      throw new IssueWriteError(
+        "ISSUE_SUBMISSION_STORAGE_UNAVAILABLE",
+        503,
+        "이미지 저장소에 연결할 수 없어 삭제를 완료하지 못했어요. 잠시 후 다시 시도해 주세요.",
+      );
+    try {
+      await storage.purge(objectKeys);
+    } catch {
+      throw new IssueWriteError(
+        "ISSUE_SUBMISSION_STORAGE_DELETE_FAILED",
+        503,
+        "이미지를 삭제하지 못해 질문도 삭제하지 않았어요. 잠시 후 다시 시도해 주세요.",
+      );
+    }
+  }
+  await transaction.delete(memberIssueSubmissions).where(eq(memberIssueSubmissions.id, current.id));
+  for (const asset of exclusiveAssets) {
+    const [reviewDecision] = await transaction
+      .select({ id: issueMediaReviewDecisions.id })
+      .from(issueMediaReviewDecisions)
+      .where(eq(issueMediaReviewDecisions.mediaAssetId, asset.id))
+      .limit(1);
+    const [rightsRequest] = await transaction
+      .select({ id: issueMediaRightsRequests.id })
+      .from(issueMediaRightsRequests)
+      .where(eq(issueMediaRightsRequests.mediaAssetId, asset.id))
+      .limit(1);
+    if (reviewDecision || rightsRequest) {
+      await transaction
+        .update(issueMediaAssets)
+        .set({
+          storageState: "PURGED",
+          stagingObjectKey: null,
+          publishedObjectKey: null,
+          quarantinedObjectKey: null,
+          purgedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(issueMediaAssets.id, asset.id));
+    } else {
+      await transaction
+        .delete(issueMediaAssetVersions)
+        .where(eq(issueMediaAssetVersions.assetId, asset.id));
+      await transaction.delete(issueMediaAssets).where(eq(issueMediaAssets.id, asset.id));
+    }
+  }
+  return {
+    submission: toSubmission({
+      ...current,
+      status: "CANCELLED",
+      reviewNote: null,
+      updatedAt: new Date(),
+    }),
+    created: true,
+    deleted: true,
+  };
+}
+
+export function createIssueWriteService(
+  database: Database["db"],
+  storage: IssueMediaObjectStorage | null = null,
+): IssueWriteService {
   return {
     async submitMemberIssue(command) {
       if (command.libraryPairId || command.libraryAssetIds?.length) {
@@ -918,7 +1129,7 @@ export function createIssueWriteService(database: Database["db"]): IssueWriteSer
           );
         if (
           (command.action === "CANCEL" && current.status === "CANCELLED") ||
-          (command.action !== "CANCEL" && current.publishedIssueId)
+          (!["CANCEL", "DELETE"].includes(command.action) && current.publishedIssueId)
         ) {
           return { submission: await submissionView(transaction, current), created: false };
         }
@@ -928,6 +1139,19 @@ export function createIssueWriteService(database: Database["db"]): IssueWriteSer
             409,
             "질문이 변경되었어요. 최신 상태를 다시 확인해 주세요.",
           );
+        if (command.action === "DELETE") {
+          const view = await submissionView(transaction, current);
+          if (
+            current.publishedIssueId ||
+            !["NEEDS_CHANGES", "REJECTED", "QUARANTINED"].includes(view.publicationState)
+          )
+            throw new IssueWriteError(
+              "ISSUE_SUBMISSION_NOT_DELETABLE",
+              409,
+              "게시 실패한 비공개 질문만 완전히 삭제할 수 있어요.",
+            );
+          return hardDeleteFailedSubmission(transaction, current, storage);
+        }
         const allowedStatuses =
           command.action === "CANCEL"
             ? ["PENDING", "NEEDS_CHANGES", "REJECTED"]
