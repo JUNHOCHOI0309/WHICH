@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 
 import type {
@@ -11,6 +11,8 @@ import type {
   OpsPublishedIssueState,
 } from "./contracts";
 import styles from "./ops-management.module.css";
+
+type ChoiceCode = "A" | "B" | "C" | "D";
 
 const stateLabels: Record<OpsPublishedIssueState, string> = {
   ACTIVE: "공개 중",
@@ -43,6 +45,37 @@ const actionLabels: Record<OpsPublishedIssueAction, string> = {
   REMOVE: "게시 중단",
 };
 
+function ChoiceMediaPreview({
+  file,
+  assetId,
+  alt,
+}: {
+  file?: File;
+  assetId?: string;
+  alt: string;
+}) {
+  const preview = useMemo(
+    () => (file && typeof URL.createObjectURL === "function" ? URL.createObjectURL(file) : null),
+    [file],
+  );
+  useEffect(() => {
+    return () => {
+      if (preview) URL.revokeObjectURL(preview);
+    };
+  }, [preview]);
+  const source = preview ?? (assetId ? `/api/ops/media-review/assets/${assetId}/content` : null);
+  return source ? <img src={source} alt={alt} /> : <span>등록된 이미지 없음</span>;
+}
+
+function fileBase64(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("이미지를 읽지 못했습니다."));
+    reader.onload = () => resolve(String(reader.result).split(",")[1] ?? "");
+    reader.readAsDataURL(file);
+  });
+}
+
 export function OpsPublishedIssuesPanel() {
   const [query, setQuery] = useState("");
   const [submittedQuery, setSubmittedQuery] = useState("");
@@ -50,6 +83,9 @@ export function OpsPublishedIssuesPanel() {
   const [page, setPage] = useState<OpsPublishedIssuePage | null>(null);
   const [selected, setSelected] = useState<OpsPublishedIssue | null>(null);
   const [reason, setReason] = useState("");
+  const [mediaReason, setMediaReason] = useState("");
+  const [rightsAttestation, setRightsAttestation] = useState("");
+  const [choiceFiles, setChoiceFiles] = useState<Partial<Record<ChoiceCode, File>>>({});
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState<{ error: boolean; message: string } | null>(null);
@@ -134,6 +170,133 @@ export function OpsPublishedIssuesPanel() {
     }
   }
 
+  async function reviseMedia() {
+    if (!selected) return;
+    const rationale = mediaReason.trim();
+    const files = Object.values(choiceFiles).filter(Boolean) as File[];
+    if (rationale.length < 10) {
+      setFeedback({ error: true, message: "이미지 수정 사유를 10자 이상 입력해 주세요." });
+      return;
+    }
+    if (files.length > 0 && rightsAttestation.trim().length < 20) {
+      setFeedback({ error: true, message: "새 이미지의 권리 근거를 20자 이상 입력해 주세요." });
+      return;
+    }
+    if (selected.choices.some((choice) => !choice.media && !choiceFiles[choice.code])) {
+      setFeedback({
+        error: true,
+        message: "A/B를 포함한 모든 선택지에 이미지를 지정해 주세요.",
+      });
+      return;
+    }
+    if (
+      selected.acceptedVotes > 0 &&
+      !window.confirm(
+        "이미지 수정은 새 질문 버전으로 공개되며 최신 버전의 투표 집계는 0표부터 시작합니다. 계속할까요?",
+      )
+    )
+      return;
+
+    setBusy(true);
+    setFeedback(null);
+    try {
+      const choices = [] as Array<{
+        code: ChoiceCode;
+        assetId: string;
+        altText: string;
+        cropMode: "COVER" | "CONTAIN";
+      }>;
+      for (const choice of selected.choices) {
+        const file = choiceFiles[choice.code];
+        let assetId = choice.media?.assetId;
+        if (file) {
+          if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+            throw new Error(`${choice.code} 이미지는 JPG, PNG, WebP만 사용할 수 있습니다.`);
+          }
+          const uploadResponse = await fetch("/api/ops/media-review/assets", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              sourceType: "OPERATOR_UPLOAD",
+              rightsAttestation: rightsAttestation.trim(),
+              declaredMimeType: file.type,
+              contentBase64: await fileBase64(file),
+            }),
+          });
+          const uploadBody = (await uploadResponse.json()) as {
+            asset?: { id: string; moderationState: string; storageState: string };
+            message?: string;
+          };
+          if (!uploadResponse.ok || !uploadBody.asset?.id) {
+            throw new Error(uploadBody.message || `${choice.code} 이미지를 등록하지 못했습니다.`);
+          }
+          assetId = uploadBody.asset.id;
+          if (
+            uploadBody.asset.moderationState !== "APPROVED" ||
+            uploadBody.asset.storageState !== "PUBLISHED"
+          ) {
+            const approvalResponse = await fetch(
+              `/api/ops/media-review/assets/${encodeURIComponent(assetId)}/decision`,
+              {
+                method: "PUT",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({
+                  status: "APPROVED",
+                  reasonCode: "OPS_ISSUE_MEDIA_REVISION",
+                  rationale,
+                  policyVersion: "issue-media-review-v1",
+                }),
+              },
+            );
+            const approvalBody = (await approvalResponse.json()) as { message?: string };
+            if (!approvalResponse.ok) {
+              throw new Error(
+                approvalBody.message || `${choice.code} 이미지를 승인하지 못했습니다.`,
+              );
+            }
+          }
+        }
+        if (!assetId) throw new Error(`${choice.code} 이미지가 없습니다.`);
+        choices.push({
+          code: choice.code,
+          assetId,
+          altText: choice.media?.altText || choice.label,
+          cropMode: choice.media?.cropMode || "CONTAIN",
+        });
+      }
+      const response = await fetch(
+        `/api/ops/published-issues/${encodeURIComponent(selected.issueId)}`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            expectedVersion: selected.version,
+            expectedUpdatedAt: selected.updatedAt,
+            reason: rationale,
+            choices,
+          }),
+        },
+      );
+      const body = (await response.json()) as OpsPublishedIssue & { message?: string };
+      if (!response.ok) throw new Error(body.message || "질문 이미지를 수정하지 못했습니다.");
+      setChoiceFiles({});
+      setRightsAttestation("");
+      setMediaReason("");
+      await load();
+      setFeedback({
+        error: false,
+        message: `이미지를 적용한 v${body.version} 수정본을 공개했습니다.`,
+      });
+    } catch (caught) {
+      setFeedback({
+        error: true,
+        message: caught instanceof Error ? caught.message : "질문 이미지를 수정하지 못했습니다.",
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <section className={styles.page} aria-labelledby="published-issues-title">
       <div className={styles.intro}>
@@ -180,6 +343,9 @@ export function OpsPublishedIssuesPanel() {
               onClick={() => {
                 setSelected(issue);
                 setReason("");
+                setMediaReason("");
+                setRightsAttestation("");
+                setChoiceFiles({});
                 setFeedback(null);
               }}
             >
@@ -204,12 +370,33 @@ export function OpsPublishedIssuesPanel() {
             </p>
             <h2>{selected.question}</h2>
             {selected.context ? <p className={styles.context}>{selected.context}</p> : null}
-            <div className={styles.choices}>
+            <div className={styles.choiceMediaEditor}>
               {selected.choices.map((choice) => (
-                <div key={choice.code}>
-                  <b>{choice.code}</b>
-                  <span>{choice.label}</span>
-                </div>
+                <article key={choice.code}>
+                  <div className={styles.choiceMediaPreview}>
+                    <ChoiceMediaPreview
+                      file={choiceFiles[choice.code]}
+                      assetId={choice.media?.assetId}
+                      alt={`${choice.code} ${choice.label}`}
+                    />
+                  </div>
+                  <div className={styles.choiceMediaMeta}>
+                    <b>{choice.code}</b>
+                    <span>{choice.label}</span>
+                    <label>
+                      {choice.media ? "이미지 교체" : "이미지 추가"}
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        disabled={busy || selected.state === "REMOVED"}
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          setChoiceFiles((current) => ({ ...current, [choice.code]: file }));
+                        }}
+                      />
+                    </label>
+                  </div>
+                </article>
               ))}
             </div>
             <div className={styles.facts}>
@@ -229,6 +416,34 @@ export function OpsPublishedIssuesPanel() {
             <Link href={`/issues/${selected.issueId}`} target="_blank" rel="noreferrer">
               공개 화면 확인 ↗
             </Link>
+            {selected.state !== "REMOVED" ? (
+              <section className={styles.mediaRevision}>
+                <div>
+                  <strong>선택지 이미지 수정</strong>
+                  <span>
+                    모든 선택지 이미지를 갖춘 새 버전을 공개합니다. 기존 버전과 투표 기록은
+                    보존됩니다.
+                  </span>
+                </div>
+                <input
+                  value={rightsAttestation}
+                  onChange={(event) => setRightsAttestation(event.target.value)}
+                  placeholder="새 이미지 권리 근거 (직접 촬영·라이선스 등, 20자 이상)"
+                  maxLength={2000}
+                  disabled={busy}
+                />
+                <textarea
+                  value={mediaReason}
+                  onChange={(event) => setMediaReason(event.target.value)}
+                  placeholder="이미지 수정 사유 (10자 이상)"
+                  maxLength={1000}
+                  disabled={busy}
+                />
+                <button type="button" disabled={busy} onClick={() => void reviseMedia()}>
+                  이미지 수정본 공개
+                </button>
+              </section>
+            ) : null}
             {actionsFor(selected).length ? (
               <section className={styles.decision}>
                 <textarea

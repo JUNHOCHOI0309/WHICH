@@ -1,13 +1,19 @@
+import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
-import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import type { Database } from "../../database/client.js";
 import {
   issues,
+  issueChoiceMedia,
+  issueChoices,
+  issueInterestCards,
+  issueMediaAssets,
+  issueVersions,
   members,
   operatorAccessGrants,
   operatorAuditLogs,
@@ -15,11 +21,16 @@ import {
   pointCatalogItems,
   pointCatalogItemVersions,
   pointPurchases,
+  resultSnapshots,
+  voteAggregates,
+  outboxEvents,
 } from "../../database/schema/index.js";
 import { defaultReviewConsolePaths } from "../../editorial-review-console.js";
 import { loadIssueInventoryReadiness } from "../issue-publication/inventory.js";
 import { EditorialReviewConsole } from "../issue-publication/review-console.js";
 import { evaluateMemberIssueAccessSignals } from "../issues/member-issue-access.js";
+import { sealIssueVersionSnapshot } from "../content-revisions/service.js";
+import { createModerationSubmissionEvents } from "../moderation-dispatch/contracts.js";
 
 import {
   OpsPublishedIssueConflictError,
@@ -160,6 +171,7 @@ type OpsManagementMethods = Pick<
   | "saveEditorialDecision"
   | "readPublishedIssues"
   | "updatePublishedIssue"
+  | "revisePublishedIssueMedia"
 >;
 
 type OpsPointShopMethods = Pick<
@@ -270,12 +282,28 @@ function createOpsManagementMethods(
       ? row.choices.flatMap((choice) => {
           if (typeof choice !== "object" || choice === null) return [];
           const value = choice as Record<string, unknown>;
-          if (!["A", "B", "C", "D"].includes(String(value.code)) || typeof value.label !== "string")
+          if (
+            typeof value.id !== "string" ||
+            !["A", "B", "C", "D"].includes(String(value.code)) ||
+            typeof value.label !== "string"
+          )
             return [];
+          const media =
+            typeof value.assetId === "string" &&
+            typeof value.altText === "string" &&
+            ["COVER", "CONTAIN"].includes(String(value.cropMode))
+              ? {
+                  assetId: value.assetId,
+                  altText: value.altText,
+                  cropMode: String(value.cropMode) as "COVER" | "CONTAIN",
+                }
+              : null;
           return [
             {
+              id: value.id,
               code: String(value.code) as "A" | "B" | "C" | "D",
               label: value.label,
+              media,
             },
           ];
         })
@@ -338,9 +366,20 @@ function createOpsManagementMethods(
       select i.issue_id, latest.version, latest.question, latest.context,
         latest.primary_category_code as category_code, latest.media_mode,
         coalesce((
-          select jsonb_agg(jsonb_build_object('code', choice.choice_code, 'label', choice.label)
+          select jsonb_agg(jsonb_build_object(
+            'id', choice.choice_id,
+            'code', choice.choice_code,
+            'label', choice.label,
+            'assetId', media.media_asset_id,
+            'altText', media.alt_text,
+            'cropMode', media.crop_mode
+          )
             order by choice.choice_code)
           from issue_choices choice
+          left join issue_choice_media media
+            on media.issue_id = choice.issue_id
+            and media.issue_version = choice.issue_version
+            and media.choice_id = choice.choice_id
           where choice.issue_id = latest.issue_id and choice.issue_version = latest.version
         ), '[]'::jsonb) as choices,
         ia.member_id as author_member_id, author.display_name as author_display_name,
@@ -976,6 +1015,249 @@ function createOpsManagementMethods(
       });
       const [saved] = await publishedIssueRows({ issueId: input.issueId, limit: 1 });
       if (!saved) throw new Error("변경된 게시 질문을 다시 읽지 못했습니다.");
+      return saved;
+    },
+
+    async revisePublishedIssueMedia(input): Promise<OpsPublishedIssue | null> {
+      const actor = await operator(input.memberId);
+      if (!actor) {
+        await audit({
+          memberId: input.memberId,
+          eventType: "OPS_PUBLISHED_ISSUE_MEDIA_WRITE",
+          outcome: "DENIED",
+          requestId: input.requestId,
+          metadata: { issueId: input.issueId, reason: "OPERATOR_ROLE_REQUIRED" },
+        });
+        return null;
+      }
+      const reason = input.reason.trim();
+      if (reason.length < 10 || reason.length > 1000) {
+        throw new Error("이미지 수정 사유는 10자 이상 1000자 이하로 입력해 주세요.");
+      }
+      const expectedUpdatedAt = new Date(input.expectedUpdatedAt);
+      const changedAt = new Date(Math.max(Date.now(), expectedUpdatedAt.getTime() + 1));
+
+      const revised = await database.transaction(async (transaction) => {
+        await transaction.execute(
+          sql`select pg_advisory_xact_lock(hashtextextended(${`which:ops-issue-media:${input.issueId}`}, 0))`,
+        );
+        const [issue] = await transaction
+          .select({
+            lifecycle: issues.lifecycle,
+            updatedAt: issues.updatedAt,
+          })
+          .from(issues)
+          .where(eq(issues.id, input.issueId))
+          .limit(1)
+          .for("update");
+        if (!issue) throw new OpsPublishedIssueConflictError("게시 질문을 찾을 수 없습니다.");
+        if (issue.lifecycle !== "PUBLISHED") {
+          throw new OpsPublishedIssueConflictError("공개 중인 질문만 이미지를 수정할 수 있습니다.");
+        }
+        if (issue.updatedAt.getTime() !== expectedUpdatedAt.getTime()) {
+          throw new OpsPublishedIssueConflictError(
+            "다른 운영 변경이 먼저 반영됐습니다. 목록을 새로고침해 주세요.",
+          );
+        }
+
+        const [currentVersion] = await transaction
+          .select()
+          .from(issueVersions)
+          .where(
+            and(
+              eq(issueVersions.issueId, input.issueId),
+              sql`${issueVersions.publishedAt} is not null`,
+              sql`${issueVersions.publishedAt} <= now()`,
+            ),
+          )
+          .orderBy(desc(issueVersions.version))
+          .limit(1);
+        if (!currentVersion || currentVersion.version !== input.expectedVersion) {
+          throw new OpsPublishedIssueConflictError(
+            "질문의 최신 버전이 변경됐습니다. 목록을 새로고침해 주세요.",
+          );
+        }
+        const currentChoices = await transaction
+          .select({ code: issueChoices.code, label: issueChoices.label })
+          .from(issueChoices)
+          .where(
+            and(
+              eq(issueChoices.issueId, input.issueId),
+              eq(issueChoices.issueVersion, currentVersion.version),
+            ),
+          )
+          .orderBy(asc(issueChoices.code));
+        const requestedByCode = new Map(input.choices.map((choice) => [choice.code, choice]));
+        if (
+          currentChoices.length < 2 ||
+          currentChoices.length !== input.choices.length ||
+          currentChoices.some((choice) => !requestedByCode.has(choice.code)) ||
+          input.choices.some(
+            (choice) => choice.altText.trim().length < 2 || choice.altText.trim().length > 300,
+          )
+        ) {
+          throw new OpsPublishedIssueConflictError(
+            "모든 선택지에 승인된 이미지를 한 장씩 지정해 주세요.",
+          );
+        }
+        const assetIds = input.choices.map((choice) => choice.assetId);
+        const assets = await transaction
+          .select({
+            id: issueMediaAssets.id,
+            storageState: issueMediaAssets.storageState,
+            moderationState: issueMediaAssets.moderationState,
+            rightsState: issueMediaAssets.rightsState,
+          })
+          .from(issueMediaAssets)
+          .where(inArray(issueMediaAssets.id, assetIds));
+        if (
+          new Set(assets.map((asset) => asset.id)).size !== new Set(assetIds).size ||
+          assets.some(
+            (asset) =>
+              asset.storageState !== "PUBLISHED" ||
+              asset.moderationState !== "APPROVED" ||
+              !["ASSERTED", "CLEARED"].includes(asset.rightsState),
+          )
+        ) {
+          throw new OpsPublishedIssueConflictError(
+            "검수 승인되어 공개 저장소에 있는 이미지만 질문에 적용할 수 있습니다.",
+          );
+        }
+
+        const cards = await transaction
+          .select({
+            cardCode: issueInterestCards.cardCode,
+            taxonomyVersion: issueInterestCards.taxonomyVersion,
+            weight: issueInterestCards.weight,
+          })
+          .from(issueInterestCards)
+          .where(
+            and(
+              eq(issueInterestCards.issueId, input.issueId),
+              eq(issueInterestCards.issueVersion, currentVersion.version),
+            ),
+          );
+        const [versionCounter] = await transaction
+          .select({ value: sql<number>`max(${issueVersions.version})::int` })
+          .from(issueVersions)
+          .where(eq(issueVersions.issueId, input.issueId));
+        const nextVersion = numberValue(versionCounter?.value) + 1;
+        const nextChoices = currentChoices.map((choice) => ({
+          id: randomUUID(),
+          code: choice.code,
+          label: choice.label,
+        }));
+        await transaction.insert(issueVersions).values({
+          issueId: input.issueId,
+          version: nextVersion,
+          question: currentVersion.question,
+          context: currentVersion.context,
+          contentHash: currentVersion.contentHash,
+          primaryCategoryCode: currentVersion.primaryCategoryCode,
+          experienceModeCode: currentVersion.experienceModeCode,
+          formatMode: currentVersion.formatMode,
+          mediaMode: "OPTION_IMAGES",
+          taxonomyVersion: currentVersion.taxonomyVersion,
+          publishedAt: changedAt,
+        });
+        await transaction.insert(issueChoices).values(
+          nextChoices.map((choice) => ({
+            ...choice,
+            issueId: input.issueId,
+            issueVersion: nextVersion,
+          })),
+        );
+        await transaction.insert(issueChoiceMedia).values(
+          nextChoices.map((choice, index) => {
+            const requested = requestedByCode.get(choice.code)!;
+            return {
+              issueId: input.issueId,
+              issueVersion: nextVersion,
+              choiceId: choice.id,
+              mediaAssetId: requested.assetId,
+              altText: requested.altText.trim(),
+              cropMode: requested.cropMode,
+              displayPosition: index,
+              linkedByMemberId: input.memberId,
+            };
+          }),
+        );
+        if (cards.length > 0) {
+          await transaction.insert(issueInterestCards).values(
+            cards.map((card) => ({
+              issueId: input.issueId,
+              issueVersion: nextVersion,
+              ...card,
+            })),
+          );
+        }
+        await transaction.insert(voteAggregates).values({
+          issueId: input.issueId,
+          issueVersion: nextVersion,
+        });
+        await transaction.insert(resultSnapshots).values({
+          issueId: input.issueId,
+          issueVersion: nextVersion,
+          resultVersion: 1,
+          acceptedACount: 0,
+          acceptedBCount: 0,
+          acceptedCCount: 0,
+          acceptedDCount: 0,
+          displayedVoteCount: 0,
+          integrityState: "NORMAL",
+        });
+        const snapshot = await sealIssueVersionSnapshot(transaction, input.issueId, nextVersion);
+        const publicationEventId = randomUUID();
+        const aggregateId = `${input.issueId}:${nextVersion}`;
+        await transaction.insert(outboxEvents).values([
+          {
+            id: publicationEventId,
+            aggregateType: "ISSUE_VERSION",
+            aggregateId,
+            eventType: "ISSUE_PUBLISHED",
+            schemaVersion: 1,
+            occurredAt: changedAt,
+            payload: {
+              event_id: publicationEventId,
+              event_type: "ISSUE_PUBLISHED",
+              schema_version: 1,
+              occurred_at: changedAt.toISOString(),
+              aggregate_type: "ISSUE_VERSION",
+              aggregate_id: aggregateId,
+              data: {
+                issue_id: input.issueId,
+                issue_version: nextVersion,
+                source: "OPS_MEDIA_REVISION",
+                content_hash: currentVersion.contentHash,
+              },
+            },
+          },
+          ...createModerationSubmissionEvents({
+            targetType: "ISSUE_VERSION",
+            targetId: input.issueId,
+            targetVersion: nextVersion,
+            privateObjectReference: `issue://version/${input.issueId}/${nextVersion}`,
+            normalizedInputHash: snapshot.inputHash,
+            reason: "EDIT",
+            occurredAt: changedAt,
+          }).rows,
+        ]);
+        await transaction
+          .update(issues)
+          .set({ updatedAt: changedAt })
+          .where(eq(issues.id, input.issueId));
+        return { fromVersion: currentVersion.version, toVersion: nextVersion, assetIds };
+      });
+
+      await audit({
+        memberId: input.memberId,
+        eventType: "OPS_PUBLISHED_ISSUE_MEDIA_WRITE",
+        outcome: "SUCCEEDED",
+        requestId: input.requestId,
+        metadata: { issueId: input.issueId, ...revised, reason },
+      });
+      const [saved] = await publishedIssueRows({ issueId: input.issueId, limit: 1 });
+      if (!saved) throw new Error("이미지 수정본을 다시 읽지 못했습니다.");
       return saved;
     },
   };

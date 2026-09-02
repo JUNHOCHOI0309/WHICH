@@ -12,7 +12,10 @@ import { GET as getMembers } from "@/app/api/ops/members/route";
 import { GET as getPointShop } from "@/app/api/ops/point-shop/route";
 import { PATCH as patchPointShopItem } from "@/app/api/ops/point-shop/[itemId]/route";
 import { GET as getPublishedIssues } from "@/app/api/ops/published-issues/route";
-import { PATCH as patchPublishedIssue } from "@/app/api/ops/published-issues/[issueId]/route";
+import {
+  PATCH as patchPublishedIssue,
+  POST as postPublishedIssueMedia,
+} from "@/app/api/ops/published-issues/[issueId]/route";
 import { GET as getReportedMembers } from "@/app/api/ops/reported-members/route";
 
 afterEach(() => {
@@ -207,6 +210,36 @@ describe("operator management BFF", () => {
     );
     expect(response.status).toBe(403);
     expect(upstream).not.toHaveBeenCalled();
+  });
+
+  it("forwards same-origin published-Issue media revisions", async () => {
+    const issueId = "10503719-4d3b-4abf-a1ee-ec0920d72e9a";
+    const upstream = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      expect(String(input)).toBe(
+        `http://localhost:4000/v1/internal/ops/published-issues/${issueId}/media-revision`,
+      );
+      expect(init?.method).toBe("POST");
+      expect(JSON.parse(String(init?.body))).toMatchObject({ expectedVersion: 1 });
+      return new Response(JSON.stringify({ issueId, version: 2 }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    });
+    vi.stubGlobal("fetch", upstream);
+    const response = await postPublishedIssueMedia(
+      new NextRequest(`https://whichone.site/api/ops/published-issues/${issueId}`, {
+        method: "POST",
+        headers: {
+          cookie: "which_member_session=member-token",
+          origin: "https://whichone.site",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ expectedVersion: 1, choices: [] }),
+      }),
+      { params: Promise.resolve({ issueId }) },
+    );
+    expect(response.status).toBe(200);
+    expect(upstream).toHaveBeenCalledOnce();
   });
 
   it("forwards same-origin Point Shop status updates", async () => {

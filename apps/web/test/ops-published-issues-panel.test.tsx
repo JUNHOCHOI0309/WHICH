@@ -9,8 +9,18 @@ const issue = {
   question: "운영 화면에서 관리할 질문은?",
   context: "게시된 질문 관리 테스트",
   choices: [
-    { code: "A" as const, label: "계속 공개" },
-    { code: "B" as const, label: "노출 중지" },
+    {
+      id: "30503719-4d3b-4abf-a1ee-ec0920d72e9a",
+      code: "A" as const,
+      label: "계속 공개",
+      media: null,
+    },
+    {
+      id: "40503719-4d3b-4abf-a1ee-ec0920d72e9a",
+      code: "B" as const,
+      label: "노출 중지",
+      media: null,
+    },
   ],
   categoryCode: "LIFE",
   mediaMode: "TEXT_ONLY",
@@ -73,5 +83,69 @@ describe("Ops published Issue controls", () => {
     expect(await screen.findByText("노출 중지 조치를 기록했습니다.")).toBeVisible();
     await waitFor(() => expect(request).toHaveBeenCalledTimes(3));
     expect(screen.getByText("SUSPENDED")).toBeVisible();
+  });
+
+  it("uploads and approves every choice image before publishing a media revision", async () => {
+    issue.state = "ACTIVE";
+    issue.visibility = "VISIBLE";
+    issue.participation = "VOTING_OPEN";
+    issue.feedEligibility = "ELIGIBLE";
+    issue.acceptedVotes = 0;
+    issue.updatedAt = "2026-09-02T03:00:00.000Z";
+    let uploadCount = 0;
+    const request = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/ops/media-review/assets" && init?.method === "POST") {
+        uploadCount += 1;
+        return new Response(
+          JSON.stringify({
+            asset: {
+              id: `${uploadCount}0503719-4d3b-4abf-a1ee-ec0920d72e9a`,
+              moderationState: "PENDING",
+              storageState: "STAGED",
+            },
+          }),
+          { status: 201, headers: { "content-type": "application/json" } },
+        );
+      }
+      if (url.includes("/api/ops/media-review/assets/") && init?.method === "PUT") {
+        return new Response(JSON.stringify({ status: "APPROVED" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      if (url.includes("/api/ops/published-issues/") && init?.method === "POST") {
+        const body = JSON.parse(String(init.body)) as { choices: unknown[] };
+        expect(body.choices).toHaveLength(2);
+        return new Response(JSON.stringify({ ...issue, version: 2 }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return pageResponse();
+    });
+    vi.stubGlobal("fetch", request);
+
+    render(<OpsPublishedIssuesPanel />);
+    await screen.findByRole("heading", { name: issue.question });
+    const inputs = screen.getAllByLabelText("이미지 추가");
+    fireEvent.change(inputs[0]!, {
+      target: { files: [new File(["a"], "a.png", { type: "image/png" })] },
+    });
+    fireEvent.change(inputs[1]!, {
+      target: { files: [new File(["b"], "b.png", { type: "image/png" })] },
+    });
+    fireEvent.change(
+      screen.getByPlaceholderText("새 이미지 권리 근거 (직접 촬영·라이선스 등, 20자 이상)"),
+      { target: { value: "운영자가 직접 제작하고 사용 권리를 확인한 이미지입니다." } },
+    );
+    fireEvent.change(screen.getByPlaceholderText("이미지 수정 사유 (10자 이상)"), {
+      target: { value: "기본 질문에 A/B 선택지 이미지를 추가합니다." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "이미지 수정본 공개" }));
+
+    expect(await screen.findByText("이미지를 적용한 v2 수정본을 공개했습니다.")).toBeVisible();
+    expect(uploadCount).toBe(2);
+    expect(request).toHaveBeenCalledTimes(7);
   });
 });
