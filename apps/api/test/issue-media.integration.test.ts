@@ -188,7 +188,7 @@ describe("operator Issue media foundation", () => {
       service.stageAsset({
         memberId: operatorId,
         sourceType: "OPERATOR_UPLOAD",
-        rightsAttestation: "Reusable A image with verified commercial and redistribution rights.",
+        rightsAttestation: "직접 촬영",
         declaredMimeType: "image/png",
         bytes: await image("png", { r: 2, g: 130, b: 170 }),
       }),

@@ -534,7 +534,7 @@ export async function registerOpsRoutes(
         expectedUpdatedAt: string;
         expectedReportCaseId?: string;
         expectedReportUpdatedAt?: string;
-        reason: string;
+        reason?: string;
       };
     }>(
       "/v1/internal/ops/published-issues/:issueId",
@@ -549,7 +549,7 @@ export async function registerOpsRoutes(
               expectedUpdatedAt: Type.String({ format: "date-time" }),
               expectedReportCaseId: Type.Optional(Type.String({ format: "uuid" })),
               expectedReportUpdatedAt: Type.Optional(Type.String({ format: "date-time" })),
-              reason: Type.String({ minLength: 1 }),
+              reason: Type.Optional(Type.String()),
             },
             { additionalProperties: false },
           ),
@@ -588,7 +588,7 @@ export async function registerOpsRoutes(
       Body: {
         expectedVersion: number;
         expectedUpdatedAt: string;
-        reason: string;
+        reason?: string;
         choices: Array<{
           code: "A" | "B" | "C" | "D";
           assetId: string;
@@ -607,7 +607,7 @@ export async function registerOpsRoutes(
             {
               expectedVersion: Type.Integer({ minimum: 1 }),
               expectedUpdatedAt: Type.String({ format: "date-time" }),
-              reason: Type.String({ minLength: 1 }),
+              reason: Type.Optional(Type.String()),
               choices: Type.Array(
                 Type.Object(
                   {

@@ -1040,8 +1040,7 @@ function createOpsManagementMethods(
         });
         return null;
       }
-      const reason = input.reason.trim();
-      if (!reason) throw new Error("게시 질문 조치 사유를 입력해 주세요.");
+      const reason = input.reason?.trim() || `OPERATOR_${input.action}`;
       const [current] = await publishedIssueRows({ issueId: input.issueId, limit: 1 });
       if (!current) throw new OpsPublishedIssueConflictError("게시 질문을 찾을 수 없습니다.");
       const expectedUpdatedAt = new Date(input.expectedUpdatedAt);
@@ -1181,8 +1180,7 @@ function createOpsManagementMethods(
         });
         return null;
       }
-      const reason = input.reason.trim();
-      if (!reason) throw new Error("이미지 수정 사유를 입력해 주세요.");
+      const reason = input.reason?.trim() || "OPERATOR_MEDIA_REVISION";
       const expectedUpdatedAt = new Date(input.expectedUpdatedAt);
       const changedAt = new Date(Math.max(Date.now(), expectedUpdatedAt.getTime() + 1));
 

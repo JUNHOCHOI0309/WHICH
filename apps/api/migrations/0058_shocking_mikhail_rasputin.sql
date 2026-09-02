@@ -1,0 +1,2 @@
+ALTER TABLE "issue_media_assets" DROP CONSTRAINT "issue_media_assets_attestation_check";--> statement-breakpoint
+ALTER TABLE "issue_media_assets" ADD CONSTRAINT "issue_media_assets_attestation_check" CHECK (char_length(trim("issue_media_assets"."rights_attestation")) > 0);

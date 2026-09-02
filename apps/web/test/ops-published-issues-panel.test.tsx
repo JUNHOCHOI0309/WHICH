@@ -52,13 +52,12 @@ function pageResponse() {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("Ops published Issue controls", () => {
-  it("hides an active Issue with an audited reason and keeps success feedback visible", async () => {
+  it("hides an active Issue from the action button and keeps success feedback visible", async () => {
     const request = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
       if (init?.method === "PATCH") {
         expect(JSON.parse(String(init.body))).toEqual({
           action: "HIDE",
           expectedUpdatedAt: "2026-09-02T01:00:00.000Z",
-          reason: "신고 내용을 확인할 때까지 노출을 중지합니다.",
         });
         issue.state = "HIDDEN";
         issue.visibility = "SUSPENDED";
@@ -77,9 +76,7 @@ describe("Ops published Issue controls", () => {
     render(<OpsPublishedIssuesPanel />);
 
     expect(await screen.findByRole("heading", { name: issue.question })).toBeVisible();
-    fireEvent.change(screen.getByPlaceholderText("운영 조치 사유"), {
-      target: { value: "신고 내용을 확인할 때까지 노출을 중지합니다." },
-    });
+    expect(screen.queryByPlaceholderText("운영 조치 사유")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "노출 중지" }));
 
     expect(await screen.findByText("노출 중지 조치를 기록했습니다.")).toBeVisible();
@@ -140,9 +137,7 @@ describe("Ops published Issue controls", () => {
     fireEvent.change(screen.getByPlaceholderText("새 이미지 권리 근거 (직접 촬영·라이선스 등)"), {
       target: { value: "운영자가 직접 제작하고 사용 권리를 확인한 이미지입니다." },
     });
-    fireEvent.change(screen.getByPlaceholderText("이미지 수정 사유"), {
-      target: { value: "기본 질문에 A/B 선택지 이미지를 추가합니다." },
-    });
+    expect(screen.queryByPlaceholderText("이미지 수정 사유")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "이미지 수정본 공개" }));
 
     expect(await screen.findByText("이미지를 적용한 v2 수정본을 공개했습니다.")).toBeVisible();
@@ -150,7 +145,7 @@ describe("Ops published Issue controls", () => {
     expect(request).toHaveBeenCalledTimes(7);
   });
 
-  it("shows report details and dismisses an active report case with a short reason", async () => {
+  it("shows report details and dismisses an active report case from the action button", async () => {
     issue.state = "ACTIVE";
     issue.activeReportReview = {
       caseId: "50503719-4d3b-4abf-a1ee-ec0920d72e9a",
@@ -178,7 +173,6 @@ describe("Ops published Issue controls", () => {
           action: "DISMISS_REPORTS",
           expectedReportCaseId: "50503719-4d3b-4abf-a1ee-ec0920d72e9a",
           expectedReportUpdatedAt: "2026-09-02T03:10:00.000Z",
-          reason: "오탐",
         });
         issue.activeReportReview = null;
         return new Response(JSON.stringify(issue), {
@@ -193,9 +187,6 @@ describe("Ops published Issue controls", () => {
     render(<OpsPublishedIssuesPanel />);
     expect(await screen.findByText("혐오 표현")).toBeVisible();
     expect(screen.getByText("선택지 표현이 특정 집단을 비하합니다.")).toBeVisible();
-    fireEvent.change(screen.getByPlaceholderText("운영 조치 사유"), {
-      target: { value: "오탐" },
-    });
     fireEvent.click(screen.getByRole("button", { name: "신고 기각" }));
 
     expect(await screen.findByText("신고 기각 조치를 기록했습니다.")).toBeVisible();

@@ -421,7 +421,7 @@ export interface OpsDashboardService {
     expectedUpdatedAt: string;
     expectedReportCaseId?: string;
     expectedReportUpdatedAt?: string;
-    reason: string;
+    reason?: string;
     requestId?: string;
   }): Promise<OpsPublishedIssue | null>;
   revisePublishedIssueMedia(input: {
@@ -429,7 +429,7 @@ export interface OpsDashboardService {
     issueId: string;
     expectedVersion: number;
     expectedUpdatedAt: string;
-    reason: string;
+    reason?: string;
     choices: Array<{
       code: "A" | "B" | "C" | "D";
       assetId: string;
