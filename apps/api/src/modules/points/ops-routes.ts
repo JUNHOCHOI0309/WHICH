@@ -259,7 +259,7 @@ export async function registerPointOpsRoutes(
           body: Type.Object({
             targetMemberId: Type.String({ format: "uuid" }),
             amount: Type.Integer(),
-            reason: Type.String({ minLength: 8, maxLength: 500 }),
+            reason: Type.String({ minLength: 1 }),
             incidentId: Type.String({ minLength: 3, maxLength: 128 }),
             idempotencyKey: Type.String({ minLength: 8, maxLength: 160 }),
           }),

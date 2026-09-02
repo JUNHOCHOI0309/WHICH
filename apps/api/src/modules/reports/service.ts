@@ -45,20 +45,8 @@ function hashToken(token: string) {
 
 function normalizeDetail(command: ContentReportCommand) {
   const detail = command.detail?.replace(/\r\n?/g, "\n").normalize("NFC").trim();
-  const length = detail ? Array.from(detail).length : 0;
-  if (length > 1_000) {
-    throw new ContentReportError(
-      "REPORT_DETAIL_TOO_LONG",
-      422,
-      "Report detail must contain at most 1000 characters.",
-    );
-  }
-  if (command.reasonCode === "OTHER" && length < 10) {
-    throw new ContentReportError(
-      "REPORT_DETAIL_REQUIRED",
-      422,
-      "OTHER reports require a detail of at least 10 characters.",
-    );
+  if (command.reasonCode === "OTHER" && !detail) {
+    throw new ContentReportError("REPORT_DETAIL_REQUIRED", 422, "OTHER reports require a detail.");
   }
   return detail || undefined;
 }

@@ -219,7 +219,26 @@ export type OpsEditorialPage = {
 };
 
 export type OpsPublishedIssueState = "ACTIVE" | "HIDDEN" | "CLOSED" | "REMOVED";
-export type OpsPublishedIssueAction = "HIDE" | "RESTORE" | "REMOVE";
+export type OpsPublishedIssueAction =
+  "HIDE" | "RESTORE" | "REMOVE" | "RESOLVE_REPORTS" | "DISMISS_REPORTS";
+export type OpsPublishedIssueReportReview = {
+  caseId: string;
+  status: "OPEN" | "QUARANTINED" | "PENDING_REVIEW";
+  priority: "NORMAL" | "P0";
+  automationRecommendation: "NONE" | "P0_REVIEW" | "QUARANTINE_REVIEW";
+  policyVersion: string;
+  reportCount: number;
+  reports: Array<{
+    id: string;
+    reasonCode: string;
+    detail: string | null;
+    reporterKind: "GUEST" | "MEMBER" | "VERIFIED_MEMBER";
+    weight: number;
+    createdAt: string;
+  }>;
+  createdAt: string;
+  updatedAt: string;
+};
 export type OpsPublishedIssue = {
   issueId: string;
   version: number;
@@ -245,6 +264,7 @@ export type OpsPublishedIssue = {
   state: OpsPublishedIssueState;
   acceptedVotes: number;
   reportCount: number;
+  activeReportReview: OpsPublishedIssueReportReview | null;
   publishedAt: string | null;
   createdAt: string;
   updatedAt: string;

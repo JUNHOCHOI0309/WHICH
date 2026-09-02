@@ -121,7 +121,7 @@ export async function registerMemberModerationRoutes(
             {
               targetType: targetTypeSchema,
               targetId: Type.String({ format: "uuid" }),
-              reason: Type.String({ minLength: 20, maxLength: 4000 }),
+              reason: Type.String({ minLength: 1 }),
               evidence: evidenceSchema,
             },
             { additionalProperties: false },
@@ -159,7 +159,7 @@ export async function registerMemberModerationRoutes(
               ]),
               targetType: targetTypeSchema,
               targetId: Type.String({ format: "uuid" }),
-              details: Type.String({ minLength: 20, maxLength: 4000 }),
+              details: Type.String({ minLength: 1 }),
               evidence: evidenceSchema,
             },
             { additionalProperties: false },

@@ -359,11 +359,11 @@ export function createIssueMediaUploadGateService(
       if (!(await operatorAllowed(input.operatorMemberId))) return null;
       await expireGrant(input.targetMemberId);
       const rationale = input.rationale.trim();
-      if (rationale.length < 10 || rationale.length > 2000) {
+      if (!rationale) {
         throw new IssueMediaUploadGateError(
           "MEDIA_UPLOAD_NOT_AVAILABLE",
           409,
-          "Pilot capability decisions require a 10-2000 character rationale.",
+          "Pilot capability decisions require a rationale.",
         );
       }
       const [target] = await pilotMembers(input.targetMemberId, 1);

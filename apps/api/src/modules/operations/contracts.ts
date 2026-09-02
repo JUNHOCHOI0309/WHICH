@@ -214,8 +214,33 @@ export type OpsEditorialPage = {
 
 export const OPS_PUBLISHED_ISSUE_STATES = ["ACTIVE", "HIDDEN", "CLOSED", "REMOVED"] as const;
 export type OpsPublishedIssueState = (typeof OPS_PUBLISHED_ISSUE_STATES)[number];
-export const OPS_PUBLISHED_ISSUE_ACTIONS = ["HIDE", "RESTORE", "REMOVE"] as const;
+export const OPS_PUBLISHED_ISSUE_ACTIONS = [
+  "HIDE",
+  "RESTORE",
+  "REMOVE",
+  "RESOLVE_REPORTS",
+  "DISMISS_REPORTS",
+] as const;
 export type OpsPublishedIssueAction = (typeof OPS_PUBLISHED_ISSUE_ACTIONS)[number];
+
+export type OpsPublishedIssueReportReview = {
+  caseId: string;
+  status: "OPEN" | "QUARANTINED" | "PENDING_REVIEW";
+  priority: "NORMAL" | "P0";
+  automationRecommendation: "NONE" | "P0_REVIEW" | "QUARANTINE_REVIEW";
+  policyVersion: string;
+  reportCount: number;
+  reports: Array<{
+    id: string;
+    reasonCode: string;
+    detail: string | null;
+    reporterKind: "GUEST" | "MEMBER" | "VERIFIED_MEMBER";
+    weight: number;
+    createdAt: string;
+  }>;
+  createdAt: string;
+  updatedAt: string;
+};
 
 export type OpsPublishedIssue = {
   issueId: string;
@@ -242,6 +267,7 @@ export type OpsPublishedIssue = {
   state: OpsPublishedIssueState;
   acceptedVotes: number;
   reportCount: number;
+  activeReportReview: OpsPublishedIssueReportReview | null;
   publishedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -383,6 +409,7 @@ export interface OpsDashboardService {
   readPublishedIssues(input: {
     memberId: string;
     state?: OpsPublishedIssueState;
+    reportedOnly?: boolean;
     query?: string;
     limit: number;
     requestId?: string;
@@ -392,6 +419,8 @@ export interface OpsDashboardService {
     issueId: string;
     action: OpsPublishedIssueAction;
     expectedUpdatedAt: string;
+    expectedReportCaseId?: string;
+    expectedReportUpdatedAt?: string;
     reason: string;
     requestId?: string;
   }): Promise<OpsPublishedIssue | null>;

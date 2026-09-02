@@ -165,7 +165,7 @@ describe("operator management BFF", () => {
       const url = String(input);
       expect([
         "/v1/internal/ops/reported-members?limit=50&state=BLOCKED&q=maker",
-        "/v1/internal/ops/published-issues?limit=50&state=ACTIVE&q=lunch",
+        "/v1/internal/ops/published-issues?limit=50&state=ACTIVE&reported=true&q=lunch",
       ]).toContain(new URL(url).pathname + new URL(url).search);
       return new Response(JSON.stringify({ schemaVersion: 1, items: [] }), {
         status: 200,
@@ -180,9 +180,10 @@ describe("operator management BFF", () => {
         }),
       ),
       getPublishedIssues(
-        new NextRequest("https://whichone.site/api/ops/published-issues?state=ACTIVE&q=lunch", {
-          headers: { cookie: "which_member_session=member-token" },
-        }),
+        new NextRequest(
+          "https://whichone.site/api/ops/published-issues?state=ACTIVE&reported=true&q=lunch",
+          { headers: { cookie: "which_member_session=member-token" } },
+        ),
       ),
     ]);
     expect(reported.status).toBe(200);

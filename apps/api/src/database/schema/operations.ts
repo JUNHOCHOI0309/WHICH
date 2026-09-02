@@ -6,6 +6,7 @@ import {
   integer,
   jsonb,
   pgTable,
+  text,
   timestamp,
   unique,
   uniqueIndex,
@@ -88,7 +89,7 @@ export const operatorEditorialDecisions = pgTable(
     catalogId: varchar("catalog_id", { length: 128 }).notNull(),
     candidateId: varchar("candidate_id", { length: 32 }).notNull(),
     status: varchar("status", { length: 24 }).notNull(),
-    note: varchar("note", { length: 2000 }).default("").notNull(),
+    note: text("note").default("").notNull(),
     reviewedByMemberId: uuid("reviewed_by_member_id")
       .notNull()
       .references(() => members.id, { onDelete: "restrict" }),

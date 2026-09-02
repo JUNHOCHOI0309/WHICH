@@ -125,12 +125,10 @@ export function OpsPointShopPanel() {
       (statusChanged && !priceChanged
         ? `판매 상태 변경: ${statusLabels[selected.status]} → ${statusLabels[editStatus]}`
         : "");
-    if (reason.length < 8) {
+    if (!reason) {
       setEditFeedback({
         kind: "error",
-        message: priceChanged
-          ? "가격 변경 사유를 8자 이상 입력해 주세요."
-          : "변경 사유를 8자 이상 입력해 주세요.",
+        message: priceChanged ? "가격 변경 사유를 입력해 주세요." : "변경 사유를 입력해 주세요.",
       });
       return;
     }
@@ -263,7 +261,7 @@ export function OpsPointShopPanel() {
                     변경 사유
                     <textarea
                       value={editReason}
-                      placeholder="가격 변경 시 8자 이상 입력해 주세요. 상태만 변경하면 자동 기록됩니다."
+                      placeholder="가격 변경 사유를 입력해 주세요. 상태만 변경하면 자동 기록됩니다."
                       onChange={(event) => setEditReason(event.target.value)}
                     />
                   </label>

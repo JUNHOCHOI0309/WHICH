@@ -21,6 +21,7 @@ import {
   pointCatalogItems,
   pointCatalogItemVersions,
   pointPurchases,
+  reportCases,
   resultSnapshots,
   voteAggregates,
   outboxEvents,
@@ -260,6 +261,7 @@ function createOpsManagementMethods(
     feed_eligibility: string;
     accepted_votes: number;
     report_count: number;
+    active_report_review: unknown;
     published_at: Date | string | null;
     created_at: Date | string;
     updated_at: Date | string;
@@ -308,6 +310,57 @@ function createOpsManagementMethods(
           ];
         })
       : [];
+    const activeReportValue =
+      typeof row.active_report_review === "object" && row.active_report_review !== null
+        ? (row.active_report_review as Record<string, unknown>)
+        : null;
+    const activeReportReview =
+      activeReportValue &&
+      typeof activeReportValue.caseId === "string" &&
+      ["OPEN", "QUARANTINED", "PENDING_REVIEW"].includes(String(activeReportValue.status)) &&
+      ["NORMAL", "P0"].includes(String(activeReportValue.priority)) &&
+      ["NONE", "P0_REVIEW", "QUARANTINE_REVIEW"].includes(
+        String(activeReportValue.automationRecommendation),
+      ) &&
+      typeof activeReportValue.policyVersion === "string" &&
+      typeof activeReportValue.createdAt === "string" &&
+      typeof activeReportValue.updatedAt === "string"
+        ? {
+            caseId: activeReportValue.caseId,
+            status: String(activeReportValue.status) as "OPEN" | "QUARANTINED" | "PENDING_REVIEW",
+            priority: String(activeReportValue.priority) as "NORMAL" | "P0",
+            automationRecommendation: String(activeReportValue.automationRecommendation) as
+              "NONE" | "P0_REVIEW" | "QUARANTINE_REVIEW",
+            policyVersion: activeReportValue.policyVersion,
+            reportCount: numberValue(activeReportValue.reportCount as number | string | null),
+            reports: Array.isArray(activeReportValue.reports)
+              ? activeReportValue.reports.flatMap((report) => {
+                  if (typeof report !== "object" || report === null) return [];
+                  const value = report as Record<string, unknown>;
+                  if (
+                    typeof value.id !== "string" ||
+                    typeof value.reasonCode !== "string" ||
+                    !["GUEST", "MEMBER", "VERIFIED_MEMBER"].includes(String(value.reporterKind)) ||
+                    typeof value.createdAt !== "string"
+                  )
+                    return [];
+                  return [
+                    {
+                      id: value.id,
+                      reasonCode: value.reasonCode,
+                      detail: typeof value.detail === "string" ? value.detail : null,
+                      reporterKind: String(value.reporterKind) as
+                        "GUEST" | "MEMBER" | "VERIFIED_MEMBER",
+                      weight: numberValue(value.weight as number | string | null),
+                      createdAt: value.createdAt,
+                    },
+                  ];
+                })
+              : [],
+            createdAt: activeReportValue.createdAt,
+            updatedAt: activeReportValue.updatedAt,
+          }
+        : null;
     return {
       issueId: row.issue_id,
       version: Number(row.version),
@@ -327,6 +380,7 @@ function createOpsManagementMethods(
       state: publishedIssueState(row),
       acceptedVotes: numberValue(row.accepted_votes),
       reportCount: numberValue(row.report_count),
+      activeReportReview,
       publishedAt: row.published_at ? new Date(row.published_at).toISOString() : null,
       createdAt: new Date(row.created_at).toISOString(),
       updatedAt: new Date(row.updated_at).toISOString(),
@@ -335,6 +389,7 @@ function createOpsManagementMethods(
 
   async function publishedIssueRows(input: {
     state?: OpsPublishedIssue["state"];
+    reportedOnly?: boolean;
     query?: string;
     issueId?: string;
     limit: number;
@@ -348,6 +403,13 @@ function createOpsManagementMethods(
         )`
       : sql``;
     const issueClause = input.issueId ? sql`and i.issue_id = ${input.issueId}::uuid` : sql``;
+    const reportedClause = input.reportedOnly
+      ? sql`and exists (
+          select 1 from report_cases active_case
+          where active_case.target_type = 'ISSUE' and active_case.target_id = i.issue_id
+            and active_case.status in ('OPEN', 'QUARANTINED', 'PENDING_REVIEW')
+        )`
+      : sql``;
     const stateClause =
       input.state === "ACTIVE"
         ? sql`and i.lifecycle = 'PUBLISHED' and i.visibility = 'VISIBLE'
@@ -392,6 +454,32 @@ function createOpsManagementMethods(
           join report_cases report_case on report_case.report_case_id = report.report_case_id
           where report.target_type = 'ISSUE' and report.target_id = i.issue_id
             and report.counted = true and report_case.status <> 'DISMISSED') as report_count,
+        (select jsonb_build_object(
+          'caseId', active_case.report_case_id,
+          'status', active_case.status,
+          'priority', active_case.priority,
+          'automationRecommendation', active_case.automation_recommendation,
+          'policyVersion', active_case.policy_version,
+          'reportCount', (select count(*)::int from content_reports active_report
+            where active_report.report_case_id = active_case.report_case_id
+              and active_report.counted = true),
+          'reports', coalesce((select jsonb_agg(jsonb_build_object(
+            'id', active_report.content_report_id,
+            'reasonCode', active_report.reason_code,
+            'detail', active_report.detail,
+            'reporterKind', active_report.reporter_kind,
+            'weight', active_report.weight_snapshot,
+            'createdAt', active_report.created_at
+          ) order by active_report.created_at desc)
+            from content_reports active_report
+            where active_report.report_case_id = active_case.report_case_id
+              and active_report.counted = true), '[]'::jsonb),
+          'createdAt', active_case.created_at,
+          'updatedAt', active_case.updated_at
+        ) from report_cases active_case
+          where active_case.target_type = 'ISSUE' and active_case.target_id = i.issue_id
+            and active_case.status in ('OPEN', 'QUARANTINED', 'PENDING_REVIEW')
+          order by active_case.updated_at desc limit 1) as active_report_review,
         latest.published_at, i.created_at, i.updated_at
       from issues i
       join lateral (
@@ -406,8 +494,17 @@ function createOpsManagementMethods(
       ) latest on true
       left join issue_authors ia on ia.issue_id = i.issue_id
       left join members author on author.member_id = ia.member_id
-      where true ${queryClause} ${issueClause} ${stateClause}
-      order by i.updated_at desc, i.issue_id desc
+      where true ${queryClause} ${issueClause} ${stateClause} ${reportedClause}
+      order by
+        case when ${input.reportedOnly ?? false} then (
+          select count(*) from content_reports priority_report
+          join report_cases priority_case
+            on priority_case.report_case_id = priority_report.report_case_id
+          where priority_report.target_type = 'ISSUE' and priority_report.target_id = i.issue_id
+            and priority_report.counted = true
+            and priority_case.status in ('OPEN', 'QUARANTINED', 'PENDING_REVIEW')
+        ) else 0 end desc,
+        i.updated_at desc, i.issue_id desc
       limit ${Math.max(1, Math.min(input.limit, 100))}
     `);
     return result.rows.map(mapPublishedIssue);
@@ -924,6 +1021,7 @@ function createOpsManagementMethods(
         metadata: {
           resultCount: items.length,
           state: input.state ?? "ALL",
+          reportedOnly: input.reportedOnly ?? false,
           searched: Boolean(input.query?.trim()),
         },
       });
@@ -943,9 +1041,7 @@ function createOpsManagementMethods(
         return null;
       }
       const reason = input.reason.trim();
-      if (reason.length < 10 || reason.length > 1000) {
-        throw new Error("게시 질문 조치 사유는 10자 이상 1000자 이하로 입력해 주세요.");
-      }
+      if (!reason) throw new Error("게시 질문 조치 사유를 입력해 주세요.");
       const [current] = await publishedIssueRows({ issueId: input.issueId, limit: 1 });
       if (!current) throw new OpsPublishedIssueConflictError("게시 질문을 찾을 수 없습니다.");
       const expectedUpdatedAt = new Date(input.expectedUpdatedAt);
@@ -953,6 +1049,45 @@ function createOpsManagementMethods(
         throw new OpsPublishedIssueConflictError(
           "다른 운영 변경이 먼저 반영됐습니다. 목록을 새로고침해 주세요.",
         );
+      }
+      if (["RESOLVE_REPORTS", "DISMISS_REPORTS"].includes(input.action)) {
+        if (!input.expectedReportCaseId || !input.expectedReportUpdatedAt) {
+          throw new OpsPublishedIssueConflictError("신고 목록을 새로고침한 뒤 다시 처리해 주세요.");
+        }
+        const changedAt = new Date();
+        const expectedReportUpdatedAt = new Date(input.expectedReportUpdatedAt);
+        const status = input.action === "DISMISS_REPORTS" ? "DISMISSED" : "RESOLVED";
+        const cases = await database
+          .update(reportCases)
+          .set({ status, updatedAt: changedAt, resolvedAt: changedAt })
+          .where(
+            and(
+              eq(reportCases.targetType, "ISSUE"),
+              eq(reportCases.targetId, input.issueId),
+              eq(reportCases.id, input.expectedReportCaseId),
+              inArray(reportCases.status, ["OPEN", "QUARANTINED", "PENDING_REVIEW"]),
+              sql`date_trunc('milliseconds', ${reportCases.updatedAt}) = ${expectedReportUpdatedAt}`,
+            ),
+          )
+          .returning({ id: reportCases.id });
+        if (cases.length === 0) {
+          throw new OpsPublishedIssueConflictError("처리할 열린 신고 건이 없습니다.");
+        }
+        await audit({
+          memberId: input.memberId,
+          eventType: "OPS_PUBLISHED_ISSUE_REPORT_REVIEW",
+          outcome: "SUCCEEDED",
+          requestId: input.requestId,
+          metadata: {
+            issueId: input.issueId,
+            action: input.action,
+            reportCaseIds: cases.map((reportCase) => reportCase.id),
+            reason,
+          },
+        });
+        const [saved] = await publishedIssueRows({ issueId: input.issueId, limit: 1 });
+        if (!saved) throw new Error("신고 처리 후 게시 질문을 다시 읽지 못했습니다.");
+        return saved;
       }
       if (current.state === "REMOVED") {
         throw new OpsPublishedIssueConflictError("이미 게시 중단된 질문입니다.");
@@ -981,21 +1116,36 @@ function createOpsManagementMethods(
                 participation: "VOTING_CLOSED" as const,
                 feedEligibility: "EXCLUDED" as const,
               };
-      const [updated] = await database
-        .update(issues)
-        .set({ ...next, updatedAt: changedAt })
-        .where(
-          and(
-            eq(issues.id, input.issueId),
-            sql`date_trunc('milliseconds', ${issues.updatedAt}) = ${expectedUpdatedAt}`,
-          ),
-        )
-        .returning({ id: issues.id });
-      if (!updated) {
-        throw new OpsPublishedIssueConflictError(
-          "다른 운영 변경이 먼저 반영됐습니다. 목록을 새로고침해 주세요.",
-        );
-      }
+      const resolvedReportCaseIds = await database.transaction(async (transaction) => {
+        const [updated] = await transaction
+          .update(issues)
+          .set({ ...next, updatedAt: changedAt })
+          .where(
+            and(
+              eq(issues.id, input.issueId),
+              sql`date_trunc('milliseconds', ${issues.updatedAt}) = ${expectedUpdatedAt}`,
+            ),
+          )
+          .returning({ id: issues.id });
+        if (!updated) {
+          throw new OpsPublishedIssueConflictError(
+            "다른 운영 변경이 먼저 반영됐습니다. 목록을 새로고침해 주세요.",
+          );
+        }
+        if (input.action !== "HIDE" && input.action !== "REMOVE") return [];
+        const cases = await transaction
+          .update(reportCases)
+          .set({ status: "RESOLVED", updatedAt: changedAt, resolvedAt: changedAt })
+          .where(
+            and(
+              eq(reportCases.targetType, "ISSUE"),
+              eq(reportCases.targetId, input.issueId),
+              inArray(reportCases.status, ["OPEN", "QUARANTINED", "PENDING_REVIEW"]),
+            ),
+          )
+          .returning({ id: reportCases.id });
+        return cases.map((reportCase) => reportCase.id);
+      });
       await audit({
         memberId: input.memberId,
         eventType: "OPS_PUBLISHED_ISSUE_WRITE",
@@ -1011,6 +1161,7 @@ function createOpsManagementMethods(
             feedEligibility: current.feedEligibility,
           },
           reason,
+          resolvedReportCaseIds,
         },
       });
       const [saved] = await publishedIssueRows({ issueId: input.issueId, limit: 1 });
@@ -1031,9 +1182,7 @@ function createOpsManagementMethods(
         return null;
       }
       const reason = input.reason.trim();
-      if (reason.length < 10 || reason.length > 1000) {
-        throw new Error("이미지 수정 사유는 10자 이상 1000자 이하로 입력해 주세요.");
-      }
+      if (!reason) throw new Error("이미지 수정 사유를 입력해 주세요.");
       const expectedUpdatedAt = new Date(input.expectedUpdatedAt);
       const changedAt = new Date(Math.max(Date.now(), expectedUpdatedAt.getTime() + 1));
 

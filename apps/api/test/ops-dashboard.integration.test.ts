@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -5,6 +7,7 @@ import { buildApp } from "../src/app.js";
 import { getConfig } from "../src/config.js";
 import type { Database } from "../src/database/client.js";
 import {
+  contentReports,
   issueAuthors,
   issueChoiceMedia,
   issueChoices,
@@ -16,6 +19,9 @@ import {
   operatorEditorialDecisions,
   pointCatalogItems,
   pointCatalogItemVersions,
+  reportCases,
+  reportClusters,
+  voterSubjects,
 } from "../src/database/schema/index.js";
 import { createCommentReadService } from "../src/modules/comments/service.js";
 import { createMemberIdentityService } from "../src/modules/identity/service.js";
@@ -121,6 +127,39 @@ function opsRequest(
     },
     payload,
   });
+}
+
+async function createIssueReport(issueId: string, reasonCode: string, detail: string) {
+  const now = new Date();
+  const [subject] = await database.db
+    .insert(voterSubjects)
+    .values({ kind: "GUEST", anonymousSubjectId: randomUUID() })
+    .returning({ id: voterSubjects.id });
+  const [reportCase] = await database.db
+    .insert(reportCases)
+    .values({ targetType: "ISSUE", targetId: issueId, policyVersion: "report-signal-v2" })
+    .returning({ id: reportCases.id });
+  const [cluster] = await database.db
+    .insert(reportClusters)
+    .values({ caseId: reportCase!.id, windowStartedAt: now })
+    .returning({ id: reportClusters.id });
+  const [report] = await database.db
+    .insert(contentReports)
+    .values({
+      caseId: reportCase!.id,
+      clusterId: cluster!.id,
+      targetType: "ISSUE",
+      targetId: issueId,
+      subjectId: subject!.id,
+      originSubjectId: subject!.id,
+      reporterKind: "GUEST",
+      reasonCode,
+      detail,
+      weightSnapshot: 1,
+      accountAgeDays: 30,
+    })
+    .returning({ id: contentReports.id });
+  return { caseId: reportCase!.id, reportId: report!.id };
 }
 
 describe("operator dashboard", () => {
@@ -318,16 +357,63 @@ describe("operator dashboard", () => {
       { issueId: issue!.id, issueVersion: 1, code: "B", label: "노출 중지" },
     ]);
     await database.db.insert(issueAuthors).values({ issueId: issue!.id, memberId });
+    const firstReport = await createIssueReport(
+      issue!.id,
+      "HATE",
+      "선택지 표현이 특정 집단을 비하한다는 신고입니다.",
+    );
 
     const list = await opsRequest(
       "GET",
-      "/v1/internal/ops/published-issues?q=%EC%9A%B4%EC%98%81&limit=10",
+      "/v1/internal/ops/published-issues?reported=true&q=%EC%9A%B4%EC%98%81&limit=10",
     );
     expect(list.statusCode, list.body).toBe(200);
     const published = list.json<{
-      items: Array<{ issueId: string; state: string; updatedAt: string }>;
+      items: Array<{
+        issueId: string;
+        state: string;
+        updatedAt: string;
+        activeReportReview: {
+          caseId: string;
+          updatedAt: string;
+          reportCount: number;
+          reports: Array<{ reasonCode: string; detail: string }>;
+        };
+      }>;
     }>().items[0]!;
     expect(published).toMatchObject({ issueId: issue!.id, state: "ACTIVE" });
+    expect(published.activeReportReview).toMatchObject({
+      caseId: firstReport.caseId,
+      reportCount: 1,
+      reports: [
+        {
+          reasonCode: "HATE",
+          detail: "선택지 표현이 특정 집단을 비하한다는 신고입니다.",
+        },
+      ],
+    });
+
+    const dismissed = await opsRequest("PATCH", `/v1/internal/ops/published-issues/${issue!.id}`, {
+      action: "DISMISS_REPORTS",
+      expectedUpdatedAt: published.updatedAt,
+      expectedReportCaseId: published.activeReportReview.caseId,
+      expectedReportUpdatedAt: published.activeReportReview.updatedAt,
+      reason: "오탐",
+    });
+    expect(dismissed.statusCode, dismissed.body).toBe(200);
+    expect(dismissed.json()).toMatchObject({ activeReportReview: null });
+    expect(
+      await database.db
+        .select({ status: reportCases.status })
+        .from(reportCases)
+        .where(eq(reportCases.id, firstReport.caseId)),
+    ).toEqual([{ status: "DISMISSED" }]);
+
+    const secondReport = await createIssueReport(
+      issue!.id,
+      "SPAM",
+      "반복 게시된 질문이라는 신고입니다.",
+    );
 
     const assets = await database.db
       .insert(issueMediaAssets)
@@ -401,6 +487,12 @@ describe("operator dashboard", () => {
     expect(hidden.statusCode, hidden.body).toBe(200);
     const hiddenIssue = hidden.json<{ updatedAt: string }>();
     expect(hiddenIssue).toMatchObject({ state: "HIDDEN", visibility: "SUSPENDED" });
+    expect(
+      await database.db
+        .select({ status: reportCases.status })
+        .from(reportCases)
+        .where(eq(reportCases.id, secondReport.caseId)),
+    ).toEqual([{ status: "RESOLVED" }]);
 
     const stale = await opsRequest("PATCH", `/v1/internal/ops/published-issues/${issue!.id}`, {
       action: "RESTORE",

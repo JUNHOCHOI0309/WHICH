@@ -2,8 +2,9 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { OpsPublishedIssuesPanel } from "@/features/operations/ops-published-issues-panel";
+import type { OpsPublishedIssue } from "@/features/operations/contracts";
 
-const issue = {
+const issue: OpsPublishedIssue = {
   issueId: "10503719-4d3b-4abf-a1ee-ec0920d72e9a",
   version: 1,
   question: "운영 화면에서 관리할 질문은?",
@@ -32,9 +33,10 @@ const issue = {
   visibility: "VISIBLE",
   participation: "VOTING_OPEN",
   feedEligibility: "ELIGIBLE",
-  state: "ACTIVE" as "ACTIVE" | "HIDDEN",
+  state: "ACTIVE",
   acceptedVotes: 24,
   reportCount: 2,
+  activeReportReview: null,
   publishedAt: "2026-09-02T01:00:00.000Z",
   createdAt: "2026-09-02T00:00:00.000Z",
   updatedAt: "2026-09-02T01:00:00.000Z",
@@ -75,7 +77,7 @@ describe("Ops published Issue controls", () => {
     render(<OpsPublishedIssuesPanel />);
 
     expect(await screen.findByRole("heading", { name: issue.question })).toBeVisible();
-    fireEvent.change(screen.getByPlaceholderText("운영 조치 사유 (10자 이상)"), {
+    fireEvent.change(screen.getByPlaceholderText("운영 조치 사유"), {
       target: { value: "신고 내용을 확인할 때까지 노출을 중지합니다." },
     });
     fireEvent.click(screen.getByRole("button", { name: "노출 중지" }));
@@ -135,11 +137,10 @@ describe("Ops published Issue controls", () => {
     fireEvent.change(inputs[1]!, {
       target: { files: [new File(["b"], "b.png", { type: "image/png" })] },
     });
-    fireEvent.change(
-      screen.getByPlaceholderText("새 이미지 권리 근거 (직접 촬영·라이선스 등, 20자 이상)"),
-      { target: { value: "운영자가 직접 제작하고 사용 권리를 확인한 이미지입니다." } },
-    );
-    fireEvent.change(screen.getByPlaceholderText("이미지 수정 사유 (10자 이상)"), {
+    fireEvent.change(screen.getByPlaceholderText("새 이미지 권리 근거 (직접 촬영·라이선스 등)"), {
+      target: { value: "운영자가 직접 제작하고 사용 권리를 확인한 이미지입니다." },
+    });
+    fireEvent.change(screen.getByPlaceholderText("이미지 수정 사유"), {
       target: { value: "기본 질문에 A/B 선택지 이미지를 추가합니다." },
     });
     fireEvent.click(screen.getByRole("button", { name: "이미지 수정본 공개" }));
@@ -147,5 +148,56 @@ describe("Ops published Issue controls", () => {
     expect(await screen.findByText("이미지를 적용한 v2 수정본을 공개했습니다.")).toBeVisible();
     expect(uploadCount).toBe(2);
     expect(request).toHaveBeenCalledTimes(7);
+  });
+
+  it("shows report details and dismisses an active report case with a short reason", async () => {
+    issue.state = "ACTIVE";
+    issue.activeReportReview = {
+      caseId: "50503719-4d3b-4abf-a1ee-ec0920d72e9a",
+      status: "PENDING_REVIEW",
+      priority: "P0",
+      automationRecommendation: "P0_REVIEW",
+      policyVersion: "report-signal-v2",
+      reportCount: 1,
+      reports: [
+        {
+          id: "60503719-4d3b-4abf-a1ee-ec0920d72e9a",
+          reasonCode: "HATE",
+          detail: "선택지 표현이 특정 집단을 비하합니다.",
+          reporterKind: "MEMBER",
+          weight: 1,
+          createdAt: "2026-09-02T03:10:00.000Z",
+        },
+      ],
+      createdAt: "2026-09-02T03:10:00.000Z",
+      updatedAt: "2026-09-02T03:10:00.000Z",
+    };
+    const request = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
+      if (init?.method === "PATCH") {
+        expect(JSON.parse(String(init.body))).toMatchObject({
+          action: "DISMISS_REPORTS",
+          expectedReportCaseId: "50503719-4d3b-4abf-a1ee-ec0920d72e9a",
+          expectedReportUpdatedAt: "2026-09-02T03:10:00.000Z",
+          reason: "오탐",
+        });
+        issue.activeReportReview = null;
+        return new Response(JSON.stringify(issue), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return pageResponse();
+    });
+    vi.stubGlobal("fetch", request);
+
+    render(<OpsPublishedIssuesPanel />);
+    expect(await screen.findByText("혐오 표현")).toBeVisible();
+    expect(screen.getByText("선택지 표현이 특정 집단을 비하합니다.")).toBeVisible();
+    fireEvent.change(screen.getByPlaceholderText("운영 조치 사유"), {
+      target: { value: "오탐" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "신고 기각" }));
+
+    expect(await screen.findByText("신고 기각 조치를 기록했습니다.")).toBeVisible();
   });
 });

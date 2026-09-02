@@ -8,6 +8,7 @@ const states = new Set(["ACTIVE", "HIDDEN", "CLOSED", "REMOVED"]);
 export async function GET(request: NextRequest) {
   const params = new URLSearchParams({ limit: "50" });
   const state = request.nextUrl.searchParams.get("state");
+  const reported = request.nextUrl.searchParams.get("reported");
   const query = request.nextUrl.searchParams.get("q")?.trim();
   if (state && !states.has(state)) {
     return NextResponse.json(
@@ -22,6 +23,7 @@ export async function GET(request: NextRequest) {
     );
   }
   if (state) params.set("state", state);
+  if (reported === "true") params.set("reported", "true");
   if (query) params.set("q", query);
   return proxyOpsApi(request, `/v1/internal/ops/published-issues?${params}`);
 }

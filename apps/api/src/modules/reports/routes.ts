@@ -74,7 +74,7 @@ export async function registerContentReportRoutes(
               targetType: Type.Union(CONTENT_REPORT_TARGETS.map((value) => Type.Literal(value))),
               targetId: uuid,
               reasonCode: Type.Union(CONTENT_REPORT_REASONS.map((value) => Type.Literal(value))),
-              detail: Type.Optional(Type.String({ maxLength: 1_000 })),
+              detail: Type.Optional(Type.String()),
             },
             { additionalProperties: false },
           ),

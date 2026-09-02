@@ -208,8 +208,8 @@ export default function ModerationScreen() {
   }
 
   async function submitAppeal(assetId: string) {
-    if (!session || appealReason.trim().length < 20) {
-      Alert.alert("재검토 요청", "재검토 이유를 20자 이상 입력해 주세요.");
+    if (!session || !appealReason.trim()) {
+      Alert.alert("재검토 요청", "재검토 이유를 입력해 주세요.");
       return;
     }
     await run(async () => {
@@ -225,8 +225,8 @@ export default function ModerationScreen() {
   }
 
   async function submitRights(assetId: string) {
-    if (!session || rightsDetails.trim().length < 20) {
-      Alert.alert("권리 요청", "권리 요청 내용을 20자 이상 입력해 주세요.");
+    if (!session || !rightsDetails.trim()) {
+      Alert.alert("권리 요청", "권리 요청 내용을 입력해 주세요.");
       return;
     }
     await run(async () => {
@@ -380,7 +380,7 @@ export default function ModerationScreen() {
                     <TextInput
                       multiline
                       onChangeText={setAppealReason}
-                      placeholder="조치를 다시 검토해야 하는 이유를 20자 이상 적어 주세요."
+                      placeholder="조치를 다시 검토해야 하는 이유를 적어 주세요."
                       placeholderTextColor={colors.textTertiary}
                       style={styles.textarea}
                       value={appealReason}
@@ -422,7 +422,7 @@ export default function ModerationScreen() {
                     <TextInput
                       multiline
                       onChangeText={setRightsDetails}
-                      placeholder="요청 및 증빙 설명을 20자 이상 적어 주세요."
+                      placeholder="요청 및 증빙 설명을 적어 주세요."
                       placeholderTextColor={colors.textTertiary}
                       style={styles.textarea}
                       value={rightsDetails}

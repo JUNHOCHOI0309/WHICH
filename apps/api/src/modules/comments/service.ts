@@ -186,12 +186,8 @@ function toPublicComment(
 function normalizeReportDetail(command: Pick<CommentReportCommand, "reason" | "detail">) {
   const detail = command.detail?.replace(/\r\n?/g, "\n").normalize("NFC").trim();
   if (command.reason === "OTHER") {
-    if (!detail || Array.from(detail).length < 10) {
-      throw new CommentError(
-        "REPORT_DETAIL_REQUIRED",
-        422,
-        "OTHER reports require a detail of at least 10 characters.",
-      );
+    if (!detail) {
+      throw new CommentError("REPORT_DETAIL_REQUIRED", 422, "OTHER reports require a detail.");
     }
     return detail;
   }

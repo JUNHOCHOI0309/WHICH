@@ -126,8 +126,8 @@ export function OpsModerationQueuePanel() {
   }
 
   async function submitProvisional() {
-    if (!selected || !provisionalLabel || provisionalRationale.trim().length < 3)
-      return toast.error("선판정과 3자 이상의 근거를 입력해 주세요.");
+    if (!selected || !provisionalLabel || !provisionalRationale.trim())
+      return toast.error("선판정과 근거를 입력해 주세요.");
     setBusy(true);
     try {
       await json(
@@ -150,8 +150,7 @@ export function OpsModerationQueuePanel() {
   }
 
   async function decide(action: string) {
-    if (!selected || rationale.trim().length < 10)
-      return toast.error("판단 근거를 10자 이상 입력해 주세요.");
+    if (!selected || !rationale.trim()) return toast.error("판단 근거를 입력해 주세요.");
     if (
       selected.reviewerAssist.requiresProvisionalLabel &&
       !selected.reviewerAssist.provisionalLabel
@@ -570,7 +569,7 @@ export function OpsModerationQueuePanel() {
               <textarea
                 value={rationale}
                 onChange={(event) => setRationale(event.target.value)}
-                placeholder="판단 근거 (10자 이상)"
+                placeholder="판단 근거"
               />
               <div className={styles.decisionActions}>
                 {actions?.map((action) => (

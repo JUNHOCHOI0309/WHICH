@@ -246,7 +246,7 @@ export async function registerIssueMediaRoutes(
           headers: opsHeaders,
           params: Type.Object({ pairId: uuid }),
           body: Type.Object(
-            { reason: Type.String({ minLength: 10, maxLength: 2000 }) },
+            { reason: Type.String({ minLength: 1 }) },
             { additionalProperties: false },
           ),
         },
@@ -372,7 +372,7 @@ export async function registerIssueMediaRoutes(
                 Type.Literal("REVOKE"),
                 Type.Literal("RESTORE"),
               ]),
-              rationale: Type.String({ minLength: 10, maxLength: 2000 }),
+              rationale: Type.String({ minLength: 1 }),
             },
             { additionalProperties: false },
           ),
@@ -460,7 +460,7 @@ export async function registerIssueMediaRoutes(
           headers: memberHeaders,
           body: Type.Object(
             {
-              rightsAttestation: Type.String({ minLength: 20, maxLength: 2000 }),
+              rightsAttestation: Type.String({ minLength: 1 }),
               uploadSessionId: uuid,
               uploadSessionToken: Type.String({ minLength: 32, maxLength: 128 }),
               declaredMimeType: Type.Union(
@@ -526,7 +526,7 @@ export async function registerIssueMediaRoutes(
           body: Type.Object(
             {
               sourceType: Type.Literal("OPERATOR_UPLOAD"),
-              rightsAttestation: Type.String({ minLength: 20, maxLength: 2000 }),
+              rightsAttestation: Type.String({ minLength: 1 }),
               declaredMimeType: Type.Union(
                 ISSUE_MEDIA_INPUT_MIME_TYPES.map((value) => Type.Literal(value)),
               ),
