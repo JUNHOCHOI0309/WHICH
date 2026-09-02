@@ -671,14 +671,16 @@
 
 @media (max-width: 760px) {
   .shopModalBackdrop {
-    align-items: end;
+    place-items: stretch end;
     padding: 0;
   }
 
   .shopModal {
-    height: 94svh;
-    max-height: 94svh;
-    border-radius: 22px 22px 0 0;
+    width: min(94vw, 430px);
+    height: 100svh;
+    max-height: 100svh;
+    border-radius: 22px 0 0 22px;
+    animation: shop-drawer-enter 220ms ease-out;
   }
 
   .shopModalHeader {
@@ -736,6 +738,22 @@
   .shopCatalogTab {
     flex: 0 0 auto;
     padding-inline: 16px;
+  }
+}
+
+@keyframes shop-drawer-enter {
+  from {
+    transform: translateX(100%);
+  }
+
+  to {
+    transform: translateX(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shopModal {
+    animation: none;
   }
 }
 

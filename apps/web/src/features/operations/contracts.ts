@@ -100,6 +100,33 @@ export type OpsMemberPage = {
   nextCursor: string | null;
 };
 
+export type OpsReportedMember = {
+  memberId: string;
+  displayName: string;
+  memberStatus: OpsMemberStatus;
+  reports7d: number;
+  uniqueReporters7d: number;
+  reportedTargets7d: number;
+  reports14d: number;
+  uniqueReporters14d: number;
+  reportedTargets14d: number;
+  latestReportAt: string;
+  issueAccess: {
+    policyVersion: string;
+    state: "OPEN" | "LIMITED" | "BLOCKED";
+    canCreateNow: boolean;
+    canStartUpload: boolean;
+    reasonCode: null | "REPORT_RATE_LIMIT" | "REPORT_COOLDOWN";
+    restrictedUntil: string | null;
+  };
+};
+
+export type OpsReportedMembersPage = {
+  schemaVersion: 1;
+  generatedAt: string;
+  items: OpsReportedMember[];
+};
+
 export type OpsTrustedImagePilotMember = {
   memberId: string;
   displayName: string;
@@ -189,6 +216,35 @@ export type OpsEditorialPage = {
   counts: Record<OpsEditorialStatus, number>;
   items: OpsEditorialCandidate[];
   nextCursor: string | null;
+};
+
+export type OpsPublishedIssueState = "ACTIVE" | "HIDDEN" | "CLOSED" | "REMOVED";
+export type OpsPublishedIssueAction = "HIDE" | "RESTORE" | "REMOVE";
+export type OpsPublishedIssue = {
+  issueId: string;
+  version: number;
+  question: string;
+  context: string | null;
+  choices: Array<{ code: "A" | "B" | "C" | "D"; label: string }>;
+  categoryCode: string;
+  mediaMode: string;
+  author: { memberId: string; displayName: string } | null;
+  lifecycle: string;
+  visibility: string;
+  participation: string;
+  feedEligibility: string;
+  state: OpsPublishedIssueState;
+  acceptedVotes: number;
+  reportCount: number;
+  publishedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type OpsPublishedIssuePage = {
+  schemaVersion: 1;
+  generatedAt: string;
+  items: OpsPublishedIssue[];
 };
 
 export type OpsPointShopStatus = "ACTIVE" | "PAUSED" | "RETIRED";

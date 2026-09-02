@@ -28,28 +28,6 @@ const statusLabels: Record<OpsPointShopStatus, string> = {
   RETIRED: "Archive",
 };
 
-type CreateForm = {
-  code: string;
-  equipSlot: OpsPointShopEquipSlot;
-  themeFamily: OpsPointShopThemeFamily;
-  name: string;
-  description: string;
-  price: string;
-  status: "ACTIVE" | "PAUSED";
-  reason: string;
-};
-
-const initialCreateForm: CreateForm = {
-  code: "",
-  equipSlot: "PROFILE_ACCENT",
-  themeFamily: "SIGNAL_GRID",
-  name: "",
-  description: "",
-  price: "",
-  status: "PAUSED",
-  reason: "신규 꾸미기 상품 등록",
-};
-
 function dateTime(value: string) {
   return new Intl.DateTimeFormat("ko-KR", {
     year: "numeric",
@@ -80,11 +58,8 @@ export function OpsPointShopPanel() {
   const [editPrice, setEditPrice] = useState("");
   const [editStatus, setEditStatus] = useState<"ACTIVE" | "PAUSED">("ACTIVE");
   const [editReason, setEditReason] = useState("");
-  const [createForm, setCreateForm] = useState<CreateForm>(initialCreateForm);
-  const [showCreate, setShowCreate] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [editFeedback, setEditFeedback] = useState<{
     kind: "success" | "error";
@@ -160,7 +135,6 @@ export function OpsPointShopPanel() {
       return;
     }
     setSaving(true);
-    setMessage("");
     setEditFeedback(null);
     try {
       const response = await fetch(`/api/ops/point-shop/${encodeURIComponent(selected.id)}`, {
@@ -191,46 +165,6 @@ export function OpsPointShopPanel() {
     }
   }
 
-  async function createItem() {
-    const price = Number(createForm.price);
-    if (!Number.isInteger(price) || price < 1) {
-      setError("가격은 1P 이상의 정수여야 합니다.");
-      return;
-    }
-    if (createForm.reason.trim().length < 8) {
-      setError("등록 사유를 8자 이상 입력해 주세요.");
-      return;
-    }
-    setSaving(true);
-    setMessage("");
-    try {
-      const response = await fetch("/api/ops/point-shop", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          ...createForm,
-          code: createForm.code.trim().toUpperCase(),
-          name: createForm.name.trim(),
-          description: createForm.description.trim(),
-          reason: createForm.reason.trim(),
-          price,
-        }),
-      });
-      const body = (await response.json()) as OpsPointShopItem & { message?: string };
-      if (!response.ok) throw new Error(body.message || "상품을 생성하지 못했습니다.");
-      setCreateForm(initialCreateForm);
-      setShowCreate(false);
-      setSelectedId(body.id);
-      setMessage(`${body.name} 상품을 생성했습니다.`);
-      setError("");
-      await load();
-    } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "상품을 생성하지 못했습니다.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
   return (
     <section className={styles.page} aria-labelledby="point-shop-title">
       <div className={styles.intro}>
@@ -248,138 +182,9 @@ export function OpsPointShopPanel() {
             <strong>{view?.counts[status] ?? 0}</strong>
           </article>
         ))}
-        <button
-          type="button"
-          className={styles.createButton}
-          onClick={() => setShowCreate((current) => !current)}
-        >
-          {showCreate ? "생성 닫기" : "+ 새 상품"}
-        </button>
       </div>
 
-      {message ? <p className={styles.successNotice}>{message}</p> : null}
       {error ? <p className={styles.notice}>{error}</p> : null}
-
-      {showCreate ? (
-        <section className={styles.shopCreatePanel} aria-labelledby="shop-create-title">
-          <div className={styles.sectionTitle}>
-            <div>
-              <p className={styles.eyebrow}>NEW SKU</p>
-              <h2 id="shop-create-title">새 꾸미기 상품</h2>
-            </div>
-            <span>초기값은 안전하게 판매 중지 상태를 권장합니다.</span>
-          </div>
-          <div className={styles.shopFormGrid}>
-            <label>
-              상품 코드
-              <input
-                value={createForm.code}
-                placeholder="NEW_THEME_ACCENT"
-                onChange={(event) =>
-                  setCreateForm((form) => ({ ...form, code: event.target.value.toUpperCase() }))
-                }
-              />
-            </label>
-            <label>
-              상품명
-              <input
-                value={createForm.name}
-                onChange={(event) =>
-                  setCreateForm((form) => ({ ...form, name: event.target.value }))
-                }
-              />
-            </label>
-            <label>
-              상품 종류
-              <select
-                value={createForm.equipSlot}
-                onChange={(event) =>
-                  setCreateForm((form) => ({
-                    ...form,
-                    equipSlot: event.target.value as OpsPointShopEquipSlot,
-                  }))
-                }
-              >
-                {Object.entries(slotLabels).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              테마 패밀리
-              <select
-                value={createForm.themeFamily}
-                onChange={(event) =>
-                  setCreateForm((form) => ({
-                    ...form,
-                    themeFamily: event.target.value as OpsPointShopThemeFamily,
-                  }))
-                }
-              >
-                {Object.entries(themeLabels).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              가격
-              <input
-                inputMode="numeric"
-                value={createForm.price}
-                placeholder="500"
-                onChange={(event) =>
-                  setCreateForm((form) => ({ ...form, price: event.target.value }))
-                }
-              />
-            </label>
-            <label>
-              초기 판매 상태
-              <select
-                value={createForm.status}
-                onChange={(event) =>
-                  setCreateForm((form) => ({
-                    ...form,
-                    status: event.target.value as "ACTIVE" | "PAUSED",
-                  }))
-                }
-              >
-                <option value="PAUSED">판매 중지</option>
-                <option value="ACTIVE">판매 중</option>
-              </select>
-            </label>
-            <label className={styles.wideField}>
-              설명
-              <textarea
-                value={createForm.description}
-                onChange={(event) =>
-                  setCreateForm((form) => ({ ...form, description: event.target.value }))
-                }
-              />
-            </label>
-            <label className={styles.wideField}>
-              등록 사유
-              <input
-                value={createForm.reason}
-                onChange={(event) =>
-                  setCreateForm((form) => ({ ...form, reason: event.target.value }))
-                }
-              />
-            </label>
-          </div>
-          <button
-            type="button"
-            className={styles.primaryAction}
-            onClick={createItem}
-            disabled={saving}
-          >
-            {saving ? "저장 중" : "상품 생성"}
-          </button>
-        </section>
-      ) : null}
 
       <div className={styles.shopOpsGrid}>
         <div className={styles.shopItemList} aria-label="상점 상품 목록">

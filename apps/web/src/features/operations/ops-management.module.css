@@ -24,6 +24,29 @@
   color: #64727a;
   font-size: 14px;
 }
+.reviewModeTabs {
+  display: flex;
+  gap: 8px;
+  padding: 6px;
+  border: 1px solid #d6e1e5;
+  border-radius: 16px;
+  background: #fff;
+}
+.reviewModeTabs button {
+  min-height: 42px;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  color: #64727a;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 850;
+  padding: 0 18px;
+}
+.reviewModeTabs button[aria-pressed="true"] {
+  background: #082b35;
+  color: #fff;
+}
 .filters {
   display: grid;
   grid-template-columns: minmax(220px, 1fr) 190px auto;

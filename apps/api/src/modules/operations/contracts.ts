@@ -114,6 +114,33 @@ export type OpsMemberPage = {
   nextCursor: string | null;
 };
 
+export type OpsReportedMember = {
+  memberId: string;
+  displayName: string;
+  memberStatus: OpsMemberStatus;
+  reports7d: number;
+  uniqueReporters7d: number;
+  reportedTargets7d: number;
+  reports14d: number;
+  uniqueReporters14d: number;
+  reportedTargets14d: number;
+  latestReportAt: string;
+  issueAccess: {
+    policyVersion: string;
+    state: "OPEN" | "LIMITED" | "BLOCKED";
+    canCreateNow: boolean;
+    canStartUpload: boolean;
+    reasonCode: null | "REPORT_RATE_LIMIT" | "REPORT_COOLDOWN";
+    restrictedUntil: string | null;
+  };
+};
+
+export type OpsReportedMembersPage = {
+  schemaVersion: 1;
+  generatedAt: string;
+  items: OpsReportedMember[];
+};
+
 export type OpsRankingPreview = {
   schemaVersion: 1;
   generatedAt: string;
@@ -185,6 +212,38 @@ export type OpsEditorialPage = {
   nextCursor: string | null;
 };
 
+export const OPS_PUBLISHED_ISSUE_STATES = ["ACTIVE", "HIDDEN", "CLOSED", "REMOVED"] as const;
+export type OpsPublishedIssueState = (typeof OPS_PUBLISHED_ISSUE_STATES)[number];
+export const OPS_PUBLISHED_ISSUE_ACTIONS = ["HIDE", "RESTORE", "REMOVE"] as const;
+export type OpsPublishedIssueAction = (typeof OPS_PUBLISHED_ISSUE_ACTIONS)[number];
+
+export type OpsPublishedIssue = {
+  issueId: string;
+  version: number;
+  question: string;
+  context: string | null;
+  choices: Array<{ code: "A" | "B" | "C" | "D"; label: string }>;
+  categoryCode: string;
+  mediaMode: string;
+  author: { memberId: string; displayName: string } | null;
+  lifecycle: string;
+  visibility: string;
+  participation: string;
+  feedEligibility: string;
+  state: OpsPublishedIssueState;
+  acceptedVotes: number;
+  reportCount: number;
+  publishedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type OpsPublishedIssuePage = {
+  schemaVersion: 1;
+  generatedAt: string;
+  items: OpsPublishedIssue[];
+};
+
 export const OPS_POINT_SHOP_STATUSES = ["ACTIVE", "PAUSED", "RETIRED"] as const;
 export type OpsPointShopStatus = (typeof OPS_POINT_SHOP_STATUSES)[number];
 export const OPS_POINT_SHOP_EQUIP_SLOTS = [
@@ -253,6 +312,13 @@ export class OpsReviewConflictError extends Error {
   }
 }
 
+export class OpsPublishedIssueConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "OpsPublishedIssueConflictError";
+  }
+}
+
 export class OpsPointShopConflictError extends Error {
   constructor(message: string) {
     super(message);
@@ -275,6 +341,13 @@ export interface OpsDashboardService {
     limit: number;
     requestId?: string;
   }): Promise<OpsMemberPage | null>;
+  readReportedMembers(input: {
+    memberId: string;
+    state?: "OPEN" | "LIMITED" | "BLOCKED";
+    query?: string;
+    limit: number;
+    requestId?: string;
+  }): Promise<OpsReportedMembersPage | null>;
   readRankingPreview(input: {
     memberId: string;
     limit: number;
@@ -298,6 +371,21 @@ export interface OpsDashboardService {
     checks: OpsEditorialDecision["checks"];
     requestId?: string;
   }): Promise<OpsEditorialDecision | null>;
+  readPublishedIssues(input: {
+    memberId: string;
+    state?: OpsPublishedIssueState;
+    query?: string;
+    limit: number;
+    requestId?: string;
+  }): Promise<OpsPublishedIssuePage | null>;
+  updatePublishedIssue(input: {
+    memberId: string;
+    issueId: string;
+    action: OpsPublishedIssueAction;
+    expectedUpdatedAt: string;
+    reason: string;
+    requestId?: string;
+  }): Promise<OpsPublishedIssue | null>;
   readPointShop(input: { memberId: string; requestId?: string }): Promise<OpsPointShopView | null>;
   createPointShopItem(input: {
     memberId: string;

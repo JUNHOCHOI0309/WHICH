@@ -24,6 +24,16 @@ export type MemberIssueAccess = {
   restrictedUntil: string | null;
 };
 
+export type MemberIssueAccessSignals = {
+  hardReporterCount: number;
+  hardTargetCount: number;
+  latestHardReportAt: Date | null;
+  softReporterCount: number;
+  softTargetCount: number;
+  latestSubmissionAt: Date | null;
+  now: Date;
+};
+
 function uniqueCounts(rows: EffectiveContentReport[]) {
   return {
     reporters: new Set(rows.map((row) => row.subjectId)).size,
@@ -44,10 +54,36 @@ export function evaluateMemberIssueAccess(input: {
     (latest, report) => (!latest || report.createdAt > latest ? report.createdAt : latest),
     null,
   );
-  const hardUntil = latestHardReport
-    ? new Date(latestHardReport.getTime() + HARD_COOLDOWN_MS)
+  const softReports = input.reports.filter(
+    (report) => input.now.getTime() - report.createdAt.getTime() <= SOFT_WINDOW_MS,
+  );
+  const softCounts = uniqueCounts(softReports);
+  const latestSubmission = input.recentSubmissionTimes
+    .filter((submittedAt) => input.now.getTime() - submittedAt.getTime() <= DAY_MS)
+    .sort((left, right) => right.getTime() - left.getTime())[0];
+  return evaluateMemberIssueAccessSignals({
+    hardReporterCount: hardCounts.reporters,
+    hardTargetCount: hardCounts.targets,
+    latestHardReportAt: latestHardReport,
+    softReporterCount: softCounts.reporters,
+    softTargetCount: softCounts.targets,
+    latestSubmissionAt: latestSubmission ?? null,
+    now: input.now,
+  });
+}
+
+export function evaluateMemberIssueAccessSignals(
+  input: MemberIssueAccessSignals,
+): MemberIssueAccess {
+  const hardUntil = input.latestHardReportAt
+    ? new Date(input.latestHardReportAt.getTime() + HARD_COOLDOWN_MS)
     : null;
-  if (hardCounts.reporters >= 5 && hardCounts.targets >= 3 && hardUntil && hardUntil > input.now) {
+  if (
+    input.hardReporterCount >= 5 &&
+    input.hardTargetCount >= 3 &&
+    hardUntil &&
+    hardUntil > input.now
+  ) {
     return {
       policyVersion: MEMBER_ISSUE_ACCESS_POLICY_VERSION,
       state: "BLOCKED",
@@ -58,15 +94,10 @@ export function evaluateMemberIssueAccess(input: {
     };
   }
 
-  const softReports = input.reports.filter(
-    (report) => input.now.getTime() - report.createdAt.getTime() <= SOFT_WINDOW_MS,
-  );
-  const softCounts = uniqueCounts(softReports);
-  if (softCounts.reporters >= 3 && softCounts.targets >= 2) {
-    const latestSubmission = input.recentSubmissionTimes
-      .filter((submittedAt) => input.now.getTime() - submittedAt.getTime() <= DAY_MS)
-      .sort((left, right) => right.getTime() - left.getTime())[0];
-    const restrictedUntil = latestSubmission ? new Date(latestSubmission.getTime() + DAY_MS) : null;
+  if (input.softReporterCount >= 3 && input.softTargetCount >= 2) {
+    const restrictedUntil = input.latestSubmissionAt
+      ? new Date(input.latestSubmissionAt.getTime() + DAY_MS)
+      : null;
     return {
       policyVersion: MEMBER_ISSUE_ACCESS_POLICY_VERSION,
       state: "LIMITED",

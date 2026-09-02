@@ -67,6 +67,7 @@ describe("Ops Point Shop status controls", () => {
 
     render(<OpsPointShopPanel />);
 
+    expect(screen.queryByRole("button", { name: /새 상품/ })).not.toBeInTheDocument();
     const status = await screen.findByRole("combobox", { name: "판매 상태" });
     // The selection effect hydrates the draft after the form first appears.
     await waitFor(() =>
