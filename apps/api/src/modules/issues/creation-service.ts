@@ -48,6 +48,7 @@ import { evaluateTextRules, normalizeModerationText } from "../moderation/rule-e
 import { createModerationSubmissionEvents } from "../moderation-dispatch/contracts.js";
 import { submissionWakeup } from "../moderation-dispatch/submission-wakeup-event.js";
 import { IssueWriteError } from "./errors.js";
+import { readMemberIssueAccess } from "./member-issue-access.js";
 import type { IssueMediaObjectStorage } from "../issue-media/contracts.js";
 
 const ISSUE_VERSION = 1 as const;
@@ -881,6 +882,20 @@ export function createIssueWriteService(
   database: Database["db"],
   storage: IssueMediaObjectStorage | null = null,
 ): IssueWriteService {
+  async function requireCreationAccess(reader: Pick<Database["db"], "execute">, memberId: string) {
+    const access = await readMemberIssueAccess(reader, memberId);
+    if (access.canCreateNow) return;
+    const message =
+      access.reasonCode === "REPORT_COOLDOWN"
+        ? "최근 게시물 신고가 누적되어 새 질문 작성이 72시간 제한되었어요. 기존 질문의 수정이나 삭제는 계속할 수 있어요."
+        : "최근 게시물 신고가 누적되어 현재는 24시간에 질문 1개만 작성할 수 있어요.";
+    throw new IssueWriteError(
+      "ISSUE_CREATION_REPORT_RESTRICTED",
+      access.reasonCode === "REPORT_COOLDOWN" ? 403 : 429,
+      message,
+    );
+  }
+
   return {
     async submitMemberIssue(command) {
       if (command.libraryPairId || command.libraryAssetIds?.length) {
@@ -901,14 +916,6 @@ export function createIssueWriteService(
         await transaction.execute(
           sql`select pg_advisory_xact_lock(hashtextextended(${`which:member-issue:${session.memberId}`}, 0))`,
         );
-        await requireOwnedSubmissionMedia(transaction, session.memberId, [
-          normalized.contextMediaAssetId,
-          normalized.mediaAssetAId,
-          normalized.mediaAssetBId,
-          normalized.mediaAssetCId,
-          normalized.mediaAssetDId,
-        ]);
-
         const [existing] = await transaction
           .select()
           .from(memberIssueSubmissions)
@@ -929,6 +936,15 @@ export function createIssueWriteService(
           }
           return { submission: toSubmission(existing), created: false };
         }
+
+        await requireCreationAccess(transaction, session.memberId);
+        await requireOwnedSubmissionMedia(transaction, session.memberId, [
+          normalized.contextMediaAssetId,
+          normalized.mediaAssetAId,
+          normalized.mediaAssetBId,
+          normalized.mediaAssetCId,
+          normalized.mediaAssetDId,
+        ]);
 
         const [created] = await transaction
           .insert(memberIssueSubmissions)
@@ -1354,6 +1370,18 @@ export function createIssueWriteService(
       }
       return database.transaction(async (transaction) => {
         const session = await requireActiveMember(transaction, command.sessionToken);
+        await transaction.execute(
+          sql`select pg_advisory_xact_lock(hashtextextended(${`which:member-issue:${session.memberId}`}, 0))`,
+        );
+        const issueId = deterministicUuid(`${session.memberId}:${command.idempotencyKey}:issue`);
+        const [existingIssue] = await transaction
+          .select({ memberId: issueAuthors.memberId })
+          .from(issueAuthors)
+          .where(
+            and(eq(issueAuthors.issueId, issueId), eq(issueAuthors.memberId, session.memberId)),
+          )
+          .limit(1);
+        if (!existingIssue) await requireCreationAccess(transaction, session.memberId);
         const result = await publishMemberIssue(
           transaction,
           session.memberId,

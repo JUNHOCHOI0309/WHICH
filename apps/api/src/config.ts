@@ -43,7 +43,7 @@ const environmentSchema = z.object({
   FEATURE_RESULT_SHARING_ENABLED: booleanString,
   FEATURE_ISSUE_MEDIA_ENABLED: booleanString,
   ISSUE_MEDIA_EXPERIMENT_PERCENT: z.coerce.number().int().min(0).max(100).default(0),
-  ISSUE_MEMBER_MEDIA_UPLOAD_MODE: z.enum(["OFF", "PILOT"]).default("OFF"),
+  ISSUE_MEMBER_MEDIA_UPLOAD_MODE: z.enum(["OFF", "PILOT", "MEMBER"]).default("OFF"),
   ISSUE_MEDIA_CONSENT_VERSION: z.string().min(1).max(64).default("which-media-consent-v2"),
   QUALITY_RANKER_MODE: z.enum(["OFF", "SHADOW", "LIVE"]).default("SHADOW"),
   FEATURE_POINTS_ENABLED: booleanString,

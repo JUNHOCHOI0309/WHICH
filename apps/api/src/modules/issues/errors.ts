@@ -25,12 +25,13 @@ export type IssueWriteErrorCode =
   | "ISSUE_SUBMISSION_MEDIA_INVALID"
   | "ISSUE_LIBRARY_PAIR_UNAVAILABLE"
   | "ISSUE_LIBRARY_ASSET_UNAVAILABLE"
+  | "ISSUE_CREATION_REPORT_RESTRICTED"
   | "IDEMPOTENCY_CONFLICT";
 
 export class IssueWriteError extends Error {
   constructor(
     public readonly code: IssueWriteErrorCode,
-    public readonly statusCode: 400 | 401 | 404 | 409 | 422 | 429 | 503,
+    public readonly statusCode: 400 | 401 | 403 | 404 | 409 | 422 | 429 | 503,
     message: string,
   ) {
     super(message);

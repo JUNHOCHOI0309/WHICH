@@ -52,6 +52,7 @@ export const ISSUE_MEDIA_UPLOAD_LIMITS = {
 export type IssueMediaUploadGateReason =
   | "MODE_DISABLED"
   | "CAPABILITY_REQUIRED"
+  | "ACCOUNT_RESTRICTED"
   | "CONSENT_REQUIRED"
   | "SUBMISSION_OWNERSHIP_REQUIRED"
   | "SUBMISSION_STATE_INELIGIBLE"
@@ -59,16 +60,19 @@ export type IssueMediaUploadGateReason =
   | "MODERATION_CAPACITY_PAUSED";
 
 export function evaluateIssueMediaUploadGate(input: {
-  mode: "OFF" | "PILOT";
+  mode: "OFF" | "PILOT" | "MEMBER";
   hasActiveCapability: boolean;
+  hasActiveMember: boolean;
+  accountRestricted: boolean;
   hasCurrentConsent: boolean;
   ownsSubmission: boolean;
   submissionStatus: string | null;
   activeSessions: number;
 }): { allowed: boolean; reasons: IssueMediaUploadGateReason[] } {
   const reasons: IssueMediaUploadGateReason[] = [];
-  if (input.mode !== "PILOT") reasons.push("MODE_DISABLED");
-  if (!input.hasActiveCapability) reasons.push("CAPABILITY_REQUIRED");
+  if (input.mode === "OFF") reasons.push("MODE_DISABLED");
+  if (input.mode === "PILOT" && !input.hasActiveCapability) reasons.push("CAPABILITY_REQUIRED");
+  if (!input.hasActiveMember || input.accountRestricted) reasons.push("ACCOUNT_RESTRICTED");
   if (!input.hasCurrentConsent) reasons.push("CONSENT_REQUIRED");
   if (!input.ownsSubmission) reasons.push("SUBMISSION_OWNERSHIP_REQUIRED");
   if (!input.submissionStatus || !["PENDING", "NEEDS_CHANGES"].includes(input.submissionStatus)) {

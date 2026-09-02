@@ -10,6 +10,8 @@ import {
 const eligibleGate = {
   mode: "PILOT" as const,
   hasActiveCapability: true,
+  hasActiveMember: true,
+  accountRestricted: false,
   hasCurrentConsent: true,
   ownsSubmission: true,
   submissionStatus: "PENDING",
@@ -32,12 +34,31 @@ describe("Member Issue media upload gate", () => {
       allowed: false,
       reasons: [
         "MODE_DISABLED",
-        "CAPABILITY_REQUIRED",
         "CONSENT_REQUIRED",
         "SUBMISSION_OWNERSHIP_REQUIRED",
         "CONCURRENT_SESSION_LIMIT",
       ],
     });
+  });
+
+  it("opens direct upload to an active Member without a Pilot capability", () => {
+    expect(
+      evaluateIssueMediaUploadGate({
+        ...eligibleGate,
+        mode: "MEMBER",
+        hasActiveCapability: false,
+      }),
+    ).toEqual({ allowed: true, reasons: [] });
+  });
+
+  it("blocks a report-restricted account in Member mode", () => {
+    expect(
+      evaluateIssueMediaUploadGate({
+        ...eligibleGate,
+        mode: "MEMBER",
+        accountRestricted: true,
+      }),
+    ).toEqual({ allowed: false, reasons: ["ACCOUNT_RESTRICTED"] });
   });
 
   it.each([null, "CANCELLED", "APPROVED", "REJECTED"])(

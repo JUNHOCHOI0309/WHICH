@@ -93,6 +93,56 @@ describe("Issue media upload session service", () => {
     });
   });
 
+  it("allows an active Member to upload without a Pilot capability", async () => {
+    const regularMemberId = randomUUID();
+    const regularSubmissionId = randomUUID();
+    await database.db.insert(members).values({
+      id: regularMemberId,
+      displayName: "Regular Member",
+    });
+    await database.db.insert(memberIssueSubmissions).values({
+      id: regularSubmissionId,
+      memberId: regularMemberId,
+      idempotencyKey: randomUUID(),
+      status: "PENDING",
+      question: "Member도 이미지를 직접 올릴 수 있나요?",
+      choiceA: "네",
+      choiceB: "아니요",
+      interestCardCode: "DAILY_LIFE",
+      contentHash: "b".repeat(64),
+    });
+    await database.db.insert(memberMediaConsents).values({
+      memberId: regularMemberId,
+      consentVersion: "which-media-consent-v1",
+    });
+    const service = createIssueMediaUploadGateService(database.db, {
+      mode: "MEMBER",
+      consentVersion: "which-media-consent-v1",
+      pseudonymSecret: "test-pseudonym-secret-long-enough",
+    });
+
+    await expect(service.readAccess(regularMemberId)).resolves.toMatchObject({
+      mode: "MEMBER",
+      allowed: true,
+      reasons: [],
+      capability: null,
+    });
+    const session = await service.createSession({
+      memberId: regularMemberId,
+      submissionId: regularSubmissionId,
+      consentVersion: "which-media-consent-v1",
+      ipAddress: "203.0.113.7",
+    });
+    await expect(
+      service.consumeSession({
+        memberId: regularMemberId,
+        sessionId: session.id,
+        token: session.token,
+        byteSize: 1024,
+      }),
+    ).resolves.toEqual({ objectKey: session.objectKey });
+  });
+
   it("pauses new sessions when Moderation capacity is fail-closed", async () => {
     const service = createIssueMediaUploadGateService(database.db, {
       mode: "PILOT",

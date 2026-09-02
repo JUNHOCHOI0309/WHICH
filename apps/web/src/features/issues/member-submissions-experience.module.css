@@ -72,7 +72,9 @@
 
 .publishedActions {
   display: flex;
-  align-self: start;
+  align-self: stretch;
+  flex-direction: column;
+  justify-content: space-between;
   gap: 8px;
 }
 

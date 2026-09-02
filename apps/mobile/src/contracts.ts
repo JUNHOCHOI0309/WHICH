@@ -366,10 +366,10 @@ export type MemberIssueMediaAsset = {
 };
 
 export type IssueMediaUploadAccess = {
-  mode: "OFF" | "PILOT";
+  mode: "OFF" | "PILOT" | "MEMBER";
   allowed: boolean;
   consentVersion: string;
-  reasons: ("MODE_DISABLED" | "CAPABILITY_REQUIRED" | "CONSENT_REQUIRED")[];
+  reasons: ("MODE_DISABLED" | "CAPABILITY_REQUIRED" | "CONSENT_REQUIRED" | "ACCOUNT_RESTRICTED")[];
   capability: {
     state: "ACTIVE" | "SUSPENDED" | "REVOKED" | "EXPIRED";
     expiresAt: string;

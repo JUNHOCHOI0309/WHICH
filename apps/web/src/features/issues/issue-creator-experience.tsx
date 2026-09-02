@@ -419,7 +419,9 @@ export function IssueCreatorExperience({
               title={
                 mediaAccess?.allowed
                   ? "선택지 이미지를 직접 올립니다."
-                  : "신뢰 사용자 Pilot 대상에게 순차 제공됩니다."
+                  : mediaAccess?.reasons.includes("ACCOUNT_RESTRICTED")
+                    ? "최근 신고 누적으로 새 이미지 업로드가 잠시 제한되었습니다."
+                    : "이미지 업로드 약관 동의 후 사용할 수 있습니다."
               }
               onClick={() => {
                 setMediaMode("DIRECT");
@@ -427,10 +429,12 @@ export function IssueCreatorExperience({
                 update("libraryAssetIds", []);
               }}
             >
-              {mediaAccess?.allowed ? "직접 업로드" : "직접 업로드 · Pilot"}
+              직접 업로드
             </button>
           </div>
-          {mediaAccess?.mode === "PILOT" && mediaAccess.reasons.includes("CONSENT_REQUIRED") ? (
+          {mediaAccess &&
+          mediaAccess.mode !== "OFF" &&
+          mediaAccess.reasons.includes("CONSENT_REQUIRED") ? (
             <div className={styles.mediaConsent}>
               <p>
                 이미지 직접 업로드 전에 현재 <Link href="/legal/terms">이용약관</Link>과{" "}
