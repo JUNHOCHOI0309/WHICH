@@ -263,6 +263,10 @@ async function main() {
     console.log(JSON.stringify(await policyJudge.summary(), null, 2));
     return;
   }
+  if (command === "auto-publication-audit-summary") {
+    console.log(JSON.stringify(await autoPublication.auditSummary(), null, 2));
+    return;
+  }
   if (command === "policy-judge-once") {
     console.log(JSON.stringify(await policyJudge.runBatch(), null, 2));
     return;

@@ -10,6 +10,8 @@ import {
   members,
   memberMediaConsents,
   memberCapabilityGrants,
+  moderationCaseReferences,
+  moderationCases,
   moderationRuns,
   moderationTargets,
   moderationAuditEvents,
@@ -36,6 +38,10 @@ import type { createPolicyJudgeService } from "../policy-judge/service.js";
 import { hasClaimedWakeup } from "../moderation-dispatch/submission-wakeup-event.js";
 
 export const AUTO_PUBLICATION_POLICY = "which-auto-publication-member-v1";
+export const POST_PUBLICATION_AUDIT_POLICY = "which-111-post-publication-audit-v1";
+export const POST_PUBLICATION_RANDOM_AUDIT_PERCENT = 20;
+export const POST_PUBLICATION_FIRST_ASSET_WINDOW = 500;
+export const POST_PUBLICATION_NEW_MEMBER_DAYS = 30;
 const PUBLIC_REPAIR = `${AUTO_PUBLICATION_POLICY}:public`;
 const PRIVATE_REPAIR = `${AUTO_PUBLICATION_POLICY}:private`;
 const environmentSchema = z.object({
@@ -59,6 +65,41 @@ export function autoPublicationConfig(env: NodeJS.ProcessEnv = process.env) {
   return environmentSchema.parse(env);
 }
 export type AutoPublicationConfig = ReturnType<typeof autoPublicationConfig>;
+
+function auditBucket(value: string) {
+  return (
+    createHash("sha256")
+      .update(`${POST_PUBLICATION_AUDIT_POLICY}:${value}`)
+      .digest()
+      .readUInt32BE(0) % 100
+  );
+}
+
+export function selectPostPublicationAudit(input: {
+  assetIds: string[];
+  memberCreatedAt: Date;
+  priorPublishedAssetCount: number;
+  now: Date;
+}) {
+  const memberAgeMs = input.now.getTime() - input.memberCreatedAt.getTime();
+  const newMember =
+    memberAgeMs >= 0 && memberAgeMs <= POST_PUBLICATION_NEW_MEMBER_DAYS * 24 * 60 * 60 * 1000;
+  const selectedAssets = input.assetIds.flatMap((assetId, index) => {
+    const reasons: Array<"FIRST_500_RANDOM_20_PERCENT" | "NEW_MEMBER_30_DAY"> = [];
+    if (
+      input.priorPublishedAssetCount + index < POST_PUBLICATION_FIRST_ASSET_WINDOW &&
+      auditBucket(assetId) < POST_PUBLICATION_RANDOM_AUDIT_PERCENT
+    )
+      reasons.push("FIRST_500_RANDOM_20_PERCENT");
+    if (newMember) reasons.push("NEW_MEMBER_30_DAY");
+    return reasons.length ? [{ assetId, reasons }] : [];
+  });
+  return {
+    policy: POST_PUBLICATION_AUDIT_POLICY,
+    selectedAssets,
+    targetedNewMember: newMember,
+  };
+}
 
 const safetySchema = normalizedResultSchema.extend({
   provider: z.literal("OPENAI_MODERATION"),
@@ -332,8 +373,31 @@ export function createAutoPublicationService(options: {
         .from(memberCapabilityGrants)
         .where(eq(memberCapabilityGrants.memberId, current.source.submission.memberId))
         .for("share");
+      const [member] = await tx
+        .select({ createdAt: members.createdAt })
+        .from(members)
+        .where(eq(members.id, current.source.submission.memberId))
+        .limit(1);
+      if (!member) return { status: "HELD", reason: "ACCESS_CHANGED" };
       if (!(await judge.readCurrentSource(current.source.run.id, tx)))
         return { status: "HELD", reason: "ACCESS_CHANGED" };
+      const [publicationStats] = await tx
+        .select({
+          publishedAssetCount: sql<number>`coalesce(sum(jsonb_array_length(coalesce(${moderationAuditEvents.metadata}->'imageHashes', '[]'::jsonb))), 0)::int`,
+        })
+        .from(moderationAuditEvents)
+        .where(
+          and(
+            eq(moderationAuditEvents.eventType, "AI_MEMBER_MEDIA_PUBLISHED"),
+            sql`${moderationAuditEvents.metadata}->>'policy' = ${AUTO_PUBLICATION_POLICY}`,
+          ),
+        );
+      const auditSelection = selectPostPublicationAudit({
+        assetIds: current.assets.map((row) => row.asset.id),
+        memberCreatedAt: member.createdAt,
+        priorPublishedAssetCount: publicationStats?.publishedAssetCount ?? 0,
+        now: now(),
+      });
       // Deliberately committed on a separate connection, while the submission lock is held.
       // Recovery cannot overtake this attempt, and plans survive a rollback of publication.
       if (plans.length > 0)
@@ -403,6 +467,68 @@ export function createAutoPublicationService(options: {
           publishedIssueId: published.publishedIssueId,
         },
       });
+      for (const selectedAsset of auditSelection.selectedAssets) {
+        const asset = current.assets.find((row) => row.asset.id === selectedAsset.assetId);
+        if (!asset) throw new Error("POST_PUBLICATION_AUDIT_ASSET_NOT_FOUND");
+        const [createdTarget] = await tx
+          .insert(moderationTargets)
+          .values({
+            targetType: "ISSUE_MEDIA_ASSET",
+            targetId: asset.asset.id,
+            targetVersion: asset.version.version,
+            inputHash: asset.version.inputHash,
+            snapshotReference: `issue-media://asset/${asset.asset.id}/version/${asset.version.version}`,
+          })
+          .onConflictDoNothing()
+          .returning({ id: moderationTargets.id });
+        const [existingTarget] = createdTarget
+          ? [createdTarget]
+          : await tx
+              .select({ id: moderationTargets.id })
+              .from(moderationTargets)
+              .where(
+                and(
+                  eq(moderationTargets.targetType, "ISSUE_MEDIA_ASSET"),
+                  eq(moderationTargets.targetId, asset.asset.id),
+                  eq(moderationTargets.targetVersion, asset.version.version),
+                ),
+              )
+              .limit(1);
+        const auditTarget = createdTarget ?? existingTarget;
+        if (!auditTarget) throw new Error("POST_PUBLICATION_AUDIT_TARGET_NOT_CREATED");
+        const targeted = selectedAsset.reasons.includes("NEW_MEMBER_30_DAY");
+        const [auditCase] = await tx
+          .insert(moderationCases)
+          .values({
+            targetId: auditTarget.id,
+            riskLane: "LOW",
+            priority: targeted ? "P2" : "P3",
+            slaDueAt: new Date(now().getTime() + (targeted ? 24 : 72) * 60 * 60 * 1000),
+          })
+          .returning({ id: moderationCases.id });
+        if (!auditCase) throw new Error("POST_PUBLICATION_AUDIT_CASE_NOT_CREATED");
+        await tx.insert(moderationCaseReferences).values({
+          caseId: auditCase.id,
+          referenceType: "RANDOM_AUDIT",
+          referenceId: asset.asset.id,
+        });
+        await tx.insert(moderationAuditEvents).values({
+          eventType: "AI_MEMBER_MEDIA_POST_PUBLICATION_AUDIT_SELECTED",
+          entityType: "CASE",
+          entityId: auditCase.id,
+          actorType: "SYSTEM",
+          metadata: {
+            policy: POST_PUBLICATION_AUDIT_POLICY,
+            publicationPolicy: AUTO_PUBLICATION_POLICY,
+            submissionId: current.source.submission.id,
+            publishedIssueId: published.publishedIssueId,
+            sourceRunId: current.source.run.id,
+            judgeEvaluationId: evaluationId,
+            selectedAssetIds: [asset.asset.id],
+            selectionReasons: { [asset.asset.id]: selectedAsset.reasons },
+          },
+        });
+      }
       return { status: "PUBLISHED", issueId: published.publishedIssueId };
     });
     return result;
@@ -515,5 +641,42 @@ export function createAutoPublicationService(options: {
     await reconcile();
     return { enabled: true, recovery, processed };
   }
-  return { process, runBatch, reconcile, enabled };
+  async function auditSummary() {
+    const [published] = await database
+      .select({
+        submissions: sql<number>`count(*)::int`,
+        assets: sql<number>`coalesce(sum(jsonb_array_length(coalesce(${moderationAuditEvents.metadata}->'imageHashes', '[]'::jsonb))), 0)::int`,
+        startedAt: sql<Date | null>`min(${moderationAuditEvents.occurredAt})`,
+        latestAt: sql<Date | null>`max(${moderationAuditEvents.occurredAt})`,
+      })
+      .from(moderationAuditEvents)
+      .where(
+        and(
+          eq(moderationAuditEvents.eventType, "AI_MEMBER_MEDIA_PUBLISHED"),
+          sql`${moderationAuditEvents.metadata}->>'policy' = ${AUTO_PUBLICATION_POLICY}`,
+        ),
+      );
+    const [selected] = await database
+      .select({
+        cases: sql<number>`count(*)::int`,
+        assets: sql<number>`coalesce(sum(jsonb_array_length(coalesce(${moderationAuditEvents.metadata}->'selectedAssetIds', '[]'::jsonb))), 0)::int`,
+      })
+      .from(moderationAuditEvents)
+      .where(
+        and(
+          eq(moderationAuditEvents.eventType, "AI_MEMBER_MEDIA_POST_PUBLICATION_AUDIT_SELECTED"),
+          sql`${moderationAuditEvents.metadata}->>'policy' = ${POST_PUBLICATION_AUDIT_POLICY}`,
+        ),
+      );
+    return {
+      policy: POST_PUBLICATION_AUDIT_POLICY,
+      formalGateDecision: "COLLECTING",
+      requiredRandomAuditPercent: POST_PUBLICATION_RANDOM_AUDIT_PERCENT,
+      firstAssetWindow: POST_PUBLICATION_FIRST_ASSET_WINDOW,
+      newMemberDays: POST_PUBLICATION_NEW_MEMBER_DAYS,
+      publication: published ?? { submissions: 0, assets: 0, startedAt: null, latestAt: null },
+      auditSelection: selected ?? { cases: 0, assets: 0 },
+    };
+  }
+  return { process, runBatch, reconcile, enabled, auditSummary };
 }
