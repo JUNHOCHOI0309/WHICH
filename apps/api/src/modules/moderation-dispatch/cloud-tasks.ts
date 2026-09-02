@@ -5,14 +5,24 @@ type ClaimedWakeup = {
   claimToken: string | null;
 };
 
+const claimedWakeupSchema = z.object({ id: z.uuid(), claimToken: z.uuid() });
 const queueSchema = z
   .string()
   .regex(/^projects\/[a-z0-9-]+\/locations\/[a-z0-9-]+\/queues\/[a-z0-9-]+$/);
-const serviceAccountSchema = z.string().email();
+const serviceAccountSchema = z.string().regex(/^[a-z0-9-]+@[a-z0-9-]+\.iam\.gserviceaccount\.com$/);
 
 function trustedWorkerUrl(value: string) {
   const url = new URL(value);
-  if (url.protocol !== "https:" || !url.hostname.endsWith(".run.app") || url.pathname !== "/") {
+  if (
+    url.protocol !== "https:" ||
+    !url.hostname.endsWith(".run.app") ||
+    url.pathname !== "/" ||
+    url.port ||
+    url.username ||
+    url.password ||
+    url.search ||
+    url.hash
+  ) {
     throw new Error("MODERATION_TASK_WORKER_URL_INVALID");
   }
   return url;
@@ -46,12 +56,10 @@ export function createCloudTasksStarter(
 
   return async (events: ClaimedWakeup[]) => {
     if (!events.length) return;
-    if (events.some((event) => !event.claimToken)) {
-      throw new Error("MODERATION_TASK_WAKEUP_NOT_CLAIMED");
-    }
+    const claimedEvents = z.array(claimedWakeupSchema).max(100).parse(events);
     const token = await metadataToken(request);
     const responses = await Promise.all(
-      events.map(async (event) => {
+      claimedEvents.map(async (event) => {
         const taskId = `moderation-${event.id}-${event.claimToken}`;
         const response = await request(`https://cloudtasks.googleapis.com/v2/${queue}/tasks`, {
           method: "POST",

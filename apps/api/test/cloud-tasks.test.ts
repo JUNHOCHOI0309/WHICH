@@ -82,5 +82,6 @@ describe("Cloud Tasks moderation transport", () => {
     await expect(start([{ id: randomUUID(), claimToken: randomUUID() }])).resolves.toEqual({
       created: 1,
     });
+    await expect(start([{ id: randomUUID(), claimToken: null }])).rejects.toThrow();
   });
 });
