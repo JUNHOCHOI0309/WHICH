@@ -7,6 +7,7 @@ import { z } from "zod";
 
 import type { Database } from "../../database/client.js";
 import {
+  issues,
   members,
   operatorAccessGrants,
   operatorAuditLogs,
@@ -18,8 +19,10 @@ import {
 import { defaultReviewConsolePaths } from "../../editorial-review-console.js";
 import { loadIssueInventoryReadiness } from "../issue-publication/inventory.js";
 import { EditorialReviewConsole } from "../issue-publication/review-console.js";
+import { evaluateMemberIssueAccessSignals } from "../issues/member-issue-access.js";
 
 import {
+  OpsPublishedIssueConflictError,
   OpsReviewConflictError,
   OpsPointShopConflictError,
   type OpsDashboardService,
@@ -28,6 +31,9 @@ import {
   type OpsEditorialDecision,
   type OpsEditorialPage,
   type OpsMemberPage,
+  type OpsPublishedIssue,
+  type OpsPublishedIssuePage,
+  type OpsReportedMembersPage,
   type OpsPointShopItem,
   type OpsPointShopView,
   type OpsRankingPreview,
@@ -148,7 +154,12 @@ function mapDecision(row: {
 
 type OpsManagementMethods = Pick<
   OpsDashboardService,
-  "readMembers" | "readEditorial" | "saveEditorialDecision"
+  | "readMembers"
+  | "readReportedMembers"
+  | "readEditorial"
+  | "saveEditorialDecision"
+  | "readPublishedIssues"
+  | "updatePublishedIssue"
 >;
 
 type OpsPointShopMethods = Pick<
@@ -221,6 +232,148 @@ function createOpsManagementMethods(
     metadata?: Record<string, unknown>;
   }) => Promise<void>,
 ): OpsManagementMethods {
+  type PublishedIssueRow = {
+    issue_id: string;
+    version: number;
+    question: string;
+    context: string | null;
+    choices: unknown;
+    category_code: string;
+    media_mode: string;
+    author_member_id: string | null;
+    author_display_name: string | null;
+    lifecycle: string;
+    visibility: string;
+    participation: string;
+    feed_eligibility: string;
+    accepted_votes: number;
+    report_count: number;
+    published_at: Date | string | null;
+    created_at: Date | string;
+    updated_at: Date | string;
+  };
+
+  function publishedIssueState(row: PublishedIssueRow): OpsPublishedIssue["state"] {
+    if (row.lifecycle === "RETIRED" || row.visibility === "REMOVED") return "REMOVED";
+    if (["CLOSED", "ARCHIVED"].includes(row.lifecycle)) return "CLOSED";
+    if (
+      row.visibility !== "VISIBLE" ||
+      row.participation !== "VOTING_OPEN" ||
+      row.feed_eligibility === "EXCLUDED"
+    )
+      return "HIDDEN";
+    return "ACTIVE";
+  }
+
+  function mapPublishedIssue(row: PublishedIssueRow): OpsPublishedIssue {
+    const choices = Array.isArray(row.choices)
+      ? row.choices.flatMap((choice) => {
+          if (typeof choice !== "object" || choice === null) return [];
+          const value = choice as Record<string, unknown>;
+          if (!["A", "B", "C", "D"].includes(String(value.code)) || typeof value.label !== "string")
+            return [];
+          return [
+            {
+              code: String(value.code) as "A" | "B" | "C" | "D",
+              label: value.label,
+            },
+          ];
+        })
+      : [];
+    return {
+      issueId: row.issue_id,
+      version: Number(row.version),
+      question: row.question,
+      context: row.context,
+      choices,
+      categoryCode: row.category_code,
+      mediaMode: row.media_mode,
+      author:
+        row.author_member_id && row.author_display_name
+          ? { memberId: row.author_member_id, displayName: row.author_display_name }
+          : null,
+      lifecycle: row.lifecycle,
+      visibility: row.visibility,
+      participation: row.participation,
+      feedEligibility: row.feed_eligibility,
+      state: publishedIssueState(row),
+      acceptedVotes: numberValue(row.accepted_votes),
+      reportCount: numberValue(row.report_count),
+      publishedAt: row.published_at ? new Date(row.published_at).toISOString() : null,
+      createdAt: new Date(row.created_at).toISOString(),
+      updatedAt: new Date(row.updated_at).toISOString(),
+    };
+  }
+
+  async function publishedIssueRows(input: {
+    state?: OpsPublishedIssue["state"];
+    query?: string;
+    issueId?: string;
+    limit: number;
+  }) {
+    const query = input.query?.trim();
+    const queryClause = query
+      ? sql`and (
+          i.issue_id::text ilike ${`${query}%`}
+          or latest.question ilike ${`%${query}%`}
+          or coalesce(author.display_name, '') ilike ${`%${query}%`}
+        )`
+      : sql``;
+    const issueClause = input.issueId ? sql`and i.issue_id = ${input.issueId}::uuid` : sql``;
+    const stateClause =
+      input.state === "ACTIVE"
+        ? sql`and i.lifecycle = 'PUBLISHED' and i.visibility = 'VISIBLE'
+            and i.participation = 'VOTING_OPEN' and i.feed_eligibility <> 'EXCLUDED'`
+        : input.state === "HIDDEN"
+          ? sql`and i.lifecycle = 'PUBLISHED' and (
+              i.visibility <> 'VISIBLE' or i.participation <> 'VOTING_OPEN'
+              or i.feed_eligibility = 'EXCLUDED'
+            )`
+          : input.state === "CLOSED"
+            ? sql`and i.lifecycle in ('CLOSED', 'ARCHIVED')`
+            : input.state === "REMOVED"
+              ? sql`and (i.lifecycle = 'RETIRED' or i.visibility = 'REMOVED')`
+              : sql``;
+    const result = await database.execute<PublishedIssueRow>(sql`
+      select i.issue_id, latest.version, latest.question, latest.context,
+        latest.primary_category_code as category_code, latest.media_mode,
+        coalesce((
+          select jsonb_agg(jsonb_build_object('code', choice.choice_code, 'label', choice.label)
+            order by choice.choice_code)
+          from issue_choices choice
+          where choice.issue_id = latest.issue_id and choice.issue_version = latest.version
+        ), '[]'::jsonb) as choices,
+        ia.member_id as author_member_id, author.display_name as author_display_name,
+        i.lifecycle::text as lifecycle, i.visibility::text as visibility,
+        i.participation::text as participation, i.feed_eligibility::text as feed_eligibility,
+        (select count(*)::int from votes vote where vote.issue_id = i.issue_id
+          and vote.issue_version = latest.version and vote.integrity_state = 'ACCEPTED'
+          and vote.is_test_subject = false) as accepted_votes,
+        (select count(*)::int from content_reports report
+          join report_cases report_case on report_case.report_case_id = report.report_case_id
+          where report.target_type = 'ISSUE' and report.target_id = i.issue_id
+            and report.counted = true and report_case.status <> 'DISMISSED') as report_count,
+        latest.published_at, i.created_at, i.updated_at
+      from issues i
+      join lateral (
+        select version.issue_id, version.issue_version as version, version.question, version.context,
+          version.primary_category_code, version.media_mode, version.published_at
+        from issue_versions version
+        where version.issue_id = i.issue_id
+          and version.published_at is not null
+          and version.published_at <= now()
+        order by version.issue_version desc
+        limit 1
+      ) latest on true
+      left join issue_authors ia on ia.issue_id = i.issue_id
+      left join members author on author.member_id = ia.member_id
+      where true ${queryClause} ${issueClause} ${stateClause}
+      order by i.updated_at desc, i.issue_id desc
+      limit ${Math.max(1, Math.min(input.limit, 100))}
+    `);
+    return result.rows.map(mapPublishedIssue);
+  }
+
   return {
     async readMembers(input): Promise<OpsMemberPage | null> {
       const actor = await operator(input.memberId);
@@ -333,6 +486,129 @@ function createOpsManagementMethods(
         }).catch(() => undefined);
         throw error;
       }
+    },
+
+    async readReportedMembers(input): Promise<OpsReportedMembersPage | null> {
+      const actor = await operator(input.memberId);
+      if (!actor) {
+        await audit({
+          memberId: input.memberId,
+          eventType: "OPS_REPORTED_MEMBERS_READ",
+          outcome: "DENIED",
+          requestId: input.requestId,
+          metadata: { reason: "OPERATOR_ROLE_REQUIRED" },
+        });
+        return null;
+      }
+
+      const query = input.query?.trim();
+      const queryClause = query
+        ? sql`and (
+            m.member_id::text ilike ${`${query}%`}
+            or m.display_name ilike ${`%${query}%`}
+          )`
+        : sql``;
+      const now = new Date();
+      const result = await database.execute<{
+        member_id: string;
+        display_name: string;
+        member_status: string;
+        reports_7d: number;
+        reporters_7d: number;
+        targets_7d: number;
+        reports_14d: number;
+        reporters_14d: number;
+        targets_14d: number;
+        latest_report_at: Date | string;
+        latest_submission_at: Date | string | null;
+      }>(sql`
+        with effective_reports as (
+          select coalesce(issue_author.member_id, media.uploaded_by_member_id) as member_id,
+            report.subject_id,
+            report.target_type || ':' || report.target_id::text as target_key,
+            report.created_at
+          from content_reports report
+          join report_cases report_case on report_case.report_case_id = report.report_case_id
+          join report_clusters cluster on cluster.report_cluster_id = report.report_cluster_id
+          left join issue_authors issue_author
+            on report.target_type = 'ISSUE' and issue_author.issue_id = report.target_id
+          left join issue_media_assets media
+            on report.target_type = 'ISSUE_MEDIA' and media.media_asset_id = report.target_id
+          where report.counted = true
+            and report.created_at >= ${new Date(now.getTime() - 14 * 86_400_000)}
+            and report_case.status <> 'DISMISSED'
+            and cluster.classification <> 'COORDINATED_SUSPECTED'
+        ), report_totals as (
+          select member_id,
+            count(*) filter (where created_at >= ${new Date(now.getTime() - 7 * 86_400_000)})::int
+              as reports_7d,
+            count(distinct subject_id) filter (
+              where created_at >= ${new Date(now.getTime() - 7 * 86_400_000)}
+            )::int as reporters_7d,
+            count(distinct target_key) filter (
+              where created_at >= ${new Date(now.getTime() - 7 * 86_400_000)}
+            )::int as targets_7d,
+            count(*)::int as reports_14d,
+            count(distinct subject_id)::int as reporters_14d,
+            count(distinct target_key)::int as targets_14d,
+            max(created_at) as latest_report_at
+          from effective_reports
+          where member_id is not null
+          group by member_id
+        )
+        select m.member_id, m.display_name, m.status::text as member_status,
+          totals.reports_7d, totals.reporters_7d, totals.targets_7d,
+          totals.reports_14d, totals.reporters_14d, totals.targets_14d,
+          totals.latest_report_at,
+          (select max(submission.submitted_at) from member_issue_submissions submission
+            where submission.member_id = m.member_id
+              and submission.submitted_at >= ${new Date(now.getTime() - 86_400_000)})
+            as latest_submission_at
+        from report_totals totals
+        join members m on m.member_id = totals.member_id
+        where true ${queryClause}
+        order by totals.reporters_14d desc, totals.targets_14d desc,
+          totals.latest_report_at desc, m.member_id desc
+        limit ${Math.max(input.limit * 2, 100)}
+      `);
+      const items = result.rows
+        .map((row) => {
+          const issueAccess = evaluateMemberIssueAccessSignals({
+            hardReporterCount: numberValue(row.reporters_14d),
+            hardTargetCount: numberValue(row.targets_14d),
+            latestHardReportAt: new Date(row.latest_report_at),
+            softReporterCount: numberValue(row.reporters_7d),
+            softTargetCount: numberValue(row.targets_7d),
+            latestSubmissionAt: row.latest_submission_at
+              ? new Date(row.latest_submission_at)
+              : null,
+            now,
+          });
+          return {
+            memberId: row.member_id,
+            displayName: row.display_name,
+            memberStatus:
+              row.member_status as OpsReportedMembersPage["items"][number]["memberStatus"],
+            reports7d: numberValue(row.reports_7d),
+            uniqueReporters7d: numberValue(row.reporters_7d),
+            reportedTargets7d: numberValue(row.targets_7d),
+            reports14d: numberValue(row.reports_14d),
+            uniqueReporters14d: numberValue(row.reporters_14d),
+            reportedTargets14d: numberValue(row.targets_14d),
+            latestReportAt: new Date(row.latest_report_at).toISOString(),
+            issueAccess,
+          };
+        })
+        .filter((item) => !input.state || item.issueAccess.state === input.state)
+        .slice(0, input.limit);
+      await audit({
+        memberId: input.memberId,
+        eventType: "OPS_REPORTED_MEMBERS_READ",
+        outcome: "ALLOWED",
+        requestId: input.requestId,
+        metadata: { resultCount: items.length, state: input.state ?? "ALL", searched: !!query },
+      });
+      return { schemaVersion: 1, generatedAt: now.toISOString(), items };
     },
 
     async readEditorial(input): Promise<OpsEditorialPage | null> {
@@ -586,6 +862,121 @@ function createOpsManagementMethods(
         }
         throw error;
       }
+    },
+
+    async readPublishedIssues(input): Promise<OpsPublishedIssuePage | null> {
+      const actor = await operator(input.memberId);
+      if (!actor) {
+        await audit({
+          memberId: input.memberId,
+          eventType: "OPS_PUBLISHED_ISSUES_READ",
+          outcome: "DENIED",
+          requestId: input.requestId,
+          metadata: { reason: "OPERATOR_ROLE_REQUIRED" },
+        });
+        return null;
+      }
+      const items = await publishedIssueRows(input);
+      await audit({
+        memberId: input.memberId,
+        eventType: "OPS_PUBLISHED_ISSUES_READ",
+        outcome: "ALLOWED",
+        requestId: input.requestId,
+        metadata: {
+          resultCount: items.length,
+          state: input.state ?? "ALL",
+          searched: Boolean(input.query?.trim()),
+        },
+      });
+      return { schemaVersion: 1, generatedAt: new Date().toISOString(), items };
+    },
+
+    async updatePublishedIssue(input): Promise<OpsPublishedIssue | null> {
+      const actor = await operator(input.memberId);
+      if (!actor) {
+        await audit({
+          memberId: input.memberId,
+          eventType: "OPS_PUBLISHED_ISSUE_WRITE",
+          outcome: "DENIED",
+          requestId: input.requestId,
+          metadata: { issueId: input.issueId, reason: "OPERATOR_ROLE_REQUIRED" },
+        });
+        return null;
+      }
+      const reason = input.reason.trim();
+      if (reason.length < 10 || reason.length > 1000) {
+        throw new Error("게시 질문 조치 사유는 10자 이상 1000자 이하로 입력해 주세요.");
+      }
+      const [current] = await publishedIssueRows({ issueId: input.issueId, limit: 1 });
+      if (!current) throw new OpsPublishedIssueConflictError("게시 질문을 찾을 수 없습니다.");
+      const expectedUpdatedAt = new Date(input.expectedUpdatedAt);
+      if (current.updatedAt !== expectedUpdatedAt.toISOString()) {
+        throw new OpsPublishedIssueConflictError(
+          "다른 운영 변경이 먼저 반영됐습니다. 목록을 새로고침해 주세요.",
+        );
+      }
+      if (current.state === "REMOVED") {
+        throw new OpsPublishedIssueConflictError("이미 게시 중단된 질문입니다.");
+      }
+      if (input.action === "RESTORE" && current.lifecycle !== "PUBLISHED") {
+        throw new OpsPublishedIssueConflictError("종료되거나 제거된 질문은 복구할 수 없습니다.");
+      }
+
+      const changedAt = new Date(Math.max(Date.now(), expectedUpdatedAt.getTime() + 1));
+      const next =
+        input.action === "HIDE"
+          ? {
+              visibility: "SUSPENDED" as const,
+              participation: "VOTING_SUSPENDED" as const,
+              feedEligibility: "EXCLUDED" as const,
+            }
+          : input.action === "RESTORE"
+            ? {
+                visibility: "VISIBLE" as const,
+                participation: "VOTING_OPEN" as const,
+                feedEligibility: "ELIGIBLE" as const,
+              }
+            : {
+                lifecycle: "RETIRED" as const,
+                visibility: "REMOVED" as const,
+                participation: "VOTING_CLOSED" as const,
+                feedEligibility: "EXCLUDED" as const,
+              };
+      const [updated] = await database
+        .update(issues)
+        .set({ ...next, updatedAt: changedAt })
+        .where(
+          and(
+            eq(issues.id, input.issueId),
+            sql`date_trunc('milliseconds', ${issues.updatedAt}) = ${expectedUpdatedAt}`,
+          ),
+        )
+        .returning({ id: issues.id });
+      if (!updated) {
+        throw new OpsPublishedIssueConflictError(
+          "다른 운영 변경이 먼저 반영됐습니다. 목록을 새로고침해 주세요.",
+        );
+      }
+      await audit({
+        memberId: input.memberId,
+        eventType: "OPS_PUBLISHED_ISSUE_WRITE",
+        outcome: "SUCCEEDED",
+        requestId: input.requestId,
+        metadata: {
+          issueId: input.issueId,
+          action: input.action,
+          before: {
+            lifecycle: current.lifecycle,
+            visibility: current.visibility,
+            participation: current.participation,
+            feedEligibility: current.feedEligibility,
+          },
+          reason,
+        },
+      });
+      const [saved] = await publishedIssueRows({ issueId: input.issueId, limit: 1 });
+      if (!saved) throw new Error("변경된 게시 질문을 다시 읽지 못했습니다.");
+      return saved;
     },
   };
 }

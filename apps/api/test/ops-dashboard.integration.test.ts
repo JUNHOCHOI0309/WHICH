@@ -5,6 +5,10 @@ import { buildApp } from "../src/app.js";
 import { getConfig } from "../src/config.js";
 import type { Database } from "../src/database/client.js";
 import {
+  issueAuthors,
+  issueChoices,
+  issues,
+  issueVersions,
   operatorAccessGrants,
   operatorAuditLogs,
   operatorEditorialDecisions,
@@ -282,6 +286,84 @@ describe("operator dashboard", () => {
     ]) {
       expect(serialized).not.toContain(forbidden);
     }
+  });
+
+  it("lists report-based account restrictions behind the operator boundary", async () => {
+    const [allowed, denied] = await Promise.all([
+      opsRequest("GET", "/v1/internal/ops/reported-members?limit=10"),
+      opsRequest("GET", "/v1/internal/ops/reported-members?limit=10", undefined, ordinaryToken),
+    ]);
+    expect(allowed.statusCode, allowed.body).toBe(200);
+    expect(allowed.json()).toMatchObject({ schemaVersion: 1, items: [] });
+    expect(denied.statusCode).toBe(403);
+  });
+
+  it("lists and controls an already-published Issue with optimistic concurrency", async () => {
+    const [issue] = await database.db.insert(issues).values({}).returning({ id: issues.id });
+    await database.db.insert(issueVersions).values({
+      issueId: issue!.id,
+      version: 1,
+      question: "운영 화면에서 관리할 게시 질문은?",
+      context: "게시된 질문 관리 통합 테스트",
+      contentHash: "a".repeat(64),
+      primaryCategoryCode: "LIFE",
+      experienceModeCode: "STANDARD",
+      taxonomyVersion: "v1",
+      publishedAt: new Date("2026-09-02T10:00:00.000Z"),
+    });
+    await database.db.insert(issueChoices).values([
+      { issueId: issue!.id, issueVersion: 1, code: "A", label: "계속 공개" },
+      { issueId: issue!.id, issueVersion: 1, code: "B", label: "노출 중지" },
+    ]);
+    await database.db.insert(issueAuthors).values({ issueId: issue!.id, memberId });
+
+    const list = await opsRequest(
+      "GET",
+      "/v1/internal/ops/published-issues?q=%EC%9A%B4%EC%98%81&limit=10",
+    );
+    expect(list.statusCode, list.body).toBe(200);
+    const published = list.json<{
+      items: Array<{ issueId: string; state: string; updatedAt: string }>;
+    }>().items[0]!;
+    expect(published).toMatchObject({ issueId: issue!.id, state: "ACTIVE" });
+
+    const hidden = await opsRequest("PATCH", `/v1/internal/ops/published-issues/${issue!.id}`, {
+      action: "HIDE",
+      expectedUpdatedAt: published.updatedAt,
+      reason: "신고 내용 검토를 위해 노출을 잠시 중지합니다.",
+    });
+    expect(hidden.statusCode, hidden.body).toBe(200);
+    const hiddenIssue = hidden.json<{ updatedAt: string }>();
+    expect(hiddenIssue).toMatchObject({ state: "HIDDEN", visibility: "SUSPENDED" });
+
+    const stale = await opsRequest("PATCH", `/v1/internal/ops/published-issues/${issue!.id}`, {
+      action: "RESTORE",
+      expectedUpdatedAt: published.updatedAt,
+      reason: "오래된 화면에서 복구를 시도하는 충돌 검증입니다.",
+    });
+    expect(stale.statusCode).toBe(409);
+    expect(stale.json()).toMatchObject({ code: "PUBLISHED_ISSUE_CONFLICT" });
+
+    const restored = await opsRequest("PATCH", `/v1/internal/ops/published-issues/${issue!.id}`, {
+      action: "RESTORE",
+      expectedUpdatedAt: hiddenIssue.updatedAt,
+      reason: "신고 검토 결과 문제가 없어 질문을 다시 공개합니다.",
+    });
+    expect(restored.statusCode, restored.body).toBe(200);
+    const restoredIssue = restored.json<{ updatedAt: string }>();
+    expect(restoredIssue).toMatchObject({ state: "ACTIVE", visibility: "VISIBLE" });
+
+    const removed = await opsRequest("PATCH", `/v1/internal/ops/published-issues/${issue!.id}`, {
+      action: "REMOVE",
+      expectedUpdatedAt: restoredIssue.updatedAt,
+      reason: "운영 정책 위반이 확인되어 게시를 최종 중단합니다.",
+    });
+    expect(removed.statusCode, removed.body).toBe(200);
+    expect(removed.json()).toMatchObject({
+      state: "REMOVED",
+      lifecycle: "RETIRED",
+      visibility: "REMOVED",
+    });
   });
 
   it("creates, pauses, reprices, and audits Point Shop catalog items", async () => {

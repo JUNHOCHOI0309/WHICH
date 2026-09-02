@@ -15,8 +15,8 @@ function PanelLoading() {
   );
 }
 
-const OpsEditorialPanel = dynamic(
-  () => import("./ops-editorial-panel").then((module) => module.OpsEditorialPanel),
+const OpsIssueReviewPanel = dynamic(
+  () => import("./ops-issue-review-panel").then((module) => module.OpsIssueReviewPanel),
   { loading: PanelLoading },
 );
 const OpsMembersPanel = dynamic(
@@ -27,8 +27,8 @@ const OpsMediaReviewPanel = dynamic(
   () => import("./ops-media-review-panel").then((module) => module.OpsMediaReviewPanel),
   { loading: PanelLoading },
 );
-const OpsMediaUploadPilotPanel = dynamic(
-  () => import("./ops-media-upload-pilot-panel").then((module) => module.OpsMediaUploadPilotPanel),
+const OpsReportedMembersPanel = dynamic(
+  () => import("./ops-reported-members-panel").then((module) => module.OpsReportedMembersPanel),
   { loading: PanelLoading },
 );
 const OpsModerationQueuePanel = dynamic(
@@ -52,7 +52,7 @@ type Tab =
   | "editorial"
   | "moderation"
   | "media"
-  | "mediaPilot"
+  | "reportedMembers"
   | "pointShop"
   | "ranking";
 
@@ -227,7 +227,7 @@ export function OpsDashboardExperience() {
                 ["editorial", "Issue Review"],
                 ["moderation", "Moderation Queue"],
                 ["media", "Image Review"],
-                ["mediaPilot", "Upload Pilot"],
+                ["reportedMembers", "신고 인원 관리"],
                 ["pointShop", "Point Shop"],
                 ["ranking", "Ranking Preview"],
               ] as const
@@ -506,11 +506,11 @@ export function OpsDashboardExperience() {
           ) : tab === "members" ? (
             <OpsMembersPanel />
           ) : tab === "editorial" ? (
-            <OpsEditorialPanel />
+            <OpsIssueReviewPanel />
           ) : tab === "media" ? (
             <OpsMediaReviewPanel />
-          ) : tab === "mediaPilot" ? (
-            <OpsMediaUploadPilotPanel />
+          ) : tab === "reportedMembers" ? (
+            <OpsReportedMembersPanel onOpenModeration={() => setTab("moderation")} />
           ) : tab === "pointShop" ? (
             <OpsPointShopPanel />
           ) : (

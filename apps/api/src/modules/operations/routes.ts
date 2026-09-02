@@ -10,9 +10,12 @@ import {
   OPS_EDITORIAL_SCOPES,
   OPS_EDITORIAL_STATUSES,
   OPS_MEMBER_STATUSES,
+  OPS_PUBLISHED_ISSUE_ACTIONS,
+  OPS_PUBLISHED_ISSUE_STATES,
   OPS_POINT_SHOP_EQUIP_SLOTS,
   OPS_POINT_SHOP_THEME_FAMILIES,
   OpsPointShopConflictError,
+  OpsPublishedIssueConflictError,
   OpsReviewConflictError,
   type OpsDashboardService,
   type OpsDashboardWindow,
@@ -76,6 +79,12 @@ export async function registerOpsRoutes(
       if (error instanceof OpsPointShopConflictError) {
         return reply.code(409).send({
           code: "POINT_SHOP_CONFLICT",
+          message: error.message,
+        });
+      }
+      if (error instanceof OpsPublishedIssueConflictError) {
+        return reply.code(409).send({
+          code: "PUBLISHED_ISSUE_CONFLICT",
           message: error.message,
         });
       }
@@ -230,6 +239,55 @@ export async function registerOpsRoutes(
           });
         }
         return reply.send(preview);
+      },
+    );
+
+    opsApp.get<{
+      Headers: OpsHeaders;
+      Querystring: {
+        state?: "OPEN" | "LIMITED" | "BLOCKED";
+        q?: string;
+        limit?: number;
+      };
+    }>(
+      "/v1/internal/ops/reported-members",
+      {
+        schema: {
+          hide: true,
+          headers: opsHeadersSchema,
+          querystring: Type.Object({
+            state: Type.Optional(
+              Type.Union([Type.Literal("OPEN"), Type.Literal("LIMITED"), Type.Literal("BLOCKED")]),
+            ),
+            q: Type.Optional(Type.String({ maxLength: 80 })),
+            limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 50 })),
+          }),
+          response: {
+            200: Type.Any(),
+            400: Type.Object({ code: Type.String(), message: Type.String() }),
+            401: Type.Object({ code: Type.String(), message: Type.String() }),
+            403: Type.Object({ code: Type.String(), message: Type.String() }),
+            500: Type.Object({ code: Type.String(), message: Type.String() }),
+          },
+        },
+      },
+      async (request, reply) => {
+        const memberId = await authenticate(request, reply);
+        if (!memberId) return;
+        const page = await service.readReportedMembers({
+          memberId,
+          state: request.query.state,
+          query: request.query.q,
+          limit: request.query.limit ?? 50,
+          requestId: request.id,
+        });
+        if (!page) {
+          return reply.code(403).send({
+            code: "OPERATOR_ROLE_REQUIRED",
+            message: "This Member does not have active OPERATOR access.",
+          });
+        }
+        return reply.send(page);
       },
     );
 
@@ -413,6 +471,107 @@ export async function registerOpsRoutes(
           });
         }
         return reply.send(decision);
+      },
+    );
+
+    opsApp.get<{
+      Headers: OpsHeaders;
+      Querystring: {
+        state?: (typeof OPS_PUBLISHED_ISSUE_STATES)[number];
+        q?: string;
+        limit?: number;
+      };
+    }>(
+      "/v1/internal/ops/published-issues",
+      {
+        schema: {
+          hide: true,
+          headers: opsHeadersSchema,
+          querystring: Type.Object({
+            state: Type.Optional(
+              Type.Union(OPS_PUBLISHED_ISSUE_STATES.map((state) => Type.Literal(state))),
+            ),
+            q: Type.Optional(Type.String({ maxLength: 120 })),
+            limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 50 })),
+          }),
+          response: {
+            200: Type.Any(),
+            400: Type.Object({ code: Type.String(), message: Type.String() }),
+            401: Type.Object({ code: Type.String(), message: Type.String() }),
+            403: Type.Object({ code: Type.String(), message: Type.String() }),
+            500: Type.Object({ code: Type.String(), message: Type.String() }),
+          },
+        },
+      },
+      async (request, reply) => {
+        const memberId = await authenticate(request, reply);
+        if (!memberId) return;
+        const page = await service.readPublishedIssues({
+          memberId,
+          state: request.query.state,
+          query: request.query.q,
+          limit: request.query.limit ?? 50,
+          requestId: request.id,
+        });
+        if (!page) {
+          return reply.code(403).send({
+            code: "OPERATOR_ROLE_REQUIRED",
+            message: "This Member does not have active OPERATOR access.",
+          });
+        }
+        return reply.send(page);
+      },
+    );
+
+    opsApp.patch<{
+      Headers: OpsHeaders;
+      Params: { issueId: string };
+      Body: {
+        action: (typeof OPS_PUBLISHED_ISSUE_ACTIONS)[number];
+        expectedUpdatedAt: string;
+        reason: string;
+      };
+    }>(
+      "/v1/internal/ops/published-issues/:issueId",
+      {
+        schema: {
+          hide: true,
+          headers: opsHeadersSchema,
+          params: Type.Object({ issueId: Type.String({ format: "uuid" }) }),
+          body: Type.Object(
+            {
+              action: Type.Union(OPS_PUBLISHED_ISSUE_ACTIONS.map((action) => Type.Literal(action))),
+              expectedUpdatedAt: Type.String({ format: "date-time" }),
+              reason: Type.String({ minLength: 10, maxLength: 1000 }),
+            },
+            { additionalProperties: false },
+          ),
+          response: {
+            200: Type.Any(),
+            400: Type.Object({ code: Type.String(), message: Type.String() }),
+            401: Type.Object({ code: Type.String(), message: Type.String() }),
+            403: Type.Object({ code: Type.String(), message: Type.String() }),
+            409: Type.Object({ code: Type.String(), message: Type.String() }),
+            500: Type.Object({ code: Type.String(), message: Type.String() }),
+          },
+        },
+      },
+      async (request, reply) => {
+        const memberId = await authenticate(request, reply);
+        if (!memberId) return;
+        const issue = await service.updatePublishedIssue({
+          memberId,
+          issueId: request.params.issueId,
+          ...request.body,
+          requestId: request.id,
+        });
+        if (!issue) {
+          return reply.code(403).send({
+            code: "OPERATOR_ROLE_REQUIRED",
+            message: "This Member does not have active OPERATOR access.",
+          });
+        }
+        return reply.send(issue);
       },
     );
 

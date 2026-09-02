@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { evaluateMemberIssueAccess } from "../src/modules/issues/member-issue-access.js";
+import {
+  evaluateMemberIssueAccess,
+  evaluateMemberIssueAccessSignals,
+} from "../src/modules/issues/member-issue-access.js";
 
 const now = new Date("2026-09-02T12:00:00.000Z");
 const hoursAgo = (hours: number) => new Date(now.getTime() - hours * 60 * 60 * 1_000);
@@ -69,5 +72,24 @@ describe("Member Issue access policy", () => {
         now,
       }),
     ).toMatchObject({ state: "OPEN", canCreateNow: true });
+  });
+
+  it("evaluates aggregated operator signals with the same hard-block policy", () => {
+    expect(
+      evaluateMemberIssueAccessSignals({
+        hardReporterCount: 5,
+        hardTargetCount: 3,
+        latestHardReportAt: hoursAgo(3),
+        softReporterCount: 3,
+        softTargetCount: 2,
+        latestSubmissionAt: hoursAgo(1),
+        now,
+      }),
+    ).toMatchObject({
+      state: "BLOCKED",
+      canCreateNow: false,
+      canStartUpload: false,
+      restrictedUntil: "2026-09-05T09:00:00.000Z",
+    });
   });
 });
