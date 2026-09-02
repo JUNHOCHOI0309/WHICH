@@ -408,7 +408,7 @@ export function createModerationDispatcherService(
     return staleReason ? "SKIPPED" : "QUEUED";
   }
 
-  async function claimOutbox(limit?: number) {
+  async function claimOutbox(limit?: number, submissionIds?: string[]) {
     return database.transaction(async (transaction) => {
       const claimedAt = now();
       const candidates = await transaction
@@ -419,6 +419,9 @@ export function createModerationDispatcherService(
             eq(outboxEvents.status, "PENDING"),
             eq(outboxEvents.eventType, "MODERATION_REQUESTED"),
             lte(outboxEvents.availableAt, claimedAt),
+            submissionIds?.length
+              ? inArray(sql`${outboxEvents.payload}->'data'->>'target_id'`, submissionIds)
+              : undefined,
             options.submissionWakeupsOnly
               ? hasClaimedWakeup(
                   sql`${outboxEvents.payload}->'data'->>'target_id'`,
@@ -463,7 +466,7 @@ export function createModerationDispatcherService(
     });
   }
 
-  async function claimRuns(limit?: number) {
+  async function claimRuns(limit?: number, submissionIds?: string[]) {
     return database.transaction(async (transaction) => {
       const claimedAt = now();
       const candidates = await transaction
@@ -471,6 +474,14 @@ export function createModerationDispatcherService(
         .from(moderationRuns)
         .where(
           and(
+            submissionIds?.length
+              ? sql`exists (
+                  select 1 from ${moderationTargets} scoped_target
+                  where scoped_target.moderation_target_id = ${moderationRuns.targetId}
+                    and scoped_target.target_type = 'ISSUE_VERSION'
+                    and ${inArray(sql`scoped_target.target_id`, submissionIds)}
+                )`
+              : undefined,
             options.submissionMemberIds
               ? sql`exists (
             select 1 from ${moderationTargets} t
@@ -932,8 +943,8 @@ export function createModerationDispatcherService(
   }
 
   return {
-    async dispatchBatch(limit?: number) {
-      const claimed = await claimOutbox(limit);
+    async dispatchBatch(limit?: number, submissionIds?: string[]) {
+      const claimed = await claimOutbox(limit, submissionIds);
       const summary = {
         claimed: claimed.length,
         queued: 0,
@@ -954,8 +965,8 @@ export function createModerationDispatcherService(
       return summary;
     },
 
-    async processBatch(limit?: number) {
-      const runs = await claimRuns(limit);
+    async processBatch(limit?: number, submissionIds?: string[]) {
+      const runs = await claimRuns(limit, submissionIds);
       const summary = {
         claimed: runs.length,
         succeeded: 0,

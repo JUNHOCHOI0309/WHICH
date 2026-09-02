@@ -40,6 +40,10 @@ export type ModerationOperationalHealth = {
   alerts: ModerationOperationalAlert[];
 };
 
+const QUEUE_WARNING_AGE_SECONDS = 2 * 60;
+const QUEUE_CRITICAL_AGE_SECONDS = 10 * 60;
+const QUEUE_CRITICAL_PENDING = 100;
+
 function numberValue(value: unknown) {
   return Number(value ?? 0);
 }
@@ -87,17 +91,25 @@ export function evaluateModerationOperationalHealth(input: {
       message: `Dead letter ${input.deadLettered}건을 재처리하거나 원인을 확인해야 합니다.`,
     });
   }
-  if (input.oldestPendingAgeSeconds !== null && input.oldestPendingAgeSeconds > 48 * 3600) {
+  if (
+    input.pending > QUEUE_CRITICAL_PENDING ||
+    (input.oldestPendingAgeSeconds !== null &&
+      input.oldestPendingAgeSeconds > QUEUE_CRITICAL_AGE_SECONDS)
+  ) {
     alerts.push({
       code: "MODERATION_QUEUE_SLO_BREACH",
       severity: "CRITICAL",
-      message: "가장 오래된 Moderation 작업이 48시간 SLO를 넘었습니다.",
+      message:
+        "자동 검사 용량이 10분 또는 대기 100건 기준을 넘었습니다. 새 직접 업로드를 잠시 보호합니다.",
     });
-  } else if (input.oldestPendingAgeSeconds !== null && input.oldestPendingAgeSeconds > 15 * 60) {
+  } else if (
+    input.oldestPendingAgeSeconds !== null &&
+    input.oldestPendingAgeSeconds > QUEUE_WARNING_AGE_SECONDS
+  ) {
     alerts.push({
       code: "MODERATION_QUEUE_DELAYED",
       severity: "WARNING",
-      message: "Moderation Worker 시작 지연이 15분을 넘었습니다.",
+      message: "자동 검사 대기가 2분을 넘어 확장 상태를 확인해야 합니다.",
     });
   }
   if (input.reconciliationFailed > 0 || input.reconciliationMismatches > 0) {
@@ -229,6 +241,20 @@ export async function readModerationOperationalHealth(
         count(*) filter (where status = 'DEAD_LETTERED')::int as dead_lettered_runs,
         extract(epoch from (now() - min(created_at) filter (where status = 'PENDING')))::double precision as oldest_pending_age_seconds
       from moderation_runs
+    ), wakeups as (
+      select
+        count(*) filter (
+          where status = 'PENDING'
+            and (claim_token is not null or available_at <= now())
+        )::int as pending_wakeups,
+        extract(epoch from (
+          now() - min(coalesce(claimed_at, occurred_at)) filter (
+            where status = 'PENDING'
+              and (claim_token is not null or available_at <= now())
+          )
+        ))::double precision as oldest_wakeup_age_seconds
+      from outbox_events
+      where event_type = 'MODERATION_JOB_REQUESTED'
     ), reconciliations as (
       select
         count(*) filter (where status = 'MISMATCH')::int as reconciliation_mismatches,
@@ -236,7 +262,16 @@ export async function readModerationOperationalHealth(
         count(*) filter (where status = 'REPAIRED' and resolved_at >= now() - interval '7 days')::int as reconciliation_repaired_7d
       from moderation_reconciliations
     )
-    select * from provider cross join runs cross join reconciliations
+    select
+      provider.*,
+      greatest(runs.pending_runs, wakeups.pending_wakeups)::int as pending_runs,
+      runs.running_runs,
+      runs.failed_runs,
+      runs.dead_lettered_runs,
+      greatest(runs.oldest_pending_age_seconds, wakeups.oldest_wakeup_age_seconds)
+        as oldest_pending_age_seconds,
+      reconciliations.*
+    from provider cross join runs cross join wakeups cross join reconciliations
   `);
   const row = rows.rows[0] ?? ({} as (typeof rows.rows)[number]);
   return evaluateModerationOperationalHealth({

@@ -88,6 +88,25 @@ describe("moderation operational health", () => {
     );
   });
 
+  it("warns early and pauses only after the elastic queue exceeds its emergency boundary", () => {
+    const warning = evaluateModerationOperationalHealth(input({ oldestPendingAgeSeconds: 121 }));
+    expect(warning.directUploadAllowed).toBe(true);
+    expect(warning.alerts).toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: "MODERATION_QUEUE_DELAYED" })]),
+    );
+
+    for (const overloaded of [
+      input({ oldestPendingAgeSeconds: 601 }),
+      input({ pending: 101, oldestPendingAgeSeconds: 30 }),
+    ]) {
+      const health = evaluateModerationOperationalHealth(overloaded);
+      expect(health.directUploadAllowed).toBe(false);
+      expect(health.alerts).toEqual(
+        expect.arrayContaining([expect.objectContaining({ code: "MODERATION_QUEUE_SLO_BREACH" })]),
+      );
+    }
+  });
+
   it("fails closed on dead letters, queue SLO breach, and reconciliation failures", () => {
     const health = evaluateModerationOperationalHealth(
       input({

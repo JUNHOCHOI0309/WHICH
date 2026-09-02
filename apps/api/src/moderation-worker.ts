@@ -52,6 +52,7 @@ const environmentSchema = z.object({
   MODERATION_WORKER_RETRY_BASE_MS: z.coerce.number().int().min(100).default(5_000),
   MODERATION_WORKER_RETRY_MAX_MS: z.coerce.number().int().min(1_000).default(300_000),
   MODERATION_WORKER_POLL_MS: z.coerce.number().int().min(250).default(2_000),
+  MODERATION_WORKER_DB_POOL_MAX: z.coerce.number().int().min(1).max(20).default(3),
   ISSUE_MEMBER_MEDIA_UPLOAD_MODE: z.enum(["PILOT", "MEMBER"]).default("PILOT"),
 });
 
@@ -62,7 +63,10 @@ if (config.MODERATION_WORKER_RETRY_MAX_MS < config.MODERATION_WORKER_RETRY_BASE_
 
 // A cold Cloud Run Job connects to the external DB over VPC/TLS. Keep the web
 // pool's short default, but allow this background worker time to connect.
-const database = createDatabase(config.DATABASE_URL, { connectionTimeoutMillis: 10_000 });
+const database = createDatabase(config.DATABASE_URL, {
+  connectionTimeoutMillis: 10_000,
+  maxConnections: config.MODERATION_WORKER_DB_POOL_MAX,
+});
 const publicationEvidence = {
   consentVersion: config.ISSUE_MEDIA_CONSENT_VERSION,
   decisionRuntime: moderationDecisionRuntime(),
@@ -207,19 +211,20 @@ const autoPublication = createAutoPublicationService({
     judgeDiagnostic(judgeConfig, providerConfig).allowed,
 });
 
-async function once() {
-  return withModerationWorkerLock(database.db, async () => {
+async function runOnce(request?: { eventId: string; claimToken: string }) {
+  const work = async () => {
     const wakeups = createSubmissionWakeups(database.db, publicationMemberIds);
-    const requests = submissionWakeupsOnly ? await wakeups.claimed() : [];
+    const requests = submissionWakeupsOnly ? await wakeups.claimed(request) : [];
     if (submissionWakeupsOnly && !requests.length) return { status: "NO_SUBMISSION_REQUESTS" };
-    const dispatched = await worker.dispatchBatch();
-    const processed = await worker.processBatch();
-    const policyJudgeShadow = await policyJudge.runBatch().catch(() => ({
+    const submissionIds = requests.map((item) => item.aggregateId);
+    const dispatched = await worker.dispatchBatch(undefined, submissionIds);
+    const processed = await worker.processBatch(undefined, submissionIds);
+    const policyJudgeShadow = await policyJudge.runBatch(10, submissionIds).catch(() => ({
       status: "ERROR",
       reason: "POLICY_JUDGE_WORKER_FAILED",
       publicationChanged: false,
     }));
-    const automaticPublication = await autoPublication.runBatch();
+    const automaticPublication = await autoPublication.runBatch(5, submissionIds);
     if (automaticPublication.enabled) {
       const budgetDeferred =
         "processed" in policyJudgeShadow &&
@@ -231,7 +236,11 @@ async function once() {
         await wakeups.finish(request, { budgetDeferred, publicationRetryable });
     }
     return { dispatched, processed, policyJudgeShadow, automaticPublication };
-  });
+  };
+  // Cloud Tasks assigns one claimed submission to each authenticated request. The
+  // per-submission locks and row leases allow those requests to scale independently.
+  if (request) return work();
+  return withModerationWorkerLock(database.db, work);
 }
 
 async function main() {
@@ -292,7 +301,13 @@ async function main() {
     return;
   }
   if (command === "once") {
-    console.log(JSON.stringify(await once(), null, 2));
+    console.log(JSON.stringify(await runOnce(), null, 2));
+    return;
+  }
+  if (command === "submission") {
+    const eventId = z.uuid().parse(process.argv[3]);
+    const claimToken = z.uuid().parse(process.argv[4]);
+    console.log(JSON.stringify(await runOnce({ eventId, claimToken }), null, 2));
     return;
   }
   if (command === "run") {
@@ -301,7 +316,7 @@ async function main() {
       process.once(signal, () => controller.abort());
     while (!controller.signal.aborted) {
       try {
-        console.log(JSON.stringify(await once()));
+        console.log(JSON.stringify(await runOnce()));
       } catch {
         console.error(JSON.stringify({ status: "ERROR", reason: "MODERATION_BATCH_FAILED" }));
       }

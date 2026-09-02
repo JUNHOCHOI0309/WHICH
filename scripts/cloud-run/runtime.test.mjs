@@ -1,7 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { moderationJobDefinition, runtimeEnvironment, serviceDefinitions } from "./runtime.mjs";
+import {
+  moderationJobDefinition,
+  moderationTaskServiceDefinition,
+  runtimeEnvironment,
+  serviceDefinitions,
+} from "./runtime.mjs";
 
 const base = {
   K_SERVICE: "which-web",
@@ -88,6 +94,53 @@ test("submission dispatcher stays lightweight and cannot run beside an in-proces
   assert.throws(
     () => serviceDefinitions({ ...env, MODERATION_WORKER_ENABLED: "true" }),
     /WORKLOAD_CONFLICT/,
+  );
+});
+test("moderation task service is production-only and bound to claimed submission wakeups", () => {
+  const environment = runtimeEnvironment({
+    ...base,
+    CLOUD_RUN_PREVIEW: "false",
+    MODERATION_WORKER_ENABLED: "true",
+    MODERATION_SUBMISSION_WAKEUPS_ONLY: "true",
+  });
+  const task = moderationTaskServiceDefinition(environment, "/app");
+  assert.equal(task.name, "moderation-task");
+  assert.equal(task.cwd, resolve("/app", "apps/api"));
+  assert.deepEqual(task.args, ["dist/moderation-worker.js", "submission"]);
+  assert.throws(
+    () => moderationTaskServiceDefinition(runtimeEnvironment({ ...base }), "/app"),
+    /TASK_PREVIEW_FORBIDDEN/,
+  );
+  assert.throws(
+    () =>
+      moderationTaskServiceDefinition(
+        runtimeEnvironment({
+          ...base,
+          CLOUD_RUN_PREVIEW: "false",
+          MODERATION_WORKER_ENABLED: "true",
+        }),
+        "/app",
+      ),
+    /TASK_DISABLED/,
+  );
+});
+test("Cloud Build deploys the private elastic worker before switching web dispatch", () => {
+  const build = readFileSync(resolve(import.meta.dirname, "../../cloudbuild.yaml"), "utf8");
+  assert.ok(build.indexOf("id: deploy-moderation-worker") < build.indexOf("id: deploy-revision"));
+  for (const required of [
+    "--concurrency=1",
+    "--min=1",
+    '--max="${_MODERATION_MAX_INSTANCES}"',
+    "--no-allow-unauthenticated",
+    "which-moderation-task-invoker",
+    "MODERATION_DISPATCH_TRANSPORT=CLOUD_TASKS",
+    "MODERATION_WORKER_DB_POOL_MAX=3",
+  ]) {
+    assert.match(build, new RegExp(required.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  }
+  assert.doesNotMatch(
+    build,
+    /--member="serviceAccount:which-web@\$PROJECT_ID\.iam\.gserviceaccount\.com"/,
   );
 });
 test("internal Render DB or unverified external TLS fails closed without secret leakage", () => {

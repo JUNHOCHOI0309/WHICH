@@ -13,16 +13,16 @@
 ## 제출 기반 실행
 
 1. 두 이미지가 연결된 새 제출/수정본과 같은 트랜잭션에 `MODERATION_JOB_REQUESTED` 내부 outbox 이벤트를 저장한다. 텍스트 초안·단일 이미지 업로드에는 만들지 않는다.
-2. 웹의 경량 `moderation-job-dispatcher`가 저장된 요청만 확인하고 기존 Cloud Run Job을 깨운다. OCR/AI는 웹 프로세스에서 실행하지 않는다. Cloud Scheduler나 Codex 자동실행 예약은 사용하지 않는다.
-3. 한 번에 최대 2건을 묶고 DB lease로 배포 중복 실행을 막는다. Job 실행은 고정 리소스에 서비스 계정으로 요청하고 클라이언트가 job/환경변수/한도를 전달할 수 없다.
-4. Job은 현재 claim된 요청, 허용 회원, 현재 revision/hash, 동의·활성 권한을 재확인한다. 과거 대기 질문이나 취소 질문을 일괄 재검사하지 않는다.
+2. 웹의 경량 `moderation-job-dispatcher`가 저장된 요청만 claim하고 요청마다 Cloud Tasks 작업 하나를 만든다. OCR/AI는 웹 프로세스에서 실행하지 않는다. Cloud Scheduler나 Codex 자동실행 예약은 사용하지 않는다.
+3. Cloud Tasks는 전용 OIDC 서비스 계정으로 비공개 Cloud Run moderation service의 `/moderate`만 호출한다. 본문에는 사용자 콘텐츠 대신 outbox event ID와 DB claim token만 담는다. Cloud Run은 최소 1개 인스턴스를 유지하고 요청 동시성 1, 최대 8개 인스턴스로 자동 확장한다.
+4. 각 서비스 요청은 해당 claim 한 건만 처리하며 현재 revision/hash, 동의·활성 권한을 다시 확인한다. DB lease·고유 제약·제출별 advisory lock으로 재전송과 동시 실행에도 공개는 멱등이다. 과거 대기 질문이나 취소 질문을 일괄 재검사하지 않는다.
 5. 로컬 OCR/QR → 기본 안전검사(이미지별 요청) → Luna 문맥 판단 → 기존 명시적 PILOT 공개 정책을 따른다. 기권·미지원/누락 근거·충돌·고위험 신호를 통과로 취급하지 않는다.
 6. 공개는 두 이미지·최신 수정본을 재검증하고 기존 DB/R2 복구·감사·회원 알림 경로로 실행한다. 애매한 판단은 비공개 NEEDS_CHANGES와 이해할 수 있는 사유로 반환한다. 계정 제재나 자동 영구 삭제는 하지 않는다.
-7. Job 완료 처리에서 outbox를 확인한다. HTTP 호출 성공만으로 게시 성공을 기록하지 않는다. 시작 결과 불명은 12분 lease(10분 Job 제한보다 길게) 만료 후 재시도한다. 최대 5회 시도 후 기술적 실패 사유를 남긴다.
+7. worker 완료 처리에서 outbox를 확인한다. HTTP 2xx만으로 게시 성공을 기록하지 않는다. 전송·실행 결과 불명은 12분 lease 만료 후 새 claim token으로 재시도한다. Cloud Tasks와 DB 재시도는 각각 최대 5회이며, 최종적으로 기술적 실패 사유를 남긴다.
 8. 비용 한도 소진은 다음 UTC 날짜로 연기하며 게시 실패나 승인으로 바꾸지 않는다. Provider/Luna 원장은 초기화하지 않는다.
 
 범용 outbox 전달기는 위 내부 이벤트를 외부로 전송하지 않는다. 기존 테이블을 사용하므로 신규 migration은 없다.
-Job 실행 API는 [Google Cloud Run jobs.run](https://docs.cloud.google.com/run/docs/reference/rest/v2/projects.locations.jobs/run)을 사용한다.
+기존 `which-moderation` Cloud Run Job은 긴급 수동 fallback으로 같은 release 이미지를 유지한다. 정상 경로는 [Cloud Tasks HTTP target](https://docs.cloud.google.com/tasks/docs/creating-http-target-tasks)과 비공개 Cloud Run service다.
 
 ## 활성화 설정 (코드 배포와 별개)
 
@@ -34,22 +34,26 @@ Job 실행 API는 [Google Cloud Run jobs.run](https://docs.cloud.google.com/run/
 MODERATION_WORKER_ENABLED=false
 MODERATION_DAILY_LIMITS_ENABLED=false
 MODERATION_JOB_DISPATCH_ENABLED=true
-MODERATION_CLOUD_RUN_JOB=projects/which-505908/locations/asia-southeast1/jobs/which-moderation
-ISSUE_MEDIA_AUTO_PUBLICATION_MEMBER_IDS=<기존 승인된 테스트 회원 UUID>
+MODERATION_DISPATCH_TRANSPORT=CLOUD_TASKS
+MODERATION_DISPATCH_BATCH_SIZE=16
+MODERATION_CLOUD_TASKS_QUEUE=projects/which-505908/locations/asia-southeast1/queues/which-moderation
+MODERATION_TASK_WORKER_URL=<which-moderation-worker의 HTTPS URL>
+MODERATION_TASK_SERVICE_ACCOUNT=which-moderation-task-invoker@which-505908.iam.gserviceaccount.com
 FEATURE_ISSUE_MEDIA_ENABLED=true
 ISSUE_MEDIA_EXPERIMENT_PERCENT=100
 ```
 
 마지막 두 설정은 이미 승인·게시된 이미지의 표시를 활성화하며 업로드 권한을 모든 회원에게 부여하지 않는다.
 
-기존 moderation Job (검증된 동일 release 이미지):
+비공개 moderation service (검증된 동일 release 이미지):
 
 ```text
 MODERATION_WORKER_ENABLED=true
 MODERATION_DAILY_LIMITS_ENABLED=false
 MODERATION_SUBMISSION_WAKEUPS_ONLY=true
-MODERATION_WORKER_BATCH_SIZE=2
-MODERATION_WORKER_LEASE_MS=180000
+MODERATION_WORKER_BATCH_SIZE=1
+MODERATION_WORKER_DB_POOL_MAX=3
+MODERATION_WORKER_LEASE_MS=240000
 ISSUE_MEDIA_LOCAL_SCANNER_MODE=LOCAL
 MODERATION_PROVIDER_MODE=SHADOW
 MODERATION_PROVIDER_KILL_SWITCH=false
@@ -60,16 +64,23 @@ MODERATION_POLICY_JUDGE_KILL_SWITCH=false
 MODERATION_POLICY_JUDGE_CANARY_PERCENT=100
 MODERATION_POLICY_JUDGE_DAILY_CALL_CAP=5
 MODERATION_POLICY_JUDGE_DAILY_COST_MICROS_CAP=50000
-ISSUE_MEMBER_MEDIA_UPLOAD_MODE=PILOT
+ISSUE_MEMBER_MEDIA_UPLOAD_MODE=MEMBER
 FEATURE_ISSUE_MEDIA_ENABLED=true
-ISSUE_MEDIA_AUTO_PUBLICATION_MODE=PILOT
+ISSUE_MEDIA_AUTO_PUBLICATION_MODE=MEMBER
 ISSUE_MEDIA_AUTO_PUBLICATION_KILL_SWITCH=false
-ISSUE_MEDIA_AUTO_PUBLICATION_MEMBER_IDS=<동일 UUID>
 ```
 
 `SHADOW`는 제공자 결과 저장 모드다. 별도의 명시적 `AUTO_PUBLICATION_MODE=PILOT` 실행부가 모든 조건을 통과했을 때만 공개한다. 일반 결정 엔진·제재 자동화는 OFF를 유지한다. 캡 숫자는 기존 값으로 보존하되 일일 상한 해제 시 적용하지 않는다. 두 장 기본 검사에는 캐시 미적중 시 기본 요청 2회가 필요하다.
 
-웹 런타임 계정에 해당 Job 하나의 `roles/run.invoker`만 부여한다. 공개 웹 방문자에게 Job 실행 권한을 주지 않는다. Job 설정 변경/환경변수 override 권한도 부여하지 않는다.
+웹 런타임 계정에는 해당 queue의 enqueue 권한과 전용 task identity를 선택할 권한만 부여한다. worker의 `roles/run.invoker`는 `which-moderation-task-invoker`에만 부여한다. 공개 방문자에게 호출 권한을 주지 않으며 클라이언트가 서비스 환경변수·한도·검사 대상을 전달할 수 없다.
+
+## 성능 목표와 용량 보호
+
+- 사용자 목표: 정상 시 제출부터 자동 검사·게시 결과까지 p50 30초, p95 50초, p99 90초 이내. 모델 호출 자체가 30초를 소비하면 인프라는 그 시간을 줄일 수 없으므로 queue wait를 별도 관측한다.
+- 기본 용량: warm instance 1개, 요청당 제출 1건, 동시성 1, 최대 8개. 40초/건 기준 지속 처리량은 약 12건/분이다. 실제 p95·DB 연결·provider rate limit을 확인한 뒤 최대 인스턴스를 단계적으로 높인다.
+- dispatcher는 10초마다 최대 16건을 queue에 전달한다. queue는 초당 4건, 동시 8건까지만 dispatch하여 순간 유입이 DB/provider를 압도하지 않게 한다.
+- 처리 가능한 wakeup과 moderation run 중 큰 값을 backlog로 계산해 같은 제출을 중복 집계하지 않는다. queue wait 2분은 경고, 10분 또는 backlog 100건 초과는 직접 업로드 일시 중단으로 fail closed한다. 미래 시각으로 정상 연기된 작업은 backlog에서 제외한다.
+- 호출 수·비용의 제품 일일 상한은 해제되어도 provider circuit breaker, 개인정보·정책 gate, 작업/DB 재시도 한도, 사용량 원장, R2/DB 정합성 검사는 유지한다.
 
 ## 검증·중단
 
@@ -85,7 +96,7 @@ ISSUE_MEDIA_AUTO_PUBLICATION_MEMBER_IDS=<동일 UUID>
 - 로컬: 모달 접수 완료, 전역 toast 중복 방지/오류/취소/세션 만료, 상태별 버튼, 소유권 조회, durable dispatch/lease/revision/동의/예산/공개 복구 테스트.
 - 배포: PR 필수 CI → main Cloud Build → 웹 Ready/traffic 확인 → 같은 이미지로 Job 갱신 → 설정 활성화 → `diagnose-runtime` 확인.
 - 실제 AI 판정·게시 E2E는 허용받은 신규 테스트 질문으로만 진행한다. 설정 진단 성공을 실제 질문 게시 성공으로 보고하지 않는다.
-- 중단: 먼저 웹 `MODERATION_JOB_DISPATCH_ENABLED=false`, Job의 provider/judge/auto-publication kill switch를 true로 설정한다. 이미 실행 중인 Job에는 시작 시 환경변수가 유지되므로 필요하면 해당 execution을 명시적으로 취소한다.
+- 중단: 먼저 웹 `MODERATION_JOB_DISPATCH_ENABLED=false`, moderation service의 provider/judge/auto-publication kill switch를 true로 설정한다. queue를 pause하면 새 dispatch를 멈출 수 있으며 이미 실행 중인 요청은 시작 시 환경변수를 유지한다.
 - 재시작 시 대기 이벤트는 보존되어 다시 처리 가능하다. 데이터나 비용 원장을 삭제하여 재시도하지 않는다.
 
 이는 기존 테스트 회원 대상 제한적 자동 공개이며 WHICH-111 전체 출시/정확도 검증을 완료했다고 의미하지 않는다.

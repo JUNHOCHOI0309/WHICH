@@ -129,3 +129,19 @@ export function moderationJobDefinition(environment, root = process.cwd()) {
     env: environment,
   };
 }
+
+export function moderationTaskServiceDefinition(environment, root = process.cwd()) {
+  if (environment.CLOUD_RUN_PREVIEW !== "false")
+    throw new Error("CLOUD_RUN_MODERATION_TASK_PREVIEW_FORBIDDEN");
+  if (
+    environment.MODERATION_WORKER_ENABLED !== "true" ||
+    environment.MODERATION_SUBMISSION_WAKEUPS_ONLY !== "true"
+  )
+    throw new Error("CLOUD_RUN_MODERATION_TASK_DISABLED");
+  return {
+    name: "moderation-task",
+    cwd: resolve(root, "apps/api"),
+    args: ["dist/moderation-worker.js", "submission"],
+    env: environment,
+  };
+}
