@@ -441,7 +441,7 @@ export async function recordSubmissionTransition(
   });
 }
 
-// Callers must establish separate human or explicit pilot execution authority first.
+// Callers must establish separate human or explicit Member automation authority first.
 // A provider SHADOW result alone is never authorization.
 export async function publishReviewedSubmission(
   transaction: Transaction,

@@ -148,6 +148,17 @@ function fixture() {
 type Fixture = ReturnType<typeof fixture>;
 
 describe("internal publication evidence resolver", () => {
+  it("uses active Member access instead of a Pilot capability in Member mode", () => {
+    const f = fixture();
+    f.access.capability = null;
+    f.access.requireCapability = false;
+    const result = resolvePublicationEvidence(f);
+    expect(result.checks.find((check) => check.check === "CAPABILITY")).toMatchObject({
+      status: "PASS",
+      reasons: [],
+    });
+  });
+
   it("never treats upload-only access as a trusted publication capability", () => {
     const f = fixture();
     f.access.capability!.policyVersion = UPLOAD_ONLY_POLICY_VERSION;

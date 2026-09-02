@@ -10,12 +10,16 @@ async function main() {
     process.env.MODERATION_JOB_DISPATCH_ENABLED !== "true"
   )
     return;
-  const cohort = autoPublicationConfig().ISSUE_MEDIA_AUTO_PUBLICATION_MEMBER_IDS;
-  if (!cohort.length || !process.env.DATABASE_URL)
+  const autoConfig = autoPublicationConfig();
+  const memberIds =
+    autoConfig.ISSUE_MEDIA_AUTO_PUBLICATION_MODE === "MEMBER"
+      ? null
+      : autoConfig.ISSUE_MEDIA_AUTO_PUBLICATION_MEMBER_IDS;
+  if ((memberIds && !memberIds.length) || !process.env.DATABASE_URL)
     throw new Error("DISPATCH_CONFIGURATION_REQUIRED");
   const start = createCloudRunJobStarter(process.env.MODERATION_CLOUD_RUN_JOB ?? "");
   const database = createDatabase(process.env.DATABASE_URL, { connectionTimeoutMillis: 10000 });
-  const wakeups = createSubmissionWakeups(database.db, cohort);
+  const wakeups = createSubmissionWakeups(database.db, memberIds);
   const controller = new AbortController();
   for (const signal of ["SIGTERM", "SIGINT"] as const)
     process.once(signal, () => controller.abort());

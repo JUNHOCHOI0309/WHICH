@@ -39,6 +39,7 @@ export type PublicationAccessEvidence = {
     revokedAt: Date | null;
   } | null;
   requiredConsentVersion: string;
+  requireCapability?: boolean;
 };
 type Check = ProvisionalEvidence["checks"][number] & { reasons: string[] };
 
@@ -244,19 +245,21 @@ export function resolvePublicationEvidence(input: {
 
   const cap = access.capability;
   const capReasons: string[] = [];
-  if (!cap || cap.memberId !== snapshot.submission?.memberId || cap.state !== "ACTIVE")
-    capReasons.push("CAPABILITY_REQUIRED");
-  if (cap && cap.policyVersion !== TRUSTED_IMAGE_UPLOADER_POLICY_VERSION)
-    capReasons.push("CAPABILITY_POLICY_STALE");
-  if (
-    cap &&
-    (!Number.isFinite(cap.grantedAt.getTime()) ||
-      !Number.isFinite(cap.expiresAt.getTime()) ||
-      cap.grantedAt > now ||
-      cap.expiresAt <= now ||
-      cap.expiresAt <= cap.grantedAt)
-  )
-    capReasons.push("CAPABILITY_TIME_INVALID_OR_EXPIRED");
+  if (access.requireCapability !== false) {
+    if (!cap || cap.memberId !== snapshot.submission?.memberId || cap.state !== "ACTIVE")
+      capReasons.push("CAPABILITY_REQUIRED");
+    if (cap && cap.policyVersion !== TRUSTED_IMAGE_UPLOADER_POLICY_VERSION)
+      capReasons.push("CAPABILITY_POLICY_STALE");
+    if (
+      cap &&
+      (!Number.isFinite(cap.grantedAt.getTime()) ||
+        !Number.isFinite(cap.expiresAt.getTime()) ||
+        cap.grantedAt > now ||
+        cap.expiresAt <= now ||
+        cap.expiresAt <= cap.grantedAt)
+    )
+      capReasons.push("CAPABILITY_TIME_INVALID_OR_EXPIRED");
+  }
   const capExpiry =
     cap && capReasons.length === 0
       ? new Date(Math.min(Date.parse(validUntil), cap.expiresAt.getTime())).toISOString()

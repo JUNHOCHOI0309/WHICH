@@ -52,6 +52,7 @@ const environmentSchema = z.object({
   MODERATION_WORKER_RETRY_BASE_MS: z.coerce.number().int().min(100).default(5_000),
   MODERATION_WORKER_RETRY_MAX_MS: z.coerce.number().int().min(1_000).default(300_000),
   MODERATION_WORKER_POLL_MS: z.coerce.number().int().min(250).default(2_000),
+  ISSUE_MEMBER_MEDIA_UPLOAD_MODE: z.enum(["PILOT", "MEMBER"]).default("PILOT"),
 });
 
 const config = environmentSchema.parse(process.env);
@@ -65,17 +66,22 @@ const database = createDatabase(config.DATABASE_URL, { connectionTimeoutMillis: 
 const publicationEvidence = {
   consentVersion: config.ISSUE_MEDIA_CONSENT_VERSION,
   decisionRuntime: moderationDecisionRuntime(),
+  requireCapability: config.ISSUE_MEMBER_MEDIA_UPLOAD_MODE === "PILOT",
 };
 const providerConfig = moderationProviderRuntimeConfig();
 const mediaConfig = issueMediaStorageConfig();
 const mediaStorage = mediaConfig ? createR2IssueMediaStorage(mediaConfig) : null;
 const scannerConfig = localMediaScannerConfig();
 const autoConfig = autoPublicationConfig();
-const pilotRuntime = process.env.MODERATION_WORKER_ENABLED === "true";
+const workerRuntime = process.env.MODERATION_WORKER_ENABLED === "true";
 const submissionWakeupsOnly = process.env.MODERATION_SUBMISSION_WAKEUPS_ONLY === "true";
-if (submissionWakeupsOnly && !pilotRuntime)
-  throw new Error("SUBMISSION_WAKEUPS_REQUIRE_PILOT_RUNTIME");
-if (pilotRuntime && autoConfig.ISSUE_MEDIA_AUTO_PUBLICATION_MEMBER_IDS.length === 0)
+const memberAutoPublication = autoConfig.ISSUE_MEDIA_AUTO_PUBLICATION_MODE === "MEMBER";
+const publicationMemberIds = memberAutoPublication
+  ? null
+  : autoConfig.ISSUE_MEDIA_AUTO_PUBLICATION_MEMBER_IDS;
+if (submissionWakeupsOnly && !workerRuntime)
+  throw new Error("SUBMISSION_WAKEUPS_REQUIRE_WORKER_RUNTIME");
+if (workerRuntime && !memberAutoPublication && publicationMemberIds?.length === 0)
   throw new Error("MODERATION_WORKER_PILOT_COHORT_REQUIRED");
 if (
   scannerConfig.enabled &&
@@ -98,9 +104,9 @@ const resolveRawInput = createModerationProviderInputResolver({
     execArgv: import.meta.url.endsWith(".ts") ? ["--import", "tsx"] : [],
   }),
 });
-async function requirePilotAccess(target: Parameters<typeof resolveRawInput>[0]) {
-  if (!pilotRuntime) return;
-  if (target.targetType !== "ISSUE_VERSION") throw new Error("PILOT_SUBMISSION_REQUIRED");
+async function requirePublicationAccess(target: Parameters<typeof resolveRawInput>[0]) {
+  if (!workerRuntime) return;
+  if (target.targetType !== "ISSUE_VERSION") throw new Error("AUTOMATED_SUBMISSION_REQUIRED");
   const [row] = await database.db
     .select({ memberId: members.id })
     .from(memberIssueSubmissions)
@@ -111,15 +117,6 @@ async function requirePilotAccess(target: Parameters<typeof resolveRawInput>[0])
         eq(memberMediaConsents.memberId, members.id),
         eq(memberMediaConsents.consentVersion, POLICY_JUDGE_CONSENT_VERSION),
         isNull(memberMediaConsents.revokedAt),
-      ),
-    )
-    .innerJoin(
-      memberCapabilityGrants,
-      and(
-        eq(memberCapabilityGrants.memberId, members.id),
-        eq(memberCapabilityGrants.capabilityCode, "ISSUE_IMAGE_UPLOAD"),
-        eq(memberCapabilityGrants.state, "ACTIVE"),
-        sql`${memberCapabilityGrants.expiresAt} > now()`,
       ),
     )
     .where(
@@ -136,14 +133,29 @@ async function requirePilotAccess(target: Parameters<typeof resolveRawInput>[0])
       ),
     )
     .limit(1);
-  if (!row || !autoConfig.ISSUE_MEDIA_AUTO_PUBLICATION_MEMBER_IDS.includes(row.memberId))
-    throw new Error("PILOT_ACCESS_REQUIRED");
+  if (!row) throw new Error("MEMBER_PUBLICATION_ACCESS_REQUIRED");
+  if (!memberAutoPublication) {
+    const [capability] = await database.db
+      .select({ id: memberCapabilityGrants.id })
+      .from(memberCapabilityGrants)
+      .where(
+        and(
+          eq(memberCapabilityGrants.memberId, row.memberId),
+          eq(memberCapabilityGrants.capabilityCode, "ISSUE_IMAGE_UPLOAD"),
+          eq(memberCapabilityGrants.state, "ACTIVE"),
+          sql`${memberCapabilityGrants.expiresAt} > now()`,
+        ),
+      )
+      .limit(1);
+    if (!capability || !publicationMemberIds?.includes(row.memberId))
+      throw new Error("PILOT_ACCESS_REQUIRED");
+  }
 }
 const resolveProviderInput: typeof resolveRawInput = async (target) => {
-  await requirePilotAccess(target);
+  await requirePublicationAccess(target);
   const input = await resolveRawInput(target);
-  if (pilotRuntime) requireCompletePrivateLocalScan(input);
-  await requirePilotAccess(target);
+  if (workerRuntime) requireCompletePrivateLocalScan(input);
+  await requirePublicationAccess(target);
   return input;
 };
 const adapter =
@@ -165,9 +177,7 @@ const worker = createModerationDispatcherService(database.db, adapter, {
   retryMaxMilliseconds: config.MODERATION_WORKER_RETRY_MAX_MS,
   providerGate: createModerationProviderGate({ database: database.db, config: providerConfig }),
   publicationEvidence,
-  submissionMemberIds: pilotRuntime
-    ? autoConfig.ISSUE_MEDIA_AUTO_PUBLICATION_MEMBER_IDS
-    : undefined,
+  submissionMemberIds: workerRuntime ? (publicationMemberIds ?? undefined) : undefined,
   deferProviderGate: true,
   submissionWakeupsOnly,
 });
@@ -179,6 +189,7 @@ const policyJudge = createPolicyJudgeService({
   config: judgeConfig,
   provider: providerConfig,
   resolveInput: resolveProviderInput,
+  requireUploadCapability: config.ISSUE_MEMBER_MEDIA_UPLOAD_MODE === "PILOT",
 });
 const autoPublication = createAutoPublicationService({
   submissionWakeupsOnly,
@@ -189,19 +200,16 @@ const autoPublication = createAutoPublicationService({
   safetyModel: providerConfig.OPENAI_MODERATION_MODEL,
   resolveInput: resolveProviderInput,
   runtimeAllowed: () =>
-    pilotRuntime &&
+    workerRuntime &&
     scannerConfig.enabled &&
-    process.env.ISSUE_MEMBER_MEDIA_UPLOAD_MODE === "PILOT" &&
+    config.ISSUE_MEMBER_MEDIA_UPLOAD_MODE === (memberAutoPublication ? "MEMBER" : "PILOT") &&
     process.env.FEATURE_ISSUE_MEDIA_ENABLED === "true" &&
     judgeDiagnostic(judgeConfig, providerConfig).allowed,
 });
 
 async function once() {
   return withModerationWorkerLock(database.db, async () => {
-    const wakeups = createSubmissionWakeups(
-      database.db,
-      autoConfig.ISSUE_MEDIA_AUTO_PUBLICATION_MEMBER_IDS,
-    );
+    const wakeups = createSubmissionWakeups(database.db, publicationMemberIds);
     const requests = submissionWakeupsOnly ? await wakeups.claimed() : [];
     if (submissionWakeupsOnly && !requests.length) return { status: "NO_SUBMISSION_REQUESTS" };
     const dispatched = await worker.dispatchBatch();
@@ -232,9 +240,10 @@ async function main() {
     console.log(
       JSON.stringify(
         {
-          workerEnabled: pilotRuntime,
+          workerEnabled: workerRuntime,
           localScannerEnabled: scannerConfig.enabled,
-          cohortSize: autoConfig.ISSUE_MEDIA_AUTO_PUBLICATION_MEMBER_IDS.length,
+          publicationScope: memberAutoPublication ? "ALL_ACTIVE_MEMBERS" : "PILOT_COHORT",
+          cohortSize: publicationMemberIds?.length ?? null,
           autoPublicationEnabled: autoPublication.enabled(),
           mode: autoConfig.ISSUE_MEDIA_AUTO_PUBLICATION_MODE,
           judge: judgeDiagnostic(judgeConfig, providerConfig),

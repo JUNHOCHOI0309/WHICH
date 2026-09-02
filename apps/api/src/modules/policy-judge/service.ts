@@ -70,6 +70,7 @@ export function createPolicyJudgeService(options: {
   call?: ReturnType<typeof createLunaJudgeAdapter>;
   now?: () => Date;
   submissionWakeupsOnly?: boolean;
+  requireUploadCapability?: boolean;
 }) {
   const { database, config, provider } = options;
   const now = options.now ?? (() => new Date());
@@ -169,18 +170,24 @@ export function createPolicyJudgeService(options: {
           isNull(memberMediaConsents.revokedAt),
         ),
       )
-      .innerJoin(
-        memberCapabilityGrants,
-        and(
-          eq(memberCapabilityGrants.memberId, members.id),
-          eq(memberCapabilityGrants.capabilityCode, "ISSUE_IMAGE_UPLOAD"),
-          eq(memberCapabilityGrants.state, "ACTIVE"),
-          sql`${memberCapabilityGrants.expiresAt} > ${now()}`,
-        ),
-      )
       .where(and(eq(members.id, submission.memberId), eq(members.status, "ACTIVE")))
       .limit(1);
     if (!access) return null;
+    if (options.requireUploadCapability !== false) {
+      const [capability] = await reader
+        .select({ id: memberCapabilityGrants.id })
+        .from(memberCapabilityGrants)
+        .where(
+          and(
+            eq(memberCapabilityGrants.memberId, submission.memberId),
+            eq(memberCapabilityGrants.capabilityCode, "ISSUE_IMAGE_UPLOAD"),
+            eq(memberCapabilityGrants.state, "ACTIVE"),
+            sql`${memberCapabilityGrants.expiresAt} > ${now()}`,
+          ),
+        )
+        .limit(1);
+      if (!capability) return null;
+    }
     if (
       run.status !== "SUCCEEDED" ||
       run.mode !== "SHADOW" ||

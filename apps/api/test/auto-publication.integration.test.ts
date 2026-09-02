@@ -39,7 +39,7 @@ import { submissionWakeup as wakeupEvent } from "../src/modules/moderation-dispa
 const submissionWakeup = (...args: Parameters<typeof wakeupEvent>) =>
   wakeupEvent(...args).map((row) => ({ ...row, availableAt: new Date(0) }));
 
-describe("explicit image publication pilot", () => {
+describe("explicit image automatic publication", () => {
   let testDb: Awaited<ReturnType<typeof createTestDatabase>>;
   beforeAll(async () => {
     testDb = await createTestDatabase();
@@ -49,7 +49,7 @@ describe("explicit image publication pilot", () => {
     await testDb.drop();
   });
   const hash = (v: string | Buffer) => createHash("sha256").update(v).digest("hex");
-  async function fixture() {
+  async function fixture(options: { mode?: "PILOT" | "MEMBER"; includeCapability?: boolean } = {}) {
     const db = testDb.database.db;
     const [member] = await db
       .insert(schema.members)
@@ -60,13 +60,14 @@ describe("explicit image publication pilot", () => {
       consentVersion: "which-media-consent-v2",
       acceptedAt: new Date("2026-01-01"),
     });
-    await db.insert(schema.memberCapabilityGrants).values({
-      memberId: member!.id,
-      capabilityCode: "ISSUE_IMAGE_UPLOAD",
-      policyVersion: "test",
-      reason: "Test explicit grant",
-      expiresAt: new Date("2040-01-01"),
-    });
+    if (options.includeCapability !== false)
+      await db.insert(schema.memberCapabilityGrants).values({
+        memberId: member!.id,
+        capabilityCode: "ISSUE_IMAGE_UPLOAD",
+        policyVersion: "test",
+        reason: "Test explicit grant",
+        expiresAt: new Date("2040-01-01"),
+      });
     const objects = new Map<string, Buffer>();
     const storage: IssueMediaObjectStorage = {
       stage: vi.fn(),
@@ -229,16 +230,18 @@ describe("explicit image publication pilot", () => {
         result: { decision: clearDecision },
       })
       .returning();
+    const mode = options.mode ?? "PILOT";
     const config = autoPublicationConfig({
-      ISSUE_MEDIA_AUTO_PUBLICATION_MODE: "PILOT",
+      ISSUE_MEDIA_AUTO_PUBLICATION_MODE: mode,
       ISSUE_MEDIA_AUTO_PUBLICATION_KILL_SWITCH: "false",
-      ISSUE_MEDIA_AUTO_PUBLICATION_MEMBER_IDS: member!.id,
+      ISSUE_MEDIA_AUTO_PUBLICATION_MEMBER_IDS: mode === "PILOT" ? member!.id : "",
     });
     const judge = createPolicyJudgeService({
       database: db,
       config: judgeConfig(),
       provider: providerConfig(),
       resolveInput: resolver,
+      requireUploadCapability: mode === "PILOT",
     });
     const runtimeAllowed = vi.fn(() => true);
     const service = createAutoPublicationService({
@@ -273,6 +276,29 @@ describe("explicit image publication pilot", () => {
     expect(() =>
       autoPublicationConfig({ ISSUE_MEDIA_AUTO_PUBLICATION_MEMBER_IDS: "not-an-id" }),
     ).toThrow();
+  });
+  it("publishes for an active consenting Member without a Pilot grant or cohort", async () => {
+    const f = await fixture({ mode: "MEMBER", includeCapability: false });
+    expect(f.service.enabled()).toBe(true);
+    await f.db
+      .insert(schema.outboxEvents)
+      .values(submissionWakeup(f.submission.id, f.submission.revision, true));
+    const wakeups = createSubmissionWakeups(f.db, null);
+    await expect(wakeups.dispatch(async () => {})).resolves.toMatchObject({
+      status: "STARTED",
+      count: 1,
+    });
+    const [request] = await wakeups.claimed();
+    expect(request).toBeTruthy();
+    await expect(f.service.process(f.evaluation.id)).resolves.toMatchObject({
+      status: "PUBLISHED",
+    });
+    await wakeups.finish(request!);
+    const [submission] = await f.db
+      .select()
+      .from(schema.memberIssueSubmissions)
+      .where(eq(schema.memberIssueSubmissions.id, f.submission.id));
+    expect(submission).toMatchObject({ status: "APPROVED" });
   });
   it("durably dispatches one job across concurrent dispatchers and acknowledges actual publication", async () => {
     const f = await fixture();
@@ -435,7 +461,7 @@ describe("explicit image publication pilot", () => {
       .from(schema.memberModerationNotices)
       .where(eq(schema.memberModerationNotices.memberId, f.member.id));
     expect(notices).toHaveLength(1);
-    expect(notices[0]?.reasonCode).toBe("AI_PILOT_MEDIA_PUBLISHED");
+    expect(notices[0]?.reasonCode).toBe("AI_MEMBER_MEDIA_PUBLISHED");
     expect([...f.objects.keys()]).toHaveLength(2);
     expect(
       [...f.objects.keys()].every((key) => key.startsWith("issue-media/published/auto/")),

@@ -21,6 +21,7 @@ import type { ModerationDecisionRuntime } from "../moderation/decision-engine.js
 export type PublicationEvidenceOptions = {
   consentVersion: string;
   decisionRuntime: ModerationDecisionRuntime;
+  requireCapability?: boolean;
 };
 // Explicit defaults avoid inheriting a caller's environment in tests or library usage.
 const defaultOptions: PublicationEvidenceOptions = {
@@ -155,6 +156,7 @@ export async function readPublicationReadiness(
         capability: capability ?? null,
         consent: consent ?? null,
         requiredConsentVersion: options.consentVersion,
+        requireCapability: options.requireCapability,
       },
       runtime: options.decisionRuntime,
     }),

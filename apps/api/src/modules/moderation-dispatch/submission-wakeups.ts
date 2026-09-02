@@ -25,7 +25,7 @@ const localScanPrivacy =
 
 export function createSubmissionWakeups(
   database: Database["db"],
-  memberIds: string[],
+  memberIds: string[] | null,
   now = () => new Date(),
 ) {
   async function needsChanges(
@@ -170,7 +170,7 @@ export function createSubmissionWakeups(
   }
 
   async function claimed() {
-    if (!memberIds.length) return [];
+    if (memberIds && !memberIds.length) return [];
     return database
       .select({ event: outboxEvents })
       .from(outboxEvents)
@@ -184,14 +184,14 @@ export function createSubmissionWakeups(
           eq(outboxEvents.status, "PENDING"),
           isNotNull(outboxEvents.claimToken),
           gt(outboxEvents.availableAt, now()),
-          inArray(memberIssueSubmissions.memberId, memberIds),
+          memberIds ? inArray(memberIssueSubmissions.memberId, memberIds) : undefined,
         ),
       )
       .then((rows) => rows.map((r) => r.event));
   }
 
   async function dispatch(startJob: () => Promise<void>) {
-    if (!memberIds.length) return { status: "DISABLED" };
+    if (memberIds && !memberIds.length) return { status: "DISABLED" };
     const events = await database.transaction(async (tx) => {
       // Serialize dispatchers across web revisions without holding a DB connection over HTTP.
       await tx.execute(
@@ -222,7 +222,7 @@ export function createSubmissionWakeups(
             eq(outboxEvents.eventType, SUBMISSION_WAKEUP),
             eq(outboxEvents.status, "PENDING"),
             lte(outboxEvents.availableAt, now()),
-            inArray(memberIssueSubmissions.memberId, memberIds),
+            memberIds ? inArray(memberIssueSubmissions.memberId, memberIds) : undefined,
           ),
         )
         .orderBy(asc(outboxEvents.occurredAt))
