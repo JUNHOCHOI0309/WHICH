@@ -28,13 +28,11 @@ const OpsMediaReviewPanel = dynamic(
   { loading: PanelLoading },
 );
 const OpsMediaUploadPilotPanel = dynamic(
-  () =>
-    import("./ops-media-upload-pilot-panel").then((module) => module.OpsMediaUploadPilotPanel),
+  () => import("./ops-media-upload-pilot-panel").then((module) => module.OpsMediaUploadPilotPanel),
   { loading: PanelLoading },
 );
 const OpsModerationQueuePanel = dynamic(
-  () =>
-    import("./ops-moderation-queue-panel").then((module) => module.OpsModerationQueuePanel),
+  () => import("./ops-moderation-queue-panel").then((module) => module.OpsModerationQueuePanel),
   { loading: PanelLoading },
 );
 const OpsPointShopPanel = dynamic(
@@ -157,9 +155,12 @@ export function OpsDashboardExperience() {
     // The state updates inside load happen only after the remote snapshot request settles.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load(windowDays);
-    const timer = window.setInterval(() => {
-      if (document.visibilityState === "visible") void load(windowDays, true);
-    }, 5 * 60 * 1000);
+    const timer = window.setInterval(
+      () => {
+        if (document.visibilityState === "visible") void load(windowDays, true);
+      },
+      5 * 60 * 1000,
+    );
     return () => {
       window.clearInterval(timer);
       dashboardRequest.current?.abort();
