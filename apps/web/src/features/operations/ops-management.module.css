@@ -499,9 +499,15 @@
   display: block;
   line-height: 1.45;
 }
-.detail {
+.candidateList {
   position: sticky;
   top: 18px;
+  max-height: calc(100dvh - 36px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+.detail {
   padding: 24px;
 }
 .detail h2 {
@@ -1059,8 +1065,10 @@
   .editorialGrid {
     grid-template-columns: 1fr;
   }
-  .detail {
+  .candidateList {
     position: static;
+    max-height: none;
+    overflow: hidden;
   }
   .counts {
     grid-template-columns: repeat(2, 1fr);
