@@ -556,7 +556,9 @@ export default function CreateIssueScreen() {
           ) : null}
           <View style={styles.section}>
             <Text style={styles.fieldLabel}>이미지 방식</Text>
-            {mediaAccess?.mode === "PILOT" && mediaAccess.reasons.includes("CONSENT_REQUIRED") ? (
+            {mediaAccess &&
+            mediaAccess.mode !== "OFF" &&
+            mediaAccess.reasons.includes("CONSENT_REQUIRED") ? (
               <View style={styles.consentCard}>
                 <Text style={styles.help}>
                   기존 회원은 이미지 직접 업로드 전에 콘텐츠 권리·자동 안전 검사 약관을 한 번 확인해

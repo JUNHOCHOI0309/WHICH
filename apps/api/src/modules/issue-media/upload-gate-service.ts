@@ -9,8 +9,10 @@ import {
   memberCapabilityEvents,
   memberIssueSubmissions,
   memberMediaConsents,
+  members,
   operatorAccessGrants,
 } from "../../database/schema/index.js";
+import { readMemberIssueAccess } from "../issues/member-issue-access.js";
 
 import {
   evaluateIssueMediaUploadGate,
@@ -27,10 +29,12 @@ import {
 } from "./trusted-uploader-policy.js";
 
 export type IssueMediaUploadAccess = {
-  mode: "OFF" | "PILOT";
+  mode: "OFF" | "PILOT" | "MEMBER";
   allowed: boolean;
   consentVersion: string;
-  reasons: Array<"MODE_DISABLED" | "CAPABILITY_REQUIRED" | "CONSENT_REQUIRED">;
+  reasons: Array<
+    "MODE_DISABLED" | "CAPABILITY_REQUIRED" | "CONSENT_REQUIRED" | "ACCOUNT_RESTRICTED"
+  >;
   capability: {
     state: "ACTIVE" | "SUSPENDED" | "REVOKED" | "EXPIRED";
     expiresAt: string;
@@ -125,7 +129,7 @@ function countOf(row: { count: number | string } | undefined) {
 export function createIssueMediaUploadGateService(
   database: Database["db"],
   options: {
-    mode: "OFF" | "PILOT";
+    mode: "OFF" | "PILOT" | "MEMBER";
     consentVersion: string;
     pseudonymSecret: string;
     moderationCapacity?: () => Promise<{ allowed: boolean }>;
@@ -173,7 +177,7 @@ export function createIssueMediaUploadGateService(
   async function readAccess(memberId: string): Promise<IssueMediaUploadAccess> {
     await expireGrant(memberId);
     const now = new Date();
-    const [capability, consent] = await Promise.all([
+    const [capability, consent, member, issueAccess] = await Promise.all([
       database
         .select({
           state: memberCapabilityGrants.state,
@@ -198,11 +202,19 @@ export function createIssueMediaUploadGateService(
           ),
         )
         .limit(1),
+      database
+        .select({ status: members.status })
+        .from(members)
+        .where(eq(members.id, memberId))
+        .limit(1),
+      readMemberIssueAccess(database, memberId, now),
     ]);
     const active = capability[0]?.state === "ACTIVE" && capability[0].expiresAt > now;
     const reasons: IssueMediaUploadAccess["reasons"] = [];
-    if (options.mode !== "PILOT") reasons.push("MODE_DISABLED");
-    if (!active) reasons.push("CAPABILITY_REQUIRED");
+    if (options.mode === "OFF") reasons.push("MODE_DISABLED");
+    if (options.mode === "PILOT" && !active) reasons.push("CAPABILITY_REQUIRED");
+    if (member[0]?.status !== "ACTIVE" || !issueAccess.canStartUpload)
+      reasons.push("ACCOUNT_RESTRICTED");
     if (!consent[0]) reasons.push("CONSENT_REQUIRED");
     return {
       mode: options.mode,
@@ -444,7 +456,7 @@ export function createIssueMediaUploadGateService(
         await transaction.execute(
           sql`select pg_advisory_xact_lock(hashtextextended(${`which:media-upload:${input.memberId}`}, 0))`,
         );
-        const [capability, consent, submission, active] = await Promise.all([
+        const [capability, consent, submission, active, member, issueAccess] = await Promise.all([
           transaction
             .select({ id: memberCapabilityGrants.id })
             .from(memberCapabilityGrants)
@@ -487,11 +499,19 @@ export function createIssueMediaUploadGateService(
                 gt(issueMediaUploadSessions.expiresAt, now),
               ),
             ),
+          transaction
+            .select({ status: members.status })
+            .from(members)
+            .where(eq(members.id, input.memberId))
+            .limit(1),
+          readMemberIssueAccess(transaction, input.memberId, now),
         ]);
 
         const gate = evaluateIssueMediaUploadGate({
           mode: options.mode,
           hasActiveCapability: Boolean(capability[0]),
+          hasActiveMember: member[0]?.status === "ACTIVE",
+          accountRestricted: !issueAccess.canStartUpload,
           hasCurrentConsent: Boolean(consent[0]),
           ownsSubmission: submission[0]?.memberId === input.memberId,
           submissionStatus: submission[0]?.status ?? null,
@@ -543,6 +563,15 @@ export function createIssueMediaUploadGateService(
         );
       }
       const now = new Date();
+      const issueAccess = await readMemberIssueAccess(database, input.memberId, now);
+      if (!issueAccess.canStartUpload) {
+        throw new IssueMediaUploadGateError(
+          "MEDIA_UPLOAD_NOT_AVAILABLE",
+          403,
+          "최근 게시물 신고가 누적되어 새 이미지 업로드가 72시간 제한되었어요.",
+          ["ACCOUNT_RESTRICTED"],
+        );
+      }
       const [consumed] = await database
         .update(issueMediaUploadSessions)
         .set({
@@ -559,14 +588,20 @@ export function createIssueMediaUploadGateService(
             eq(issueMediaUploadSessions.state, "CREATED"),
             gt(issueMediaUploadSessions.expiresAt, now),
             gte(issueMediaUploadSessions.maxBytes, input.byteSize),
-            sql`${options.mode} = 'PILOT'`,
+            sql`${options.mode} in ('PILOT', 'MEMBER')`,
             sql`exists (
-              select 1 from member_capability_grants cap
-              join members m on m.member_id = cap.member_id
-              where cap.member_id = ${input.memberId}
-                and cap.capability_code = 'ISSUE_IMAGE_UPLOAD'
-                and cap.state = 'ACTIVE' and cap.expires_at > ${now}
+              select 1 from members m
+              where m.member_id = ${input.memberId}
                 and m.status = 'ACTIVE'
+                and (
+                  ${options.mode} = 'MEMBER'
+                  or exists (
+                    select 1 from member_capability_grants cap
+                    where cap.member_id = m.member_id
+                      and cap.capability_code = 'ISSUE_IMAGE_UPLOAD'
+                      and cap.state = 'ACTIVE' and cap.expires_at > ${now}
+                  )
+                )
             )`,
             sql`exists (
               select 1 from member_media_consents consent

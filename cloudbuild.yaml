@@ -49,7 +49,7 @@ steps:
       - --image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_ARTIFACT_REPOSITORY}/${_IMAGE_NAME}:$COMMIT_SHA
       # Keep upload-time local evidence enabled on every production revision.
       # Deployment overrides win over the imported legacy runtime secret.
-      - --update-env-vars=RELEASE_ID=$COMMIT_SHA,ISSUE_MEDIA_LOCAL_SCANNER_MODE=LOCAL,ISSUE_MEDIA_LOCAL_SCANNER_TIMEOUT_MS=30000
+      - --update-env-vars=RELEASE_ID=$COMMIT_SHA,ISSUE_MEMBER_MEDIA_UPLOAD_MODE=MEMBER,ISSUE_MEDIA_LOCAL_SCANNER_MODE=LOCAL,ISSUE_MEDIA_LOCAL_SCANNER_TIMEOUT_MS=30000
       - --quiet
 
 images:

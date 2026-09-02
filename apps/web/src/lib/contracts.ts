@@ -71,10 +71,12 @@ export type CreateIssueCommand = {
 };
 
 export type IssueMediaUploadAccess = {
-  mode: "OFF" | "PILOT";
+  mode: "OFF" | "PILOT" | "MEMBER";
   allowed: boolean;
   consentVersion: string;
-  reasons: Array<"MODE_DISABLED" | "CAPABILITY_REQUIRED" | "CONSENT_REQUIRED">;
+  reasons: Array<
+    "MODE_DISABLED" | "CAPABILITY_REQUIRED" | "CONSENT_REQUIRED" | "ACCOUNT_RESTRICTED"
+  >;
   capability: {
     state: "ACTIVE" | "SUSPENDED" | "REVOKED" | "EXPIRED";
     expiresAt: string;
