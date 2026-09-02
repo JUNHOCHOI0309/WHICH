@@ -33,7 +33,7 @@ const EMPTY_DRAFT: CreateIssueCommand = {
   choiceB: "",
   choiceC: null,
   choiceD: null,
-  libraryAssetIds: [],
+  libraryAssetIds: null,
   interestCardCode: "DAILY_LIFE",
 };
 const CHOICE_CODES = ["A", "B", "C", "D"] as const;
@@ -398,7 +398,7 @@ export function IssueCreatorExperience({
               onClick={() => {
                 setMediaMode("TEXT_ONLY");
                 update("libraryPairId", null);
-                update("libraryAssetIds", []);
+                update("libraryAssetIds", null);
                 setDirectFiles({ CONTEXT: null, A: null, B: null, C: null, D: null });
               }}
             >
@@ -426,7 +426,7 @@ export function IssueCreatorExperience({
               onClick={() => {
                 setMediaMode("DIRECT");
                 update("libraryPairId", null);
-                update("libraryAssetIds", []);
+                update("libraryAssetIds", null);
               }}
             >
               직접 업로드
