@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { toast } from "@/components/feedback/toast-provider";
 
@@ -52,6 +52,7 @@ export function OpsMediaReviewPanel() {
   const [selected, setSelected] = useState<OpsMediaReviewAsset | null>(null);
   const [status, setStatus] = useState("");
   const [query, setQuery] = useState("");
+  const [appliedQuery, setAppliedQuery] = useState("");
   const [rationale, setRationale] = useState("");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [rightsAttestation, setRightsAttestation] = useState("");
@@ -72,37 +73,62 @@ export function OpsMediaReviewPanel() {
     rightsConfirmed: false,
   });
   const [busy, setBusy] = useState(false);
+  const assetRequest = useRef<AbortController | null>(null);
 
-  const load = useCallback(async () => {
+  const loadAssets = useCallback(async () => {
+    assetRequest.current?.abort();
+    const controller = new AbortController();
+    assetRequest.current = controller;
     const params = new URLSearchParams();
     if (status) params.set("status", status);
-    if (query.trim()) params.set("q", query.trim());
-    const [assets, requests, libraryPairs] = await Promise.all([
-      json<OpsMediaReviewPage>(
-        await fetch(`/api/ops/media-review/assets?${params}`, { cache: "no-store" }),
-      ),
-      json<{ items: OpsMediaRightsRequest[] }>(
-        await fetch("/api/ops/media-review/rights-requests", { cache: "no-store" }),
-      ),
-      json<{ items: OpsMediaLibraryPair[] }>(
-        await fetch("/api/ops/media-library", { cache: "no-store" }),
-      ),
-    ]);
-    setPage(assets);
-    setRights(requests.items);
-    setLibrary(libraryPairs.items.filter((item) => Array.isArray(item.assets)));
-    setSelected(
-      (current) => assets.items.find((item) => item.id === current?.id) ?? assets.items[0] ?? null,
+    if (appliedQuery) params.set("q", appliedQuery);
+    try {
+      const assets = await json<OpsMediaReviewPage>(
+        await fetch(`/api/ops/media-review/assets?${params}`, {
+          cache: "no-store",
+          signal: controller.signal,
+        }),
+      );
+      setPage(assets);
+      setSelected(
+        (current) =>
+          assets.items.find((item) => item.id === current?.id) ?? assets.items[0] ?? null,
+      );
+    } finally {
+      if (assetRequest.current === controller) assetRequest.current = null;
+    }
+  }, [appliedQuery, status]);
+
+  const loadRights = useCallback(async () => {
+    const requests = await json<{ items: OpsMediaRightsRequest[] }>(
+      await fetch("/api/ops/media-review/rights-requests", { cache: "no-store" }),
     );
-  }, [query, status]);
+    setRights(requests.items);
+  }, []);
+
+  const loadLibrary = useCallback(async () => {
+    const libraryPairs = await json<{ items: OpsMediaLibraryPair[] }>(
+      await fetch("/api/ops/media-library", { cache: "no-store" }),
+    );
+    setLibrary(libraryPairs.items.filter((item) => Array.isArray(item.assets)));
+  }, []);
 
   useEffect(() => {
-    // The state updates happen only after both remote operations requests settle.
+    // The state updates happen only after the remote operations request settles.
+    void loadAssets().catch((error) => {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      toast.error(error instanceof Error ? error.message : "검수 큐를 불러오지 못했습니다.");
+    });
+    return () => assetRequest.current?.abort();
+  }, [loadAssets]);
+
+  useEffect(() => {
+    // The state updates happen only after the remote operations requests settle.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    void load().catch((error) =>
-      toast.error(error instanceof Error ? error.message : "검수 큐를 불러오지 못했습니다."),
+    void Promise.all([loadRights(), loadLibrary()]).catch((error) =>
+      toast.error(error instanceof Error ? error.message : "운영 자료를 불러오지 못했습니다."),
     );
-  }, [load]);
+  }, [loadLibrary, loadRights]);
 
   async function decide(targetStatus: AssetAction, scope: "ASSET" | "ISSUE" = "ASSET") {
     if (!selected || rationale.trim().length < 10)
@@ -127,7 +153,7 @@ export function OpsMediaReviewPanel() {
       );
       toast.success(`${scope === "ISSUE" ? "Issue" : "이미지"} 검수 결정을 기록했습니다.`);
       setRationale("");
-      await load();
+      await loadAssets();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "검수 결정에 실패했습니다.");
     } finally {
@@ -162,7 +188,7 @@ export function OpsMediaReviewPanel() {
       setUploadFile(null);
       setRightsAttestation("");
       toast.success("이미지를 비공개 검수 큐에 등록했습니다.");
-      await load();
+      await loadAssets();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "이미지 등록에 실패했습니다.");
     } finally {
@@ -190,7 +216,7 @@ export function OpsMediaReviewPanel() {
       );
       toast.success("권리 요청을 기록하고 이미지를 즉시 블라인드했습니다.");
       setRationale("");
-      await load();
+      await Promise.all([loadAssets(), loadRights()]);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "권리 요청 기록에 실패했습니다.");
     } finally {
@@ -210,7 +236,7 @@ export function OpsMediaReviewPanel() {
         }),
       );
       toast.success("권리 요청 처리 결과를 기록했습니다.");
-      await load();
+      await Promise.all([loadAssets(), loadRights()]);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "요청 처리에 실패했습니다.");
     }
@@ -295,7 +321,7 @@ export function OpsMediaReviewPanel() {
         evidenceReference: "",
         rightsConfirmed: false,
       }));
-      await load();
+      await loadLibrary();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Library 등록에 실패했습니다.");
     } finally {
@@ -320,7 +346,7 @@ export function OpsMediaReviewPanel() {
       toast.success(
         String(result.fallbackIssueCount) + "개 질문을 안전한 텍스트 표시로 전환했습니다.",
       );
-      await load();
+      await loadLibrary();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Library 회수에 실패했습니다.");
     } finally {
@@ -356,7 +382,9 @@ export function OpsMediaReviewPanel() {
         className={`${styles.filters} ${styles.editorialFilters}`}
         onSubmit={(event) => {
           event.preventDefault();
-          void load();
+          const nextQuery = query.trim();
+          if (nextQuery === appliedQuery) void loadAssets();
+          else setAppliedQuery(nextQuery);
         }}
       >
         <input
@@ -416,6 +444,8 @@ export function OpsMediaReviewPanel() {
                 className={styles.mediaPreview}
                 src={`/api/ops/media-review/assets/${selected.id}/content`}
                 alt={selected.link?.altText ?? "운영 검수 이미지"}
+                loading="lazy"
+                decoding="async"
               />
             )}
             <p className={styles.eyebrow}>
@@ -627,7 +657,13 @@ export function OpsMediaReviewPanel() {
             <article key={pair.id}>
               <div>
                 {pair.assets.map((asset) => (
-                  <img key={asset.id} src={asset.url} alt={asset.altText} />
+                  <img
+                    key={asset.id}
+                    src={asset.url}
+                    alt={asset.altText}
+                    loading="lazy"
+                    decoding="async"
+                  />
                 ))}
               </div>
               <strong>{pair.title}</strong>

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -66,5 +66,34 @@ describe("Ops media review state controls", () => {
     expect(screen.queryByRole("button", { name: "삭제" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "저작권 요청" })).not.toBeInTheDocument();
     expect(screen.getByText(/추가 검수·권리 조작을 실행할 수 없습니다/)).toBeVisible();
+  });
+
+  it("applies asset search only on submit without reloading unrelated data", async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.includes("rights-requests")) return response({ items: [] });
+      if (url.includes("media-library")) return response({ items: [] });
+      return response({
+        schemaVersion: 1,
+        generatedAt: "2026-08-26T00:00:00.000Z",
+        counts: { PENDING: 0, APPROVED: 0, REJECTED: 0, HIDDEN: 0, DELETED: 0 },
+        items: [],
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<OpsMediaReviewPanel />);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+
+    const search = screen.getByPlaceholderText("Asset ID, SHA-256, 권리 근거 검색");
+    fireEvent.change(search, { target: { value: "asset-123" } });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+
+    fireEvent.click(screen.getByRole("button", { name: "조회" }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(4));
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "/api/ops/media-review/assets?q=asset-123",
+      expect.objectContaining({ cache: "no-store" }),
+    );
   });
 });
