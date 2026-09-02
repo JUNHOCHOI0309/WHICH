@@ -1,17 +1,48 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { OpsDashboardSnapshot } from "./contracts";
-import { OpsEditorialPanel } from "./ops-editorial-panel";
-import { OpsMembersPanel } from "./ops-members-panel";
-import { OpsMediaReviewPanel } from "./ops-media-review-panel";
-import { OpsMediaUploadPilotPanel } from "./ops-media-upload-pilot-panel";
-import { OpsModerationQueuePanel } from "./ops-moderation-queue-panel";
-import { OpsPointShopPanel } from "./ops-point-shop-panel";
-import { OpsRankingPreviewPanel } from "./ops-ranking-preview-panel";
 import styles from "./ops-dashboard-experience.module.css";
+
+function PanelLoading() {
+  return (
+    <section className={styles.panelLoading} aria-live="polite" aria-busy="true">
+      운영 도구를 불러오는 중입니다.
+    </section>
+  );
+}
+
+const OpsEditorialPanel = dynamic(
+  () => import("./ops-editorial-panel").then((module) => module.OpsEditorialPanel),
+  { loading: PanelLoading },
+);
+const OpsMembersPanel = dynamic(
+  () => import("./ops-members-panel").then((module) => module.OpsMembersPanel),
+  { loading: PanelLoading },
+);
+const OpsMediaReviewPanel = dynamic(
+  () => import("./ops-media-review-panel").then((module) => module.OpsMediaReviewPanel),
+  { loading: PanelLoading },
+);
+const OpsMediaUploadPilotPanel = dynamic(
+  () => import("./ops-media-upload-pilot-panel").then((module) => module.OpsMediaUploadPilotPanel),
+  { loading: PanelLoading },
+);
+const OpsModerationQueuePanel = dynamic(
+  () => import("./ops-moderation-queue-panel").then((module) => module.OpsModerationQueuePanel),
+  { loading: PanelLoading },
+);
+const OpsPointShopPanel = dynamic(
+  () => import("./ops-point-shop-panel").then((module) => module.OpsPointShopPanel),
+  { loading: PanelLoading },
+);
+const OpsRankingPreviewPanel = dynamic(
+  () => import("./ops-ranking-preview-panel").then((module) => module.OpsRankingPreviewPanel),
+  { loading: PanelLoading },
+);
 
 type WindowDays = 1 | 7 | 30;
 type Screen = "loading" | "ready" | "login" | "denied" | "error";
@@ -72,11 +103,18 @@ export function OpsDashboardExperience() {
   const [snapshot, setSnapshot] = useState<OpsDashboardSnapshot | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
   const [refreshing, setRefreshing] = useState(false);
+  const dashboardRequest = useRef<AbortController | null>(null);
 
   const load = useCallback(async (days: WindowDays, background = false) => {
+    dashboardRequest.current?.abort();
+    const controller = new AbortController();
+    dashboardRequest.current = controller;
     if (background) setRefreshing(true);
     try {
-      const response = await fetch(`/api/ops/dashboard?days=${days}`, { cache: "no-store" });
+      const response = await fetch(`/api/ops/dashboard?days=${days}`, {
+        cache: "no-store",
+        signal: controller.signal,
+      });
       const body = (await response.json()) as OpsDashboardSnapshot & {
         code?: string;
         message?: string;
@@ -96,22 +134,38 @@ export function OpsDashboardExperience() {
       setSnapshot(body);
       setScreen("ready");
     } catch (error) {
+      if (controller.signal.aborted) return;
       setErrorMessage(
         error instanceof Error ? error.message : "운영 스냅샷을 불러오지 못했습니다.",
       );
       if (!background) setScreen("error");
     } finally {
-      setRefreshing(false);
+      if (dashboardRequest.current === controller) {
+        dashboardRequest.current = null;
+        setRefreshing(false);
+      }
     }
   }, []);
 
   useEffect(() => {
+    if (tab !== "overview") {
+      dashboardRequest.current?.abort();
+      return;
+    }
     // The state updates inside load happen only after the remote snapshot request settles.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load(windowDays);
-    const timer = window.setInterval(() => void load(windowDays, true), 5 * 60 * 1000);
-    return () => window.clearInterval(timer);
-  }, [load, windowDays]);
+    const timer = window.setInterval(
+      () => {
+        if (document.visibilityState === "visible") void load(windowDays, true);
+      },
+      5 * 60 * 1000,
+    );
+    return () => {
+      window.clearInterval(timer);
+      dashboardRequest.current?.abort();
+    };
+  }, [load, tab, windowDays]);
 
   const warningCounts = useMemo(() => {
     const values = { critical: 0, warning: 0 };

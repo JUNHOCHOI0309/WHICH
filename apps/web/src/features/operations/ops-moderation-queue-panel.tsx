@@ -407,6 +407,8 @@ export function OpsModerationQueuePanel() {
                   <img
                     className={styles.mediaPreview}
                     src={`/api/ops/media-review/assets/${selectedImage.assetId}/content`}
+                    loading="lazy"
+                    decoding="async"
                     alt={
                       selectedImage.choices.find((choice) => choice.assetId === selected.targetId)
                         ?.altText ?? "검수 이미지"
