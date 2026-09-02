@@ -11,6 +11,7 @@ import {
   createAutoPublicationService,
   autoPublicationConfig,
   clearPublicationEvidence,
+  selectPostPublicationAudit,
 } from "../src/modules/issue-media/auto-publication.js";
 import type { IssueMediaObjectStorage } from "../src/modules/issue-media/contracts.js";
 import {
@@ -277,6 +278,25 @@ describe("explicit image automatic publication", () => {
       autoPublicationConfig({ ISSUE_MEDIA_AUTO_PUBLICATION_MEMBER_IDS: "not-an-id" }),
     ).toThrow();
   });
+  it("targets new Members while stopping random sampling after the first 500 published assets", () => {
+    const now = new Date("2026-09-02T00:00:00Z");
+    expect(
+      selectPostPublicationAudit({
+        assetIds: ["asset-a", "asset-b"],
+        memberCreatedAt: new Date("2026-08-15T00:00:00Z"),
+        priorPublishedAssetCount: 500,
+        now,
+      }).selectedAssets,
+    ).toHaveLength(2);
+    expect(
+      selectPostPublicationAudit({
+        assetIds: ["asset-a", "asset-b"],
+        memberCreatedAt: new Date("2026-01-01T00:00:00Z"),
+        priorPublishedAssetCount: 500,
+        now,
+      }).selectedAssets,
+    ).toEqual([]);
+  });
   it("publishes for an active consenting Member without a Pilot grant or cohort", async () => {
     const f = await fixture({ mode: "MEMBER", includeCapability: false });
     expect(f.service.enabled()).toBe(true);
@@ -462,6 +482,45 @@ describe("explicit image automatic publication", () => {
       .where(eq(schema.memberModerationNotices.memberId, f.member.id));
     expect(notices).toHaveLength(1);
     expect(notices[0]?.reasonCode).toBe("AI_MEMBER_MEDIA_PUBLISHED");
+    const auditCases = await f.db
+      .select({ moderationCase: schema.moderationCases })
+      .from(schema.moderationCases)
+      .innerJoin(
+        schema.moderationTargets,
+        eq(schema.moderationTargets.id, schema.moderationCases.targetId),
+      )
+      .where(
+        inArray(
+          schema.moderationTargets.targetId,
+          f.assets.map((asset) => asset.id),
+        ),
+      );
+    expect(auditCases).toHaveLength(2);
+    expect(auditCases.every((row) => row.moderationCase.riskLane === "LOW")).toBe(true);
+    expect(auditCases.every((row) => row.moderationCase.priority === "P2")).toBe(true);
+    const selectedAudits = await f.db
+      .select()
+      .from(schema.moderationAuditEvents)
+      .where(
+        eq(
+          schema.moderationAuditEvents.eventType,
+          "AI_MEMBER_MEDIA_POST_PUBLICATION_AUDIT_SELECTED",
+        ),
+      );
+    const currentCaseIds = new Set(auditCases.map((row) => row.moderationCase.id));
+    const currentAudits = selectedAudits.filter((event) => currentCaseIds.has(event.entityId));
+    expect(currentAudits).toHaveLength(2);
+    expect(
+      currentAudits.every(
+        (event) => ((event.metadata.selectedAssetIds as string[]) ?? []).length === 1,
+      ),
+    ).toBe(true);
+    const auditSummary = await f.service.auditSummary();
+    expect(auditSummary.formalGateDecision).toBe("COLLECTING");
+    expect(auditSummary.publication.submissions).toBeGreaterThanOrEqual(1);
+    expect(auditSummary.publication.assets).toBeGreaterThanOrEqual(2);
+    expect(auditSummary.auditSelection.cases).toBeGreaterThanOrEqual(1);
+    expect(auditSummary.auditSelection.assets).toBeGreaterThanOrEqual(2);
     expect([...f.objects.keys()]).toHaveLength(2);
     expect(
       [...f.objects.keys()].every((key) => key.startsWith("issue-media/published/auto/")),
