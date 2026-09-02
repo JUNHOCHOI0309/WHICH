@@ -94,6 +94,13 @@ export async function attachIssueSubmissionMedia(
 }
 
 export async function createMemberIssue(command: CreateIssueCommand, idempotencyKey: string) {
+  const request = {
+    ...command,
+    // The API accepts either a complete 2-4 asset selection or null. Older
+    // session drafts stored an empty array for text-only questions, so
+    // normalize it at the request boundary as well as in the current UI.
+    libraryAssetIds: command.libraryAssetIds?.length ? command.libraryAssetIds : null,
+  };
   return responseBody<CreateIssueResponse>(
     await fetch("/api/issues", {
       method: "POST",
@@ -102,7 +109,7 @@ export async function createMemberIssue(command: CreateIssueCommand, idempotency
         "content-type": "application/json",
         "idempotency-key": idempotencyKey,
       },
-      body: JSON.stringify(command),
+      body: JSON.stringify(request),
     }),
   );
 }

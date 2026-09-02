@@ -77,6 +77,7 @@ describe("IssueCreatorExperience", () => {
 
   it("publishes a Member draft and opens the new Issue", async () => {
     const submissions: unknown[] = [];
+    window.sessionStorage.setItem("which_issue_draft_v1", JSON.stringify({ libraryAssetIds: [] }));
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
@@ -111,9 +112,53 @@ describe("IssueCreatorExperience", () => {
       choiceA: "라면",
       choiceB: "김밥",
       interestCardCode: "FOOD",
+      libraryAssetIds: null,
     });
     expect(navigation.push).toHaveBeenCalledWith("/issues/new-issue-id");
     expect(window.sessionStorage.getItem("which_issue_draft_v1")).toBeNull();
+  });
+
+  it("publishes a three-choice text-only draft with no Library assets", async () => {
+    const submissions: Array<Record<string, unknown>> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = String(input);
+        if (url === "/api/member-session") return jsonResponse({ member: { status: "ACTIVE" } });
+        if (url === "/api/interests/cards") return jsonResponse(registry);
+        if (url === "/api/issues") {
+          submissions.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+          return jsonResponse({ created: true, issue: { id: "three-choice-issue" } }, 201);
+        }
+        throw new Error(`unexpected request: ${url}`);
+      }),
+    );
+    render(<IssueCreatorExperience />);
+
+    fireEvent.change(await screen.findByPlaceholderText("예: 퇴근 후 바로 잘까, 조금 더 놀까?"), {
+      target: { value: "휴일에 가장 하고 싶은 일은 무엇인가요" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("1번째 선택지를 적어 주세요"), {
+      target: { value: "산책" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("2번째 선택지를 적어 주세요"), {
+      target: { value: "독서" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "+ 선택지 추가" }));
+    fireEvent.change(screen.getByPlaceholderText("3번째 선택지를 적어 주세요"), {
+      target: { value: "게임" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "질문 게시" }));
+
+    await waitFor(() => expect(submissions).toHaveLength(1));
+    expect(submissions[0]).toMatchObject({
+      choiceA: "산책",
+      choiceB: "독서",
+      choiceC: "게임",
+      choiceD: null,
+      libraryAssetIds: null,
+    });
+    expect(navigation.push).toHaveBeenCalledWith("/issues/three-choice-issue");
   });
 
   it("adds choices in order up to four and submits C/D labels", async () => {
@@ -159,6 +204,7 @@ describe("IssueCreatorExperience", () => {
       choiceB: "여름",
       choiceC: "가을",
       choiceD: "겨울",
+      libraryAssetIds: null,
     });
   });
 
