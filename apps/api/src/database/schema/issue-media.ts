@@ -88,7 +88,7 @@ export const issueMediaAssets = pgTable(
     ),
     check(
       "issue_media_assets_attestation_check",
-      sql`char_length(${table.rightsAttestation}) between 20 and 2000`,
+      sql`char_length(trim(${table.rightsAttestation})) > 0`,
     ),
     check(
       "issue_media_assets_storage_keys_check",

@@ -97,8 +97,6 @@ export function OpsPublishedIssuesPanel() {
   const [reportedOnly, setReportedOnly] = useState(false);
   const [page, setPage] = useState<OpsPublishedIssuePage | null>(null);
   const [selected, setSelected] = useState<OpsPublishedIssue | null>(null);
-  const [reason, setReason] = useState("");
-  const [mediaReason, setMediaReason] = useState("");
   const [rightsAttestation, setRightsAttestation] = useState("");
   const [choiceFiles, setChoiceFiles] = useState<Partial<Record<ChoiceCode, File>>>({});
   const [loading, setLoading] = useState(true);
@@ -146,11 +144,6 @@ export function OpsPublishedIssuesPanel() {
 
   async function update(action: OpsPublishedIssueAction) {
     if (!selected) return;
-    const rationale = reason.trim();
-    if (!rationale) {
-      setFeedback({ error: true, message: "운영 조치 사유를 입력해 주세요." });
-      return;
-    }
     if (
       action === "REMOVE" &&
       !window.confirm("게시 중단 후에는 이 화면에서 복구할 수 없습니다. 계속할까요?")
@@ -173,14 +166,12 @@ export function OpsPublishedIssuesPanel() {
             expectedReportUpdatedAt: action.endsWith("_REPORTS")
               ? selected.activeReportReview?.updatedAt
               : undefined,
-            reason: rationale,
           }),
         },
       );
       const body = (await response.json()) as OpsPublishedIssue & { message?: string };
       if (!response.ok) throw new Error(body.message || "게시 질문 상태를 변경하지 못했습니다.");
       await load();
-      setReason("");
       setFeedback({ error: false, message: `${actionLabels[action]} 조치를 기록했습니다.` });
     } catch (caught) {
       setFeedback({
@@ -194,12 +185,7 @@ export function OpsPublishedIssuesPanel() {
 
   async function reviseMedia() {
     if (!selected) return;
-    const rationale = mediaReason.trim();
     const files = Object.values(choiceFiles).filter(Boolean) as File[];
-    if (!rationale) {
-      setFeedback({ error: true, message: "이미지 수정 사유를 입력해 주세요." });
-      return;
-    }
     if (files.length > 0 && !rightsAttestation.trim()) {
       setFeedback({ error: true, message: "새 이미지의 권리 근거를 입력해 주세요." });
       return;
@@ -265,7 +251,7 @@ export function OpsPublishedIssuesPanel() {
                 body: JSON.stringify({
                   status: "APPROVED",
                   reasonCode: "OPS_ISSUE_MEDIA_REVISION",
-                  rationale,
+                  rationale: "게시 질문 선택지 이미지 관리자 승인",
                   policyVersion: "issue-media-review-v1",
                 }),
               },
@@ -294,7 +280,6 @@ export function OpsPublishedIssuesPanel() {
           body: JSON.stringify({
             expectedVersion: selected.version,
             expectedUpdatedAt: selected.updatedAt,
-            reason: rationale,
             choices,
           }),
         },
@@ -303,7 +288,6 @@ export function OpsPublishedIssuesPanel() {
       if (!response.ok) throw new Error(body.message || "질문 이미지를 수정하지 못했습니다.");
       setChoiceFiles({});
       setRightsAttestation("");
-      setMediaReason("");
       await load();
       setFeedback({
         error: false,
@@ -372,8 +356,6 @@ export function OpsPublishedIssuesPanel() {
               key={issue.issueId}
               onClick={() => {
                 setSelected(issue);
-                setReason("");
-                setMediaReason("");
                 setRightsAttestation("");
                 setChoiceFiles({});
                 setFeedback(null);
@@ -495,12 +477,6 @@ export function OpsPublishedIssuesPanel() {
                   placeholder="새 이미지 권리 근거 (직접 촬영·라이선스 등)"
                   disabled={busy}
                 />
-                <textarea
-                  value={mediaReason}
-                  onChange={(event) => setMediaReason(event.target.value)}
-                  placeholder="이미지 수정 사유"
-                  disabled={busy}
-                />
                 <button type="button" disabled={busy} onClick={() => void reviseMedia()}>
                   이미지 수정본 공개
                 </button>
@@ -508,11 +484,6 @@ export function OpsPublishedIssuesPanel() {
             ) : null}
             {actionsFor(selected).length || selected.activeReportReview ? (
               <section className={styles.decision}>
-                <textarea
-                  value={reason}
-                  onChange={(event) => setReason(event.target.value)}
-                  placeholder="운영 조치 사유"
-                />
                 <div className={styles.decisionActions}>
                   {selected.activeReportReview ? (
                     <>

@@ -398,7 +398,6 @@ describe("operator dashboard", () => {
       expectedUpdatedAt: published.updatedAt,
       expectedReportCaseId: published.activeReportReview.caseId,
       expectedReportUpdatedAt: published.activeReportReview.updatedAt,
-      reason: "오탐",
     });
     expect(dismissed.statusCode, dismissed.body).toBe(200);
     expect(dismissed.json()).toMatchObject({ activeReportReview: null });
@@ -447,7 +446,6 @@ describe("operator dashboard", () => {
       {
         expectedVersion: 1,
         expectedUpdatedAt: published.updatedAt,
-        reason: "기본 질문의 A/B 선택지 이미지를 운영 화면에서 추가합니다.",
         choices: [
           {
             code: "A",
@@ -482,7 +480,6 @@ describe("operator dashboard", () => {
     const hidden = await opsRequest("PATCH", `/v1/internal/ops/published-issues/${issue!.id}`, {
       action: "HIDE",
       expectedUpdatedAt: revised.updatedAt,
-      reason: "신고 내용 검토를 위해 노출을 잠시 중지합니다.",
     });
     expect(hidden.statusCode, hidden.body).toBe(200);
     const hiddenIssue = hidden.json<{ updatedAt: string }>();
