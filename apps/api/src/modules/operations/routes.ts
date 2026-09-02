@@ -575,6 +575,76 @@ export async function registerOpsRoutes(
       },
     );
 
+    opsApp.post<{
+      Headers: OpsHeaders;
+      Params: { issueId: string };
+      Body: {
+        expectedVersion: number;
+        expectedUpdatedAt: string;
+        reason: string;
+        choices: Array<{
+          code: "A" | "B" | "C" | "D";
+          assetId: string;
+          altText: string;
+          cropMode: "COVER" | "CONTAIN";
+        }>;
+      };
+    }>(
+      "/v1/internal/ops/published-issues/:issueId/media-revision",
+      {
+        schema: {
+          hide: true,
+          headers: opsHeadersSchema,
+          params: Type.Object({ issueId: Type.String({ format: "uuid" }) }),
+          body: Type.Object(
+            {
+              expectedVersion: Type.Integer({ minimum: 1 }),
+              expectedUpdatedAt: Type.String({ format: "date-time" }),
+              reason: Type.String({ minLength: 10, maxLength: 1000 }),
+              choices: Type.Array(
+                Type.Object(
+                  {
+                    code: Type.Union(["A", "B", "C", "D"].map((code) => Type.Literal(code))),
+                    assetId: Type.String({ format: "uuid" }),
+                    altText: Type.String({ minLength: 2, maxLength: 300 }),
+                    cropMode: Type.Union([Type.Literal("COVER"), Type.Literal("CONTAIN")]),
+                  },
+                  { additionalProperties: false },
+                ),
+                { minItems: 2, maxItems: 4 },
+              ),
+            },
+            { additionalProperties: false },
+          ),
+          response: {
+            200: Type.Any(),
+            400: Type.Object({ code: Type.String(), message: Type.String() }),
+            401: Type.Object({ code: Type.String(), message: Type.String() }),
+            403: Type.Object({ code: Type.String(), message: Type.String() }),
+            409: Type.Object({ code: Type.String(), message: Type.String() }),
+            500: Type.Object({ code: Type.String(), message: Type.String() }),
+          },
+        },
+      },
+      async (request, reply) => {
+        const memberId = await authenticate(request, reply);
+        if (!memberId) return;
+        const issue = await service.revisePublishedIssueMedia({
+          memberId,
+          issueId: request.params.issueId,
+          ...request.body,
+          requestId: request.id,
+        });
+        if (!issue) {
+          return reply.code(403).send({
+            code: "OPERATOR_ROLE_REQUIRED",
+            message: "This Member does not have active OPERATOR access.",
+          });
+        }
+        return reply.send(issue);
+      },
+    );
+
     opsApp.get<{ Headers: OpsHeaders }>(
       "/v1/internal/ops/point-shop",
       {

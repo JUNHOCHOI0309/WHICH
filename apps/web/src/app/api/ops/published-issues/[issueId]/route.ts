@@ -38,3 +38,40 @@ export async function PATCH(
     body: JSON.stringify(body),
   });
 }
+
+export async function POST(
+  request: NextRequest,
+  context: { params: Promise<{ issueId: string }> },
+) {
+  if (!hasSamePublicOrigin(request)) {
+    return NextResponse.json(
+      { code: "ORIGIN_MISMATCH", message: "요청 출처가 올바르지 않습니다." },
+      { status: 403 },
+    );
+  }
+  const { issueId } = await context.params;
+  if (!uuid.test(issueId)) {
+    return NextResponse.json(
+      { code: "INVALID_ISSUE", message: "질문 ID가 올바르지 않습니다." },
+      { status: 400 },
+    );
+  }
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json(
+      { code: "INVALID_JSON", message: "요청 본문이 올바르지 않습니다." },
+      { status: 400 },
+    );
+  }
+  return proxyOpsApi(
+    request,
+    `/v1/internal/ops/published-issues/${encodeURIComponent(issueId)}/media-revision`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+}

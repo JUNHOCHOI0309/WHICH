@@ -680,6 +680,12 @@ describe("operator Issue media foundation", () => {
     expect(publishedA?.publishedUrl).toBe(
       `https://media.which.test/issue-media/published/${stagedA!.id}.webp`,
     );
+    const reusedPublishedOperatorAsset = await stage("jpeg", [10, 120, 220]);
+    expect(reusedPublishedOperatorAsset).toMatchObject({
+      id: publishedA!.id,
+      storageState: "PUBLISHED",
+      moderationState: "APPROVED",
+    });
 
     await service.attachChoice({
       memberId: operatorId,

@@ -6,7 +6,9 @@ import { getConfig } from "../src/config.js";
 import type { Database } from "../src/database/client.js";
 import {
   issueAuthors,
+  issueChoiceMedia,
   issueChoices,
+  issueMediaAssets,
   issues,
   issueVersions,
   operatorAccessGrants,
@@ -327,9 +329,73 @@ describe("operator dashboard", () => {
     }>().items[0]!;
     expect(published).toMatchObject({ issueId: issue!.id, state: "ACTIVE" });
 
+    const assets = await database.db
+      .insert(issueMediaAssets)
+      .values(
+        ["a", "b"].map((marker) => ({
+          uploadedByMemberId: memberId,
+          sourceType: "OPERATOR_UPLOAD",
+          rightsAttestation: "운영 통합 테스트에서 사용 권리를 확인한 이미지입니다.",
+          rightsAttestedAt: new Date(),
+          sha256: marker.repeat(64),
+          perceptualHash: marker.repeat(16),
+          inputMimeType: "image/png",
+          inputByteSize: 100,
+          inputWidth: 100,
+          inputHeight: 100,
+          outputByteSize: 80,
+          outputWidth: 100,
+          outputHeight: 100,
+          processingState: "READY",
+          moderationState: "APPROVED",
+          storageState: "PUBLISHED",
+          rightsState: "ASSERTED",
+          publishedObjectKey: `published/${marker}.webp`,
+          publishedAt: new Date(),
+        })),
+      )
+      .returning({ id: issueMediaAssets.id });
+    const mediaRevision = await opsRequest(
+      "POST",
+      `/v1/internal/ops/published-issues/${issue!.id}/media-revision`,
+      {
+        expectedVersion: 1,
+        expectedUpdatedAt: published.updatedAt,
+        reason: "기본 질문의 A/B 선택지 이미지를 운영 화면에서 추가합니다.",
+        choices: [
+          {
+            code: "A",
+            assetId: assets[0]!.id,
+            altText: "계속 공개 선택지 이미지",
+            cropMode: "CONTAIN",
+          },
+          {
+            code: "B",
+            assetId: assets[1]!.id,
+            altText: "노출 중지 선택지 이미지",
+            cropMode: "CONTAIN",
+          },
+        ],
+      },
+    );
+    expect(mediaRevision.statusCode, mediaRevision.body).toBe(200);
+    const revised = mediaRevision.json<{
+      version: number;
+      updatedAt: string;
+      choices: unknown[];
+    }>();
+    expect(revised).toMatchObject({ version: 2 });
+    expect(revised.choices).toHaveLength(2);
+    expect(
+      await database.db
+        .select({ mediaAssetId: issueChoiceMedia.mediaAssetId })
+        .from(issueChoiceMedia)
+        .where(eq(issueChoiceMedia.issueVersion, 2)),
+    ).toHaveLength(2);
+
     const hidden = await opsRequest("PATCH", `/v1/internal/ops/published-issues/${issue!.id}`, {
       action: "HIDE",
-      expectedUpdatedAt: published.updatedAt,
+      expectedUpdatedAt: revised.updatedAt,
       reason: "신고 내용 검토를 위해 노출을 잠시 중지합니다.",
     });
     expect(hidden.statusCode, hidden.body).toBe(200);

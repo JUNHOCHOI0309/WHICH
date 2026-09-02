@@ -554,6 +554,13 @@ export function createIssueMediaService(
       ) {
         return mapAsset(duplicate, storage);
       }
+      if (
+        input.sourceType === "OPERATOR_UPLOAD" &&
+        duplicate.sourceType === "OPERATOR_UPLOAD" &&
+        reusablePublishedAsset
+      ) {
+        return mapAsset(duplicate, storage);
+      }
       throw new IssueMediaError(
         "MEDIA_DUPLICATE",
         409,

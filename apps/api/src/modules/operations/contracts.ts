@@ -222,7 +222,16 @@ export type OpsPublishedIssue = {
   version: number;
   question: string;
   context: string | null;
-  choices: Array<{ code: "A" | "B" | "C" | "D"; label: string }>;
+  choices: Array<{
+    id: string;
+    code: "A" | "B" | "C" | "D";
+    label: string;
+    media: null | {
+      assetId: string;
+      altText: string;
+      cropMode: "COVER" | "CONTAIN";
+    };
+  }>;
   categoryCode: string;
   mediaMode: string;
   author: { memberId: string; displayName: string } | null;
@@ -384,6 +393,20 @@ export interface OpsDashboardService {
     action: OpsPublishedIssueAction;
     expectedUpdatedAt: string;
     reason: string;
+    requestId?: string;
+  }): Promise<OpsPublishedIssue | null>;
+  revisePublishedIssueMedia(input: {
+    memberId: string;
+    issueId: string;
+    expectedVersion: number;
+    expectedUpdatedAt: string;
+    reason: string;
+    choices: Array<{
+      code: "A" | "B" | "C" | "D";
+      assetId: string;
+      altText: string;
+      cropMode: "COVER" | "CONTAIN";
+    }>;
     requestId?: string;
   }): Promise<OpsPublishedIssue | null>;
   readPointShop(input: { memberId: string; requestId?: string }): Promise<OpsPointShopView | null>;
