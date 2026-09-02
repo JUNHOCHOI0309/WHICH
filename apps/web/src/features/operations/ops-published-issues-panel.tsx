@@ -401,6 +401,7 @@ export function OpsPublishedIssuesPanel() {
                     <label>
                       {choice.media ? "이미지 교체" : "이미지 추가"}
                       <input
+                        key={`${selected.issueId}:${selected.version}:${choice.code}`}
                         type="file"
                         accept="image/jpeg,image/png,image/webp"
                         disabled={busy || selected.state === "REMOVED"}
