@@ -35,11 +35,11 @@ import {
 import type { createPolicyJudgeService } from "../policy-judge/service.js";
 import { hasClaimedWakeup } from "../moderation-dispatch/submission-wakeup-event.js";
 
-export const AUTO_PUBLICATION_POLICY = "which-auto-publication-pilot-v1";
+export const AUTO_PUBLICATION_POLICY = "which-auto-publication-member-v1";
 const PUBLIC_REPAIR = `${AUTO_PUBLICATION_POLICY}:public`;
 const PRIVATE_REPAIR = `${AUTO_PUBLICATION_POLICY}:private`;
 const environmentSchema = z.object({
-  ISSUE_MEDIA_AUTO_PUBLICATION_MODE: z.enum(["OFF", "PILOT"]).default("OFF"),
+  ISSUE_MEDIA_AUTO_PUBLICATION_MODE: z.enum(["OFF", "PILOT", "MEMBER"]).default("OFF"),
   ISSUE_MEDIA_AUTO_PUBLICATION_MEMBER_IDS: z
     .string()
     .default("")
@@ -74,7 +74,8 @@ const safetySchema = normalizedResultSchema.extend({
   }),
 });
 
-// This is a bounded pilot policy, not a claim of calibration or complete model coverage.
+// Automatic publication still requires complete, current evidence; Member scope is not
+// a claim of calibration or complete model coverage.
 // Scores are routing signals, not probabilities. Uncertainty always retains private review.
 export function clearPublicationEvidence(input: {
   result: unknown;
@@ -140,10 +141,13 @@ export function createAutoPublicationService(options: {
 }) {
   const { database, storage, config, judge } = options;
   const now = options.now ?? (() => new Date());
+  const memberMode = () => config.ISSUE_MEDIA_AUTO_PUBLICATION_MODE === "MEMBER";
+  const memberInScope = (memberId: string) =>
+    memberMode() || config.ISSUE_MEDIA_AUTO_PUBLICATION_MEMBER_IDS.includes(memberId);
   const enabled = () =>
-    config.ISSUE_MEDIA_AUTO_PUBLICATION_MODE === "PILOT" &&
+    config.ISSUE_MEDIA_AUTO_PUBLICATION_MODE !== "OFF" &&
     !config.ISSUE_MEDIA_AUTO_PUBLICATION_KILL_SWITCH &&
-    config.ISSUE_MEDIA_AUTO_PUBLICATION_MEMBER_IDS.length > 0 &&
+    (memberMode() || config.ISSUE_MEDIA_AUTO_PUBLICATION_MEMBER_IDS.length > 0) &&
     typeof storage?.preparePublication === "function" &&
     typeof storage.exists === "function" &&
     options.runtimeAllowed();
@@ -170,7 +174,7 @@ export function createAutoPublicationService(options: {
     if (
       !source ||
       source.submission.status !== "PENDING" ||
-      !config.ISSUE_MEDIA_AUTO_PUBLICATION_MEMBER_IDS.includes(source.submission.memberId)
+      !memberInScope(source.submission.memberId)
     )
       return null;
     const ids = [
@@ -381,11 +385,11 @@ export function createAutoPublicationService(options: {
       const published = await publishReviewedSubmission(
         tx,
         current.source.submission,
-        "AI_PILOT_MEDIA_PUBLISHED",
+        "AI_MEMBER_MEDIA_PUBLISHED",
       );
       if (!published.publishedIssueId) throw new Error("PUBLICATION_NOT_COMMITTED");
       await tx.insert(moderationAuditEvents).values({
-        eventType: "AI_PILOT_MEDIA_PUBLISHED",
+        eventType: "AI_MEMBER_MEDIA_PUBLISHED",
         entityType: "TARGET",
         entityId: current.source.submission.id,
         actorType: "SYSTEM",
@@ -482,7 +486,12 @@ export function createAutoPublicationService(options: {
           options.submissionWakeupsOnly
             ? hasClaimedWakeup(memberIssueSubmissions.id, memberIssueSubmissions.revision)
             : undefined,
-          inArray(memberIssueSubmissions.memberId, config.ISSUE_MEDIA_AUTO_PUBLICATION_MEMBER_IDS),
+          memberMode()
+            ? undefined
+            : inArray(
+                memberIssueSubmissions.memberId,
+                config.ISSUE_MEDIA_AUTO_PUBLICATION_MEMBER_IDS,
+              ),
           eq(policyJudgeEvaluations.profile, POLICY_JUDGE_PROFILE),
           inArray(policyJudgeEvaluations.status, ["SUCCEEDED", "CACHE_HIT"]),
           sql`${policyJudgeEvaluations.completedAt} >= ${new Date(now().getTime() - POLICY_JUDGE_CACHE_TTL_MS)}`,
