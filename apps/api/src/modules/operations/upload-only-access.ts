@@ -25,8 +25,8 @@ export async function decideUploadOnlyAccess(
   },
 ) {
   const rationale = input.rationale.trim();
-  if (rationale.length < 10 || rationale.length > 2000 || !input.actor.trim()) {
-    throw new Error("An actor and a 10-2000 character rationale are required.");
+  if (!rationale || !input.actor.trim()) {
+    throw new Error("An actor and rationale are required.");
   }
   if (input.confirmMemberId && input.confirmMemberId !== input.memberId) {
     throw new Error("Confirmation must exactly match the resolved Member ID.");

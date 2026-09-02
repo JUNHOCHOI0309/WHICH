@@ -48,8 +48,8 @@ export function OpsMediaUploadPilotPanel() {
   }, [load]);
 
   async function decide(memberId: string, action: Action) {
-    if (rationale.trim().length < 10) {
-      setError("판단 근거를 10자 이상 입력해 주세요.");
+    if (!rationale.trim()) {
+      setError("판단 근거를 입력해 주세요.");
       return;
     }
     setBusyMemberId(memberId);
@@ -109,8 +109,7 @@ export function OpsMediaUploadPilotPanel() {
         <input
           value={rationale}
           onChange={(event) => setRationale(event.target.value)}
-          placeholder="권한 판단 근거 (10자 이상)"
-          maxLength={2000}
+          placeholder="권한 판단 근거"
         />
         <button type="submit">검색</button>
       </form>

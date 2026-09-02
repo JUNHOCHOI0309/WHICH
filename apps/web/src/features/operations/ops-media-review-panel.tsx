@@ -131,8 +131,7 @@ export function OpsMediaReviewPanel() {
   }, [loadLibrary, loadRights]);
 
   async function decide(targetStatus: AssetAction, scope: "ASSET" | "ISSUE" = "ASSET") {
-    if (!selected || rationale.trim().length < 10)
-      return toast.error("판단 근거를 10자 이상 입력해 주세요.");
+    if (!selected || !rationale.trim()) return toast.error("판단 근거를 입력해 주세요.");
     setBusy(true);
     try {
       const target =
@@ -162,8 +161,8 @@ export function OpsMediaReviewPanel() {
   }
 
   async function upload() {
-    if (!uploadFile || rightsAttestation.trim().length < 20) {
-      return toast.error("이미지와 20자 이상의 권리 근거를 입력해 주세요.");
+    if (!uploadFile || !rightsAttestation.trim()) {
+      return toast.error("이미지와 권리 근거를 입력해 주세요.");
     }
     setBusy(true);
     try {
@@ -197,8 +196,7 @@ export function OpsMediaReviewPanel() {
   }
 
   async function reportRights(type: "PRIVACY" | "DEFAMATION" | "COPYRIGHT") {
-    if (!selected || rationale.trim().length < 10)
-      return toast.error("요청 내용을 10자 이상 입력해 주세요.");
+    if (!selected || !rationale.trim()) return toast.error("요청 내용을 입력해 주세요.");
     setBusy(true);
     try {
       await json(
@@ -225,8 +223,8 @@ export function OpsMediaReviewPanel() {
   }
 
   async function resolve(request: OpsMediaRightsRequest, result: "ACTIONED" | "DISMISSED") {
-    const resolution = window.prompt("처리 결과를 10자 이상 입력해 주세요.");
-    if (!resolution || resolution.trim().length < 10) return;
+    const resolution = window.prompt("처리 결과를 입력해 주세요.");
+    if (!resolution?.trim()) return;
     try {
       await json(
         await fetch(`/api/ops/media-review/rights-requests/${request.id}/resolve`, {
@@ -331,9 +329,9 @@ export function OpsMediaReviewPanel() {
 
   async function revokeLibraryPair(pair: OpsMediaLibraryPair) {
     const reason = window.prompt(
-      "이 이미지 쌍을 사용 중인 모든 질문을 텍스트로 전환할 근거를 입력해 주세요. (10자 이상)",
+      "이 이미지 쌍을 사용 중인 모든 질문을 텍스트로 전환할 근거를 입력해 주세요.",
     );
-    if (!reason || reason.trim().length < 10) return;
+    if (!reason?.trim()) return;
     setBusy(true);
     try {
       const result = await json<{ fallbackIssueCount: number }>(
@@ -372,7 +370,7 @@ export function OpsMediaReviewPanel() {
         <input
           value={rightsAttestation}
           onChange={(event) => setRightsAttestation(event.target.value)}
-          placeholder="사용 권한·출처 근거 (20자 이상)"
+          placeholder="사용 권한·출처 근거"
         />
         <button type="button" disabled={busy} onClick={() => void upload()}>
           검수 큐 등록
@@ -481,7 +479,7 @@ export function OpsMediaReviewPanel() {
                   <textarea
                     value={rationale}
                     onChange={(event) => setRationale(event.target.value)}
-                    placeholder="검수 판단 또는 권리 요청 근거 (10자 이상)"
+                    placeholder="검수 판단 또는 권리 요청 근거"
                   />
                   <div className={styles.decisionActions}>
                     {reviewActionsForStatus(selected.effectiveStatus).map((action) => (

@@ -352,12 +352,8 @@ export function createIssueMediaService(
     bytes: Buffer;
   }) {
     const rightsAttestation = input.rightsAttestation.trim();
-    if (rightsAttestation.length < 20 || rightsAttestation.length > 2000) {
-      throw new IssueMediaError(
-        "MEDIA_RIGHTS_BLOCKED",
-        422,
-        "A 20-2000 character rights attestation is required.",
-      );
+    if (!rightsAttestation) {
+      throw new IssueMediaError("MEDIA_RIGHTS_BLOCKED", 422, "A rights attestation is required.");
     }
     const processed = await processIssueMedia(input.bytes, input.declaredMimeType).catch(
       mediaError,
@@ -806,11 +802,11 @@ export function createIssueMediaService(
       const eventType = "OPS_ISSUE_MEDIA_LIBRARY_REVOKE";
       if (!(await requireOperator(input.memberId, eventType, input.requestId))) return null;
       const reason = input.reason.trim();
-      if (reason.length < 10 || reason.length > 2000) {
+      if (!reason) {
         throw new IssueMediaError(
           "MEDIA_RIGHTS_BLOCKED",
           422,
-          "Library 회수 근거를 10자 이상 입력해 주세요.",
+          "Library 회수 근거를 입력해 주세요.",
         );
       }
       const [pair] = await database

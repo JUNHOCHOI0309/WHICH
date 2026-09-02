@@ -43,6 +43,20 @@ const actionLabels: Record<OpsPublishedIssueAction, string> = {
   HIDE: "노출 중지",
   RESTORE: "공개 복구",
   REMOVE: "게시 중단",
+  RESOLVE_REPORTS: "신고 처리 완료",
+  DISMISS_REPORTS: "신고 기각",
+};
+
+const reportReasonLabels: Record<string, string> = {
+  SPAM: "스팸·도배",
+  INSULT_OR_HARASSMENT: "모욕·괴롭힘",
+  HATE: "혐오 표현",
+  THREAT: "위협",
+  PRIVACY: "개인정보 침해",
+  SEXUAL: "선정성",
+  IMPERSONATION: "사칭",
+  ILLEGAL_ACTIVITY: "불법 행위",
+  OTHER: "기타",
 };
 
 function ChoiceMediaPreview({
@@ -80,6 +94,7 @@ export function OpsPublishedIssuesPanel() {
   const [query, setQuery] = useState("");
   const [submittedQuery, setSubmittedQuery] = useState("");
   const [state, setState] = useState<OpsPublishedIssueState | "">("");
+  const [reportedOnly, setReportedOnly] = useState(false);
   const [page, setPage] = useState<OpsPublishedIssuePage | null>(null);
   const [selected, setSelected] = useState<OpsPublishedIssue | null>(null);
   const [reason, setReason] = useState("");
@@ -96,6 +111,7 @@ export function OpsPublishedIssuesPanel() {
     try {
       const params = new URLSearchParams();
       if (state) params.set("state", state);
+      if (reportedOnly) params.set("reported", "true");
       if (submittedQuery) params.set("q", submittedQuery);
       const response = await fetch(`/api/ops/published-issues?${params}`, { cache: "no-store" });
       const body = (await response.json()) as OpsPublishedIssuePage & { message?: string };
@@ -113,7 +129,7 @@ export function OpsPublishedIssuesPanel() {
     } finally {
       setLoading(false);
     }
-  }, [state, submittedQuery]);
+  }, [state, submittedQuery, reportedOnly]);
 
   useEffect(() => {
     // State updates happen after the bounded operator request resolves.
@@ -131,8 +147,8 @@ export function OpsPublishedIssuesPanel() {
   async function update(action: OpsPublishedIssueAction) {
     if (!selected) return;
     const rationale = reason.trim();
-    if (rationale.length < 10) {
-      setFeedback({ error: true, message: "운영 조치 사유를 10자 이상 입력해 주세요." });
+    if (!rationale) {
+      setFeedback({ error: true, message: "운영 조치 사유를 입력해 주세요." });
       return;
     }
     if (
@@ -151,6 +167,12 @@ export function OpsPublishedIssuesPanel() {
           body: JSON.stringify({
             action,
             expectedUpdatedAt: selected.updatedAt,
+            expectedReportCaseId: action.endsWith("_REPORTS")
+              ? selected.activeReportReview?.caseId
+              : undefined,
+            expectedReportUpdatedAt: action.endsWith("_REPORTS")
+              ? selected.activeReportReview?.updatedAt
+              : undefined,
             reason: rationale,
           }),
         },
@@ -174,12 +196,12 @@ export function OpsPublishedIssuesPanel() {
     if (!selected) return;
     const rationale = mediaReason.trim();
     const files = Object.values(choiceFiles).filter(Boolean) as File[];
-    if (rationale.length < 10) {
-      setFeedback({ error: true, message: "이미지 수정 사유를 10자 이상 입력해 주세요." });
+    if (!rationale) {
+      setFeedback({ error: true, message: "이미지 수정 사유를 입력해 주세요." });
       return;
     }
-    if (files.length > 0 && rightsAttestation.trim().length < 20) {
-      setFeedback({ error: true, message: "새 이미지의 권리 근거를 20자 이상 입력해 주세요." });
+    if (files.length > 0 && !rightsAttestation.trim()) {
+      setFeedback({ error: true, message: "새 이미지의 권리 근거를 입력해 주세요." });
       return;
     }
     if (selected.choices.some((choice) => !choice.media && !choiceFiles[choice.code])) {
@@ -306,7 +328,7 @@ export function OpsPublishedIssuesPanel() {
         </div>
         <span>노출 중지·복구·게시 중단은 모두 운영 감사 기록에 남습니다.</span>
       </div>
-      <form className={styles.filters} onSubmit={submit}>
+      <form className={`${styles.filters} ${styles.publishedFilters}`} onSubmit={submit}>
         <input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
@@ -324,6 +346,14 @@ export function OpsPublishedIssuesPanel() {
             </option>
           ))}
         </select>
+        <label className={styles.reportedOnlyFilter}>
+          <input
+            type="checkbox"
+            checked={reportedOnly}
+            onChange={(event) => setReportedOnly(event.target.checked)}
+          />
+          신고 처리 필요만
+        </label>
         <button type="submit">조회</button>
       </form>
       {feedback ? (
@@ -356,6 +386,9 @@ export function OpsPublishedIssuesPanel() {
               <strong>{issue.question}</strong>
               <small>
                 {issue.categoryCode} · 신고 {issue.reportCount}
+                {issue.activeReportReview
+                  ? ` · 처리 필요 ${issue.activeReportReview.reportCount}`
+                  : ""}
               </small>
             </button>
           ))}
@@ -416,6 +449,37 @@ export function OpsPublishedIssuesPanel() {
             <Link href={`/issues/${selected.issueId}`} target="_blank" rel="noreferrer">
               공개 화면 확인 ↗
             </Link>
+            {selected.activeReportReview ? (
+              <section className={styles.reportReview} aria-label="신고 검토 상세">
+                <div className={styles.reportReviewHeader}>
+                  <div>
+                    <strong>신고 검토 필요</strong>
+                    <span>
+                      {selected.activeReportReview.status} · {selected.activeReportReview.priority}{" "}
+                      · {selected.activeReportReview.reportCount}건
+                    </span>
+                  </div>
+                  <small>최근 갱신 {dateTime(selected.activeReportReview.updatedAt)}</small>
+                </div>
+                <div className={styles.reportDetails}>
+                  {selected.activeReportReview.reports.map((report) => (
+                    <article key={report.id}>
+                      <div>
+                        <b>{reportReasonLabels[report.reasonCode] ?? report.reasonCode}</b>
+                        <span>
+                          {report.reporterKind} · 가중치 {report.weight} ·{" "}
+                          {dateTime(report.createdAt)}
+                        </span>
+                      </div>
+                      <p>{report.detail || "추가 설명 없음"}</p>
+                    </article>
+                  ))}
+                </div>
+                <p className={styles.context}>
+                  노출 중지 또는 게시 중단을 선택하면 열린 신고 건도 자동으로 처리 완료됩니다.
+                </p>
+              </section>
+            ) : null}
             {selected.state !== "REMOVED" ? (
               <section className={styles.mediaRevision}>
                 <div>
@@ -428,15 +492,13 @@ export function OpsPublishedIssuesPanel() {
                 <input
                   value={rightsAttestation}
                   onChange={(event) => setRightsAttestation(event.target.value)}
-                  placeholder="새 이미지 권리 근거 (직접 촬영·라이선스 등, 20자 이상)"
-                  maxLength={2000}
+                  placeholder="새 이미지 권리 근거 (직접 촬영·라이선스 등)"
                   disabled={busy}
                 />
                 <textarea
                   value={mediaReason}
                   onChange={(event) => setMediaReason(event.target.value)}
-                  placeholder="이미지 수정 사유 (10자 이상)"
-                  maxLength={1000}
+                  placeholder="이미지 수정 사유"
                   disabled={busy}
                 />
                 <button type="button" disabled={busy} onClick={() => void reviseMedia()}>
@@ -444,15 +506,32 @@ export function OpsPublishedIssuesPanel() {
                 </button>
               </section>
             ) : null}
-            {actionsFor(selected).length ? (
+            {actionsFor(selected).length || selected.activeReportReview ? (
               <section className={styles.decision}>
                 <textarea
                   value={reason}
                   onChange={(event) => setReason(event.target.value)}
-                  placeholder="운영 조치 사유 (10자 이상)"
-                  maxLength={1000}
+                  placeholder="운영 조치 사유"
                 />
                 <div className={styles.decisionActions}>
+                  {selected.activeReportReview ? (
+                    <>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void update("DISMISS_REPORTS")}
+                      >
+                        신고 기각
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void update("RESOLVE_REPORTS")}
+                      >
+                        신고 처리 완료
+                      </button>
+                    </>
+                  ) : null}
                   {actionsFor(selected).map((action) => (
                     <button
                       type="button"

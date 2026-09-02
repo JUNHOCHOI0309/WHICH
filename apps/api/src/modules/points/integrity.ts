@@ -498,7 +498,7 @@ export function createPointIntegrityService(
       if (
         !Number.isSafeInteger(input.amount) ||
         input.amount === 0 ||
-        input.reason.trim().length < 8 ||
+        !input.reason.trim() ||
         input.incidentId.trim().length < 3 ||
         input.idempotencyKey.trim().length < 8
       ) {

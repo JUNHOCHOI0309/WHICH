@@ -157,7 +157,7 @@ export async function registerOpsModerationQueueRoutes(
               Type.Literal("BLOCK"),
               Type.Literal("ABSTAIN"),
             ]),
-            rationale: Type.String({ minLength: 3, maxLength: 500 }),
+            rationale: Type.String({ minLength: 1 }),
           }),
         },
       },
@@ -224,7 +224,7 @@ export async function registerOpsModerationQueueRoutes(
               Type.Literal("RESTORE"),
             ]),
             reasonCode: Type.String({ minLength: 2, maxLength: 64, pattern: "^[A-Z0-9_]+$" }),
-            rationale: Type.String({ minLength: 10, maxLength: 2000 }),
+            rationale: Type.String({ minLength: 1 }),
             policyVersion: Type.String({ minLength: 3, maxLength: 64 }),
             reviewerAssist: Type.Object({
               agreement: Type.Union([

@@ -18,10 +18,10 @@ export async function POST(request: NextRequest) {
       !ALLOWED_TYPES.has(file.type) ||
       file.size > 10 * 1024 * 1024 ||
       typeof rightsAttestation !== "string" ||
-      rightsAttestation.trim().length < 20
+      !rightsAttestation.trim()
     ) {
       return NextResponse.json(
-        { code: "ISSUE_MEDIA_INVALID", message: "이미지와 20자 이상의 권리 확인을 입력해 주세요." },
+        { code: "ISSUE_MEDIA_INVALID", message: "이미지와 권리 확인을 입력해 주세요." },
         { status: 400 },
       );
     }

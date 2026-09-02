@@ -103,8 +103,7 @@ export function MemberModerationExperience({
   }
 
   async function submitAppeal(assetId: string) {
-    if (appealReason.trim().length < 20)
-      return toast.error("재검토 이유를 20자 이상 입력해 주세요.");
+    if (!appealReason.trim()) return toast.error("재검토 이유를 입력해 주세요.");
     setBusy(true);
     try {
       await post("/api/me/moderation/appeals", {
@@ -124,8 +123,7 @@ export function MemberModerationExperience({
   }
 
   async function submitRights(assetId: string) {
-    if (rightsDetails.trim().length < 20)
-      return toast.error("권리 요청 내용을 20자 이상 입력해 주세요.");
+    if (!rightsDetails.trim()) return toast.error("권리 요청 내용을 입력해 주세요.");
     setBusy(true);
     try {
       await post("/api/me/moderation/rights", {

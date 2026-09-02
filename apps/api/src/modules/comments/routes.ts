@@ -538,7 +538,7 @@ export async function registerCommentRoutes(
               Type.Literal("PERSONAL_INFORMATION"),
               Type.Literal("OTHER"),
             ]),
-            detail: Type.Optional(Type.String({ maxLength: 300 })),
+            detail: Type.Optional(Type.String()),
           }),
           response: {
             201: Type.Object({

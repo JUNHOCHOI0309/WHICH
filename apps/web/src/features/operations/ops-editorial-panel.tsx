@@ -285,7 +285,6 @@ export function OpsEditorialPanel() {
               </div>
               <textarea
                 value={note}
-                maxLength={2000}
                 onChange={(event) => setNote(event.target.value)}
                 placeholder="수정 요청 또는 심사 근거를 남겨 주세요."
               />

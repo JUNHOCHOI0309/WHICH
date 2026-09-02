@@ -1252,8 +1252,8 @@ function CommentSection({
   const submitReport = async () => {
     if (!reportDraft || reportingCommentId) return;
     const detail = reportDraft.detail.trim();
-    if (reportDraft.reason === "OTHER" && Array.from(detail).length < 10) {
-      setReportError("기타 사유는 10자 이상 설명해 주세요.");
+    if (reportDraft.reason === "OTHER" && !detail) {
+      setReportError("기타 사유를 설명해 주세요.");
       return;
     }
     if (pendingReportKey.current?.commentId !== reportDraft.commentId) {
@@ -1547,7 +1547,6 @@ function CommentSection({
               <textarea
                 aria-label="기타 신고 사유"
                 value={reportDraft.detail}
-                maxLength={300}
                 rows={3}
                 onChange={(event) =>
                   setReportDraft((current) =>
@@ -1967,9 +1966,8 @@ function CommentSection({
                       <textarea
                         aria-label="기타 신고 사유"
                         value={reportDraft.detail}
-                        maxLength={300}
                         rows={3}
-                        placeholder="문제가 되는 이유를 10자 이상 적어 주세요."
+                        placeholder="문제가 되는 이유를 적어 주세요."
                         onChange={(event) =>
                           setReportDraft((current) =>
                             current ? { ...current, detail: event.target.value } : current,

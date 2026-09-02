@@ -428,7 +428,7 @@ export async function registerOpsRoutes(
               Type.Literal("NEEDS_CHANGES"),
               Type.Literal("REJECTED"),
             ]),
-            note: Type.String({ maxLength: 2000 }),
+            note: Type.String(),
             checks: Type.Object({
               binaryFit: Type.Boolean(),
               choiceParity: Type.Boolean(),
@@ -478,6 +478,7 @@ export async function registerOpsRoutes(
       Headers: OpsHeaders;
       Querystring: {
         state?: (typeof OPS_PUBLISHED_ISSUE_STATES)[number];
+        reported?: "true";
         q?: string;
         limit?: number;
       };
@@ -491,6 +492,7 @@ export async function registerOpsRoutes(
             state: Type.Optional(
               Type.Union(OPS_PUBLISHED_ISSUE_STATES.map((state) => Type.Literal(state))),
             ),
+            reported: Type.Optional(Type.Literal("true")),
             q: Type.Optional(Type.String({ maxLength: 120 })),
             limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 50 })),
           }),
@@ -509,6 +511,7 @@ export async function registerOpsRoutes(
         const page = await service.readPublishedIssues({
           memberId,
           state: request.query.state,
+          reportedOnly: request.query.reported === "true",
           query: request.query.q,
           limit: request.query.limit ?? 50,
           requestId: request.id,
@@ -529,6 +532,8 @@ export async function registerOpsRoutes(
       Body: {
         action: (typeof OPS_PUBLISHED_ISSUE_ACTIONS)[number];
         expectedUpdatedAt: string;
+        expectedReportCaseId?: string;
+        expectedReportUpdatedAt?: string;
         reason: string;
       };
     }>(
@@ -542,7 +547,9 @@ export async function registerOpsRoutes(
             {
               action: Type.Union(OPS_PUBLISHED_ISSUE_ACTIONS.map((action) => Type.Literal(action))),
               expectedUpdatedAt: Type.String({ format: "date-time" }),
-              reason: Type.String({ minLength: 10, maxLength: 1000 }),
+              expectedReportCaseId: Type.Optional(Type.String({ format: "uuid" })),
+              expectedReportUpdatedAt: Type.Optional(Type.String({ format: "date-time" })),
+              reason: Type.String({ minLength: 1 }),
             },
             { additionalProperties: false },
           ),
@@ -600,7 +607,7 @@ export async function registerOpsRoutes(
             {
               expectedVersion: Type.Integer({ minimum: 1 }),
               expectedUpdatedAt: Type.String({ format: "date-time" }),
-              reason: Type.String({ minLength: 10, maxLength: 1000 }),
+              reason: Type.String({ minLength: 1 }),
               choices: Type.Array(
                 Type.Object(
                   {
@@ -701,7 +708,7 @@ export async function registerOpsRoutes(
             description: Type.String({ minLength: 5, maxLength: 280 }),
             price: Type.Integer({ minimum: 1, maximum: 1_000_000 }),
             status: Type.Union([Type.Literal("ACTIVE"), Type.Literal("PAUSED")]),
-            reason: Type.String({ minLength: 8, maxLength: 500 }),
+            reason: Type.String({ minLength: 1 }),
           }),
           response: {
             200: Type.Any(),
@@ -751,7 +758,7 @@ export async function registerOpsRoutes(
             expectedRevision: Type.Integer({ minimum: 1 }),
             price: Type.Integer({ minimum: 1, maximum: 1_000_000 }),
             status: Type.Union([Type.Literal("ACTIVE"), Type.Literal("PAUSED")]),
-            reason: Type.String({ minLength: 8, maxLength: 500 }),
+            reason: Type.String({ minLength: 1 }),
           }),
           response: {
             200: Type.Any(),
