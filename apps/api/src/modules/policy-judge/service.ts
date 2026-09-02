@@ -346,7 +346,7 @@ export function createPolicyJudgeService(options: {
     return { status: finished, reason: finalReason };
   }
 
-  async function runBatch(limit = 10) {
+  async function runBatch(limit = 10, submissionIds?: string[]) {
     const gate = judgeDiagnostic(config, provider);
     if (!gate.allowed) return { gate, processed: [] };
     await ledger.reconcileUnknown();
@@ -371,6 +371,7 @@ export function createPolicyJudgeService(options: {
       .where(
         and(
           eq(moderationRuns.status, "SUCCEEDED"),
+          submissionIds?.length ? inArray(memberIssueSubmissions.id, submissionIds) : undefined,
           options.submissionWakeupsOnly
             ? hasClaimedWakeup(memberIssueSubmissions.id, memberIssueSubmissions.revision)
             : undefined,

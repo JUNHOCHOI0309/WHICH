@@ -590,7 +590,7 @@ export function createAutoPublicationService(options: {
     return { repaired };
   }
 
-  async function runBatch(limit = 5) {
+  async function runBatch(limit = 5, submissionIds?: string[]) {
     // Recovery is also allowed with the publication kill switch on.
     const recovery = await reconcile();
     if (!enabled()) return { enabled: false, recovery, processed: [] };
@@ -609,6 +609,7 @@ export function createAutoPublicationService(options: {
       .where(
         and(
           eq(memberIssueSubmissions.status, "PENDING"),
+          submissionIds?.length ? inArray(memberIssueSubmissions.id, submissionIds) : undefined,
           options.submissionWakeupsOnly
             ? hasClaimedWakeup(memberIssueSubmissions.id, memberIssueSubmissions.revision)
             : undefined,

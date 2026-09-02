@@ -53,7 +53,10 @@ describe("immutable submission image moderation inputs", () => {
     await testDatabase.drop();
   });
 
-  async function fixture(extractEmbeddedText?: (bytes: Buffer) => Promise<EmbeddedText>) {
+  async function fixture(
+    extractEmbeddedText?: (bytes: Buffer) => Promise<EmbeddedText>,
+    backgrounds = ["#00ccdd", "#ff6633"],
+  ) {
     const db = testDatabase.database.db;
     const objects = new Map<string, Buffer>();
     const unused = vi.fn(() =>
@@ -90,7 +93,7 @@ describe("immutable submission image moderation inputs", () => {
     });
     const media = createIssueMediaService(db, storage);
     const assets = [];
-    for (const background of ["#00ccdd", "#ff6633"]) {
+    for (const background of backgrounds) {
       assets.push(
         await media.stageMemberAsset({
           memberId: session.member.id,
@@ -201,6 +204,38 @@ describe("immutable submission image moderation inputs", () => {
       { status: 200 },
     );
   }
+
+  it("claims and processes only the submission bound to an elastic task", async () => {
+    const first = await fixture();
+    const second = await fixture(undefined, ["#11ddcc", "#ee7744"]);
+    const fetchImpl = vi.fn(() => Promise.resolve(response()));
+    const worker = first.worker(fetchImpl);
+
+    await expect(worker.dispatchBatch(undefined, [first.submission.id])).resolves.toMatchObject({
+      claimed: 1,
+      queued: 1,
+    });
+    await expect(worker.dispatchBatch(undefined, [second.submission.id])).resolves.toMatchObject({
+      claimed: 1,
+      queued: 1,
+    });
+    await expect(worker.processBatch(undefined, [first.submission.id])).resolves.toMatchObject({
+      claimed: 1,
+      succeeded: 1,
+    });
+
+    const rows = await first.db
+      .select({ submissionId: moderationTargets.targetId, status: moderationRuns.status })
+      .from(moderationRuns)
+      .innerJoin(moderationTargets, eq(moderationTargets.id, moderationRuns.targetId));
+    expect(rows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ submissionId: first.submission.id, status: "SUCCEEDED" }),
+        expect.objectContaining({ submissionId: second.submission.id, status: "PENDING" }),
+      ]),
+    );
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
 
   it("reads current capability, consent and member status without changing stored observations or publishing", async () => {
     const f = await fixture();

@@ -3,9 +3,10 @@ import { Pool } from "pg";
 
 export function createDatabase(
   databaseUrl: string,
-  options: { connectionTimeoutMillis?: number } = {},
+  options: { connectionTimeoutMillis?: number; maxConnections?: number } = {},
 ) {
   const connectionTimeoutMillis = options.connectionTimeoutMillis ?? 2_000;
+  const maxConnections = options.maxConnections ?? 10;
   if (
     !Number.isInteger(connectionTimeoutMillis) ||
     connectionTimeoutMillis < 1 ||
@@ -13,9 +14,12 @@ export function createDatabase(
   ) {
     throw new Error("DATABASE_CONNECTION_TIMEOUT_INVALID");
   }
+  if (!Number.isInteger(maxConnections) || maxConnections < 1 || maxConnections > 20) {
+    throw new Error("DATABASE_MAX_CONNECTIONS_INVALID");
+  }
   const pool = new Pool({
     connectionString: databaseUrl,
-    max: 10,
+    max: maxConnections,
     connectionTimeoutMillis,
     idleTimeoutMillis: 30_000,
   });
@@ -27,7 +31,7 @@ export function createDatabase(
     connectionDiagnostics() {
       return {
         connectionTimeoutMillis,
-        maxConnections: 10,
+        maxConnections,
         totalConnections: pool.totalCount,
         idleConnections: pool.idleCount,
         waitingRequests: pool.waitingCount,

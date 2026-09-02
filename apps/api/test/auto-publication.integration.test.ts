@@ -310,6 +310,12 @@ describe("explicit image automatic publication", () => {
     });
     const [request] = await wakeups.claimed();
     expect(request).toBeTruthy();
+    await expect(
+      wakeups.claimed({ eventId: request!.id, claimToken: randomUUID() }),
+    ).resolves.toEqual([]);
+    await expect(
+      wakeups.claimed({ eventId: request!.id, claimToken: request!.claimToken! }),
+    ).resolves.toHaveLength(1);
     await expect(f.service.process(f.evaluation.id)).resolves.toMatchObject({
       status: "PUBLISHED",
     });

@@ -52,18 +52,29 @@ describe("database connection timeouts", () => {
   });
 
   it("allows a bounded cold-worker timeout without changing other pool settings", () => {
-    createDatabase(url, { connectionTimeoutMillis: 10_000 });
+    const database = createDatabase(url, {
+      connectionTimeoutMillis: 10_000,
+      maxConnections: 3,
+    });
     expect(mocks.pool).toHaveBeenCalledWith({
       connectionString: url,
-      max: 10,
+      max: 3,
       connectionTimeoutMillis: 10_000,
       idleTimeoutMillis: 30_000,
     });
+    expect(database.connectionDiagnostics().maxConnections).toBe(3);
   });
 
   it.each([0, -1, 60_001, 1.5, NaN, Infinity])("rejects invalid timeout %s", (timeout) => {
     expect(() => createDatabase(url, { connectionTimeoutMillis: timeout })).toThrow(
       "DATABASE_CONNECTION_TIMEOUT_INVALID",
+    );
+    expect(mocks.pool).not.toHaveBeenCalled();
+  });
+
+  it.each([0, -1, 21, 1.5, NaN, Infinity])("rejects invalid pool maximum %s", (maxConnections) => {
+    expect(() => createDatabase(url, { maxConnections })).toThrow(
+      "DATABASE_MAX_CONNECTIONS_INVALID",
     );
     expect(mocks.pool).not.toHaveBeenCalled();
   });

@@ -5,6 +5,12 @@ substitutions:
   _ARTIFACT_REPOSITORY: which
   _IMAGE_NAME: web
   _SERVICE: which-web
+  _MODERATION_WORKER_SERVICE: which-moderation-worker
+  _MODERATION_JOB: which-moderation
+  _MODERATION_QUEUE: which-moderation
+  _MODERATION_TASK_SERVICE_ACCOUNT: which-moderation-task-invoker
+  _MODERATION_MAX_INSTANCES: "8"
+  _MODERATION_DISPATCH_BATCH_SIZE: "16"
 
 options:
   # Compatible with the dedicated, least-privilege trigger service account.
@@ -36,21 +42,55 @@ steps:
       - push
       - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_ARTIFACT_REPOSITORY}/${_IMAGE_NAME}:$COMMIT_SHA
 
+  - id: deploy-moderation-worker
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        IMAGE="${_REGION}-docker.pkg.dev/$PROJECT_ID/${_ARTIFACT_REPOSITORY}/${_IMAGE_NAME}:$COMMIT_SHA"
+        gcloud run deploy "${_MODERATION_WORKER_SERVICE}" \
+          --project="$PROJECT_ID" --region="${_REGION}" --image="$$IMAGE" \
+          --command=node --args=scripts/cloud-run/moderation-service.mjs \
+          --service-account="which-web@$PROJECT_ID.iam.gserviceaccount.com" \
+          --execution-environment=gen2 --port=8080 --ingress=internal \
+          --network=which-run-vpc --subnet=which-run-subnet --vpc-egress=all-traffic \
+          --cpu=2 --memory=4Gi --min=1 --max="${_MODERATION_MAX_INSTANCES}" \
+          --concurrency=1 --timeout=300 --no-allow-unauthenticated \
+          --set-secrets=/var/run/which/runtime.json=which-runtime-env:1 \
+          --set-env-vars="CLOUD_RUN_ENV_FILE=/var/run/which/runtime.json,CLOUD_RUN_PREVIEW=false,POINTS_WORKER_ENABLED=false,MODERATION_WORKER_ENABLED=true,MODERATION_SUBMISSION_WAKEUPS_ONLY=true,MODERATION_WORKER_BATCH_SIZE=1,MODERATION_WORKER_DB_POOL_MAX=3,MODERATION_WORKER_LEASE_MS=240000,ISSUE_MEDIA_LOCAL_SCANNER_MODE=LOCAL,ISSUE_MEDIA_LOCAL_SCANNER_TIMEOUT_MS=30000,MODERATION_PROVIDER_MODE=SHADOW,MODERATION_PROVIDER_KILL_SWITCH=false,MODERATION_PROVIDER_CANARY_PERCENT=100,MODERATION_POLICY_JUDGE_MODE=SHADOW,MODERATION_POLICY_JUDGE_KILL_SWITCH=false,MODERATION_POLICY_JUDGE_CANARY_PERCENT=100,ISSUE_MEMBER_MEDIA_UPLOAD_MODE=MEMBER,FEATURE_ISSUE_MEDIA_ENABLED=true,ISSUE_MEDIA_AUTO_PUBLICATION_MODE=MEMBER,ISSUE_MEDIA_AUTO_PUBLICATION_KILL_SWITCH=false,MODERATION_DAILY_LIMITS_ENABLED=false,RELEASE_ID=$COMMIT_SHA" \
+          --startup-probe=httpGet.path=/health,httpGet.port=8080,periodSeconds=3,timeoutSeconds=2,failureThreshold=40 \
+          --labels=app=which,component=moderation-worker --quiet
+
+        gcloud run services add-iam-policy-binding "${_MODERATION_WORKER_SERVICE}" \
+          --project="$PROJECT_ID" --region="${_REGION}" \
+          --member="serviceAccount:${_MODERATION_TASK_SERVICE_ACCOUNT}@$PROJECT_ID.iam.gserviceaccount.com" \
+          --role=roles/run.invoker --quiet
+
+        gcloud run jobs update "${_MODERATION_JOB}" \
+          --project="$PROJECT_ID" --region="${_REGION}" --image="$$IMAGE" \
+          --update-env-vars="RELEASE_ID=$COMMIT_SHA" --quiet
+
+        gcloud tasks queues update "${_MODERATION_QUEUE}" \
+          --project="$PROJECT_ID" --location="${_REGION}" \
+          --max-concurrent-dispatches="${_MODERATION_MAX_INSTANCES}" \
+          --max-dispatches-per-second=4 --max-attempts=5 \
+          --max-retry-duration=600s --min-backoff=5s --max-backoff=60s \
+          --max-doublings=3 --quiet
+
   - id: deploy-revision
     name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
-    entrypoint: gcloud
+    entrypoint: bash
     args:
-      - run
-      - services
-      - update
-      - ${_SERVICE}
-      - --project=$PROJECT_ID
-      - --region=${_REGION}
-      - --image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_ARTIFACT_REPOSITORY}/${_IMAGE_NAME}:$COMMIT_SHA
-      # Keep upload-time local evidence enabled on every production revision.
-      # Deployment overrides win over the imported legacy runtime secret.
-      - --update-env-vars=RELEASE_ID=$COMMIT_SHA,ISSUE_MEMBER_MEDIA_UPLOAD_MODE=MEMBER,ISSUE_MEDIA_AUTO_PUBLICATION_MODE=MEMBER,ISSUE_MEDIA_LOCAL_SCANNER_MODE=LOCAL,ISSUE_MEDIA_LOCAL_SCANNER_TIMEOUT_MS=30000
-      - --quiet
+      - -ceu
+      - |
+        IMAGE="${_REGION}-docker.pkg.dev/$PROJECT_ID/${_ARTIFACT_REPOSITORY}/${_IMAGE_NAME}:$COMMIT_SHA"
+        WORKER_URL="$$(gcloud run services describe "${_MODERATION_WORKER_SERVICE}" --project="$PROJECT_ID" --region="${_REGION}" --format='value(status.url)')"
+        test -n "$$WORKER_URL"
+        gcloud run services update "${_SERVICE}" \
+          --project="$PROJECT_ID" --region="${_REGION}" --image="$$IMAGE" \
+          --update-env-vars="RELEASE_ID=$COMMIT_SHA,ISSUE_MEMBER_MEDIA_UPLOAD_MODE=MEMBER,ISSUE_MEDIA_AUTO_PUBLICATION_MODE=MEMBER,ISSUE_MEDIA_LOCAL_SCANNER_MODE=LOCAL,ISSUE_MEDIA_LOCAL_SCANNER_TIMEOUT_MS=30000,MODERATION_JOB_DISPATCH_ENABLED=true,MODERATION_DISPATCH_TRANSPORT=CLOUD_TASKS,MODERATION_CLOUD_TASKS_QUEUE=projects/$PROJECT_ID/locations/${_REGION}/queues/${_MODERATION_QUEUE},MODERATION_TASK_WORKER_URL=$$WORKER_URL,MODERATION_TASK_SERVICE_ACCOUNT=${_MODERATION_TASK_SERVICE_ACCOUNT}@$PROJECT_ID.iam.gserviceaccount.com,MODERATION_DISPATCH_BATCH_SIZE=${_MODERATION_DISPATCH_BATCH_SIZE}" \
+          --quiet
 
 images:
   - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_ARTIFACT_REPOSITORY}/${_IMAGE_NAME}:$COMMIT_SHA

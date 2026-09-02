@@ -1,16 +1,16 @@
-# WHICH Cloud Run moderation job
+# WHICH Cloud Run moderation job (manual fallback)
 
 ## Purpose and boundary
 
-`which-web` remains the HTTP/API service. Image OCR and moderation are a
-finite Cloud Run **Job** that runs one locked `moderation-worker once` batch
-and exits. It reuses the production image, verified Render PostgreSQL route,
-and private R2 access without starting another web server or point consumer.
+The primary production path is now the private Cloud Run moderation service
+described in [submission-publication-feedback.md](submission-publication-feedback.md).
+This finite Cloud Run **Job** remains a manual fallback that runs one locked
+`moderation-worker once` batch and exits. It reuses the same release image,
+verified Render PostgreSQL route, and private R2 access.
 
-This document prepares workload separation only. Creating the Job has no
-schedule and does not itself process a submission. Do not create a scheduler,
-execute the Job, enable provider/judge modes, or enable automatic publication
-until the explicit pilot settings and member cohort have been reviewed.
+The Job has no schedule and normal web dispatch must not target it while the
+Cloud Tasks transport is active. Do not execute the fallback concurrently with
+incident recovery unless the claimed wakeup and worker locks have been checked.
 
 ## Runtime safeguards
 

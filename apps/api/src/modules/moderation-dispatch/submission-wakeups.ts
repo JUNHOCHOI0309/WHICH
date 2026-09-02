@@ -169,7 +169,7 @@ export function createSubmissionWakeups(
     });
   }
 
-  async function claimed() {
+  async function claimed(filter?: { eventId: string; claimToken: string }) {
     if (memberIds && !memberIds.length) return [];
     return database
       .select({ event: outboxEvents })
@@ -184,32 +184,39 @@ export function createSubmissionWakeups(
           eq(outboxEvents.status, "PENDING"),
           isNotNull(outboxEvents.claimToken),
           gt(outboxEvents.availableAt, now()),
+          filter ? eq(outboxEvents.id, filter.eventId) : undefined,
+          filter ? eq(outboxEvents.claimToken, filter.claimToken) : undefined,
           memberIds ? inArray(memberIssueSubmissions.memberId, memberIds) : undefined,
         ),
       )
       .then((rows) => rows.map((r) => r.event));
   }
 
-  async function dispatch(startJob: () => Promise<void>) {
+  async function dispatch(
+    startJob: (events: Wakeup[]) => Promise<unknown>,
+    options: { limit?: number; singleFlight?: boolean } = {},
+  ) {
     if (memberIds && !memberIds.length) return { status: "DISABLED" };
     const events = await database.transaction(async (tx) => {
       // Serialize dispatchers across web revisions without holding a DB connection over HTTP.
       await tx.execute(
         sql`select pg_advisory_xact_lock(hashtextextended('which:moderation-wakeup-dispatch:v1', 0))`,
       );
-      const [active] = await tx
-        .select({ id: outboxEvents.id })
-        .from(outboxEvents)
-        .where(
-          and(
-            eq(outboxEvents.eventType, SUBMISSION_WAKEUP),
-            eq(outboxEvents.status, "PENDING"),
-            isNotNull(outboxEvents.claimToken),
-            gt(outboxEvents.availableAt, now()),
-          ),
-        )
-        .limit(1);
-      if (active) return [];
+      if (options.singleFlight !== false) {
+        const [active] = await tx
+          .select({ id: outboxEvents.id })
+          .from(outboxEvents)
+          .where(
+            and(
+              eq(outboxEvents.eventType, SUBMISSION_WAKEUP),
+              eq(outboxEvents.status, "PENDING"),
+              isNotNull(outboxEvents.claimToken),
+              gt(outboxEvents.availableAt, now()),
+            ),
+          )
+          .limit(1);
+        if (active) return [];
+      }
       const candidates = await tx
         .select({ event: outboxEvents })
         .from(outboxEvents)
@@ -226,7 +233,8 @@ export function createSubmissionWakeups(
           ),
         )
         .orderBy(asc(outboxEvents.occurredAt))
-        .limit(2);
+        .limit(Math.min(100, Math.max(1, options.limit ?? 2)))
+        .for("update", { skipLocked: true });
       if (!candidates.length) return [];
       return tx
         .update(outboxEvents)
@@ -264,7 +272,7 @@ export function createSubmissionWakeups(
     }
     if (!live.length) return { status: "SETTLED" };
     try {
-      await startJob();
+      await startJob(live);
       return { status: "STARTED", count: live.length };
     } catch {
       // An HTTP timeout can mean the Job was accepted. Keep the lease; never launch
