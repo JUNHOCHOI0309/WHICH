@@ -745,6 +745,28 @@ function mapCommentTree(
   });
 }
 
+function removeOrTombstoneComment(comments: PublicComment[], commentId: string): PublicComment[] {
+  return comments.flatMap((comment) => {
+    if (comment.id === commentId) {
+      if ((comment.replies ?? []).length === 0) return [];
+      return [
+        {
+          ...comment,
+          body: "[작성자가 삭제한 댓글]",
+          visibility: "REMOVED_BY_AUTHOR" as const,
+          author: { displayName: "", avatarUrl: null },
+          reactions: { helpfulCount: 0, dislikeCount: 0, viewerReaction: null },
+          reports: { viewerReported: false, canReport: false },
+          permissions: { canEdit: false, canDelete: false },
+        },
+      ];
+    }
+    const replies = removeOrTombstoneComment(comment.replies ?? [], commentId);
+    if (comment.visibility === "REMOVED_BY_AUTHOR" && replies.length === 0) return [];
+    return [{ ...comment, replies }];
+  });
+}
+
 function removeFromCommentTree(comments: PublicComment[], commentId: string): PublicComment[] {
   return comments
     .filter((comment) => comment.id !== commentId)
@@ -796,6 +818,16 @@ function CommentAuthorHeader({ comment }: { comment: PublicComment }) {
         )}
       </span>
       <strong>{comment.author.displayName}</strong>
+      {comment.author.isManager ? (
+        <Image
+          className={styles.managerBadge}
+          src="/icons/which-icon-192.png"
+          alt="WHICH 관리자"
+          title="WHICH 관리자"
+          width={22}
+          height={22}
+        />
+      ) : null}
       <time dateTime={comment.createdAt}>{relativeCommentTime(comment.createdAt)}</time>
       <span className={styles.commentChoice} aria-label={`${comment.choice} 선택`}>
         {comment.choice}
@@ -1215,13 +1247,12 @@ function CommentSection({
     setCommentMutationError(null);
     try {
       await deleteMemberComment(commentId);
-      const removedCount = removedCommentCount(items, commentId);
       setItems((current) => {
-        const next = removeFromCommentTree(current, commentId);
+        const next = removeOrTombstoneComment(current, commentId);
         if (next.length === 0) setState("empty");
         return next;
       });
-      setTotalCount((current) => Math.max(0, current - removedCount));
+      setTotalCount((current) => Math.max(0, current - 1));
       setDeleteConfirmId(null);
       setEditDraft(null);
       toast.success("댓글을 삭제했어요.");
@@ -1320,6 +1351,7 @@ function CommentSection({
 
   const renderReply = (reply: PublicComment, depth = 1) => {
     const isCollapsed = reply.visibility === "COLLAPSED";
+    const isRemoved = reply.visibility === "REMOVED_BY_AUTHOR";
     const isExpanded = expandedCollapsedIds.has(reply.id);
     const replies = reply.replies ?? [];
     const reportState = reply.reports ?? { viewerReported: false, canReport: true };
@@ -1330,11 +1362,15 @@ function CommentSection({
     return (
       <article
         key={reply.id}
-        className={`${styles.commentReply} ${styles[`comment${reply.choice}`]}`}
+        className={`${styles.commentReply} ${styles[`comment${reply.choice}`]} ${
+          isRemoved ? styles.commentRemoved : ""
+        }`}
         data-depth={depth}
       >
-        <CommentAuthorHeader comment={reply} />
-        {isEditing ? (
+        {!isRemoved ? <CommentAuthorHeader comment={reply} /> : null}
+        {isRemoved ? (
+          <p className={styles.commentRemovedBody}>작성자가 삭제한 댓글입니다.</p>
+        ) : isEditing ? (
           <form
             className={styles.commentEditForm}
             onSubmit={(event) => {
@@ -1459,7 +1495,7 @@ function CommentSection({
             ) : null}
           </div>
         </footer>
-        {deleteConfirmId === reply.id ? (
+        {!isRemoved && deleteConfirmId === reply.id ? (
           <div className={styles.commentDeleteConfirm} role="alert">
             <p>이 답글을 삭제할까요?</p>
             <div>
@@ -1479,7 +1515,7 @@ function CommentSection({
         {commentMutationError?.commentId === reply.id ? (
           <p className={styles.commentMutationError}>{commentMutationError.message}</p>
         ) : null}
-        {replyDraft?.parentCommentId === reply.id ? (
+        {!isRemoved && replyDraft?.parentCommentId === reply.id ? (
           <form
             className={styles.replyComposer}
             onSubmit={(event) => {
@@ -1513,7 +1549,7 @@ function CommentSection({
             </div>
           </form>
         ) : null}
-        {reportDraft?.commentId === reply.id ? (
+        {!isRemoved && reportDraft?.commentId === reply.id ? (
           <form
             className={styles.reportForm}
             onSubmit={(event) => {
@@ -1705,6 +1741,7 @@ function CommentSection({
         <div className={styles.commentList}>
           {items.map((comment) => {
             const isCollapsed = comment.visibility === "COLLAPSED";
+            const isRemoved = comment.visibility === "REMOVED_BY_AUTHOR";
             const reactions = comment.reactions ?? {
               helpfulCount: 0,
               dislikeCount: 0,
@@ -1725,10 +1762,12 @@ function CommentSection({
                 key={comment.id}
                 className={`${styles.commentCard} ${styles[`comment${comment.choice}`]} ${
                   isCollapsed ? styles.commentCollapsed : ""
-                }`}
+                } ${isRemoved ? styles.commentRemoved : ""}`}
               >
-                <CommentAuthorHeader comment={comment} />
-                {isEditing ? (
+                {!isRemoved ? <CommentAuthorHeader comment={comment} /> : null}
+                {isRemoved ? (
+                  <p className={styles.commentRemovedBody}>작성자가 삭제한 댓글입니다.</p>
+                ) : isEditing ? (
                   <form
                     className={styles.commentEditForm}
                     onSubmit={(event) => {
@@ -1873,7 +1912,7 @@ function CommentSection({
                     ) : null}
                   </div>
                 </footer>
-                {deleteConfirmId === comment.id ? (
+                {!isRemoved && deleteConfirmId === comment.id ? (
                   <div className={styles.commentDeleteConfirm} role="alert">
                     <p>이 댓글을 삭제할까요? 삭제한 내용은 다시 표시되지 않아요.</p>
                     <div>
@@ -1897,7 +1936,7 @@ function CommentSection({
                 {commentMutationError?.commentId === comment.id ? (
                   <p className={styles.commentMutationError}>{commentMutationError.message}</p>
                 ) : null}
-                {replyDraft?.parentCommentId === comment.id ? (
+                {!isRemoved && replyDraft?.parentCommentId === comment.id ? (
                   <form
                     className={styles.replyComposer}
                     onSubmit={(event) => {
@@ -1931,7 +1970,7 @@ function CommentSection({
                     </div>
                   </form>
                 ) : null}
-                {reportDraft?.commentId === comment.id ? (
+                {!isRemoved && reportDraft?.commentId === comment.id ? (
                   <form
                     className={styles.reportForm}
                     onSubmit={(event) => {

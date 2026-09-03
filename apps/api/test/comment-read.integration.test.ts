@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 
+import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { buildApp } from "../src/app.js";
@@ -11,6 +12,8 @@ import {
   issueChoices,
   issues,
   issueVersions,
+  members,
+  operatorAccessGrants,
   voterSubjects,
   voteAttempts,
   votes,
@@ -107,6 +110,8 @@ async function createComment(command: {
   integrityState?: "NORMAL" | "REVIEW";
   threadState?: "OPEN" | "LOCKED";
   deletedAt?: Date;
+  parentCommentId?: string;
+  threadRootCommentId?: string;
 }) {
   const author = await createAcceptedVote({ issueId: command.issueId, choiceId: command.choiceId });
   const id = randomUUID();
@@ -124,6 +129,8 @@ async function createComment(command: {
     integrityState: command.integrityState ?? "NORMAL",
     threadState: command.threadState ?? "OPEN",
     deletedAt: command.deletedAt,
+    parentCommentId: command.parentCommentId,
+    threadRootCommentId: command.threadRootCommentId,
     createdAt: command.createdAt,
   });
   return id;
@@ -145,6 +152,29 @@ async function addHelpfulReactions(commentId: string, total: number) {
       active: true,
     });
   }
+}
+
+async function grantCommentAuthorOperatorAccess(commentId: string) {
+  const memberId = randomUUID();
+  await database.db.insert(members).values({
+    id: memberId,
+    displayName: "운영자",
+  });
+  const [author] = await database.db
+    .select({ subjectId: voterSubjects.id })
+    .from(comments)
+    .innerJoin(voterSubjects, eq(voterSubjects.id, comments.authorSubjectId))
+    .where(eq(comments.id, commentId))
+    .limit(1);
+  if (!author) throw new Error("Comment author is missing.");
+  await database.db
+    .update(voterSubjects)
+    .set({ kind: "MEMBER", userId: memberId, anonymousSubjectId: null })
+    .where(eq(voterSubjects.id, author.subjectId));
+  await database.db.insert(operatorAccessGrants).values({
+    memberId,
+    grantedBy: "comment-read-test",
+  });
 }
 
 beforeAll(async () => {
@@ -240,6 +270,35 @@ describe("Guest Comment read API", () => {
     }>();
     expect(sidePage.items.map((item) => item.choice)).toEqual(["A", "A"]);
     expect(sidePage.totalCount).toBe(3);
+  });
+
+  it("marks active operators as WHICH managers in public Comment authors", async () => {
+    const issue = await createIssue();
+    const reader = await createAcceptedVote({ issueId: issue.issueId, choiceId: issue.choiceAId });
+    const managerComment = await createComment({
+      issueId: issue.issueId,
+      choiceId: issue.choiceAId,
+      choice: "A",
+      body: "manager comment",
+      createdAt: new Date("2026-08-18T02:00:00.000Z"),
+    });
+    await grantCommentAuthorOperatorAccess(managerComment);
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/v1/issues/${issue.issueId}/comments`,
+      headers: { "x-anonymous-subject-id": reader.anonymousSubjectId },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      items: [
+        {
+          id: managerComment,
+          author: { displayName: "WHICH_MANAGER", isManager: true },
+        },
+      ],
+    });
   });
 
   it("sorts public Comments by helpful reactions with a stable cursor and returns the full count", async () => {
@@ -351,7 +410,7 @@ describe("Guest Comment read API", () => {
       {
         id: locked,
         choice: "A",
-        author: { displayName: "A 작성자", avatarUrl: null },
+        author: { displayName: "A 작성자", avatarUrl: null, isManager: false },
         body: "locked but public",
         visibility: "VISIBLE",
         threadState: "LOCKED",
@@ -364,6 +423,84 @@ describe("Guest Comment read API", () => {
         replies: [],
       },
     ]);
+  });
+
+  it("keeps author-removed ancestors as tombstones while visible replies remain", async () => {
+    const issue = await createIssue();
+    const reader = await createAcceptedVote({ issueId: issue.issueId, choiceId: issue.choiceAId });
+    const removedRoot = await createComment({
+      issueId: issue.issueId,
+      choiceId: issue.choiceAId,
+      choice: "A",
+      body: "[작성자가 삭제한 댓글]",
+      createdAt: new Date("2026-08-18T03:00:00.000Z"),
+      visibility: "REMOVED_BY_AUTHOR",
+      deletedAt: new Date("2026-08-18T04:00:00.000Z"),
+    });
+    const removedReply = await createComment({
+      issueId: issue.issueId,
+      choiceId: issue.choiceAId,
+      choice: "A",
+      body: "[작성자가 삭제한 댓글]",
+      createdAt: new Date("2026-08-18T03:10:00.000Z"),
+      visibility: "REMOVED_BY_AUTHOR",
+      deletedAt: new Date("2026-08-18T04:10:00.000Z"),
+      parentCommentId: removedRoot,
+      threadRootCommentId: removedRoot,
+    });
+    const visibleReply = await createComment({
+      issueId: issue.issueId,
+      choiceId: issue.choiceAId,
+      choice: "A",
+      body: "남아 있어야 하는 답글",
+      createdAt: new Date("2026-08-18T03:20:00.000Z"),
+      parentCommentId: removedReply,
+      threadRootCommentId: removedRoot,
+    });
+    await createComment({
+      issueId: issue.issueId,
+      choiceId: issue.choiceBId,
+      choice: "B",
+      body: "[작성자가 삭제한 댓글]",
+      createdAt: new Date("2026-08-18T02:00:00.000Z"),
+      visibility: "REMOVED_BY_AUTHOR",
+      deletedAt: new Date("2026-08-18T04:20:00.000Z"),
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/v1/issues/${issue.issueId}/comments`,
+      headers: { "x-anonymous-subject-id": reader.anonymousSubjectId },
+    });
+    const page = response.json<{
+      totalCount: number;
+      items: Array<{
+        id: string;
+        visibility: string;
+        author: { displayName: string; avatarUrl: string | null; isManager: boolean };
+        reports: { canReport: boolean };
+        permissions: { canEdit: boolean; canDelete: boolean };
+        replies: Array<{ id: string; visibility: string; replies: Array<{ id: string }> }>;
+      }>;
+    }>();
+
+    expect(response.statusCode).toBe(200);
+    expect(page.totalCount).toBe(1);
+    expect(page.items).toHaveLength(1);
+    expect(page.items[0]).toMatchObject({
+      id: removedRoot,
+      visibility: "REMOVED_BY_AUTHOR",
+      author: { displayName: "삭제된 댓글", avatarUrl: null, isManager: false },
+      reports: { canReport: false },
+      permissions: { canEdit: false, canDelete: false },
+      replies: [
+        {
+          id: removedReply,
+          visibility: "REMOVED_BY_AUTHOR",
+          replies: [{ id: visibleReply }],
+        },
+      ],
+    });
   });
 
   it("returns visible A/B highlights ordered by helpful reactions and recency", async () => {
