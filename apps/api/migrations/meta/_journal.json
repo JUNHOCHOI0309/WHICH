@@ -414,6 +414,13 @@
       "when": 1788362728321,
       "tag": "0058_shocking_mikhail_rasputin",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1788436200000,
+      "tag": "0059_manager_public_identity",
+      "breakpoints": true
     }
   ]
 }

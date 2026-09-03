@@ -196,9 +196,9 @@ export type CommentReportReason =
 export type PublicComment = {
   id: string;
   choice: ChoiceCode;
-  author: { displayName: string; avatarUrl?: string | null };
+  author: { displayName: string; avatarUrl?: string | null; isManager?: boolean };
   body: string;
-  visibility: "VISIBLE" | "DEPRIORITIZED" | "COLLAPSED";
+  visibility: "VISIBLE" | "DEPRIORITIZED" | "COLLAPSED" | "REMOVED_BY_AUTHOR";
   threadState: "OPEN" | "LOCKED";
   createdAt: string;
   editedAt: string | null;

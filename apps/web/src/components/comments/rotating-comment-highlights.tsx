@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
 
@@ -190,7 +191,18 @@ function HighlightCard({ side, comment }: { side: ChoiceCode; comment: PublicCom
         <>
           <p>{comment.body}</p>
           <span className={styles.author}>
-            {comment.author.displayName} · {relativeTimeLabel(comment.createdAt)}
+            <span>{comment.author.displayName}</span>
+            {comment.author.isManager ? (
+              <Image
+                className={styles.managerBadge}
+                src="/icons/which-icon-192.png"
+                alt="WHICH 관리자"
+                title="WHICH 관리자"
+                width={18}
+                height={18}
+              />
+            ) : null}
+            <span>· {relativeTimeLabel(comment.createdAt)}</span>
           </span>
         </>
       ) : (

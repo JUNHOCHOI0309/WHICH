@@ -95,6 +95,19 @@
   font-weight: 650;
 }
 
+.author {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.managerBadge {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  object-fit: contain;
+}
+
 .comment > p {
   display: -webkit-box;
   overflow: hidden;

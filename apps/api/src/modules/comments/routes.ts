@@ -13,12 +13,14 @@ const commentSchemaFields = {
   author: Type.Object({
     displayName: Type.String(),
     avatarUrl: Type.Union([Type.String({ format: "uri" }), Type.Null()]),
+    isManager: Type.Boolean(),
   }),
   body: Type.String(),
   visibility: Type.Union([
     Type.Literal("VISIBLE"),
     Type.Literal("DEPRIORITIZED"),
     Type.Literal("COLLAPSED"),
+    Type.Literal("REMOVED_BY_AUTHOR"),
   ]),
   threadState: Type.Union([Type.Literal("OPEN"), Type.Literal("LOCKED")]),
   createdAt: Type.String({ format: "date-time" }),

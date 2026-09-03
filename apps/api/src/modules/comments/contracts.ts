@@ -9,9 +9,9 @@ export type CommentReactionCode = "HELPFUL" | "DISLIKE";
 export type PublicComment = {
   id: string;
   choice: "A" | "B" | "C" | "D";
-  author: { displayName: string; avatarUrl: string | null };
+  author: { displayName: string; avatarUrl: string | null; isManager: boolean };
   body: string;
-  visibility: "VISIBLE" | "DEPRIORITIZED" | "COLLAPSED";
+  visibility: "VISIBLE" | "DEPRIORITIZED" | "COLLAPSED" | "REMOVED_BY_AUTHOR";
   threadState: "OPEN" | "LOCKED";
   createdAt: string;
   editedAt: string | null;

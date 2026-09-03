@@ -1333,7 +1333,7 @@ describe("IssueExperience", () => {
               {
                 id: "own-comment",
                 choice: "A",
-                author: { displayName: "작성자" },
+                author: { displayName: "WHICH_MANAGER", isManager: true },
                 body: "내가 쓴 댓글",
                 visibility: "VISIBLE",
                 threadState: "OPEN",
@@ -1342,6 +1342,23 @@ describe("IssueExperience", () => {
                 reactions: { helpfulCount: 0, dislikeCount: 0, viewerReaction: null },
                 reports: { viewerReported: false, canReport: false },
                 permissions: { canEdit: true, canDelete: true },
+                replies: [
+                  {
+                    id: "remaining-reply",
+                    choice: "A",
+                    author: { displayName: "답글 작성자" },
+                    body: "삭제 후에도 남는 답글",
+                    visibility: "VISIBLE",
+                    threadState: "OPEN",
+                    createdAt: "2026-08-24T08:10:00.000Z",
+                    editedAt: null,
+                    parentCommentId: "own-comment",
+                    reactions: { helpfulCount: 0, dislikeCount: 0, viewerReaction: null },
+                    reports: { viewerReported: false, canReport: true },
+                    permissions: { canEdit: false, canDelete: false },
+                    replies: [],
+                  },
+                ],
               },
             ],
             nextCursor: null,
@@ -1367,6 +1384,7 @@ describe("IssueExperience", () => {
 
     render(<IssueExperience issueId={ISSUE_ID} />);
     expect(await screen.findByText("내가 쓴 댓글")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "WHICH 관리자" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "수정" }));
     const editor = screen.getByRole("textbox", { name: "댓글 수정 내용" });
@@ -1385,6 +1403,8 @@ describe("IssueExperience", () => {
 
     expect(await screen.findByText("댓글을 삭제했어요.")).toBeInTheDocument();
     expect(screen.queryByText("수정된 내 댓글")).not.toBeInTheDocument();
+    expect(screen.getByText("작성자가 삭제한 댓글입니다.")).toBeInTheDocument();
+    expect(screen.getByText("삭제 후에도 남는 답글")).toBeInTheDocument();
     expect(mutationMethods).toEqual(["PATCH", "DELETE"]);
   });
 

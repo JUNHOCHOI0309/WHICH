@@ -6,8 +6,10 @@ import {
   count,
   desc,
   eq,
+  exists,
   gt,
   inArray,
+  isNotNull,
   isNull,
   lt,
   or,
@@ -15,6 +17,7 @@ import {
   sum,
   type SQL,
 } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 
 import type { Database } from "../../database/client.js";
 import {
@@ -31,6 +34,7 @@ import {
   issues,
   memberSessions,
   members,
+  operatorAccessGrants,
   outboxEvents,
   voterSubjects,
   votes,
@@ -165,11 +169,16 @@ function toPublicComment(
   permissions: PublicComment["permissions"] = { canEdit: false, canDelete: false },
   replies: PublicComment[] = [],
   authorAvatarUrl: string | null = null,
+  authorIsManager = false,
 ): PublicComment {
   return {
     id: row.id,
     choice: row.choice,
-    author: { displayName: row.authorDisplayName, avatarUrl: authorAvatarUrl },
+    author: {
+      displayName: authorIsManager ? "WHICH_MANAGER" : row.authorDisplayName,
+      avatarUrl: authorAvatarUrl,
+      isManager: authorIsManager,
+    },
     body: row.body,
     visibility: row.visibility as PublicComment["visibility"],
     threadState: row.threadState,
@@ -457,17 +466,55 @@ export function createCommentService(database: Database["db"]): CommentService {
           );
         }
 
+        const visibleCommentState = and(
+          view === "HIGHLIGHT"
+            ? eq(comments.visibility, "VISIBLE")
+            : inArray(comments.visibility, ["VISIBLE", "DEPRIORITIZED", "COLLAPSED"]),
+          isNull(comments.deletedAt),
+        )!;
         const publicCommentFilters: SQL[] = [
           eq(comments.issueId, query.issueId),
           eq(comments.issueVersion, acceptedVote.issueVersion),
           eq(comments.publicationState, "PUBLISHED"),
-          view === "HIGHLIGHT"
-            ? eq(comments.visibility, "VISIBLE")
-            : inArray(comments.visibility, ["VISIBLE", "DEPRIORITIZED", "COLLAPSED"]),
+          visibleCommentState,
           eq(comments.integrityState, "NORMAL"),
-          isNull(comments.deletedAt),
         ];
-        const filters: SQL[] = [...publicCommentFilters, isNull(comments.parentCommentId)];
+        const descendantComments = alias(comments, "descendant_comments");
+        const hasVisibleDescendant = exists(
+          transaction
+            .select({ id: descendantComments.id })
+            .from(descendantComments)
+            .where(
+              and(
+                eq(descendantComments.threadRootCommentId, comments.id),
+                eq(descendantComments.publicationState, "PUBLISHED"),
+                view === "HIGHLIGHT"
+                  ? eq(descendantComments.visibility, "VISIBLE")
+                  : inArray(descendantComments.visibility, [
+                      "VISIBLE",
+                      "DEPRIORITIZED",
+                      "COLLAPSED",
+                    ]),
+                eq(descendantComments.integrityState, "NORMAL"),
+                isNull(descendantComments.deletedAt),
+              ),
+            ),
+        );
+        const filters: SQL[] = [
+          eq(comments.issueId, query.issueId),
+          eq(comments.issueVersion, acceptedVote.issueVersion),
+          eq(comments.publicationState, "PUBLISHED"),
+          eq(comments.integrityState, "NORMAL"),
+          isNull(comments.parentCommentId),
+          or(
+            visibleCommentState,
+            and(
+              eq(comments.visibility, "REMOVED_BY_AUTHOR"),
+              isNotNull(comments.deletedAt),
+              hasVisibleDescendant,
+            ),
+          )!,
+        ];
 
         const [commentTotal] = await transaction
           .select({ total: count() })
@@ -530,9 +577,17 @@ export function createCommentService(database: Database["db"]): CommentService {
                   and(
                     inArray(comments.threadRootCommentId, rootCommentIds),
                     eq(comments.publicationState, "PUBLISHED"),
-                    inArray(comments.visibility, ["VISIBLE", "DEPRIORITIZED", "COLLAPSED"]),
+                    or(
+                      and(
+                        inArray(comments.visibility, ["VISIBLE", "DEPRIORITIZED", "COLLAPSED"]),
+                        isNull(comments.deletedAt),
+                      ),
+                      and(
+                        eq(comments.visibility, "REMOVED_BY_AUTHOR"),
+                        isNotNull(comments.deletedAt),
+                      ),
+                    ),
                     eq(comments.integrityState, "NORMAL"),
-                    isNull(comments.deletedAt),
                   ),
                 )
                 .orderBy(asc(comments.createdAt), asc(comments.id));
@@ -544,9 +599,20 @@ export function createCommentService(database: Database["db"]): CommentService {
           authorSubjectIds.length === 0
             ? []
             : await transaction
-                .select({ subjectId: voterSubjects.id, avatarUrl: members.avatarUrl })
+                .select({
+                  subjectId: voterSubjects.id,
+                  avatarUrl: members.avatarUrl,
+                  operatorGrantId: operatorAccessGrants.id,
+                })
                 .from(voterSubjects)
                 .leftJoin(members, eq(voterSubjects.userId, members.id))
+                .leftJoin(
+                  operatorAccessGrants,
+                  and(
+                    eq(operatorAccessGrants.memberId, members.id),
+                    isNull(operatorAccessGrants.revokedAt),
+                  ),
+                )
                 .where(inArray(voterSubjects.id, authorSubjectIds));
         const reactionCounts =
           commentIds.length === 0
@@ -604,27 +670,46 @@ export function createCommentService(database: Database["db"]): CommentService {
         const avatarBySubject = new Map(
           authorProfiles.map((profile) => [profile.subjectId, profile.avatarUrl]),
         );
+        const managerSubjectIds = new Set(
+          authorProfiles
+            .filter((profile) => profile.operatorGrantId !== null)
+            .map((profile) => profile.subjectId),
+        );
 
         const materialize = (row: typeof comments.$inferSelect, replies: PublicComment[] = []) => {
+          const removedByAuthor = row.visibility === "REMOVED_BY_AUTHOR" && row.deletedAt !== null;
           const viewerReported = reportedCommentIds.has(row.id);
-          return toPublicComment(
+          const comment = toPublicComment(
             row,
-            {
-              helpfulCount: countByComment.get(`${row.id}:HELPFUL`) ?? 0,
-              dislikeCount: countByComment.get(`${row.id}:DISLIKE`) ?? 0,
-              viewerReaction: viewerReactionByComment.get(row.id) ?? null,
-            },
-            {
-              viewerReported,
-              canReport: row.authorSubjectId !== viewerSubjectId && !viewerReported,
-            },
-            {
-              canEdit: viewerCanMutate && row.authorSubjectId === viewerSubjectId,
-              canDelete: viewerCanMutate && row.authorSubjectId === viewerSubjectId,
-            },
+            removedByAuthor
+              ? { helpfulCount: 0, dislikeCount: 0, viewerReaction: null }
+              : {
+                  helpfulCount: countByComment.get(`${row.id}:HELPFUL`) ?? 0,
+                  dislikeCount: countByComment.get(`${row.id}:DISLIKE`) ?? 0,
+                  viewerReaction: viewerReactionByComment.get(row.id) ?? null,
+                },
+            removedByAuthor
+              ? { viewerReported: false, canReport: false }
+              : {
+                  viewerReported,
+                  canReport: row.authorSubjectId !== viewerSubjectId && !viewerReported,
+                },
+            removedByAuthor
+              ? { canEdit: false, canDelete: false }
+              : {
+                  canEdit: viewerCanMutate && row.authorSubjectId === viewerSubjectId,
+                  canDelete: viewerCanMutate && row.authorSubjectId === viewerSubjectId,
+                },
             replies,
-            avatarBySubject.get(row.authorSubjectId) ?? null,
+            removedByAuthor ? null : (avatarBySubject.get(row.authorSubjectId) ?? null),
+            removedByAuthor ? false : managerSubjectIds.has(row.authorSubjectId),
           );
+          return removedByAuthor
+            ? {
+                ...comment,
+                author: { displayName: "삭제된 댓글", avatarUrl: null, isManager: false },
+              }
+            : comment;
         };
         const repliesByParent = new Map<string, Array<typeof comments.$inferSelect>>();
         for (const reply of replyRows) {
@@ -634,14 +719,18 @@ export function createCommentService(database: Database["db"]): CommentService {
           repliesByParent.set(reply.parentCommentId, siblings);
         }
 
-        const materializeTree = (row: typeof comments.$inferSelect): PublicComment =>
-          materialize(
-            row,
-            (repliesByParent.get(row.id) ?? []).map((reply) => materializeTree(reply)),
-          );
+        const materializeTree = (row: typeof comments.$inferSelect): PublicComment | null => {
+          const replies = (repliesByParent.get(row.id) ?? [])
+            .map((reply) => materializeTree(reply))
+            .filter((reply): reply is PublicComment => reply !== null);
+          if (row.visibility === "REMOVED_BY_AUTHOR" && replies.length === 0) return null;
+          return materialize(row, replies);
+        };
 
         return {
-          items: pageRows.map((row) => materializeTree(row)),
+          items: pageRows
+            .map((row) => materializeTree(row))
+            .filter((comment): comment is PublicComment => comment !== null),
           totalCount: commentTotal?.total ?? 0,
           nextCursor:
             view !== "HIGHLIGHT" && hasMore && lastItem
@@ -669,9 +758,17 @@ export function createCommentService(database: Database["db"]): CommentService {
             memberId: members.id,
             displayName: members.displayName,
             avatarUrl: members.avatarUrl,
+            operatorGrantId: operatorAccessGrants.id,
           })
           .from(memberSessions)
           .innerJoin(members, eq(memberSessions.memberId, members.id))
+          .leftJoin(
+            operatorAccessGrants,
+            and(
+              eq(operatorAccessGrants.memberId, members.id),
+              isNull(operatorAccessGrants.revokedAt),
+            ),
+          )
           .where(
             and(
               eq(memberSessions.tokenHash, hashToken(command.sessionToken)),
@@ -931,6 +1028,7 @@ export function createCommentService(database: Database["db"]): CommentService {
               { canEdit: true, canDelete: true },
               [],
               session.avatarUrl,
+              session.operatorGrantId !== null,
             ),
           },
         };

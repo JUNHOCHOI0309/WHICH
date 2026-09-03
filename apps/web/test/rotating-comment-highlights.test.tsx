@@ -8,7 +8,10 @@ function comment(id: string, choice: ChoiceCode, body: string): PublicComment {
   return {
     id,
     choice,
-    author: { displayName: `${choice} 작성자` },
+    author: {
+      displayName: choice === "A" ? "WHICH_MANAGER" : `${choice} 작성자`,
+      isManager: choice === "A",
+    },
     body,
     visibility: "VISIBLE",
     threadState: "OPEN",
@@ -66,6 +69,7 @@ describe("RotatingCommentHighlights", () => {
 
     expect(screen.getByText("A 첫 번째")).toBeInTheDocument();
     expect(screen.getByText("B 첫 번째")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "WHICH 관리자" })).toBeInTheDocument();
 
     act(() => vi.advanceTimersByTime(6_000));
     expect(screen.getByText("A 두 번째")).toBeInTheDocument();
