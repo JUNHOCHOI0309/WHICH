@@ -214,6 +214,7 @@ export type OpsEditorialCandidate = {
   sources: Array<{ id: string; kind: "FACT" | "COMMUNITY"; title?: string; url?: string }>;
   automatedReviewStatus: string;
   decision: OpsEditorialDecision | null;
+  publication: { issueId: string; version: number; publishedAt: string } | null;
 };
 
 export type OpsEditorialPage = {

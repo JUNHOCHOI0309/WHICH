@@ -229,8 +229,12 @@ export class EditorialReviewConsole {
       choices: issue.choices,
       category: issue.primaryCategoryCode,
       interestCardCodes: issue.interestCardCodes,
+      experienceModeCode: issue.experienceModeCode,
+      taxonomyVersion: issue.taxonomyVersion,
       editorialArea: issue.editorialArea,
       riskLevel: issue.riskLevel,
+      isPolitical: issue.isPolitical,
+      contentHash: issue.contentHash,
       inventoryScope: scopeForCandidate(this.documents.inventory, issue.candidateId),
       sourceProfile: issue.sourceProfile,
       sources: [

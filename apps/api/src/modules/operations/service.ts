@@ -28,13 +28,20 @@ import {
   outboxEvents,
 } from "../../database/schema/index.js";
 import { defaultReviewConsolePaths } from "../../editorial-review-console.js";
+import { computeManifestDigest } from "../issue-publication/content-hash.js";
 import { loadIssueInventoryReadiness } from "../issue-publication/inventory.js";
+import { parseIssueManifest } from "../issue-publication/manifest.js";
 import { EditorialReviewConsole } from "../issue-publication/review-console.js";
+import {
+  IssuePublicationConflictError,
+  publishIssueManifest,
+} from "../issue-publication/service.js";
 import { evaluateMemberIssueAccessSignals } from "../issues/member-issue-access.js";
 import { sealIssueVersionSnapshot } from "../content-revisions/service.js";
 import { createModerationSubmissionEvents } from "../moderation-dispatch/contracts.js";
 
 import {
+  OpsEditorialPublicationError,
   OpsPublishedIssueConflictError,
   OpsReviewConflictError,
   OpsReviewValidationError,
@@ -173,6 +180,7 @@ type OpsManagementMethods = Pick<
   | "readReportedMembers"
   | "readEditorial"
   | "saveEditorialDecision"
+  | "publishEditorialCandidate"
   | "attachEditorialCandidateMedia"
   | "detachEditorialCandidateMedia"
   | "readPublishedIssues"
@@ -530,6 +538,44 @@ function createOpsManagementMethods(
     return result.rows.map(mapPublishedIssue);
   }
 
+  async function editorialCandidatePublication(candidate: {
+    id: string;
+    version: number;
+  }): Promise<{
+    issueId: string;
+    version: number;
+    contentHash: string;
+    publishedAt: string;
+  } | null> {
+    const [row] = await database
+      .select({
+        issueId: issueVersions.issueId,
+        version: issueVersions.version,
+        contentHash: issueVersions.contentHash,
+        publishedAt: issueVersions.publishedAt,
+      })
+      .from(issueVersions)
+      .where(
+        and(eq(issueVersions.issueId, candidate.id), eq(issueVersions.version, candidate.version)),
+      )
+      .limit(1);
+    if (!row?.publishedAt) return null;
+    return {
+      issueId: row.issueId,
+      version: row.version,
+      contentHash: row.contentHash,
+      publishedAt: row.publishedAt.toISOString(),
+    };
+  }
+
+  async function assertEditorialCandidateIsUnpublished(candidate: { id: string; version: number }) {
+    if (await editorialCandidatePublication(candidate)) {
+      throw new OpsEditorialPublicationError(
+        "이미 게시된 질문은 검수 결정이나 선택지 이미지를 변경할 수 없습니다.",
+      );
+    }
+  }
+
   return {
     async readMembers(input): Promise<OpsMemberPage | null> {
       const actor = await operator(input.memberId);
@@ -815,6 +861,19 @@ function createOpsManagementMethods(
             eq(issueMediaAssets.id, operatorEditorialCandidateMedia.mediaAssetId),
           )
           .where(eq(operatorEditorialCandidateMedia.catalogId, state.catalog.id));
+        const publicationRows = await database
+          .select({
+            issueId: issueVersions.issueId,
+            version: issueVersions.version,
+            publishedAt: issueVersions.publishedAt,
+          })
+          .from(issueVersions)
+          .where(
+            inArray(
+              issueVersions.issueId,
+              state.candidates.map((candidate) => candidate.id),
+            ),
+          );
         const storedByCandidate = new Map(
           storedRows.map((row) => [row.candidateId, mapDecision(row)]),
         );
@@ -829,6 +888,22 @@ function createOpsManagementMethods(
               cropMode: row.cropMode as OpsEditorialCandidateMedia["cropMode"],
             },
           ]),
+        );
+        const publicationByIssueVersion = new Map(
+          publicationRows.flatMap((row) =>
+            row.publishedAt
+              ? [
+                  [
+                    `${row.issueId}:${row.version}`,
+                    {
+                      issueId: row.issueId,
+                      version: row.version,
+                      publishedAt: row.publishedAt.toISOString(),
+                    },
+                  ] as const,
+                ]
+              : [],
+          ),
         );
         const all = state.candidates
           .map((candidate) => {
@@ -868,6 +943,8 @@ function createOpsManagementMethods(
               })),
               automatedReviewStatus: candidate.automatedReview.status,
               decision,
+              publication:
+                publicationByIssueVersion.get(`${candidate.id}:${candidate.version}`) ?? null,
             };
           })
           .sort((left, right) => left.candidateId.localeCompare(right.candidateId));
@@ -943,6 +1020,7 @@ function createOpsManagementMethods(
         (candidate) => candidate.candidateId === input.candidateId,
       );
       if (!baselineCandidate) throw new Error("The Editorial candidate does not exist.");
+      await assertEditorialCandidateIsUnpublished(baselineCandidate);
       if (input.status === "APPROVED" && Object.values(input.checks).some((value) => !value)) {
         throw new Error("승인하려면 네 가지 편집 검수 항목을 모두 확인해야 합니다.");
       }
@@ -1083,6 +1161,211 @@ function createOpsManagementMethods(
       }
     },
 
+    async publishEditorialCandidate(input): Promise<OpsPublishedIssue | null> {
+      const actor = await operator(input.memberId);
+      if (!actor) {
+        await audit({
+          memberId: input.memberId,
+          eventType: "OPS_EDITORIAL_CANDIDATE_PUBLISH",
+          outcome: "DENIED",
+          requestId: input.requestId,
+          metadata: { candidateId: input.candidateId, reason: "OPERATOR_ROLE_REQUIRED" },
+        });
+        return null;
+      }
+
+      const state = await editorialReviewState();
+      const candidate = state.candidates.find((item) => item.candidateId === input.candidateId);
+      if (!candidate) {
+        throw new OpsEditorialPublicationError("게시할 Editorial 후보를 찾을 수 없습니다.");
+      }
+
+      const existing = await editorialCandidatePublication(candidate);
+      if (existing) {
+        if (existing.contentHash !== candidate.contentHash) {
+          throw new OpsEditorialPublicationError(
+            "같은 질문 버전에 다른 내용이 이미 게시되어 있어 자동으로 덮어쓸 수 없습니다.",
+          );
+        }
+        const [published] = await publishedIssueRows({ issueId: candidate.id, limit: 1 });
+        if (!published) {
+          throw new OpsEditorialPublicationError("게시된 질문을 운영 목록에서 찾을 수 없습니다.");
+        }
+        await audit({
+          memberId: input.memberId,
+          eventType: "OPS_EDITORIAL_CANDIDATE_PUBLISH",
+          outcome: "SUCCEEDED",
+          requestId: input.requestId,
+          metadata: {
+            catalogId: state.catalog.id,
+            candidateId: candidate.candidateId,
+            issueId: candidate.id,
+            issueVersion: candidate.version,
+            created: false,
+          },
+        });
+        return published;
+      }
+
+      const [storedDecision] = await database
+        .select({
+          status: operatorEditorialDecisions.status,
+          note: operatorEditorialDecisions.note,
+          reviewedBy: members.displayName,
+          reviewedAt: operatorEditorialDecisions.reviewedAt,
+          revision: operatorEditorialDecisions.revision,
+          binaryFit: operatorEditorialDecisions.binaryFit,
+          choiceParity: operatorEditorialDecisions.choiceParity,
+          duplicateReview: operatorEditorialDecisions.duplicateReview,
+          sourceReview: operatorEditorialDecisions.sourceReview,
+        })
+        .from(operatorEditorialDecisions)
+        .innerJoin(members, eq(members.id, operatorEditorialDecisions.reviewedByMemberId))
+        .where(
+          and(
+            eq(operatorEditorialDecisions.catalogId, state.catalog.id),
+            eq(operatorEditorialDecisions.candidateId, input.candidateId),
+          ),
+        )
+        .limit(1);
+      const baselineDecision: OpsEditorialDecision | null = candidate.decision
+        ? { ...candidate.decision, revision: 0 }
+        : null;
+      const decision = storedDecision ? mapDecision(storedDecision) : baselineDecision;
+      if ((decision?.revision ?? 0) !== input.expectedRevision) {
+        throw new OpsReviewConflictError(decision);
+      }
+      if (
+        decision?.status !== "APPROVED" ||
+        Object.values(decision.checks).some((checked) => !checked)
+      ) {
+        throw new OpsEditorialPublicationError(
+          "네 가지 검수를 모두 통과해 인가된 후보만 게시할 수 있습니다.",
+        );
+      }
+      if (candidate.riskLevel !== "LOW" || candidate.isPolitical) {
+        throw new OpsEditorialPublicationError(
+          "LOW·비정치 후보만 이 게시 경로를 사용할 수 있습니다.",
+        );
+      }
+
+      const factSourceUrls = candidate.sourceProfile.factSourceIds.map((sourceId) => {
+        const source = candidate.sources.find(
+          (item) => item.kind === "FACT" && item.id === sourceId,
+        );
+        if (!source?.url) {
+          throw new OpsEditorialPublicationError(`사실 출처 ${sourceId}의 URL을 찾을 수 없습니다.`);
+        }
+        return source.url;
+      });
+      if (candidate.sourceProfile.sourceRequirement === "SOURCE_REQUIRED") {
+        const today = new Date().toISOString().slice(0, 10);
+        if (!candidate.sourceProfile.reviewAfter || candidate.sourceProfile.reviewAfter <= today) {
+          throw new OpsEditorialPublicationError("출처 재검토 기한이 지나 다시 검수해야 합니다.");
+        }
+        if (!candidate.sourceProfile.expiresAt || candidate.sourceProfile.expiresAt <= today) {
+          throw new OpsEditorialPublicationError("출처 유효 기간이 지나 게시할 수 없습니다.");
+        }
+      }
+
+      // Keep an immediate publication visible even when the app and database clocks differ slightly.
+      const publicationAt = new Date(Date.now() - 1_000).toISOString();
+      const manifest = parseIssueManifest({
+        schemaVersion: 1,
+        packId: `ops-${candidate.candidateId.toLowerCase()}-v${candidate.version}`,
+        target: "production",
+        taxonomyVersion: candidate.taxonomyVersion,
+        approval: {
+          status: "APPROVED",
+          approvedBy: decision.reviewedBy,
+          approvedAt: decision.reviewedAt,
+        },
+        issues: [
+          {
+            id: candidate.id,
+            version: candidate.version,
+            question: candidate.question,
+            context: candidate.context,
+            choices: candidate.choices,
+            primaryCategoryCode: candidate.category,
+            interestCardCodes: candidate.interestCardCodes,
+            experienceModeCode: candidate.experienceModeCode,
+            taxonomyVersion: candidate.taxonomyVersion,
+            riskLevel: "LOW",
+            isPolitical: false,
+            lifecycle: "PUBLISHED",
+            visibility: "VISIBLE",
+            participation: "VOTING_OPEN",
+            resultVisibility: "PRE_VOTE_HIDDEN",
+            feedEligibility: "ELIGIBLE",
+            publishedAt: publicationAt,
+            voteOpenAt: publicationAt,
+            contentHash: candidate.contentHash,
+            editorialReview: {
+              status: "PASSED",
+              reviewedBy: decision.reviewedBy,
+              reviewedAt: decision.reviewedAt,
+              evergreen: candidate.sourceProfile.evergreen,
+              sourceRequirement:
+                candidate.sourceProfile.sourceRequirement === "SOURCE_REQUIRED"
+                  ? "SOURCE_REQUIRED"
+                  : "NOT_REQUIRED_SUBJECTIVE",
+              sourceUrls: factSourceUrls,
+              choiceParity: "PASSED",
+              duplicateReview: "PASSED",
+            },
+          },
+        ],
+      });
+      const manifestDigest = computeManifestDigest(JSON.stringify(manifest));
+
+      try {
+        const result = await publishIssueManifest(database, manifest, manifestDigest);
+        const [published] = await publishedIssueRows({ issueId: candidate.id, limit: 1 });
+        if (!published) {
+          throw new OpsEditorialPublicationError("게시 완료 후 운영 질문을 다시 읽지 못했습니다.");
+        }
+        await audit({
+          memberId: input.memberId,
+          eventType: "OPS_EDITORIAL_CANDIDATE_PUBLISH",
+          outcome: "SUCCEEDED",
+          requestId: input.requestId,
+          metadata: {
+            catalogId: state.catalog.id,
+            candidateId: candidate.candidateId,
+            issueId: candidate.id,
+            issueVersion: candidate.version,
+            created: result.created === 1,
+          },
+        });
+        return published;
+      } catch (error) {
+        if (error instanceof IssuePublicationConflictError) {
+          const concurrent = await editorialCandidatePublication(candidate);
+          if (concurrent?.contentHash === candidate.contentHash) {
+            const [published] = await publishedIssueRows({ issueId: candidate.id, limit: 1 });
+            if (published) return published;
+          }
+          const reasons = error.plan.issues.flatMap((item) => item.reasons);
+          throw new OpsEditorialPublicationError(
+            reasons[0] ?? "기존 게시 데이터와 충돌해 질문을 게시하지 못했습니다.",
+          );
+        }
+        await audit({
+          memberId: input.memberId,
+          eventType: "OPS_EDITORIAL_CANDIDATE_PUBLISH",
+          outcome: "FAILED",
+          requestId: input.requestId,
+          metadata: {
+            catalogId: state.catalog.id,
+            candidateId: candidate.candidateId,
+            reason: error instanceof Error ? error.name : "UNKNOWN",
+          },
+        }).catch(() => undefined);
+        throw error;
+      }
+    },
+
     async attachEditorialCandidateMedia(input): Promise<OpsEditorialCandidateMedia | null> {
       const actor = await operator(input.memberId);
       if (!actor) {
@@ -1098,6 +1381,7 @@ function createOpsManagementMethods(
       const state = await editorialReviewState();
       const candidate = state.candidates.find((item) => item.candidateId === input.candidateId);
       if (!candidate) throw new OpsReviewValidationError("The Editorial candidate does not exist.");
+      await assertEditorialCandidateIsUnpublished(candidate);
       const targetChoice = candidate.choices.find((choice) => choice.code === input.choiceCode);
       if (!targetChoice) {
         throw new OpsReviewValidationError("The Editorial candidate choice does not exist.");
@@ -1187,6 +1471,7 @@ function createOpsManagementMethods(
       if (!candidate?.choices.some((choice) => choice.code === input.choiceCode)) {
         throw new OpsReviewValidationError("The Editorial candidate choice does not exist.");
       }
+      await assertEditorialCandidateIsUnpublished(candidate);
       const removed = await database
         .delete(operatorEditorialCandidateMedia)
         .where(
@@ -1517,7 +1802,8 @@ function createOpsManagementMethods(
           formatMode: currentVersion.formatMode,
           mediaMode: "OPTION_IMAGES",
           taxonomyVersion: currentVersion.taxonomyVersion,
-          publishedAt: changedAt,
+          // updatedAt may be nudged forward for optimistic concurrency; publication must still be immediate.
+          publishedAt: new Date(Date.now() - 1_000),
         });
         await transaction.insert(issueChoices).values(
           nextChoices.map((choice) => ({

@@ -8,6 +8,7 @@ vi.mock("jose", () => ({
 
 import { GET as getEditorial } from "@/app/api/ops/editorial/route";
 import { PUT as putDecision } from "@/app/api/ops/editorial/[candidateId]/decision/route";
+import { POST as postEditorialPublish } from "@/app/api/ops/editorial/[candidateId]/publish/route";
 import {
   DELETE as deleteEditorialMedia,
   PUT as putEditorialMedia,
@@ -121,6 +122,35 @@ describe("operator management BFF", () => {
     );
     expect(response.status).toBe(409);
     expect(await response.json()).toMatchObject({ code: "REVISION_CONFLICT" });
+  });
+
+  it("forwards an approved candidate publication with its current revision", async () => {
+    const upstream = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      expect(String(input)).toBe(
+        "http://localhost:4000/v1/internal/ops/editorial/WEXP-0001/publish",
+      );
+      expect(init?.method).toBe("POST");
+      expect(JSON.parse(String(init?.body))).toEqual({ expectedRevision: 2 });
+      return new Response(JSON.stringify({ issue: { issueId: crypto.randomUUID(), version: 1 } }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    });
+    vi.stubGlobal("fetch", upstream);
+    const response = await postEditorialPublish(
+      new NextRequest("https://whichone.site/api/ops/editorial/WEXP-0001/publish", {
+        method: "POST",
+        headers: {
+          cookie: "which_member_session=member-token",
+          origin: "https://whichone.site",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ expectedRevision: 2 }),
+      }),
+      { params: Promise.resolve({ candidateId: "WEXP-0001" }) },
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
   });
 
   it("forwards candidate media linking and unlinking through the Ops boundary", async () => {
