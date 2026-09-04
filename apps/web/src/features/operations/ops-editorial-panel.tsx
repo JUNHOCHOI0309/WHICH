@@ -31,6 +31,8 @@ const checkLabels: Array<[keyof OpsEditorialDecision["checks"], string]> = [
   ["sourceReview", "요구되는 출처와 사실 확인 수준을 충족합니다."],
 ];
 
+const pageSize = 50;
+
 function selectedForm(candidate: OpsEditorialCandidate) {
   return {
     note: candidate.decision?.note ?? "",
@@ -56,6 +58,7 @@ export function OpsEditorialPanel({
   const [note, setNote] = useState("");
   const [checks, setChecks] = useState(emptyChecks);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [mediaBusy, setMediaBusy] = useState(false);
@@ -71,17 +74,26 @@ export function OpsEditorialPanel({
     setFeedback(null);
   }, []);
 
+  const requestPage = useCallback(
+    async (cursor?: string | null) => {
+      const params = new URLSearchParams({ limit: String(pageSize) });
+      if (status) params.set("status", status);
+      if (scope) params.set("scope", scope);
+      if (submittedQuery) params.set("q", submittedQuery);
+      if (cursor) params.set("cursor", cursor);
+      const response = await fetch(`/api/ops/editorial?${params}`, { cache: "no-store" });
+      const body = (await response.json()) as OpsEditorialPage & { message?: string };
+      if (!response.ok) throw new Error(body.message || "Issue 후보를 불러오지 못했습니다.");
+      return body;
+    },
+    [scope, status, submittedQuery],
+  );
+
   const load = useCallback(async () => {
     setLoading(true);
     setFeedback(null);
     try {
-      const params = new URLSearchParams({ limit: "50" });
-      if (status) params.set("status", status);
-      if (scope) params.set("scope", scope);
-      if (submittedQuery) params.set("q", submittedQuery);
-      const response = await fetch(`/api/ops/editorial?${params}`, { cache: "no-store" });
-      const body = (await response.json()) as OpsEditorialPage & { message?: string };
-      if (!response.ok) throw new Error(body.message || "Issue 후보를 불러오지 못했습니다.");
+      const body = await requestPage();
       setPage(body);
       const nextSelected = body.items[0] ?? null;
       if (nextSelected) choose(nextSelected);
@@ -94,7 +106,32 @@ export function OpsEditorialPanel({
     } finally {
       setLoading(false);
     }
-  }, [choose, scope, status, submittedQuery]);
+  }, [choose, requestPage]);
+
+  async function loadMore() {
+    if (!page?.nextCursor || loadingMore) return;
+    setLoadingMore(true);
+    setFeedback(null);
+    try {
+      const body = await requestPage(page.nextCursor);
+      setPage((current) => {
+        if (!current) return body;
+        const loaded = new Set(current.items.map((item) => item.candidateId));
+        return {
+          ...body,
+          items: [...current.items, ...body.items.filter((item) => !loaded.has(item.candidateId))],
+        };
+      });
+    } catch (caught) {
+      setFeedback({
+        message:
+          caught instanceof Error ? caught.message : "다음 Issue 후보를 불러오지 못했습니다.",
+        error: true,
+      });
+    } finally {
+      setLoadingMore(false);
+    }
+  }
 
   useEffect(() => {
     // The state changes happen after the bounded operator request resolves.
@@ -228,11 +265,16 @@ export function OpsEditorialPanel({
         if (response.status === 409) await load();
         throw new Error(body.message || "심사 결정을 저장하지 못했습니다.");
       }
+      const previousStatus = selected.decision?.status ?? "PENDING";
+      if (status === previousStatus && body.status !== status) {
+        await load();
+        toast.success(`${body.status} 결정을 revision ${body.revision}로 저장했어요.`);
+        return;
+      }
       const updated = { ...selected, decision: body };
       setSelected(updated);
       setPage((current) => {
         if (!current) return current;
-        const previousStatus = selected.decision?.status ?? "PENDING";
         const counts =
           previousStatus === body.status
             ? current.counts
@@ -387,6 +429,14 @@ export function OpsEditorialPanel({
           ))}
           {!loading && page?.items.length === 0 ? (
             <div className={styles.empty}>조건에 맞는 후보가 없습니다.</div>
+          ) : null}
+          {page?.nextCursor ? (
+            <div className={styles.candidateListMore}>
+              <span>{page.items.length}개 표시 중</span>
+              <button type="button" disabled={loadingMore} onClick={() => void loadMore()}>
+                {loadingMore ? "불러오는 중…" : `다음 ${pageSize}개 불러오기`}
+              </button>
+            </div>
           ) : null}
         </div>
         {selected ? (
