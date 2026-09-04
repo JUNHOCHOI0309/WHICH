@@ -54,7 +54,7 @@ steps:
           --project="$PROJECT_ID" --region="${_REGION}" --image="$$IMAGE" \
           --command=node --args=scripts/cloud-run/migrate.mjs \
           --service-account="which-web@$PROJECT_ID.iam.gserviceaccount.com" \
-          --execution-environment=gen2 --tasks=1 --max-retries=0 --task-timeout=10m \
+          --execution-environment=gen2 --tasks=1 --max-retries=2 --task-timeout=10m \
           --network=which-run-vpc --subnet=which-run-subnet --vpc-egress=all-traffic \
           --set-secrets=/var/run/which/runtime.json=which-runtime-env:1 \
           --set-env-vars="CLOUD_RUN_ENV_FILE=/var/run/which/runtime.json,RELEASE_ID=$COMMIT_SHA" \
