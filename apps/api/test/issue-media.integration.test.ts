@@ -21,6 +21,7 @@ import {
   issueVersions,
   members,
   operatorAccessGrants,
+  outboxEvents,
 } from "../src/database/schema/index.js";
 import type { IssueMediaObjectStorage } from "../src/modules/issue-media/contracts.js";
 import type { IssueMediaService } from "../src/modules/issue-media/contracts.js";
@@ -870,15 +871,34 @@ describe("operator Issue media foundation", () => {
     const storage = new FakeIssueMediaStorage();
     const foundation = createIssueMediaService(database.db, storage);
     const review = createIssueMediaReviewService(database.db, storage, foundation);
-    const staged = await foundation.stageAsset({
+    const adminAsset = await foundation.stageAsset({
       memberId: operatorId,
       sourceType: "OPERATOR_UPLOAD",
       rightsAttestation:
-        "The operator verified a reusable licensed source for this review fixture.",
+        "The operator verified this administrator image for immediate publication.",
       declaredMimeType: "image/png",
       bytes: await image("png", { r: 11, g: 77, b: 143 }),
-      requestId: "review-stage",
+      requestId: "admin-stage",
     });
+    const staged = await foundation.stageMemberAsset({
+      memberId: regularMemberId,
+      rightsAttestation: "The Member owns this image and requests editorial review.",
+      declaredMimeType: "image/png",
+      bytes: await image("png", { r: 12, g: 78, b: 144 }),
+      requestId: "member-review-stage",
+    });
+    expect(
+      await database.db
+        .select()
+        .from(outboxEvents)
+        .where(eq(outboxEvents.aggregateId, `ISSUE_MEDIA_ASSET:${adminAsset!.id}:1`)),
+    ).toHaveLength(0);
+    expect(
+      await database.db
+        .select()
+        .from(outboxEvents)
+        .where(eq(outboxEvents.aggregateId, `ISSUE_MEDIA_ASSET:${staged.id}:1`)),
+    ).toHaveLength(2);
     if (!staged) throw new Error("staging failed");
 
     expect(
@@ -890,6 +910,7 @@ describe("operator Issue media foundation", () => {
       limit: 10,
       requestId: "list-pending",
     });
+    expect(pending?.items.some((item) => item.id === adminAsset?.id)).toBe(false);
     expect(pending?.items.find((item) => item.id === staged.id)?.publishedUrl).toBeNull();
     expect(pending?.items.find((item) => item.id === staged.id)?.findings).toEqual(
       expect.arrayContaining([

@@ -52,7 +52,7 @@ function publicAsset(
 ): IssueMediaAssetRecord {
   return {
     id: row.id,
-    sourceType: "OPERATOR_UPLOAD",
+    sourceType: row.sourceType as IssueMediaAssetRecord["sourceType"],
     sha256: row.sha256,
     perceptualHash: row.perceptualHash,
     input: {
@@ -399,6 +399,13 @@ export function createIssueMediaReviewService(
     requestId: string;
   }) {
     const row = await assetRow(input.assetId);
+    if (row.sourceType !== "MEMBER_SUBMISSION") {
+      throw new IssueMediaError(
+        "MEDIA_REVIEW_TRANSITION_INVALID",
+        409,
+        "Image Review only accepts Member-submitted assets.",
+      );
+    }
     if (input.status === "APPROVED") {
       if (effectiveStatus(row) !== "PENDING") {
         throw new IssueMediaError(
@@ -495,7 +502,7 @@ export function createIssueMediaReviewService(
     async readAssets(input) {
       const eventType = "OPS_ISSUE_MEDIA_REVIEW_LIST";
       if (!(await requireOperator(input.memberId, eventType, input.requestId))) return null;
-      const conditions = [];
+      const conditions = [eq(issueMediaAssets.sourceType, "MEMBER_SUBMISSION")];
       if (input.query) {
         const pattern = `%${input.query}%`;
         conditions.push(
@@ -516,7 +523,10 @@ export function createIssueMediaReviewService(
       const items = records
         .filter((record) => !input.status || record.effectiveStatus === input.status)
         .slice(0, input.limit);
-      const countRows = await database.select({ asset: issueMediaAssets }).from(issueMediaAssets);
+      const countRows = await database
+        .select({ asset: issueMediaAssets })
+        .from(issueMediaAssets)
+        .where(eq(issueMediaAssets.sourceType, "MEMBER_SUBMISSION"));
       const counts: IssueMediaReviewPage["counts"] = {
         PENDING: 0,
         APPROVED: 0,

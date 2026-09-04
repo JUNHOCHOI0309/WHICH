@@ -211,6 +211,13 @@ export type OpsEditorialCandidate = {
   publication: { issueId: string; version: number; publishedAt: string } | null;
 };
 
+export type CreateOpsEditorialCandidateInput = {
+  question: string;
+  context: string;
+  choices: [string, string];
+  interestCardCode: string;
+};
+
 export type OpsEditorialPage = {
   schemaVersion: 1;
   generatedAt: string;
@@ -420,13 +427,17 @@ export interface OpsDashboardService {
     limit: number;
     requestId?: string;
   }): Promise<OpsEditorialPage | null>;
+  createEditorialCandidate(
+    input: CreateOpsEditorialCandidateInput & {
+      memberId: string;
+      requestId?: string;
+    },
+  ): Promise<OpsEditorialCandidate | null>;
   saveEditorialDecision(input: {
     memberId: string;
     candidateId: string;
     expectedRevision: number;
-    status: Exclude<OpsEditorialStatus, "PENDING">;
-    note: string;
-    checks: OpsEditorialDecision["checks"];
+    status: "APPROVED" | "REJECTED";
     requestId?: string;
   }): Promise<OpsEditorialDecision | null>;
   publishEditorialCandidate(input: {

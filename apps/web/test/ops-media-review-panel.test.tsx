@@ -72,7 +72,6 @@ describe("Ops media review state controls", () => {
     const fetchMock = vi.fn(async (input: string | URL | Request) => {
       const url = String(input);
       if (url.includes("rights-requests")) return response({ items: [] });
-      if (url.includes("media-library")) return response({ items: [] });
       return response({
         schemaVersion: 1,
         generatedAt: "2026-08-26T00:00:00.000Z",
@@ -83,14 +82,14 @@ describe("Ops media review state controls", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<OpsMediaReviewPanel />);
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
 
     const search = screen.getByPlaceholderText("Asset ID, SHA-256, 권리 근거 검색");
     fireEvent.change(search, { target: { value: "asset-123" } });
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
 
     fireEvent.click(screen.getByRole("button", { name: "조회" }));
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(4));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
     expect(fetchMock).toHaveBeenLastCalledWith(
       "/api/ops/media-review/assets?q=asset-123",
       expect.objectContaining({ cache: "no-store" }),

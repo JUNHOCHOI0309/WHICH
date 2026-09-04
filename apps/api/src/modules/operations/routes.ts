@@ -414,19 +414,83 @@ export async function registerOpsRoutes(
       },
     );
 
+    opsApp.post<{
+      Headers: OpsHeaders;
+      Body: {
+        question: string;
+        context: string;
+        choices: [string, string];
+        interestCardCode: string;
+      };
+    }>(
+      "/v1/internal/ops/editorial",
+      {
+        schema: {
+          hide: true,
+          headers: opsHeadersSchema,
+          body: Type.Object(
+            {
+              question: Type.String({ minLength: 1, maxLength: 200 }),
+              context: Type.String({ minLength: 1, maxLength: 500 }),
+              choices: Type.Tuple([
+                Type.String({ minLength: 1, maxLength: 100 }),
+                Type.String({ minLength: 1, maxLength: 100 }),
+              ]),
+              interestCardCode: Type.Union(
+                [
+                  "DAILY_LIFE",
+                  "FOOD",
+                  "TRAVEL",
+                  "RELATIONSHIP",
+                  "WORK",
+                  "ECONOMY_CONSUMPTION",
+                  "TECH",
+                  "GAME",
+                  "MOVIE_DRAMA",
+                  "MUSIC_CONTENT",
+                  "SPORTS",
+                  "EDUCATION",
+                  "SOCIETY",
+                  "HOBBY",
+                ].map((value) => Type.Literal(value)),
+              ),
+            },
+            { additionalProperties: false },
+          ),
+          response: {
+            201: Type.Any(),
+            400: Type.Object({ code: Type.String(), message: Type.String() }),
+            401: Type.Object({ code: Type.String(), message: Type.String() }),
+            403: Type.Object({ code: Type.String(), message: Type.String() }),
+            409: Type.Object({ code: Type.String(), message: Type.String() }),
+            500: Type.Object({ code: Type.String(), message: Type.String() }),
+          },
+        },
+      },
+      async (request, reply) => {
+        const memberId = await authenticate(request, reply);
+        if (!memberId) return;
+        const candidate = await service.createEditorialCandidate({
+          memberId,
+          ...request.body,
+          requestId: request.id,
+        });
+        if (!candidate) {
+          return reply.code(403).send({
+            code: "OPERATOR_ROLE_REQUIRED",
+            message: "This Member does not have active OPERATOR access.",
+          });
+        }
+        return reply.code(201).send({ candidate });
+      },
+    );
+
     opsApp.put<{
       Headers: OpsHeaders;
       Params: { candidateId: string };
       Body: {
         expectedRevision: number;
-        status: "APPROVED" | "NEEDS_CHANGES" | "REJECTED";
-        note: string;
-        checks: {
-          binaryFit: boolean;
-          choiceParity: boolean;
-          duplicateReview: boolean;
-          sourceReview: boolean;
-        };
+        status: "APPROVED" | "REJECTED";
       };
     }>(
       "/v1/internal/ops/editorial/:candidateId/decision",
@@ -437,18 +501,7 @@ export async function registerOpsRoutes(
           params: Type.Object({ candidateId: Type.String({ minLength: 1, maxLength: 32 }) }),
           body: Type.Object({
             expectedRevision: Type.Integer({ minimum: 0 }),
-            status: Type.Union([
-              Type.Literal("APPROVED"),
-              Type.Literal("NEEDS_CHANGES"),
-              Type.Literal("REJECTED"),
-            ]),
-            note: Type.String(),
-            checks: Type.Object({
-              binaryFit: Type.Boolean(),
-              choiceParity: Type.Boolean(),
-              duplicateReview: Type.Boolean(),
-              sourceReview: Type.Boolean(),
-            }),
+            status: Type.Union([Type.Literal("APPROVED"), Type.Literal("REJECTED")]),
           }),
           response: {
             200: Type.Any(),
@@ -463,15 +516,6 @@ export async function registerOpsRoutes(
       async (request, reply) => {
         const memberId = await authenticate(request, reply);
         if (!memberId) return;
-        if (
-          request.body.status === "APPROVED" &&
-          Object.values(request.body.checks).some((checked) => !checked)
-        ) {
-          return reply.code(400).send({
-            code: "REVIEW_CHECKS_REQUIRED",
-            message: "승인하려면 네 가지 편집 검수 항목을 모두 확인해야 합니다.",
-          });
-        }
         const decision = await service.saveEditorialDecision({
           memberId,
           candidateId: request.params.candidateId,

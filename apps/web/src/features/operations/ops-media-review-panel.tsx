@@ -4,12 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { toast } from "@/components/feedback/toast-provider";
 
-import type {
-  OpsMediaLibraryPair,
-  OpsMediaReviewAsset,
-  OpsMediaReviewPage,
-  OpsMediaRightsRequest,
-} from "./contracts";
+import type { OpsMediaReviewAsset, OpsMediaReviewPage, OpsMediaRightsRequest } from "./contracts";
 import styles from "./ops-management.module.css";
 
 const policyVersion = "issue-media-review-v1";
@@ -47,37 +42,16 @@ async function json<T>(response: Response): Promise<T> {
 
 export function OpsMediaReviewPanel({
   embedded = false,
-  onBackToIssues,
 }: {
   embedded?: boolean;
-  onBackToIssues?: () => void;
 } = {}) {
   const [page, setPage] = useState<OpsMediaReviewPage | null>(null);
   const [rights, setRights] = useState<OpsMediaRightsRequest[]>([]);
-  const [library, setLibrary] = useState<OpsMediaLibraryPair[]>([]);
   const [selected, setSelected] = useState<OpsMediaReviewAsset | null>(null);
   const [status, setStatus] = useState("");
   const [query, setQuery] = useState("");
   const [appliedQuery, setAppliedQuery] = useState("");
   const [rationale, setRationale] = useState("");
-  const [uploadFile, setUploadFile] = useState<File | null>(null);
-  const [rightsAttestation, setRightsAttestation] = useState("");
-  const [libraryForm, setLibraryForm] = useState({
-    title: "",
-    categoryCode: "LIFE",
-    topics: "",
-    assetAId: "",
-    assetBId: "",
-    altA: "",
-    altB: "",
-    sourceA: "",
-    sourceB: "",
-    authorName: "",
-    licenseName: "",
-    licenseVersion: "",
-    evidenceReference: "",
-    rightsConfirmed: false,
-  });
   const [busy, setBusy] = useState(false);
   const assetRequest = useRef<AbortController | null>(null);
 
@@ -112,13 +86,6 @@ export function OpsMediaReviewPanel({
     setRights(requests.items);
   }, []);
 
-  const loadLibrary = useCallback(async () => {
-    const libraryPairs = await json<{ items: OpsMediaLibraryPair[] }>(
-      await fetch("/api/ops/media-library", { cache: "no-store" }),
-    );
-    setLibrary(libraryPairs.items.filter((item) => Array.isArray(item.assets)));
-  }, []);
-
   useEffect(() => {
     // The state updates happen only after the remote operations request settles.
     void loadAssets().catch((error) => {
@@ -131,10 +98,10 @@ export function OpsMediaReviewPanel({
   useEffect(() => {
     // The state updates happen only after the remote operations requests settle.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    void Promise.all([loadRights(), loadLibrary()]).catch((error) =>
+    void loadRights().catch((error) =>
       toast.error(error instanceof Error ? error.message : "운영 자료를 불러오지 못했습니다."),
     );
-  }, [loadLibrary, loadRights]);
+  }, [loadRights]);
 
   async function decide(targetStatus: AssetAction, scope: "ASSET" | "ISSUE" = "ASSET") {
     if (!selected || !rationale.trim()) return toast.error("판단 근거를 입력해 주세요.");
@@ -161,41 +128,6 @@ export function OpsMediaReviewPanel({
       await loadAssets();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "검수 결정에 실패했습니다.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function upload() {
-    if (!uploadFile || !rightsAttestation.trim()) {
-      return toast.error("이미지와 권리 근거를 입력해 주세요.");
-    }
-    setBusy(true);
-    try {
-      const contentBase64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onerror = () => reject(new Error("이미지를 읽지 못했습니다."));
-        reader.onload = () => resolve(String(reader.result).split(",")[1] ?? "");
-        reader.readAsDataURL(uploadFile);
-      });
-      await json(
-        await fetch("/api/ops/media-review/assets", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            sourceType: "OPERATOR_UPLOAD",
-            rightsAttestation: rightsAttestation.trim(),
-            declaredMimeType: uploadFile.type,
-            contentBase64,
-          }),
-        }),
-      );
-      setUploadFile(null);
-      setRightsAttestation("");
-      toast.success("이미지를 비공개 검수 큐에 등록했습니다.");
-      await loadAssets();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "이미지 등록에 실패했습니다.");
     } finally {
       setBusy(false);
     }
@@ -246,118 +178,6 @@ export function OpsMediaReviewPanel({
     }
   }
 
-  async function registerLibraryPair() {
-    const form = libraryForm;
-    if (
-      !form.rightsConfirmed ||
-      [
-        form.title,
-        form.categoryCode,
-        form.assetAId,
-        form.assetBId,
-        form.altA,
-        form.altB,
-        form.sourceA,
-        form.sourceB,
-        form.authorName,
-        form.licenseName,
-        form.licenseVersion,
-        form.evidenceReference,
-      ].some((value) => !value.trim())
-    ) {
-      return toast.error("A/B 자산과 출처·라이선스·증빙 및 권리 확인을 모두 입력해 주세요.");
-    }
-    setBusy(true);
-    try {
-      const common = {
-        authorName: form.authorName.trim(),
-        licenseName: form.licenseName.trim(),
-        licenseVersion: form.licenseVersion.trim(),
-        acquiredAt: new Date().toISOString(),
-        commercialAllowed: true,
-        derivativeAllowed: true,
-        redistributionAllowed: true,
-        evidenceReference: form.evidenceReference.trim(),
-      };
-      await json(
-        await fetch("/api/ops/media-library", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            title: form.title.trim(),
-            categoryCode: form.categoryCode.trim(),
-            topics: form.topics
-              .split(",")
-              .map((topic) => topic.trim())
-              .filter(Boolean),
-            assets: [
-              {
-                ...common,
-                side: "A",
-                mediaAssetId: form.assetAId.trim(),
-                altText: form.altA.trim(),
-                cropMode: "COVER",
-                sourceUrl: form.sourceA.trim(),
-              },
-              {
-                ...common,
-                side: "B",
-                mediaAssetId: form.assetBId.trim(),
-                altText: form.altB.trim(),
-                cropMode: "COVER",
-                sourceUrl: form.sourceB.trim(),
-              },
-            ],
-          }),
-        }),
-      );
-      toast.success("승인 이미지 A/B 쌍을 Library에 공개했습니다.");
-      setLibraryForm((current) => ({
-        ...current,
-        title: "",
-        topics: "",
-        assetAId: "",
-        assetBId: "",
-        altA: "",
-        altB: "",
-        sourceA: "",
-        sourceB: "",
-        evidenceReference: "",
-        rightsConfirmed: false,
-      }));
-      await loadLibrary();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Library 등록에 실패했습니다.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function revokeLibraryPair(pair: OpsMediaLibraryPair) {
-    const reason = window.prompt(
-      "이 이미지 쌍을 사용 중인 모든 질문을 텍스트로 전환할 근거를 입력해 주세요.",
-    );
-    if (!reason?.trim()) return;
-    setBusy(true);
-    try {
-      const result = await json<{ fallbackIssueCount: number }>(
-        await fetch("/api/ops/media-library/" + pair.id + "/revoke", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ reason: reason.trim() }),
-        }),
-      );
-      toast.success(
-        String(result.fallbackIssueCount) + "개 질문을 안전한 텍스트 표시로 전환했습니다.",
-      );
-      await loadLibrary();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Library 회수에 실패했습니다.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
   return (
     <section className={embedded ? styles.embeddedReviewPanel : styles.page}>
       {!embedded ? (
@@ -372,28 +192,11 @@ export function OpsMediaReviewPanel({
         <div className={styles.embeddedReviewHeading}>
           <div>
             <p className={styles.eyebrow}>IMAGE REVIEW</p>
-            <h2>이미지 안전·권리 검수</h2>
+            <h2>사용자 이미지 안전·권리 검수</h2>
+            <span>외부 사용자가 제출한 이미지만 이 검수 큐에 표시됩니다.</span>
           </div>
-          <button type="button" onClick={onBackToIssues}>
-            질문 검수로 돌아가기
-          </button>
         </div>
       )}
-      <div className={styles.filters}>
-        <input
-          type="file"
-          accept="image/jpeg,image/png,image/webp"
-          onChange={(event) => setUploadFile(event.target.files?.[0] ?? null)}
-        />
-        <input
-          value={rightsAttestation}
-          onChange={(event) => setRightsAttestation(event.target.value)}
-          placeholder="사용 권한·출처 근거"
-        />
-        <button type="button" disabled={busy} onClick={() => void upload()}>
-          검수 큐 등록
-        </button>
-      </div>
       <form
         className={`${styles.filters} ${styles.editorialFilters}`}
         onSubmit={(event) => {
@@ -548,154 +351,6 @@ export function OpsMediaReviewPanel({
           </article>
         ) : null}
       </div>
-      <section className={styles.libraryOps}>
-        <div className={styles.intro}>
-          <div>
-            <p className={styles.eyebrow}>APPROVED LIBRARY</p>
-            <h2>재사용 이미지 A/B 쌍</h2>
-          </div>
-          <span>검수 승인 자산만 등록 · 회수 시 연결 질문은 텍스트로 전환</span>
-        </div>
-        <div className={styles.libraryForm}>
-          <input
-            value={libraryForm.title}
-            onChange={(event) =>
-              setLibraryForm((current) => ({ ...current, title: event.target.value }))
-            }
-            placeholder="이미지 쌍 이름"
-          />
-          <input
-            value={libraryForm.categoryCode}
-            onChange={(event) =>
-              setLibraryForm((current) => ({ ...current, categoryCode: event.target.value }))
-            }
-            placeholder="카테고리 코드"
-          />
-          <input
-            value={libraryForm.topics}
-            onChange={(event) =>
-              setLibraryForm((current) => ({ ...current, topics: event.target.value }))
-            }
-            placeholder="검색 주제 (쉼표 구분)"
-          />
-          <input
-            value={libraryForm.assetAId}
-            onChange={(event) =>
-              setLibraryForm((current) => ({ ...current, assetAId: event.target.value }))
-            }
-            placeholder="승인된 A Asset ID"
-          />
-          <input
-            value={libraryForm.altA}
-            onChange={(event) =>
-              setLibraryForm((current) => ({ ...current, altA: event.target.value }))
-            }
-            placeholder="A 대체 텍스트"
-          />
-          <input
-            value={libraryForm.sourceA}
-            onChange={(event) =>
-              setLibraryForm((current) => ({ ...current, sourceA: event.target.value }))
-            }
-            placeholder="A 원본 출처 URL"
-          />
-          <input
-            value={libraryForm.assetBId}
-            onChange={(event) =>
-              setLibraryForm((current) => ({ ...current, assetBId: event.target.value }))
-            }
-            placeholder="승인된 B Asset ID"
-          />
-          <input
-            value={libraryForm.altB}
-            onChange={(event) =>
-              setLibraryForm((current) => ({ ...current, altB: event.target.value }))
-            }
-            placeholder="B 대체 텍스트"
-          />
-          <input
-            value={libraryForm.sourceB}
-            onChange={(event) =>
-              setLibraryForm((current) => ({ ...current, sourceB: event.target.value }))
-            }
-            placeholder="B 원본 출처 URL"
-          />
-          <input
-            value={libraryForm.authorName}
-            onChange={(event) =>
-              setLibraryForm((current) => ({ ...current, authorName: event.target.value }))
-            }
-            placeholder="저작자"
-          />
-          <input
-            value={libraryForm.licenseName}
-            onChange={(event) =>
-              setLibraryForm((current) => ({ ...current, licenseName: event.target.value }))
-            }
-            placeholder="라이선스 이름"
-          />
-          <input
-            value={libraryForm.licenseVersion}
-            onChange={(event) =>
-              setLibraryForm((current) => ({ ...current, licenseVersion: event.target.value }))
-            }
-            placeholder="라이선스 버전"
-          />
-          <input
-            value={libraryForm.evidenceReference}
-            onChange={(event) =>
-              setLibraryForm((current) => ({
-                ...current,
-                evidenceReference: event.target.value,
-              }))
-            }
-            placeholder="권리 증빙 URL 또는 문서 참조"
-          />
-          <label className={styles.libraryConsent}>
-            <input
-              type="checkbox"
-              checked={libraryForm.rightsConfirmed}
-              onChange={(event) =>
-                setLibraryForm((current) => ({
-                  ...current,
-                  rightsConfirmed: event.target.checked,
-                }))
-              }
-            />
-            상업적 이용·수정·재배포 권한과 증빙을 확인했습니다.
-          </label>
-          <button type="button" disabled={busy} onClick={() => void registerLibraryPair()}>
-            Library 공개
-          </button>
-        </div>
-        <div className={styles.libraryCards}>
-          {library.map((pair) => (
-            <article key={pair.id}>
-              <div>
-                {pair.assets.map((asset) => (
-                  <img
-                    key={asset.id}
-                    src={asset.url}
-                    alt={asset.altText}
-                    loading="lazy"
-                    decoding="async"
-                  />
-                ))}
-              </div>
-              <strong>{pair.title}</strong>
-              <small>
-                {pair.categoryCode} · 사용 {pair.usageCount}건
-              </small>
-              <button type="button" disabled={busy} onClick={() => void revokeLibraryPair(pair)}>
-                회수·텍스트 전환
-              </button>
-            </article>
-          ))}
-          {!library.length ? (
-            <p className={styles.empty}>공개된 Library 이미지가 없습니다.</p>
-          ) : null}
-        </div>
-      </section>
       <section>
         <div className={styles.intro}>
           <div>

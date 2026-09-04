@@ -442,6 +442,13 @@
       "when": 1788533357015,
       "tag": "0062_aberrant_shiver_man",
       "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1788547218905,
+      "tag": "0063_powerful_nick_fury",
+      "breakpoints": true
     }
   ]
 }

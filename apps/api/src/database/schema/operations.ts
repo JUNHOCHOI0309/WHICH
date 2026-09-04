@@ -123,6 +123,45 @@ export const operatorEditorialDecisions = pgTable(
   ],
 );
 
+export const operatorEditorialCandidates = pgTable(
+  "operator_editorial_candidates",
+  {
+    id: uuid("operator_editorial_candidate_id").defaultRandom().primaryKey(),
+    catalogId: varchar("catalog_id", { length: 128 }).notNull(),
+    candidateId: varchar("candidate_id", { length: 32 }).notNull(),
+    question: varchar("question", { length: 200 }).notNull(),
+    context: varchar("context", { length: 500 }).notNull(),
+    choices: jsonb("choices")
+      .$type<Array<{ id: string; code: "A" | "B"; label: string }>>()
+      .notNull(),
+    categoryCode: varchar("category_code", { length: 64 }).notNull(),
+    interestCardCode: varchar("interest_card_code", { length: 64 }).notNull(),
+    editorialArea: varchar("editorial_area", { length: 64 }).notNull(),
+    inventoryScope: varchar("inventory_scope", { length: 24 }).default("ACTIVE").notNull(),
+    contentHash: varchar("content_hash", { length: 64 }).notNull(),
+    createdByMemberId: uuid("created_by_member_id")
+      .notNull()
+      .references(() => members.id, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    unique("operator_editorial_candidates_catalog_candidate_unique").on(
+      table.catalogId,
+      table.candidateId,
+    ),
+    index("operator_editorial_candidates_created_idx").on(table.createdAt, table.candidateId),
+    check(
+      "operator_editorial_candidates_inventory_scope_check",
+      sql`${table.inventoryScope} in ('ACTIVE', 'RESERVE', 'LONG_TERM')`,
+    ),
+    check(
+      "operator_editorial_candidates_content_hash_check",
+      sql`${table.contentHash} ~ '^[a-f0-9]{64}$'`,
+    ),
+  ],
+);
+
 export const operatorEditorialCandidateMedia = pgTable(
   "operator_editorial_candidate_media",
   {

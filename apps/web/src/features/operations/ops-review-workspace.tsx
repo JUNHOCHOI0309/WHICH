@@ -16,11 +16,8 @@ export function OpsReviewWorkspace() {
       <header className={styles.reviewWorkspaceHeader}>
         <div>
           <p className={styles.eyebrow}>REVIEW CENTER</p>
-          <h1>질문과 이미지를 한 흐름에서 검토합니다.</h1>
-          <span>
-            질문의 편집 판단과 이미지의 안전·권리 판단은 각각 기록한 뒤 최종 게시 단계에서 함께
-            확인합니다.
-          </span>
+          <h1>관리자 질문과 사용자 이미지를 분리해 검토합니다.</h1>
+          <span>질문 검수는 관리자 콘텐츠, 이미지 검수는 외부 사용자의 업로드만 다룹니다.</span>
         </div>
         <div className={styles.reviewLaneTabs} role="tablist" aria-label="검수 작업 선택">
           <button
@@ -43,11 +40,7 @@ export function OpsReviewWorkspace() {
       </header>
 
       <div role="tabpanel" aria-label={lane === "issues" ? "질문 검수" : "이미지 검수"}>
-        {lane === "issues" ? (
-          <OpsIssueReviewPanel onOpenMediaReview={() => setLane("images")} embedded />
-        ) : (
-          <OpsMediaReviewPanel onBackToIssues={() => setLane("issues")} embedded />
-        )}
+        {lane === "issues" ? <OpsIssueReviewPanel embedded /> : <OpsMediaReviewPanel embedded />}
       </div>
     </section>
   );

@@ -13,10 +13,8 @@ const OpsPublishedIssuesPanel = dynamic(
 
 export function OpsIssueReviewPanel({
   embedded = false,
-  onOpenMediaReview,
 }: {
   embedded?: boolean;
-  onOpenMediaReview?: () => void;
 } = {}) {
   const [mode, setMode] = useState<"candidates" | "published">("candidates");
 
@@ -39,11 +37,7 @@ export function OpsIssueReviewPanel({
         </button>
       </nav>
       {mode === "candidates" ? (
-        <OpsEditorialPanel
-          embedded={embedded}
-          onOpenMediaReview={onOpenMediaReview}
-          onPublished={() => setMode("published")}
-        />
+        <OpsEditorialPanel embedded={embedded} onPublished={() => setMode("published")} />
       ) : (
         <OpsPublishedIssuesPanel />
       )}

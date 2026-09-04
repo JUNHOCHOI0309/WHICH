@@ -11,42 +11,43 @@ import type {
   OpsEditorialPage,
   OpsEditorialScope,
   OpsEditorialStatus,
-  OpsMediaReviewAsset,
-  OpsMediaReviewPage,
   OpsPublishedIssue,
 } from "./contracts";
+import { OpsAdminMediaLibrary } from "./ops-admin-media-library";
 import styles from "./ops-management.module.css";
 
-const emptyChecks: OpsEditorialDecision["checks"] = {
-  binaryFit: false,
-  choiceParity: false,
-  duplicateReview: false,
-  sourceReview: false,
-};
-
-const checkLabels: Array<[keyof OpsEditorialDecision["checks"], string]> = [
-  ["binaryFit", "질문이 명확한 A/B 선택으로 성립합니다."],
-  ["choiceParity", "두 선택지의 표현 강도와 길이가 균형을 이룹니다."],
-  ["duplicateReview", "기존 질문과 의미상 중복되지 않습니다."],
-  ["sourceReview", "요구되는 출처와 사실 확인 수준을 충족합니다."],
-];
-
 const pageSize = 50;
+const interestCards = [
+  ["DAILY_LIFE", "일상"],
+  ["FOOD", "음식"],
+  ["TRAVEL", "여행"],
+  ["RELATIONSHIP", "관계"],
+  ["WORK", "직장·커리어"],
+  ["ECONOMY_CONSUMPTION", "경제·소비"],
+  ["TECH", "테크"],
+  ["GAME", "게임"],
+  ["MOVIE_DRAMA", "영화·드라마"],
+  ["MUSIC_CONTENT", "음악·콘텐츠"],
+  ["SPORTS", "스포츠"],
+  ["EDUCATION", "교육"],
+  ["SOCIETY", "사회"],
+  ["HOBBY", "취미"],
+] as const;
 
-function selectedForm(candidate: OpsEditorialCandidate) {
-  return {
-    note: candidate.decision?.note ?? "",
-    checks: candidate.decision?.checks ?? emptyChecks,
-  };
+async function fileBase64(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("이미지를 읽지 못했습니다."));
+    reader.onload = () => resolve(String(reader.result).split(",")[1] ?? "");
+    reader.readAsDataURL(file);
+  });
 }
 
 export function OpsEditorialPanel({
   embedded = false,
-  onOpenMediaReview,
   onPublished,
 }: {
   embedded?: boolean;
-  onOpenMediaReview?: () => void;
   onPublished?: () => void;
 } = {}) {
   const [query, setQuery] = useState("");
@@ -55,22 +56,24 @@ export function OpsEditorialPanel({
   const [scope, setScope] = useState<OpsEditorialScope | "">("");
   const [page, setPage] = useState<OpsEditorialPage | null>(null);
   const [selected, setSelected] = useState<OpsEditorialCandidate | null>(null);
-  const [note, setNote] = useState("");
-  const [checks, setChecks] = useState(emptyChecks);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
-  const [mediaBusy, setMediaBusy] = useState(false);
-  const [mediaChoiceCode, setMediaChoiceCode] = useState<string | null>(null);
-  const [libraryAssets, setLibraryAssets] = useState<OpsMediaReviewAsset[]>([]);
+  const [mediaBusy, setMediaBusy] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{ message: string; error: boolean } | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [createForm, setCreateForm] = useState({
+    question: "",
+    context: "",
+    choiceA: "",
+    choiceB: "",
+    interestCardCode: "DAILY_LIFE",
+  });
 
   const choose = useCallback((candidate: OpsEditorialCandidate) => {
-    const form = selectedForm(candidate);
     setSelected(candidate);
-    setNote(form.note);
-    setChecks(form.checks);
     setFeedback(null);
   }, []);
 
@@ -83,7 +86,7 @@ export function OpsEditorialPanel({
       if (cursor) params.set("cursor", cursor);
       const response = await fetch(`/api/ops/editorial?${params}`, { cache: "no-store" });
       const body = (await response.json()) as OpsEditorialPage & { message?: string };
-      if (!response.ok) throw new Error(body.message || "Issue 후보를 불러오지 못했습니다.");
+      if (!response.ok) throw new Error(body.message || "질문 후보를 불러오지 못했습니다.");
       return body;
     },
     [scope, status, submittedQuery],
@@ -95,23 +98,31 @@ export function OpsEditorialPanel({
     try {
       const body = await requestPage();
       setPage(body);
-      const nextSelected = body.items[0] ?? null;
-      if (nextSelected) choose(nextSelected);
-      else setSelected(null);
+      setSelected(
+        (current) =>
+          body.items.find((candidate) => candidate.candidateId === current?.candidateId) ??
+          body.items[0] ??
+          null,
+      );
     } catch (caught) {
       setFeedback({
-        message: caught instanceof Error ? caught.message : "Issue 후보를 불러오지 못했습니다.",
+        message: caught instanceof Error ? caught.message : "질문 후보를 불러오지 못했습니다.",
         error: true,
       });
     } finally {
       setLoading(false);
     }
-  }, [choose, requestPage]);
+  }, [requestPage]);
+
+  useEffect(() => {
+    // State is updated only after the bounded operator request resolves.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void load();
+  }, [load]);
 
   async function loadMore() {
     if (!page?.nextCursor || loadingMore) return;
     setLoadingMore(true);
-    setFeedback(null);
     try {
       const body = await requestPage(page.nextCursor);
       setPage((current) => {
@@ -124,24 +135,12 @@ export function OpsEditorialPanel({
       });
     } catch (caught) {
       setFeedback({
-        message:
-          caught instanceof Error ? caught.message : "다음 Issue 후보를 불러오지 못했습니다.",
+        message: caught instanceof Error ? caught.message : "다음 질문 후보를 불러오지 못했습니다.",
         error: true,
       });
     } finally {
       setLoadingMore(false);
     }
-  }
-
-  useEffect(() => {
-    // The state changes happen after the bounded operator request resolves.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void load();
-  }, [load]);
-
-  function submitSearch(event: FormEvent) {
-    event.preventDefault();
-    setSubmittedQuery(query.trim());
   }
 
   function updateCandidate(next: OpsEditorialCandidate) {
@@ -158,89 +157,168 @@ export function OpsEditorialPanel({
     );
   }
 
-  async function openMediaLibrary(choiceCode: string) {
-    setMediaChoiceCode(choiceCode);
-    setMediaBusy(true);
+  async function createCandidate(event: FormEvent) {
+    event.preventDefault();
+    setCreating(true);
     setFeedback(null);
     try {
-      const response = await fetch("/api/ops/media-review/assets?status=APPROVED", {
-        cache: "no-store",
+      const response = await fetch("/api/ops/editorial", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          question: createForm.question.trim(),
+          context: createForm.context.trim(),
+          choices: [createForm.choiceA.trim(), createForm.choiceB.trim()],
+          interestCardCode: createForm.interestCardCode,
+        }),
       });
-      const body = (await response.json()) as OpsMediaReviewPage & { message?: string };
-      if (!response.ok) {
-        throw new Error(body.message || "승인 이미지 라이브러리를 불러오지 못했습니다.");
+      const body = (await response.json()) as {
+        candidate?: OpsEditorialCandidate;
+        message?: string;
+      };
+      if (!response.ok || !body.candidate) {
+        throw new Error(body.message || "질문 후보를 추가하지 못했습니다.");
       }
-      setLibraryAssets(body.items);
+      const candidate = body.candidate;
+      setPage((current) =>
+        current
+          ? {
+              ...current,
+              catalog: { ...current.catalog, total: current.catalog.total + 1 },
+              inventory: { ...current.inventory, active: current.inventory.active + 1 },
+              counts: { ...current.counts, PENDING: current.counts.PENDING + 1 },
+              items: [candidate, ...current.items],
+            }
+          : current,
+      );
+      choose(candidate);
+      setCreateForm({
+        question: "",
+        context: "",
+        choiceA: "",
+        choiceB: "",
+        interestCardCode: "DAILY_LIFE",
+      });
+      setCreateOpen(false);
+      toast.success("관리자 질문을 검수 후보에 추가했습니다.");
     } catch (caught) {
       setFeedback({
-        message:
-          caught instanceof Error ? caught.message : "이미지 라이브러리를 불러오지 못했습니다.",
+        message: caught instanceof Error ? caught.message : "질문 후보를 추가하지 못했습니다.",
         error: true,
       });
-      setMediaChoiceCode(null);
     } finally {
-      setMediaBusy(false);
+      setCreating(false);
     }
   }
 
-  async function chooseMedia(asset: OpsMediaReviewAsset) {
-    if (!selected || !mediaChoiceCode) return;
-    const choice = selected.choices.find((item) => item.code === mediaChoiceCode);
+  async function uploadChoiceMedia(choiceCode: string, file: File) {
+    if (!selected) return;
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      setFeedback({ message: "JPG, PNG, WebP 이미지만 사용할 수 있습니다.", error: true });
+      return;
+    }
+    const choice = selected.choices.find((item) => item.code === choiceCode);
     if (!choice) return;
-    const removing = choice.media?.assetId === asset.id;
-    setMediaBusy(true);
+    setMediaBusy(choiceCode);
     setFeedback(null);
     try {
-      const path = `/api/ops/editorial/${encodeURIComponent(selected.candidateId)}/choices/${mediaChoiceCode}/media`;
-      const response = await fetch(path, {
-        method: removing ? "DELETE" : "PUT",
-        headers: removing ? undefined : { "content-type": "application/json" },
-        body: removing
-          ? undefined
-          : JSON.stringify({
-              assetId: asset.id,
-              altText: `${selected.question} - ${choice.label}`.slice(0, 300),
-              cropMode: "COVER",
-            }),
+      const uploadResponse = await fetch("/api/ops/editorial/media-assets", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          sourceType: "OPERATOR_UPLOAD",
+          rightsAttestation: "WHICH 관리자가 서비스 게시 권리를 확인한 직접 업로드 이미지",
+          declaredMimeType: file.type,
+          contentBase64: await fileBase64(file),
+        }),
       });
-      const body = (await response.json()) as {
+      const uploadBody = (await uploadResponse.json()) as {
+        asset?: { id: string; moderationState: string; storageState: string };
+        message?: string;
+      };
+      if (!uploadResponse.ok || !uploadBody.asset?.id) {
+        throw new Error(uploadBody.message || `${choiceCode} 이미지를 등록하지 못했습니다.`);
+      }
+      const assetId = uploadBody.asset.id;
+      if (
+        uploadBody.asset.moderationState !== "APPROVED" ||
+        uploadBody.asset.storageState !== "PUBLISHED"
+      ) {
+        const publishResponse = await fetch(
+          `/api/ops/editorial/media-assets/${encodeURIComponent(assetId)}/publish`,
+          { method: "POST" },
+        );
+        const publishBody = (await publishResponse.json()) as { message?: string };
+        if (!publishResponse.ok) {
+          throw new Error(publishBody.message || `${choiceCode} 이미지를 게시하지 못했습니다.`);
+        }
+      }
+      const attachResponse = await fetch(
+        `/api/ops/editorial/${encodeURIComponent(selected.candidateId)}/choices/${choiceCode}/media`,
+        {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            assetId,
+            altText: `${selected.question} - ${choice.label}`.slice(0, 300),
+            cropMode: "COVER",
+          }),
+        },
+      );
+      const attachBody = (await attachResponse.json()) as {
         media?: NonNullable<OpsEditorialCandidate["choices"][number]["media"]>;
         message?: string;
       };
-      if (!response.ok) throw new Error(body.message || "선택지 이미지를 저장하지 못했습니다.");
+      if (!attachResponse.ok || !attachBody.media) {
+        throw new Error(attachBody.message || "선택지 이미지를 연결하지 못했습니다.");
+      }
       updateCandidate({
         ...selected,
         choices: selected.choices.map((item) =>
-          item.code === mediaChoiceCode
-            ? { ...item, media: removing ? null : (body.media ?? null) }
-            : item,
+          item.code === choiceCode ? { ...item, media: attachBody.media! } : item,
         ),
       });
-      toast.success(
-        removing
-          ? `${mediaChoiceCode} 이미지 연결을 해제했어요.`
-          : `${mediaChoiceCode} 이미지를 연결했어요.`,
-      );
-      setMediaChoiceCode(null);
+      toast.success(`${choiceCode} 이미지를 즉시 승인해 연결했습니다.`);
     } catch (caught) {
       setFeedback({
-        message: caught instanceof Error ? caught.message : "선택지 이미지를 저장하지 못했습니다.",
+        message: caught instanceof Error ? caught.message : "이미지를 등록하지 못했습니다.",
         error: true,
       });
     } finally {
-      setMediaBusy(false);
+      setMediaBusy(null);
     }
   }
 
-  async function decide(nextStatus: Exclude<OpsEditorialStatus, "PENDING">) {
+  async function detachChoiceMedia(choiceCode: string) {
     if (!selected) return;
-    if (nextStatus === "APPROVED" && Object.values(checks).some((checked) => !checked)) {
+    setMediaBusy(choiceCode);
+    setFeedback(null);
+    try {
+      const response = await fetch(
+        `/api/ops/editorial/${encodeURIComponent(selected.candidateId)}/choices/${choiceCode}/media`,
+        { method: "DELETE" },
+      );
+      const body = (await response.json()) as { message?: string };
+      if (!response.ok) throw new Error(body.message || "이미지 연결을 해제하지 못했습니다.");
+      updateCandidate({
+        ...selected,
+        choices: selected.choices.map((item) =>
+          item.code === choiceCode ? { ...item, media: null } : item,
+        ),
+      });
+      toast.success(`${choiceCode} 이미지 연결을 해제했습니다.`);
+    } catch (caught) {
       setFeedback({
-        message: "승인하려면 네 가지 편집 검수 항목을 모두 확인해 주세요.",
+        message: caught instanceof Error ? caught.message : "이미지 연결을 해제하지 못했습니다.",
         error: true,
       });
-      return;
+    } finally {
+      setMediaBusy(null);
     }
+  }
+
+  async function decide(nextStatus: "APPROVED" | "REJECTED") {
+    if (!selected) return;
     setSaving(true);
     setFeedback(null);
     try {
@@ -252,15 +330,10 @@ export function OpsEditorialPanel({
           body: JSON.stringify({
             expectedRevision: selected.decision?.revision ?? 0,
             status: nextStatus,
-            note: note.trim(),
-            checks,
           }),
         },
       );
-      const body = (await response.json()) as OpsEditorialDecision & {
-        code?: string;
-        message?: string;
-      };
+      const body = (await response.json()) as OpsEditorialDecision & { message?: string };
       if (!response.ok) {
         if (response.status === 409) await load();
         throw new Error(body.message || "심사 결정을 저장하지 못했습니다.");
@@ -268,30 +341,29 @@ export function OpsEditorialPanel({
       const previousStatus = selected.decision?.status ?? "PENDING";
       if (status === previousStatus && body.status !== status) {
         await load();
-        toast.success(`${body.status} 결정을 revision ${body.revision}로 저장했어요.`);
-        return;
+      } else {
+        const updated = { ...selected, decision: body };
+        setSelected(updated);
+        setPage((current) =>
+          current
+            ? {
+                ...current,
+                items: current.items.map((item) =>
+                  item.candidateId === updated.candidateId ? updated : item,
+                ),
+                counts:
+                  previousStatus === body.status
+                    ? current.counts
+                    : {
+                        ...current.counts,
+                        [previousStatus]: Math.max(0, current.counts[previousStatus] - 1),
+                        [body.status]: current.counts[body.status] + 1,
+                      },
+              }
+            : current,
+        );
       }
-      const updated = { ...selected, decision: body };
-      setSelected(updated);
-      setPage((current) => {
-        if (!current) return current;
-        const counts =
-          previousStatus === body.status
-            ? current.counts
-            : {
-                ...current.counts,
-                [previousStatus]: Math.max(0, current.counts[previousStatus] - 1),
-                [body.status]: current.counts[body.status] + 1,
-              };
-        return {
-          ...current,
-          items: current.items.map((item) =>
-            item.candidateId === updated.candidateId ? updated : item,
-          ),
-          counts,
-        };
-      });
-      toast.success(`${body.status} 결정을 revision ${body.revision}로 저장했어요.`);
+      toast.success(nextStatus === "APPROVED" ? "질문을 인가했습니다." : "질문을 반려했습니다.");
     } catch (caught) {
       setFeedback({
         message: caught instanceof Error ? caught.message : "심사 결정을 저장하지 못했습니다.",
@@ -320,17 +392,15 @@ export function OpsEditorialPanel({
         if (response.status === 409) await load();
         throw new Error(body.message || "승인된 질문을 게시하지 못했습니다.");
       }
-      const updated: OpsEditorialCandidate = {
+      updateCandidate({
         ...selected,
         publication: {
           issueId: body.issue.issueId,
           version: body.issue.version,
           publishedAt: body.issue.publishedAt ?? new Date().toISOString(),
         },
-      };
-      updateCandidate(updated);
-      setMediaChoiceCode(null);
-      toast.success("승인된 질문을 게시했어요.");
+      });
+      toast.success("승인된 질문을 게시했습니다.");
       onPublished?.();
     } catch (caught) {
       setFeedback({
@@ -344,26 +414,83 @@ export function OpsEditorialPanel({
 
   return (
     <section className={embedded ? styles.embeddedReviewPanel : styles.page}>
-      {!embedded ? (
-        <div className={styles.intro}>
-          <div>
-            <p className={styles.eyebrow}>EDITORIAL REVIEW</p>
-            <h1>Issue 인가·반려·수정 요청</h1>
-          </div>
-          <span>후보 원문은 보존하고 심사 결정과 검수 기록만 운영 DB에 저장합니다.</span>
+      <div className={embedded ? styles.embeddedReviewHeading : styles.intro}>
+        <div>
+          <p className={styles.eyebrow}>ISSUE REVIEW</p>
+          <h2>관리자 질문 검수</h2>
+          <span>관리자 질문과 이미지는 이곳에서 바로 검수하고 게시합니다.</span>
         </div>
-      ) : (
-        <div className={styles.embeddedReviewHeading}>
+        <button type="button" onClick={() => setCreateOpen((current) => !current)}>
+          {createOpen ? "추가 닫기" : "새 질문 추가"}
+        </button>
+      </div>
+
+      {createOpen ? (
+        <form className={styles.editorialCreateForm} onSubmit={createCandidate}>
+          <h3>관리자 질문 추가</h3>
+          <input
+            required
+            maxLength={200}
+            value={createForm.question}
+            onChange={(event) =>
+              setCreateForm((current) => ({ ...current, question: event.target.value }))
+            }
+            placeholder="질문"
+          />
+          <textarea
+            required
+            maxLength={500}
+            value={createForm.context}
+            onChange={(event) =>
+              setCreateForm((current) => ({ ...current, context: event.target.value }))
+            }
+            placeholder="짧은 설명"
+          />
           <div>
-            <p className={styles.eyebrow}>ISSUE REVIEW</p>
-            <h2>질문 편집 검수</h2>
+            <input
+              required
+              maxLength={100}
+              value={createForm.choiceA}
+              onChange={(event) =>
+                setCreateForm((current) => ({ ...current, choiceA: event.target.value }))
+              }
+              placeholder="A 선택지"
+            />
+            <input
+              required
+              maxLength={100}
+              value={createForm.choiceB}
+              onChange={(event) =>
+                setCreateForm((current) => ({ ...current, choiceB: event.target.value }))
+              }
+              placeholder="B 선택지"
+            />
           </div>
-          <button type="button" onClick={onOpenMediaReview}>
-            이미지 업로드·검수로 이동
+          <select
+            value={createForm.interestCardCode}
+            onChange={(event) =>
+              setCreateForm((current) => ({ ...current, interestCardCode: event.target.value }))
+            }
+          >
+            {interestCards.map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+          <button type="submit" disabled={creating}>
+            {creating ? "추가 중…" : "검수 후보에 추가"}
           </button>
-        </div>
-      )}
-      <form className={`${styles.filters} ${styles.editorialFilters}`} onSubmit={submitSearch}>
+        </form>
+      ) : null}
+
+      <form
+        className={`${styles.filters} ${styles.editorialFilters}`}
+        onSubmit={(event) => {
+          event.preventDefault();
+          setSubmittedQuery(query.trim());
+        }}
+      >
         <input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
@@ -377,7 +504,6 @@ export function OpsEditorialPanel({
           <option value="">모든 심사 상태</option>
           <option value="PENDING">PENDING</option>
           <option value="APPROVED">APPROVED</option>
-          <option value="NEEDS_CHANGES">NEEDS_CHANGES</option>
           <option value="REJECTED">REJECTED</option>
         </select>
         <select
@@ -391,9 +517,10 @@ export function OpsEditorialPanel({
         </select>
         <button type="submit">검색</button>
       </form>
+
       {page ? (
         <div className={styles.counts}>
-          {(["PENDING", "APPROVED", "NEEDS_CHANGES", "REJECTED"] as const).map((value) => (
+          {(["PENDING", "APPROVED", "REJECTED"] as const).map((value) => (
             <article key={value}>
               <span>{value}</span>
               <strong>{page.counts[value]}</strong>
@@ -406,6 +533,7 @@ export function OpsEditorialPanel({
           {feedback.message}
         </p>
       ) : null}
+
       <div className={styles.editorialGrid}>
         <div className={styles.candidateList} aria-busy={loading}>
           {page?.items.map((candidate) => (
@@ -439,6 +567,7 @@ export function OpsEditorialPanel({
             </div>
           ) : null}
         </div>
+
         {selected ? (
           <article className={styles.detail}>
             {selected.publication ? (
@@ -460,18 +589,13 @@ export function OpsEditorialPanel({
                 </div>
               ))}
             </div>
-            <section
-              className={styles.candidateMediaSection}
-              aria-labelledby="candidate-media-title"
-            >
+
+            <section className={styles.candidateMediaSection}>
               <div className={styles.candidateMediaHeading}>
                 <div>
-                  <h3 id="candidate-media-title">선택지 이미지</h3>
-                  <p>승인 라이브러리에서 지정하거나 Image Review에서 새 이미지를 등록하세요.</p>
+                  <h3>선택지 이미지</h3>
+                  <p>관리자 업로드는 별도 이미지 검수 없이 즉시 승인되어 선택지에 연결됩니다.</p>
                 </div>
-                <button type="button" disabled={!!selected.publication} onClick={onOpenMediaReview}>
-                  새 이미지 업로드
-                </button>
               </div>
               <div className={styles.candidateMediaGrid}>
                 {selected.choices.map((choice) => (
@@ -479,7 +603,7 @@ export function OpsEditorialPanel({
                     <div className={styles.candidateMediaPreview}>
                       {choice.media ? (
                         <Image
-                          src={`/api/ops/media-review/assets/${choice.media.assetId}/content`}
+                          src={`/api/ops/editorial/media-assets/${choice.media.assetId}/content`}
                           alt={choice.media.altText}
                           width={400}
                           height={300}
@@ -491,64 +615,40 @@ export function OpsEditorialPanel({
                       <b>{choice.code}</b>
                     </div>
                     <strong>{choice.label}</strong>
-                    <small>{choice.media ? choice.media.status : "TEXT ONLY"}</small>
-                    <button
-                      type="button"
-                      disabled={mediaBusy || !!selected.publication}
-                      onClick={() => void openMediaLibrary(choice.code)}
-                    >
-                      {choice.media ? "이미지 변경·해제" : "라이브러리에서 선택"}
-                    </button>
+                    <small>{choice.media?.assetId ?? "TEXT ONLY"}</small>
+                    <label className={styles.candidateMediaUpload}>
+                      <span>
+                        {mediaBusy === choice.code
+                          ? "처리 중…"
+                          : choice.media
+                            ? "새 이미지로 교체"
+                            : "새 이미지 업로드"}
+                      </span>
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        disabled={mediaBusy !== null || !!selected.publication}
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          if (file) void uploadChoiceMedia(choice.code, file);
+                          event.currentTarget.value = "";
+                        }}
+                      />
+                    </label>
+                    {choice.media ? (
+                      <button
+                        type="button"
+                        disabled={mediaBusy !== null || !!selected.publication}
+                        onClick={() => void detachChoiceMedia(choice.code)}
+                      >
+                        이미지 제거
+                      </button>
+                    ) : null}
                   </article>
                 ))}
               </div>
-              {mediaChoiceCode ? (
-                <div className={styles.mediaLibrary} role="dialog" aria-modal="true">
-                  <div className={styles.mediaLibraryHeader}>
-                    <div>
-                      <p className={styles.eyebrow}>APPROVED LIBRARY</p>
-                      <h3>{mediaChoiceCode} 이미지 선택</h3>
-                    </div>
-                    <button type="button" onClick={() => setMediaChoiceCode(null)}>
-                      닫기
-                    </button>
-                  </div>
-                  {libraryAssets.length ? (
-                    <div className={styles.mediaLibraryGrid}>
-                      {libraryAssets.map((asset) => {
-                        const current = selected.choices.find(
-                          (choice) => choice.code === mediaChoiceCode,
-                        )?.media?.assetId;
-                        const usedElsewhere = selected.choices.some(
-                          (choice) =>
-                            choice.code !== mediaChoiceCode && choice.media?.assetId === asset.id,
-                        );
-                        return (
-                          <button
-                            type="button"
-                            key={asset.id}
-                            data-selected={current === asset.id}
-                            disabled={mediaBusy || usedElsewhere}
-                            onClick={() => void chooseMedia(asset)}
-                          >
-                            <Image
-                              src={`/api/ops/media-review/assets/${asset.id}/content`}
-                              alt={asset.link?.altText ?? "승인 이미지"}
-                              width={240}
-                              height={240}
-                              unoptimized
-                            />
-                            <span>{current === asset.id ? "한 번 더 눌러 해제" : "선택"}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <p className={styles.empty}>사용할 수 있는 승인 이미지가 없습니다.</p>
-                  )}
-                </div>
-              ) : null}
             </section>
+
             <div className={styles.facts}>
               <span>{selected.category}</span>
               <span>{selected.editorialArea}</span>
@@ -571,29 +671,8 @@ export function OpsEditorialPanel({
                 ))}
               </ul>
             ) : null}
+
             <div className={styles.decision}>
-              <div className={styles.checks}>
-                {checkLabels.map(([key, label]) => (
-                  <label key={key}>
-                    <input
-                      type="checkbox"
-                      checked={checks[key]}
-                      disabled={!!selected.publication}
-                      onChange={(event) =>
-                        setChecks((current) => ({ ...current, [key]: event.target.checked }))
-                      }
-                    />
-                    <span>{label}</span>
-                  </label>
-                ))}
-              </div>
-              <textarea
-                value={note}
-                maxLength={2000}
-                disabled={!!selected.publication}
-                onChange={(event) => setNote(event.target.value)}
-                placeholder="수정 요청 또는 심사 근거를 남겨 주세요."
-              />
               <div className={styles.decisionActions}>
                 <button
                   type="button"
@@ -605,29 +684,10 @@ export function OpsEditorialPanel({
                 <button
                   type="button"
                   disabled={saving || publishing || !!selected.publication}
-                  onClick={() => void decide("NEEDS_CHANGES")}
-                >
-                  수정 요청
-                </button>
-                <button
-                  type="button"
-                  disabled={saving || publishing || !!selected.publication}
                   onClick={() => void decide("REJECTED")}
                 >
                   반려
                 </button>
-              </div>
-              <div className={styles.publicationAction} data-complete={!!selected.publication}>
-                <div>
-                  <strong>
-                    {selected.publication ? "이 질문은 게시되었습니다." : "게시 실행"}
-                  </strong>
-                  <span>
-                    {selected.publication
-                      ? "게시된 질문 탭에서 공개 상태와 이미지를 관리할 수 있습니다."
-                      : "인가된 질문을 공개 피드에 즉시 반영합니다."}
-                  </span>
-                </div>
                 <button
                   type="button"
                   disabled={
@@ -635,13 +695,7 @@ export function OpsEditorialPanel({
                   }
                   onClick={() => void publish()}
                 >
-                  {selected.publication
-                    ? "게시 완료"
-                    : publishing
-                      ? "게시 중…"
-                      : selected.decision?.status === "APPROVED"
-                        ? "승인된 질문 게시"
-                        : "인가 후 게시 가능"}
+                  {publishing ? "게시 중…" : "승인된 질문 게시"}
                 </button>
               </div>
               {selected.decision ? (
@@ -658,6 +712,8 @@ export function OpsEditorialPanel({
           <div className={styles.empty}>검토할 후보를 선택해 주세요.</div>
         )}
       </div>
+
+      <OpsAdminMediaLibrary />
     </section>
   );
 }
