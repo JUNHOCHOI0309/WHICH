@@ -36,6 +36,7 @@ export type PublicFeedIssue = {
     recommendationCount: number;
     commentCount: number;
     viewerRecommended: boolean;
+    viewerReported: boolean;
   };
   recommendation: {
     requestId: string;

@@ -148,6 +148,7 @@ export type PublicFeedIssue = Omit<
     recommendationCount: number;
     commentCount: number;
     viewerRecommended: boolean;
+    viewerReported: boolean;
   };
   recommendation: {
     requestId: string;
@@ -164,6 +165,36 @@ export type IssueRecommendationResponse = {
     active: boolean;
     count: number;
   };
+};
+
+export type IssueReportReason =
+  | "SPAM"
+  | "INSULT_OR_HARASSMENT"
+  | "HATE"
+  | "THREAT"
+  | "PRIVACY"
+  | "SEXUAL"
+  | "IMPERSONATION"
+  | "ILLEGAL_ACTIVITY"
+  | "OTHER";
+
+export type IssueReportResponse = {
+  report: { id: string; accepted: true; counted: true };
+  case: {
+    id: string;
+    status: "OPEN" | "PENDING_REVIEW" | "QUARANTINED";
+    priority: "NORMAL" | "P0";
+    automationRecommendation: "NONE" | "P0_REVIEW" | "QUARANTINE_REVIEW";
+  };
+  signals: {
+    reporterCount: number;
+    weightedScore: number;
+    reports15m: number;
+    reports24h: number;
+    clusterClassification: "BASELINE" | "CONCENTRATED" | "COORDINATED_SUSPECTED";
+    shadowOnly: true;
+  };
+  target: { hidden: boolean };
 };
 
 export type PublicIssueFeed = {

@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { POST as reportComment } from "@/app/api/comments/[commentId]/reports/route";
+import { POST as reportIssue } from "@/app/api/reports/route";
 import { POST as reactToComment } from "@/app/api/comments/[commentId]/reactions/helpful/route";
 import {
   DELETE as deleteComment,
@@ -165,6 +166,54 @@ describe("Comment mutation BFF Origin handling", () => {
 
     expect(response.status).toBe(201);
     expect(upstream).toHaveBeenCalledTimes(1);
+  });
+
+  it("protects and forwards a public Issue report with both available identities", async () => {
+    vi.stubEnv("AUTH_BASE_URL", "https://whichone.site");
+    const upstream = vi.fn(async () =>
+      jsonResponse(
+        {
+          report: { id: "report-1", accepted: true, counted: true },
+          case: {
+            id: "case-1",
+            status: "OPEN",
+            priority: "NORMAL",
+            automationRecommendation: "NONE",
+          },
+          signals: {
+            reporterCount: 1,
+            weightedScore: 2,
+            reports15m: 1,
+            reports24h: 1,
+            clusterClassification: "BASELINE",
+            shadowOnly: true,
+          },
+          target: { hidden: false },
+        },
+        201,
+      ),
+    );
+    vi.stubGlobal("fetch", upstream);
+
+    const request = mutationRequest("/api/reports", {
+      targetType: "ISSUE",
+      targetId: issueId,
+      reasonCode: "SPAM",
+    });
+    const response = await reportIssue(request);
+
+    expect(response.status).toBe(201);
+    expect(upstream).toHaveBeenCalledWith(
+      new URL("http://localhost:4000/v1/reports"),
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          authorization: "Bearer member-token",
+          "x-anonymous-subject-id": guestSubjectId,
+          "idempotency-key": idempotencyKey,
+        }),
+      }),
+    );
   });
 
   it("protects and forwards author edit and delete requests", async () => {

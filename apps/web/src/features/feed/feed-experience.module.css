@@ -297,15 +297,20 @@
 
 .cardEngagement button:hover,
 .cardEngagement a:hover,
-.cardEngagement .recommended {
+.cardEngagement .recommended,
+.cardEngagement .reported {
   border-color: color-mix(in srgb, var(--which-cyan) 48%, transparent);
   background: color-mix(in srgb, var(--which-cyan) 10%, transparent);
   color: var(--which-cyan-strong);
 }
 
 .cardEngagement button:disabled {
-  cursor: wait;
+  cursor: default;
   opacity: 0.6;
+}
+
+.cardEngagement .recommended:disabled {
+  cursor: wait;
 }
 
 .cardEngagement img {
@@ -324,6 +329,99 @@
   font-size: 0.78rem;
   font-weight: 850;
   text-decoration: none;
+}
+
+.reportBackdrop {
+  position: fixed;
+  z-index: 100;
+  inset: 0;
+  background: rgb(15 23 42 / 52%);
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+
+.reportDialog {
+  width: min(100%, 440px);
+  border: 1px solid var(--which-border);
+  border-radius: 18px;
+  background: var(--which-surface);
+  box-shadow: 0 24px 72px rgb(15 23 42 / 24%);
+  display: grid;
+  gap: 12px;
+  padding: 24px;
+}
+
+.reportDialog h2,
+.reportDialog p {
+  margin: 0;
+}
+
+.reportDialog h2 {
+  font-size: 1.35rem;
+  letter-spacing: -0.035em;
+}
+
+.reportDialog > p:not(.eyebrow, .reportError) {
+  color: var(--which-text-secondary);
+  font-size: 0.8rem;
+  line-height: 1.6;
+}
+
+.reportDialog label {
+  margin-top: 4px;
+  font-size: 0.76rem;
+  font-weight: 850;
+}
+
+.reportDialog select,
+.reportDialog textarea {
+  width: 100%;
+  border: 1px solid var(--which-border-strong);
+  border-radius: 10px;
+  background: var(--which-surface);
+  color: var(--which-text);
+  font: inherit;
+  padding: 11px 12px;
+}
+
+.reportDialog textarea {
+  resize: vertical;
+}
+
+.reportError {
+  color: var(--which-orange-strong);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.reportActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.reportActions button {
+  min-height: 42px;
+  border: 1px solid var(--which-border-strong);
+  border-radius: 999px;
+  background: var(--which-surface);
+  color: var(--which-text);
+  cursor: pointer;
+  padding: 9px 16px;
+  font-weight: 850;
+}
+
+.reportActions button[type="submit"] {
+  border-color: var(--which-orange);
+  background: var(--which-orange);
+  color: #321303;
+}
+
+.reportActions button:disabled {
+  cursor: wait;
+  opacity: 0.6;
 }
 
 .moreButton,
@@ -465,10 +563,15 @@
 
   .cardEngagement {
     margin-left: 0;
+    flex-wrap: wrap;
   }
 
   .cardDetailLink {
     margin-left: auto;
+  }
+
+  .reportDialog {
+    padding: 20px;
   }
 }
 

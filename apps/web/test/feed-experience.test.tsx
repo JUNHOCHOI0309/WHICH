@@ -33,6 +33,7 @@ const feed: PublicIssueFeed = {
         recommendationCount: 7,
         commentCount: 3,
         viewerRecommended: false,
+        viewerReported: false,
       },
       recommendation: {
         requestId: "20000000-0000-4000-8000-000000000001",
@@ -56,6 +57,7 @@ const feed: PublicIssueFeed = {
         recommendationCount: 1,
         commentCount: 0,
         viewerRecommended: false,
+        viewerReported: false,
       },
       recommendation: {
         requestId: "20000000-0000-4000-8000-000000000001",
@@ -428,6 +430,59 @@ describe("FeedExperience", () => {
     );
     expect(recommendationRequests).toHaveLength(1);
     expect(JSON.parse(String(recommendationRequests[0]?.init?.body))).toEqual({ active: true });
+  });
+
+  it("submits an Issue report from each card and remembers the reported state", async () => {
+    const reportRequests: Array<{ url: string; init?: RequestInit }> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = String(input);
+        if (url === "/api/member-session") return jsonResponse({ code: "SESSION_INVALID" }, 401);
+        if (url === "/api/guest-subjects") return jsonResponse({ status: "ready" });
+        if (url.startsWith("/api/issues/feed?")) return jsonResponse(feed);
+        if (url === "/api/reports") {
+          reportRequests.push({ url, init });
+          return jsonResponse(
+            {
+              report: { id: "report-1", accepted: true, counted: true },
+              case: {
+                id: "case-1",
+                status: "OPEN",
+                priority: "NORMAL",
+                automationRecommendation: "NONE",
+              },
+              signals: {
+                reporterCount: 1,
+                weightedScore: 1,
+                reports15m: 1,
+                reports24h: 1,
+                clusterClassification: "BASELINE",
+                shadowOnly: true,
+              },
+              target: { hidden: false },
+            },
+            201,
+          );
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      }),
+    );
+
+    render(<FeedExperience />);
+
+    const reportButton = (await screen.findAllByRole("button", { name: "질문 신고" }))[0]!;
+    fireEvent.click(reportButton);
+    expect(screen.getByRole("dialog", { name: "이 질문을 신고할까요?" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "신고 접수" }));
+
+    expect(await screen.findByRole("button", { name: "신고한 질문" })).toBeDisabled();
+    expect(reportRequests).toHaveLength(1);
+    expect(JSON.parse(String(reportRequests[0]?.init?.body))).toEqual({
+      targetType: "ISSUE",
+      targetId: feed.items[0]!.id,
+      reasonCode: "SPAM",
+    });
   });
 
   it("replaces the static principle with result-free participation links", async () => {

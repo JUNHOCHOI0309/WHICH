@@ -30,6 +30,7 @@ import {
   analyticsEvents,
   analyticsSessions,
   comments,
+  contentReports,
   guestMemberLinks,
   issueRecommendations,
   issues,
@@ -986,52 +987,66 @@ export function createIssueReadService(
         const commentFilters = pageRows.map((row) =>
           and(eq(comments.issueId, row.id), eq(comments.issueVersion, row.version)),
         );
-        const [recommendationCounts, commentCounts, viewerRecommendations] = pageRows.length
-          ? await Promise.all([
-              transaction
-                .select({
-                  issueId: issueRecommendations.issueId,
-                  count: sql<number>`count(*)::int`,
-                })
-                .from(issueRecommendations)
-                .where(
-                  and(
-                    inArray(issueRecommendations.issueId, pageIssueIds),
-                    eq(issueRecommendations.active, true),
-                  ),
-                )
-                .groupBy(issueRecommendations.issueId),
-              transaction
-                .select({
-                  issueId: comments.issueId,
-                  issueVersion: comments.issueVersion,
-                  count: sql<number>`count(*)::int`,
-                })
-                .from(comments)
-                .where(
-                  and(
-                    or(...commentFilters),
-                    eq(comments.publicationState, "PUBLISHED"),
-                    inArray(comments.visibility, ["VISIBLE", "DEPRIORITIZED", "COLLAPSED"]),
-                    eq(comments.integrityState, "NORMAL"),
-                    isNull(comments.deletedAt),
-                  ),
-                )
-                .groupBy(comments.issueId, comments.issueVersion),
-              viewerMemberId
-                ? transaction
-                    .select({ issueId: issueRecommendations.issueId })
-                    .from(issueRecommendations)
-                    .where(
-                      and(
-                        inArray(issueRecommendations.issueId, pageIssueIds),
-                        eq(issueRecommendations.memberId, viewerMemberId),
-                        eq(issueRecommendations.active, true),
-                      ),
-                    )
-                : Promise.resolve([]),
-            ])
-          : [[], [], []];
+        const [recommendationCounts, commentCounts, viewerRecommendations, viewerReports] =
+          pageRows.length
+            ? await Promise.all([
+                transaction
+                  .select({
+                    issueId: issueRecommendations.issueId,
+                    count: sql<number>`count(*)::int`,
+                  })
+                  .from(issueRecommendations)
+                  .where(
+                    and(
+                      inArray(issueRecommendations.issueId, pageIssueIds),
+                      eq(issueRecommendations.active, true),
+                    ),
+                  )
+                  .groupBy(issueRecommendations.issueId),
+                transaction
+                  .select({
+                    issueId: comments.issueId,
+                    issueVersion: comments.issueVersion,
+                    count: sql<number>`count(*)::int`,
+                  })
+                  .from(comments)
+                  .where(
+                    and(
+                      or(...commentFilters),
+                      eq(comments.publicationState, "PUBLISHED"),
+                      inArray(comments.visibility, ["VISIBLE", "DEPRIORITIZED", "COLLAPSED"]),
+                      eq(comments.integrityState, "NORMAL"),
+                      isNull(comments.deletedAt),
+                    ),
+                  )
+                  .groupBy(comments.issueId, comments.issueVersion),
+                viewerMemberId
+                  ? transaction
+                      .select({ issueId: issueRecommendations.issueId })
+                      .from(issueRecommendations)
+                      .where(
+                        and(
+                          inArray(issueRecommendations.issueId, pageIssueIds),
+                          eq(issueRecommendations.memberId, viewerMemberId),
+                          eq(issueRecommendations.active, true),
+                        ),
+                      )
+                  : Promise.resolve([]),
+                subjectId
+                  ? transaction
+                      .select({ issueId: contentReports.targetId })
+                      .from(contentReports)
+                      .where(
+                        and(
+                          eq(contentReports.targetType, "ISSUE"),
+                          inArray(contentReports.targetId, pageIssueIds),
+                          eq(contentReports.subjectId, subjectId),
+                          eq(contentReports.counted, true),
+                        ),
+                      )
+                  : Promise.resolve([]),
+              ])
+            : [[], [], [], []];
         const recommendationCountByIssue = new Map(
           recommendationCounts.map((row) => [row.issueId, Number(row.count)]),
         );
@@ -1039,6 +1054,7 @@ export function createIssueReadService(
           commentCounts.map((row) => [`${row.issueId}:${row.issueVersion}`, Number(row.count)]),
         );
         const viewerRecommendedIssueIds = new Set(viewerRecommendations.map((row) => row.issueId));
+        const viewerReportedIssueIds = new Set(viewerReports.map((row) => row.issueId));
 
         const items = pageRows.map((row) => ({
           id: row.id,
@@ -1056,6 +1072,7 @@ export function createIssueReadService(
             recommendationCount: recommendationCountByIssue.get(row.id) ?? 0,
             commentCount: commentCountByIssueVersion.get(`${row.id}:${row.version}`) ?? 0,
             viewerRecommended: viewerRecommendedIssueIds.has(row.id),
+            viewerReported: viewerReportedIssueIds.has(row.id),
           },
           recommendation: {
             requestId: rankingRequestId,

@@ -12,6 +12,8 @@ import type {
   PublicIssue,
   PublicIssueFeed,
   IssueRecommendationResponse,
+  IssueReportReason,
+  IssueReportResponse,
   ShareCardResponse,
   ShareChannel,
   VoteResponse,
@@ -280,6 +282,31 @@ export async function setIssueRecommendation(command: { issueId: string; active:
   const body = await responseBody<IssueRecommendationResponse>(response);
   if (!response.ok) throwApiError(response, body as ApiErrorBody);
   return body as IssueRecommendationResponse;
+}
+
+export async function reportIssue(command: {
+  issueId: string;
+  idempotencyKey: string;
+  reasonCode: IssueReportReason;
+  detail?: string;
+}) {
+  const response = await fetch("/api/reports", {
+    method: "POST",
+    headers: {
+      accept: "application/json",
+      "content-type": "application/json",
+      "idempotency-key": command.idempotencyKey,
+    },
+    body: JSON.stringify({
+      targetType: "ISSUE",
+      targetId: command.issueId,
+      reasonCode: command.reasonCode,
+      detail: command.detail,
+    }),
+  });
+  const body = await responseBody<IssueReportResponse>(response);
+  if (!response.ok) throwApiError(response, body as ApiErrorBody);
+  return body as IssueReportResponse;
 }
 
 export async function submitMemberComment(command: {

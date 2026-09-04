@@ -136,6 +136,7 @@ describe("Issue and media report Signal v2", () => {
         clusterClassification: "BASELINE",
         shadowOnly: true,
       },
+      target: { hidden: false },
     });
     expect((await reportAsGuest("ISSUE", issueId, guest)).statusCode).toBe(409);
 
@@ -148,22 +149,23 @@ describe("Issue and media report Signal v2", () => {
     expect(await database.db.select().from(reporterSignalSnapshots)).toHaveLength(1);
   });
 
-  it("flags concentrated new-Guest activity as a shadow Cluster, not a verdict", async () => {
+  it("does not auto-hide coordinated new-Guest activity", async () => {
     const issueId = await createIssue();
-    let fifthResponse: Awaited<ReturnType<typeof reportAsGuest>> | undefined;
-    for (let index = 0; index < 5; index += 1) {
-      fifthResponse = await reportAsGuest("ISSUE", issueId, await createGuest());
-      expect(fifthResponse.statusCode).toBe(201);
+    let finalResponse: Awaited<ReturnType<typeof reportAsGuest>> | undefined;
+    for (let index = 0; index < 20; index += 1) {
+      finalResponse = await reportAsGuest("ISSUE", issueId, await createGuest());
+      expect(finalResponse.statusCode).toBe(201);
     }
 
-    expect(fifthResponse?.json()).toMatchObject({
+    expect(finalResponse?.json()).toMatchObject({
       case: { status: "OPEN", automationRecommendation: "NONE" },
       signals: {
-        reporterCount: 5,
-        reports15m: 5,
+        reporterCount: 20,
+        reports15m: 20,
         clusterClassification: "COORDINATED_SUSPECTED",
         shadowOnly: true,
       },
+      target: { hidden: false },
     });
     const [cluster] = await database.db
       .select({ classification: reportClusters.classification })
@@ -171,6 +173,53 @@ describe("Issue and media report Signal v2", () => {
       .innerJoin(reportCases, eq(reportCases.id, reportClusters.caseId))
       .where(eq(reportCases.targetId, issueId));
     expect(cluster?.classification).toBe("COORDINATED_SUSPECTED");
+    const [storedIssue] = await database.db
+      .select({ visibility: issues.visibility })
+      .from(issues)
+      .where(eq(issues.id, issueId));
+    expect(storedIssue?.visibility).toBe("VISIBLE");
+  });
+
+  it("temporarily hides a published Issue after ten established Member reports", async () => {
+    const issueId = await createIssue();
+    let finalResponse: Awaited<ReturnType<typeof app.inject>> | undefined;
+    for (let index = 0; index < 10; index += 1) {
+      const member = await createSession(`auto-hide-reporter-${issueId}-${index}`);
+      await database.db
+        .update(members)
+        .set({ createdAt: new Date(Date.now() - 30 * 86_400_000) })
+        .where(eq(members.id, member.member.id));
+      finalResponse = await app.inject({
+        method: "POST",
+        url: "/v1/reports",
+        headers: { authorization: `Bearer ${member.token}`, "idempotency-key": randomUUID() },
+        payload: { targetType: "ISSUE", targetId: issueId, reasonCode: "SPAM" },
+      });
+      expect(finalResponse.statusCode).toBe(201);
+    }
+
+    expect(finalResponse?.json()).toMatchObject({
+      case: { status: "QUARANTINED", automationRecommendation: "QUARANTINE_REVIEW" },
+      signals: {
+        reporterCount: 10,
+        weightedScore: 20,
+        clusterClassification: "CONCENTRATED",
+      },
+      target: { hidden: true },
+    });
+    const [storedIssue] = await database.db
+      .select({
+        visibility: issues.visibility,
+        participation: issues.participation,
+        feedEligibility: issues.feedEligibility,
+      })
+      .from(issues)
+      .where(eq(issues.id, issueId));
+    expect(storedIssue).toEqual({
+      visibility: "SUSPENDED",
+      participation: "VOTING_SUSPENDED",
+      feedEligibility: "EXCLUDED",
+    });
   });
 
   it("merges linked Guest and Member reports while preserving both original rows", async () => {

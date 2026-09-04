@@ -62,6 +62,7 @@ export type PublicFeedIssue = Omit<
     recommendationCount: number;
     commentCount: number;
     viewerRecommended: boolean;
+    viewerReported: boolean;
   };
   recommendation: FeedItemRecommendation & { requestId: string };
 };

@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 import { and, count, eq, gt, isNull, sql, sum } from "drizzle-orm";
 
@@ -11,6 +11,7 @@ import {
   issues,
   memberSessions,
   members,
+  outboxEvents,
   reportCases,
   reportClusters,
   reporterSignalSnapshots,
@@ -24,10 +25,12 @@ import type {
   ContentReportService,
 } from "./contracts.js";
 
-const POLICY_VERSION = "report-signal-v2";
+const POLICY_VERSION = "report-signal-v3-auto-hide";
 const REPORT_DAILY_LIMIT = 20;
 const CLUSTER_WINDOW_MINUTES = 15;
 const NEW_ACCOUNT_DAYS = 7;
+const AUTO_HIDE_SCORE = 20;
+const AUTO_HIDE_REPORTERS = 10;
 
 export class ContentReportError extends Error {
   constructor(
@@ -226,9 +229,24 @@ export function createContentReportService(database: Database["db"]): ContentRep
         await transaction.execute(
           sql`select pg_advisory_xact_lock(hashtextextended(${`${command.targetType}:${command.targetId}`}, 0))`,
         );
+        let issueTarget:
+          | {
+              id: string;
+              lifecycle: string;
+              visibility: string;
+              participation: string;
+              feedEligibility: string;
+            }
+          | undefined;
         if (command.targetType === "ISSUE") {
           const [target] = await transaction
-            .select({ id: issues.id })
+            .select({
+              id: issues.id,
+              lifecycle: issues.lifecycle,
+              visibility: issues.visibility,
+              participation: issues.participation,
+              feedEligibility: issues.feedEligibility,
+            })
             .from(issues)
             .where(
               and(
@@ -237,7 +255,8 @@ export function createContentReportService(database: Database["db"]): ContentRep
                 sql`${issues.lifecycle} in ('PUBLISHED', 'CLOSED', 'ARCHIVED')`,
               ),
             )
-            .limit(1);
+            .limit(1)
+            .for("update");
           if (!target) {
             throw new ContentReportError(
               "REPORT_TARGET_UNAVAILABLE",
@@ -245,6 +264,7 @@ export function createContentReportService(database: Database["db"]): ContentRep
               "Issue is not reportable.",
             );
           }
+          issueTarget = target;
         } else {
           const [target] = await transaction
             .select({ id: issueMediaAssets.id })
@@ -432,16 +452,67 @@ export function createContentReportService(database: Database["db"]): ContentRep
           .set({ classification, updatedAt: now })
           .where(eq(reportClusters.id, cluster.id));
 
+        const shouldAutoHide =
+          command.targetType === "ISSUE" &&
+          issueTarget?.lifecycle === "PUBLISHED" &&
+          weightedScore >= AUTO_HIDE_SCORE &&
+          reporterCount >= AUTO_HIDE_REPORTERS &&
+          classification !== "COORDINATED_SUSPECTED";
+        let autoHidden = false;
+        if (shouldAutoHide && issueTarget) {
+          const [hiddenIssue] = await transaction
+            .update(issues)
+            .set({
+              visibility: "SUSPENDED",
+              participation: "VOTING_SUSPENDED",
+              feedEligibility: "EXCLUDED",
+              updatedAt: now,
+            })
+            .where(and(eq(issues.id, command.targetId), eq(issues.visibility, "VISIBLE")))
+            .returning({ id: issues.id });
+          autoHidden = Boolean(hiddenIssue);
+          if (autoHidden) {
+            const eventId = randomUUID();
+            await transaction.insert(outboxEvents).values({
+              id: eventId,
+              aggregateType: "ISSUE",
+              aggregateId: command.targetId,
+              eventType: "ISSUE_AUTO_HIDDEN_BY_REPORTS",
+              schemaVersion: 1,
+              occurredAt: now,
+              payload: {
+                event_id: eventId,
+                event_type: "ISSUE_AUTO_HIDDEN_BY_REPORTS",
+                schema_version: 1,
+                occurred_at: now.toISOString(),
+                aggregate_type: "ISSUE",
+                aggregate_id: command.targetId,
+                data: {
+                  policy_version: POLICY_VERSION,
+                  weighted_score: weightedScore,
+                  reporter_count: reporterCount,
+                  cluster_classification: classification,
+                  previous_visibility: issueTarget.visibility,
+                  previous_participation: issueTarget.participation,
+                  previous_feed_eligibility: issueTarget.feedEligibility,
+                },
+              },
+            });
+          }
+        }
+
         const criticalReason = command.reasonCode === "THREAT" || command.reasonCode === "PRIVACY";
         const credibleEvidence =
           reporterKind === "VERIFIED_MEMBER" && (detail ? Array.from(detail).length >= 20 : false);
         const priority =
           reportCase.priority === "P0" || criticalReason ? ("P0" as const) : ("NORMAL" as const);
-        const requestedRecommendation = credibleEvidence
+        const requestedRecommendation = autoHidden
           ? ("QUARANTINE_REVIEW" as const)
-          : criticalReason
-            ? ("P0_REVIEW" as const)
-            : ("NONE" as const);
+          : credibleEvidence
+            ? ("QUARANTINE_REVIEW" as const)
+            : criticalReason
+              ? ("P0_REVIEW" as const)
+              : ("NONE" as const);
         const recommendationRank = { NONE: 0, P0_REVIEW: 1, QUARANTINE_REVIEW: 2 } as const;
         const automationRecommendation =
           recommendationRank[
@@ -450,7 +521,7 @@ export function createContentReportService(database: Database["db"]): ContentRep
             ? (reportCase.automationRecommendation as typeof requestedRecommendation)
             : requestedRecommendation;
         const status =
-          reportCase.status === "QUARANTINED"
+          autoHidden || reportCase.status === "QUARANTINED"
             ? ("QUARANTINED" as const)
             : reportCase.status === "PENDING_REVIEW" || criticalReason
               ? ("PENDING_REVIEW" as const)
@@ -458,11 +529,18 @@ export function createContentReportService(database: Database["db"]): ContentRep
         if (
           reportCase.priority !== priority ||
           reportCase.automationRecommendation !== automationRecommendation ||
-          reportCase.status !== status
+          reportCase.status !== status ||
+          reportCase.policyVersion !== POLICY_VERSION
         ) {
           await transaction
             .update(reportCases)
-            .set({ priority, automationRecommendation, status, updatedAt: now })
+            .set({
+              priority,
+              automationRecommendation,
+              status,
+              policyVersion: POLICY_VERSION,
+              updatedAt: now,
+            })
             .where(eq(reportCases.id, reportCase.id));
         }
 
@@ -524,6 +602,7 @@ export function createContentReportService(database: Database["db"]): ContentRep
               clusterClassification: classification,
               shadowOnly: true,
             },
+            target: { hidden: autoHidden },
           },
         };
         await transaction
