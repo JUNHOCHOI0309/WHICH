@@ -42,7 +42,7 @@ export const editorialReviewHtml = String.raw`<!doctype html>
           <div class="filters">
             <label class="search-field"><span class="sr-only">후보 검색</span><input id="search" type="search" placeholder="질문·ID 검색" /></label>
             <div class="filter-grid">
-              <label><span>재고</span><select id="scope"><option value="ACTIVE">Active 72</option><option value="RESERVE">Reserve 108</option><option value="LONG_TERM">Long-term 320</option><option value="ALL">전체</option></select></label>
+              <label><span>재고</span><select id="scope"><option value="ACTIVE">Active 72</option><option value="RESERVE">Reserve 108</option><option value="LONG_TERM">Long-term 482</option><option value="ALL">전체</option></select></label>
               <label><span>상태</span><select id="status"><option value="ALL">전체 상태</option><option value="PENDING">검토 대기</option><option value="APPROVED">승인</option><option value="NEEDS_CHANGES">수정 필요</option><option value="REJECTED">반려</option></select></label>
               <label><span>범주</span><select id="category"><option value="ALL">전체 범주</option></select></label>
               <label><span>위험도</span><select id="risk"><option value="ALL">전체</option><option value="LOW">LOW</option><option value="MEDIUM">MEDIUM</option></select></label>
