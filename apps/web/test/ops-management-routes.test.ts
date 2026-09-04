@@ -7,6 +7,7 @@ vi.mock("jose", () => ({
 }));
 
 import { GET as getEditorial } from "@/app/api/ops/editorial/route";
+import { GET as getEditorialMediaContent } from "@/app/api/ops/editorial/media-assets/[assetId]/content/route";
 import { PUT as putDecision } from "@/app/api/ops/editorial/[candidateId]/decision/route";
 import { POST as postEditorialPublish } from "@/app/api/ops/editorial/[candidateId]/publish/route";
 import {
@@ -191,6 +192,34 @@ describe("operator management BFF", () => {
     expect(attach.status).toBe(200);
     expect(detach.status).toBe(200);
     expect(upstream.mock.calls.map((call) => call[1]?.method)).toEqual(["PUT", "DELETE"]);
+  });
+
+  it("streams Editorial media content without decoding the image as JSON", async () => {
+    const assetId = "20ec3b63-9788-4797-bcf2-6f849d31c148";
+    const imageBytes = new Uint8Array([82, 73, 70, 70, 1, 2, 3, 4]);
+    const upstream = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      expect(String(input)).toBe(
+        `http://localhost:4000/v1/internal/ops/media-review/assets/${assetId}/content`,
+      );
+      expect(new Headers(init?.headers).get("authorization")).toBe("Bearer member-token");
+      return new Response(imageBytes, {
+        status: 200,
+        headers: { "content-type": "image/webp" },
+      });
+    });
+    vi.stubGlobal("fetch", upstream);
+
+    const response = await getEditorialMediaContent(
+      new NextRequest(`https://whichone.site/api/ops/editorial/media-assets/${assetId}/content`, {
+        headers: { cookie: "which_member_session=member-token" },
+      }),
+      { params: Promise.resolve({ assetId }) },
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("image/webp");
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    expect(new Uint8Array(await response.arrayBuffer())).toEqual(imageBytes);
   });
 
   it("forwards Point Shop reads through the protected Ops boundary", async () => {
