@@ -590,6 +590,7 @@ describe("Guest Issue feed API", () => {
             recommendationCount: number;
             commentCount: number;
             viewerRecommended: boolean;
+            viewerReported: boolean;
           };
         }>;
       }>()
@@ -607,6 +608,7 @@ describe("Guest Issue feed API", () => {
       recommendationCount: 1,
       commentCount: 1,
       viewerRecommended: true,
+      viewerReported: false,
     });
 
     const removed = await app.inject({

@@ -42,6 +42,7 @@ export type ContentReportResult = {
       clusterClassification: "BASELINE" | "CONCENTRATED" | "COORDINATED_SUSPECTED";
       shadowOnly: true;
     };
+    target: { hidden: boolean };
   };
 };
 

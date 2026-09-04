@@ -93,6 +93,7 @@ const feedResponseSchema = Type.Object({
         recommendationCount: Type.Integer({ minimum: 0 }),
         commentCount: Type.Integer({ minimum: 0 }),
         viewerRecommended: Type.Boolean(),
+        viewerReported: Type.Boolean(),
       }),
       recommendation: Type.Object({
         requestId: uuidSchema,
