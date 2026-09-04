@@ -12,6 +12,7 @@ export * from "./issue-media.js";
 export * from "./issue-media-library.js";
 export * from "./media-upload-gate.js";
 export * from "./issue-submissions.js";
+export * from "./issue-recommendations.js";
 export * from "./outbox.js";
 export * from "./operations.js";
 export * from "./points.js";

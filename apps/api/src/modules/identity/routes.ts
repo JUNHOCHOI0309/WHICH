@@ -96,6 +96,11 @@ const privateProfileSchema = Type.Object({
       participationCount: Type.Integer({ minimum: 0 }),
     }),
   ]),
+  choiceSummary: Type.Object({
+    majorityMatchPercent: Type.Integer({ minimum: 0, maximum: 100 }),
+    minorityChoicePercent: Type.Integer({ minimum: 0, maximum: 100 }),
+    recentSevenDayCount: Type.Integer({ minimum: 0 }),
+  }),
   publicProfile: Type.Union([memberProfileSettingsSchema, Type.Null()]),
   identities: Type.Array(
     Type.Object({

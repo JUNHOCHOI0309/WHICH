@@ -262,12 +262,60 @@
   padding-top: 15px;
 }
 
-.cardFooter > span {
+.cardResultStatus {
   color: var(--which-text-tertiary);
   font-size: 0.7rem;
 }
 
-.cardFooter a {
+.cardEngagement {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.cardEngagement button,
+.cardEngagement a {
+  min-height: 36px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--which-text-secondary);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 9px;
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.cardEngagement button {
+  cursor: pointer;
+}
+
+.cardEngagement button:hover,
+.cardEngagement a:hover,
+.cardEngagement .recommended {
+  border-color: color-mix(in srgb, var(--which-cyan) 48%, transparent);
+  background: color-mix(in srgb, var(--which-cyan) 10%, transparent);
+  color: var(--which-cyan-strong);
+}
+
+.cardEngagement button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.cardEngagement img {
+  width: 17px;
+  height: 17px;
+  object-fit: contain;
+  opacity: 0.72;
+}
+
+.cardDetailLink {
   min-height: 44px;
   color: var(--which-text);
   display: inline-flex;
@@ -404,6 +452,23 @@
 
   .choiceList {
     margin-top: 18px;
+  }
+
+  .cardFooter {
+    flex-wrap: wrap;
+    gap: 8px 10px;
+  }
+
+  .cardResultStatus {
+    width: 100%;
+  }
+
+  .cardEngagement {
+    margin-left: 0;
+  }
+
+  .cardDetailLink {
+    margin-left: auto;
   }
 }
 

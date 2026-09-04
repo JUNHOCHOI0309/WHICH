@@ -3,17 +3,19 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { toast } from "@/components/feedback/toast-provider";
 import { WhichShell } from "@/components/layout/which-shell";
 import type {
   ChoiceCode,
+  InterestCardCode,
   MemberIssueSubmission,
   MemberPointShopView,
   MemberPrivateProfile,
   MemberPrivateVote,
 } from "@/lib/contracts";
+import { loadInterestProfile } from "@/features/interests/client";
 import { logoutMemberSession, MEMBER_LOGOUT_ERROR } from "@/lib/member-session";
 import { avatarFrameStyle, equippedShopItem, profileAccentStyle } from "@/lib/point-shop-cosmetics";
 
@@ -35,6 +37,23 @@ const IDENTITY_LABELS = {
   KAKAO: "Kakao",
   TIKTOK: "TikTok",
 } as const;
+
+const INTEREST_LABELS: Record<InterestCardCode, string> = {
+  DAILY_LIFE: "생활",
+  FOOD: "음식",
+  TRAVEL: "여행",
+  RELATIONSHIP: "연애·관계",
+  WORK: "직장",
+  ECONOMY_CONSUMPTION: "경제·소비",
+  TECH: "IT·테크",
+  GAME: "게임",
+  MOVIE_DRAMA: "영화·드라마",
+  MUSIC_CONTENT: "음악·콘텐츠",
+  SPORTS: "스포츠",
+  EDUCATION: "교육",
+  SOCIETY: "사회",
+  HOBBY: "취미",
+};
 
 function isVisibleIdentity(
   identity: MemberPrivateProfile["identities"][number],
@@ -97,6 +116,51 @@ function participatedLabel(value: string) {
   }).format(new Date(value));
 }
 
+function visibleVoteSummary(profile: MemberPrivateProfile) {
+  if (profile.choiceSummary) return profile.choiceSummary;
+
+  const majorityMatchCount = profile.votes.items.filter((vote) => {
+    const counts = [
+      vote.result.acceptedA,
+      vote.result.acceptedB,
+      ...(vote.choiceCount >= 3 ? [vote.result.acceptedC ?? 0] : []),
+      ...(vote.choiceCount >= 4 ? [vote.result.acceptedD ?? 0] : []),
+    ];
+    const selectedCount = (
+      {
+        A: vote.result.acceptedA,
+        B: vote.result.acceptedB,
+        C: vote.result.acceptedC ?? 0,
+        D: vote.result.acceptedD ?? 0,
+      } as const
+    )[vote.choice];
+    return selectedCount === Math.max(...counts);
+  }).length;
+  const visibleCount = profile.votes.items.length;
+  const majorityMatchPercent =
+    visibleCount > 0 ? Math.round((majorityMatchCount / visibleCount) * 100) : 0;
+  const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1_000;
+
+  return {
+    majorityMatchPercent,
+    minorityChoicePercent: visibleCount > 0 ? 100 - majorityMatchPercent : 0,
+    recentSevenDayCount: profile.votes.items.filter(
+      (vote) => new Date(vote.acceptedAt).getTime() >= sevenDaysAgo,
+    ).length,
+  };
+}
+
+function IdentityMark({ provider }: { provider: keyof typeof IDENTITY_LABELS }) {
+  if (provider === "X") {
+    return <Image src="/icons/x-logo.png" width={14} height={14} alt="" aria-hidden="true" />;
+  }
+  return (
+    <b className={styles[`identityMark${provider}`]} aria-hidden="true">
+      {provider === "GOOGLE" ? "G" : provider === "EMAIL" ? "@" : provider.slice(0, 1)}
+    </b>
+  );
+}
+
 const SUBMISSION_STATUS_LABELS = {
   PROCESSING: "처리 중",
   PUBLISHED: "게시 완료",
@@ -133,6 +197,8 @@ export function MemberProfileExperience({
   const [profile, setProfile] = useState<MemberPrivateProfile | null>(null);
   const [submissions, setSubmissions] = useState<MemberIssueSubmission[] | null>(null);
   const [shop, setShop] = useState<MemberPointShopView | null>(null);
+  const [interestCodes, setInterestCodes] = useState<InterestCardCode[]>([]);
+  const [profileSettingsOpen, setProfileSettingsOpen] = useState(false);
   const [logoutPending, setLogoutPending] = useState(false);
   const [accountDeletionOpen, setAccountDeletionOpen] = useState(false);
   const [accountDeletionPassword, setAccountDeletionPassword] = useState("");
@@ -140,6 +206,8 @@ export function MemberProfileExperience({
   const [accountDeletionPending, setAccountDeletionPending] = useState(false);
   const [accountDeletionError, setAccountDeletionError] = useState<string | null>(null);
   const [accountDeleted, setAccountDeleted] = useState(false);
+  const profileEditButton = useRef<HTMLButtonElement>(null);
+  const profileSettingsCloseButton = useRef<HTMLButtonElement>(null);
 
   const load = useCallback(async () => {
     setScreen("loading");
@@ -179,6 +247,25 @@ export function MemberProfileExperience({
   }, []);
 
   useEffect(() => {
+    if (!profileSettingsOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const focusFrame = window.requestAnimationFrame(() =>
+      profileSettingsCloseButton.current?.focus(),
+    );
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setProfileSettingsOpen(false);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+      profileEditButton.current?.focus();
+    };
+  }, [profileSettingsOpen]);
+
+  useEffect(() => {
     if (screen !== "ready" || !profile) return;
     let active = true;
     void readRecentSubmissions()
@@ -187,6 +274,27 @@ export function MemberProfileExperience({
       })
       .catch(() => {
         if (active) setSubmissions([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [profile, screen]);
+
+  useEffect(() => {
+    if (screen !== "ready" || !profile) return;
+    let active = true;
+    void loadInterestProfile()
+      .then((interestProfile) => {
+        if (active) {
+          setInterestCodes(
+            Array.isArray(interestProfile?.selectedCardCodes)
+              ? interestProfile.selectedCardCodes
+              : [],
+          );
+        }
+      })
+      .catch(() => {
+        if (active) setInterestCodes([]);
       });
     return () => {
       active = false;
@@ -210,6 +318,7 @@ export function MemberProfileExperience({
 
   const profileAccent = equippedShopItem(shop, "PROFILE_ACCENT");
   const avatarFrame = equippedShopItem(shop, "AVATAR_FRAME");
+  const choiceSummary = profile ? visibleVoteSummary(profile) : null;
 
   return (
     <WhichShell
@@ -270,48 +379,219 @@ export function MemberProfileExperience({
               aria-labelledby="profile-title"
               style={profileAccentStyle(profileAccent)}
             >
-              <div className={styles.profileIdentity}>
-                <div className={styles.cosmeticAvatarFrame} style={avatarFrameStyle(avatarFrame)}>
-                  <MemberAvatarSettings
-                    member={profile.member}
-                    onUpdated={(member) =>
-                      setProfile((current) =>
-                        current
-                          ? { ...current, member: { ...current.member, ...member } }
-                          : current,
-                      )
-                    }
+              <div className={styles.profileTopbar}>
+                <p>
+                  <Image
+                    className={styles.lockIcon}
+                    src="/icons/profile/lock.png"
+                    width={14}
+                    height={14}
+                    alt=""
+                    aria-hidden="true"
                   />
-                </div>
-                <div className={styles.profileIdentityCopy}>
-                  <div className={styles.profileIdentityHeading}>
-                    <p>PRIVATE MEMBER PROFILE</p>
+                  <span className={styles.desktopEyebrow}>PRIVATE MEMBER PROFILE</span>
+                  <span className={styles.mobileEyebrow}>비공개 프로필</span>
+                </p>
+                <button
+                  aria-label="프로필 편집"
+                  aria-expanded={profileSettingsOpen}
+                  aria-haspopup="dialog"
+                  className={styles.profileEditLink}
+                  onClick={() => setProfileSettingsOpen(true)}
+                  ref={profileEditButton}
+                  type="button"
+                >
+                  <span aria-hidden="true">✎</span>
+                  <span className={styles.profileEditLabel}>프로필 편집</span>
+                </button>
+              </div>
+
+              <div className={styles.profileMain}>
+                <div className={styles.profileIdentity}>
+                  <div className={styles.cosmeticAvatarFrame} style={avatarFrameStyle(avatarFrame)}>
+                    <MemberAvatarSettings
+                      member={profile.member}
+                      onUpdated={(member) =>
+                        setProfile((current) =>
+                          current
+                            ? { ...current, member: { ...current.member, ...member } }
+                            : current,
+                        )
+                      }
+                    />
                   </div>
-                  <h1 id="profile-title">{profile.member.displayName}님의 선택</h1>
-                  <span>{joinedLabel(profile.member.joinedAt)}부터 WHICH에 참여했어요.</span>
+                  <div className={styles.profileIdentityCopy}>
+                    <h1 id="profile-title" aria-label={`${profile.member.displayName}님의 선택`}>
+                      {profile.member.displayName}
+                    </h1>
+                    {profile.publicProfile?.handle ? (
+                      <p className={styles.profileHandle}>@{profile.publicProfile.handle}</p>
+                    ) : null}
+                    <p className={styles.joinedAt}>
+                      <Image
+                        className={styles.calendarIcon}
+                        src="/icons/profile/calendar.png"
+                        width={14}
+                        height={14}
+                        alt=""
+                        aria-hidden="true"
+                      />
+                      {joinedLabel(profile.member.joinedAt)}부터 WHICH에 참여했어요.
+                    </p>
+                    <div className={styles.identityChips} aria-label="연결된 로그인 수단">
+                      {profile.identities.filter(isVisibleIdentity).map((identity) => (
+                        <span key={identity.provider}>
+                          <IdentityMark provider={identity.provider} />
+                          {IDENTITY_LABELS[identity.provider]} 계정
+                        </span>
+                      ))}
+                      <span>
+                        <Image
+                          className={styles.miniLockIcon}
+                          src={
+                            profile.publicProfile?.visibility === "PUBLIC"
+                              ? "/icons/profile/unlock.png"
+                              : "/icons/profile/lock.png"
+                          }
+                          width={12}
+                          height={12}
+                          alt=""
+                          aria-hidden="true"
+                        />
+                        {profile.publicProfile?.visibility === "PUBLIC"
+                          ? "공개 프로필"
+                          : "비공개 프로필"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className={styles.profileSummaryColumn} aria-label="나의 선택 요약">
+                  <h2>나의 선택 요약</h2>
+                  <div className={styles.summaryMetrics}>
+                    <div className={styles.summaryMetric}>
+                      <span>참여한 질문</span>
+                      <strong>
+                        {profile.member.participationCount.toLocaleString("ko-KR")}
+                        <small>개</small>
+                      </strong>
+                      <p>지금까지 참여한 질문 수</p>
+                    </div>
+                    <div className={`${styles.summaryMetric} ${styles.majorityMetric}`}>
+                      <span>다수 의견과 일치</span>
+                      <strong>{choiceSummary?.majorityMatchPercent ?? 0}%</strong>
+                      <p>다수 의견을 선택했어요</p>
+                    </div>
+                    <div className={`${styles.summaryMetric} ${styles.minorityMetric}`}>
+                      <span>소수 의견 선택</span>
+                      <strong>{choiceSummary?.minorityChoicePercent ?? 0}%</strong>
+                      <p>소수 의견을 선택했어요</p>
+                    </div>
+                  </div>
+                  <div
+                    className={styles.opinionBar}
+                    role="img"
+                    aria-label={`다수 의견 ${choiceSummary?.majorityMatchPercent ?? 0}%, 소수 의견 ${choiceSummary?.minorityChoicePercent ?? 0}%`}
+                  >
+                    <div
+                      className={`${styles.opinionTrack} ${
+                        profile.member.participationCount === 0 ? styles.emptyOpinionTrack : ""
+                      }`}
+                    >
+                      <span
+                        className={styles.majorityBar}
+                        style={{ width: `${choiceSummary?.majorityMatchPercent ?? 0}%` }}
+                      />
+                      <span className={styles.minorityBar} />
+                      <i
+                        aria-hidden="true"
+                        style={{ left: `${choiceSummary?.majorityMatchPercent ?? 0}%` }}
+                      />
+                    </div>
+                    <div className={styles.opinionLabels}>
+                      <span>다수 의견</span>
+                      <span>소수 의견</span>
+                    </div>
+                  </div>
                 </div>
               </div>
-              <div className={styles.profileSummaryColumn}>
-                <div className={styles.identityChips} aria-label="연결된 로그인 수단">
-                  {profile.identities.filter(isVisibleIdentity).map((identity) => (
-                    <span key={identity.provider}>{IDENTITY_LABELS[identity.provider]}</span>
-                  ))}
+
+              <div className={styles.profileFooter}>
+                <div className={styles.interestSummary}>
+                  <strong>
+                    <Image
+                      className={styles.bookmarkIcon}
+                      src="/icons/profile/bookmark.png"
+                      width={14}
+                      height={14}
+                      alt=""
+                      aria-hidden="true"
+                    />
+                    관심 주제
+                  </strong>
+                  <div>
+                    {interestCodes.length > 0 ? (
+                      interestCodes
+                        .slice(0, 4)
+                        .map((code) => <span key={code}>{INTEREST_LABELS[code]}</span>)
+                    ) : (
+                      <span className={styles.emptyInterest}>아직 설정 전</span>
+                    )}
+                  </div>
                 </div>
-                <div className={styles.summary} aria-label="참여 요약">
-                  <strong>{profile.member.participationCount.toLocaleString("ko-KR")}</strong>
-                  <span>참여한 질문</span>
+                <div className={styles.recentSummary}>
+                  <strong>
+                    <Image
+                      className={styles.clockIcon}
+                      src="/icons/profile/clock.png"
+                      width={14}
+                      height={14}
+                      alt=""
+                      aria-hidden="true"
+                    />
+                    최근 활동
+                  </strong>
+                  <p>
+                    최근 7일간 {choiceSummary?.recentSevenDayCount.toLocaleString("ko-KR") ?? 0}개의
+                    질문에 참여했어요.
+                  </p>
                 </div>
               </div>
             </section>
 
             <MemberProfileTabs active="profile" />
 
-            <MemberPublicProfileSettings
-              value={profile.publicProfile}
-              onUpdated={(publicProfile) =>
-                setProfile((current) => (current ? { ...current, publicProfile } : current))
-              }
-            />
+            {profileSettingsOpen ? (
+              <div
+                className={styles.profileSettingsBackdrop}
+                onMouseDown={() => setProfileSettingsOpen(false)}
+              >
+                <div
+                  aria-labelledby="public-profile-title"
+                  aria-modal="true"
+                  className={styles.profileSettingsModal}
+                  onMouseDown={(event) => event.stopPropagation()}
+                  role="dialog"
+                >
+                  <button
+                    aria-label="프로필 설정 닫기"
+                    className={styles.profileSettingsClose}
+                    onClick={() => setProfileSettingsOpen(false)}
+                    ref={profileSettingsCloseButton}
+                    type="button"
+                  >
+                    ×
+                  </button>
+                  <MemberPublicProfileSettings
+                    value={profile.publicProfile}
+                    onUpdated={(publicProfile) => {
+                      setProfile((current) => (current ? { ...current, publicProfile } : current));
+                      setProfileSettingsOpen(false);
+                    }}
+                  />
+                </div>
+              </div>
+            ) : null}
 
             <section
               className={`${styles.history} ${styles.voteHistory}`}

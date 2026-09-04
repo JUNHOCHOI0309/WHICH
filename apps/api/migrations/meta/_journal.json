@@ -421,6 +421,13 @@
       "when": 1788436200000,
       "tag": "0059_manager_public_identity",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1788524176337,
+      "tag": "0060_real_scarlet_spider",
+      "breakpoints": true
     }
   ]
 }

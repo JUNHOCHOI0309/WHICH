@@ -11,6 +11,7 @@ import type {
   CommentHighlights,
   PublicIssue,
   PublicIssueFeed,
+  IssueRecommendationResponse,
   ShareCardResponse,
   ShareChannel,
   VoteResponse,
@@ -265,6 +266,20 @@ export async function loadCommentHighlights(options: { issueId: string; signal?:
   const body = await responseBody<CommentHighlights>(response);
   if (!response.ok) throwApiError(response, body as ApiErrorBody);
   return body as CommentHighlights;
+}
+
+export async function setIssueRecommendation(command: { issueId: string; active: boolean }) {
+  const response = await fetch(
+    `/api/issues/${encodeURIComponent(command.issueId)}/recommendation`,
+    {
+      method: "PUT",
+      headers: { accept: "application/json", "content-type": "application/json" },
+      body: JSON.stringify({ active: command.active }),
+    },
+  );
+  const body = await responseBody<IssueRecommendationResponse>(response);
+  if (!response.ok) throwApiError(response, body as ApiErrorBody);
+  return body as IssueRecommendationResponse;
 }
 
 export async function submitMemberComment(command: {

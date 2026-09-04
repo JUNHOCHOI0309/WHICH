@@ -15,6 +15,7 @@ import {
   interestProfiles,
   issueChoices,
   issueAuthors,
+  issueRecommendations,
   memberCredentials,
   memberAuthTokens,
   memberIdentityLinks,
@@ -435,24 +436,80 @@ async function privateVoteRows(
   return result.rows;
 }
 
-async function privateVoteParticipationCount(database: Database["db"], memberId: string) {
-  const result = await database.execute<{ participation_count: number }>(sql`
+async function privateVoteChoiceSummary(database: Database["db"], memberId: string) {
+  const result = await database.execute<{
+    participation_count: number;
+    majority_match_count: number;
+    recent_seven_day_count: number;
+  }>(sql`
     with eligible_subjects as (
-      select subject_id
+      select subject_id, 1 as subject_priority
       from voter_subjects
       where user_id = ${memberId}
         and subject_kind in ('MEMBER', 'VERIFIED_MEMBER')
-      union
-      select guest_subject_id
+      union all
+      select guest_subject_id, 0 as subject_priority
       from guest_member_links
       where member_id = ${memberId}
+    ), canonical_votes as (
+      select distinct on (v.issue_id)
+        v.issue_id,
+        v.issue_version,
+        v.choice_id,
+        v.accepted_at
+      from votes v
+      inner join eligible_subjects es on es.subject_id = v.subject_id
+      where v.integrity_state = 'ACCEPTED'
+      order by
+        v.issue_id,
+        es.subject_priority desc,
+        v.accepted_at desc,
+        v.vote_id desc
+    ), vote_outcomes as (
+      select
+        cv.accepted_at,
+        case ic.choice_code
+          when 'A' then va.accepted_a_count
+          when 'B' then va.accepted_b_count
+          when 'C' then va.accepted_c_count
+          when 'D' then va.accepted_d_count
+        end as selected_count,
+        greatest(
+          va.accepted_a_count,
+          va.accepted_b_count,
+          case when choice_totals.choice_count >= 3 then va.accepted_c_count else 0 end,
+          case when choice_totals.choice_count >= 4 then va.accepted_d_count else 0 end
+        ) as highest_count
+      from canonical_votes cv
+      inner join issue_choices ic on ic.choice_id = cv.choice_id
+      inner join vote_aggregates va
+        on va.issue_id = cv.issue_id and va.issue_version = cv.issue_version
+      cross join lateral (
+        select count(*)::int as choice_count
+        from issue_choices all_choices
+        where all_choices.issue_id = cv.issue_id
+          and all_choices.issue_version = cv.issue_version
+      ) choice_totals
     )
-    select count(distinct v.issue_id)::int as participation_count
-    from votes v
-    inner join eligible_subjects es on es.subject_id = v.subject_id
-    where v.integrity_state = 'ACCEPTED'
+    select
+      count(*)::int as participation_count,
+      count(*) filter (where selected_count = highest_count)::int as majority_match_count,
+      count(*) filter (where accepted_at >= now() - interval '7 days')::int
+        as recent_seven_day_count
+    from vote_outcomes
   `);
-  return result.rows[0]?.participation_count ?? 0;
+  const row = result.rows[0];
+  const participationCount = row?.participation_count ?? 0;
+  const majorityMatchCount = row?.majority_match_count ?? 0;
+  const majorityMatchPercent =
+    participationCount > 0 ? Math.round((majorityMatchCount / participationCount) * 100) : 0;
+
+  return {
+    participationCount,
+    majorityMatchPercent,
+    minorityChoicePercent: participationCount > 0 ? 100 - majorityMatchPercent : 0,
+    recentSevenDayCount: row?.recent_seven_day_count ?? 0,
+  };
 }
 
 export function createMemberIdentityService(
@@ -1838,8 +1895,8 @@ export function createMemberIdentityService(
         // Attendance rewards are best-effort and must never break the private profile screen.
       }
 
-      const [participationCount, rows, [publicProfile], identities] = await Promise.all([
-        privateVoteParticipationCount(database, session.member.id),
+      const [choiceSummary, rows, [publicProfile], identities] = await Promise.all([
+        privateVoteChoiceSummary(database, session.member.id),
         privateVoteRows(database, session.member.id, {
           limit: query.limit + 1,
           cursor: query.cursor,
@@ -1867,7 +1924,12 @@ export function createMemberIdentityService(
           ...toMemberView(session.member),
           avatarSource: privateAvatarSource(session.member),
           joinedAt: session.member.createdAt.toISOString(),
-          participationCount,
+          participationCount: choiceSummary.participationCount,
+        },
+        choiceSummary: {
+          majorityMatchPercent: choiceSummary.majorityMatchPercent,
+          minorityChoicePercent: choiceSummary.minorityChoicePercent,
+          recentSevenDayCount: choiceSummary.recentSevenDayCount,
         },
         publicProfile: publicProfile ? profileSettings(publicProfile) : null,
         identities: identities.map((identity) => ({
@@ -2156,6 +2218,10 @@ export function createMemberIdentityService(
         await transaction
           .delete(memberProfiles)
           .where(eq(memberProfiles.memberId, session.member.id));
+        await transaction
+          .update(issueRecommendations)
+          .set({ active: false, updatedAt: now })
+          .where(eq(issueRecommendations.memberId, session.member.id));
         await transaction
           .delete(memberIdentityLinks)
           .where(eq(memberIdentityLinks.memberId, session.member.id));

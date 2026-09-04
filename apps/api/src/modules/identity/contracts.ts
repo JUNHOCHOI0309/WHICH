@@ -117,6 +117,11 @@ export type MemberPrivateProfile = {
     joinedAt: string;
     participationCount: number;
   };
+  choiceSummary: {
+    majorityMatchPercent: number;
+    minorityChoicePercent: number;
+    recentSevenDayCount: number;
+  };
   publicProfile: MemberProfileSettings | null;
   identities: Array<{
     provider: IdentityProvider;

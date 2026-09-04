@@ -32,6 +32,11 @@ export type PublicFeedIssue = {
   mediaMode: "TEXT_ONLY" | "OPTION_IMAGES";
   contextMedia?: IssueChoice["media"];
   choices: IssueChoice[];
+  engagement: {
+    recommendationCount: number;
+    commentCount: number;
+    viewerRecommended: boolean;
+  };
   recommendation: {
     requestId: string;
     score: number;
@@ -40,7 +45,7 @@ export type PublicFeedIssue = {
   };
 };
 
-export type PublicIssue = PublicFeedIssue & {
+export type PublicIssue = Omit<PublicFeedIssue, "engagement" | "recommendation"> & {
   context: string | null;
   experienceModeCode: string;
   result: {
@@ -196,6 +201,11 @@ export type MemberPrivateProfile = {
     avatarSource: "INITIALS" | "SOCIAL" | "CUSTOM";
     joinedAt: string;
     participationCount: number;
+  };
+  choiceSummary?: {
+    majorityMatchPercent: number;
+    minorityChoicePercent: number;
+    recentSevenDayCount: number;
   };
   publicProfile: {
     handle: string;

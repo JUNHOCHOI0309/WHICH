@@ -8,6 +8,7 @@ import type { MemberIdentityService } from "../src/modules/identity/contracts.js
 import type { InterestProfileService } from "../src/modules/interests/contracts.js";
 import type { GuestVoteService } from "../src/modules/voting/contracts.js";
 import type { MemberPointService } from "../src/modules/points/member-contracts.js";
+import type { IssueRecommendationService } from "../src/modules/issue-recommendations/contracts.js";
 
 const openApps: Array<Awaited<ReturnType<typeof buildApp>>> = [];
 
@@ -78,6 +79,7 @@ const interestProfiles: InterestProfileService = {
 
 const getMemberPoints = vi.fn<MemberPointService["getMemberPoints"]>();
 const memberPoints: MemberPointService = { getMemberPoints };
+const issueRecommendations: IssueRecommendationService = { set: vi.fn() };
 
 afterEach(async () => {
   await Promise.all(openApps.splice(0).map(async (app) => app.close()));
@@ -125,6 +127,7 @@ describe("system health", () => {
       memberIdentity,
       interestProfiles,
       memberPoints,
+      issueRecommendations,
     });
     openApps.push(app);
 
@@ -225,6 +228,7 @@ describe("OpenAPI contract", () => {
       memberIdentity,
       interestProfiles,
       memberPoints,
+      issueRecommendations,
     });
     openApps.push(app);
 
@@ -239,6 +243,7 @@ describe("OpenAPI contract", () => {
     expect(document.paths).toHaveProperty(["/v1/member/issue-submissions", "get"]);
     expect(document.paths).toHaveProperty(["/v1/member/issue-submissions/{submissionId}", "put"]);
     expect(document.paths).toHaveProperty(["/v1/issues/feed", "get"]);
+    expect(document.paths).toHaveProperty(["/v1/issues/{issueId}/recommendation", "put"]);
     expect(document.paths).toHaveProperty(["/v1/issues/catalog", "get"]);
     expect(document.paths).toHaveProperty(["/v1/guest-subjects", "post"]);
     expect(document.paths).toHaveProperty(["/v1/issues/{issueId}/votes", "post"]);

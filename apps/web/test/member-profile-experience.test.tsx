@@ -290,7 +290,9 @@ describe("Member private profile experience", () => {
     render(<MemberProfileExperience />);
 
     expect(await screen.findByRole("img", { name: "소셜 이미지 회원 프로필" })).toBeVisible();
-    expect(screen.getByText("변경")).toBeVisible();
+    expect(
+      screen.getByTitle("프로필 이미지 선택 또는 변경").querySelector('img[src*="camera.png"]'),
+    ).toBeVisible();
     expect(screen.queryByRole("button", { name: "프로필 이미지 삭제" })).not.toBeInTheDocument();
   });
 
@@ -323,22 +325,41 @@ describe("Member private profile experience", () => {
 
     render(<MemberProfileExperience />);
 
-    expect(await screen.findByRole("heading", { name: "프로필 설정" })).toBeVisible();
-    expect(screen.getByText("공개 범위").querySelector("img")?.getAttribute("src")).toContain(
-      encodeURIComponent("/icons/locked.png"),
-    );
+    const profileEditButton = await screen.findByRole("button", { name: "프로필 편집" });
+    expect(screen.queryByRole("link", { name: /내 선택 기록 보기/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "프로필 설정" })).not.toBeInTheDocument();
+
+    fireEvent.click(profileEditButton);
+    const profileDialog = await screen.findByRole("dialog", { name: "프로필 설정" });
+    expect(profileDialog).toBeVisible();
     expect(
-      screen.getByRole("button", { name: "프로필 저장" }).querySelector("img")?.getAttribute("src"),
+      within(profileDialog).getByText("공개 범위").querySelector("img")?.getAttribute("src"),
+    ).toContain(encodeURIComponent("/icons/locked.png"));
+    expect(
+      within(profileDialog)
+        .getByRole("button", { name: "프로필 저장" })
+        .querySelector("img")
+        ?.getAttribute("src"),
     ).toContain(encodeURIComponent("/icons/diskette.png"));
-    const handle = await screen.findByRole("textbox", { name: /Handle/ });
+    const handle = within(profileDialog).getByRole("textbox", { name: /Handle/ });
     fireEvent.change(handle, { target: { value: "question_maker" } });
-    fireEvent.change(screen.getByRole("textbox", { name: /짧은 소개/ }), {
+    fireEvent.change(within(profileDialog).getByRole("textbox", { name: /짧은 소개/ }), {
       target: { value: "좋은 질문을 만듭니다." },
     });
-    fireEvent.click(screen.getByRole("radio", { name: /^공개 —/ }));
-    fireEvent.click(screen.getByRole("button", { name: "프로필 저장" }));
+    fireEvent.click(within(profileDialog).getByRole("radio", { name: /^공개 —/ }));
+    expect(
+      within(profileDialog).getByText("공개 범위").querySelector("img")?.getAttribute("src"),
+    ).toContain(encodeURIComponent("/icons/profile/unlock.png"));
+    fireEvent.click(within(profileDialog).getByRole("button", { name: "프로필 저장" }));
 
     expect(await screen.findByText("공개 프로필을 저장했어요.")).toBeVisible();
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "프로필 설정" })).not.toBeInTheDocument(),
+    );
+    fireEvent.click(profileEditButton);
+    expect(screen.getByText("공개 프로필").querySelector("img")?.getAttribute("src")).toContain(
+      encodeURIComponent("/icons/profile/unlock.png"),
+    );
     expect(screen.getByRole("link", { name: /공개 화면 보기/ })).toHaveAttribute(
       "href",
       "/user/question_maker",

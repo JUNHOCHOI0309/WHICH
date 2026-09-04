@@ -29,6 +29,11 @@ const feed: PublicIssueFeed = {
         { id: "choice-a", code: "A", label: "미리 계획한다", media: null },
         { id: "choice-b", code: "B", label: "가서 정한다", media: null },
       ],
+      engagement: {
+        recommendationCount: 7,
+        commentCount: 3,
+        viewerRecommended: false,
+      },
       recommendation: {
         requestId: "20000000-0000-4000-8000-000000000001",
         score: 0,
@@ -47,6 +52,11 @@ const feed: PublicIssueFeed = {
         { id: "choice-c", code: "A", label: "일단 나간다", media: null },
         { id: "choice-d", code: "B", label: "집에서 쉰다", media: null },
       ],
+      engagement: {
+        recommendationCount: 1,
+        commentCount: 0,
+        viewerRecommended: false,
+      },
       recommendation: {
         requestId: "20000000-0000-4000-8000-000000000001",
         score: 0,
@@ -369,10 +379,55 @@ describe("FeedExperience", () => {
     expect(screen.getByRole("button", { name: "A 선택, 미리 계획한다" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "B 선택, 가서 정한다" })).toBeInTheDocument();
     expect(screen.queryByText(/\d+%/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "추천 7개" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    expect(screen.getByRole("link", { name: "댓글 3개 보기" })).toHaveAttribute(
+      "href",
+      `/issues/${feed.items[0]!.id}#comment-title`,
+    );
     expect(requests).toContain("/api/guest-subjects");
     expect(screen.getAllByRole("link", { name: /상세·댓글 보기/ })[0]?.getAttribute("href")).toBe(
       "/issues/10000000-0000-4000-8000-000000000003",
     );
+  });
+
+  it("updates a Member recommendation optimistically and reconciles the server count", async () => {
+    const recommendationRequests: Array<{ url: string; init?: RequestInit }> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = String(input);
+        if (url === "/api/member-session") {
+          return jsonResponse({
+            member: { id: "member-1", displayName: "추천러", status: "ACTIVE" },
+          });
+        }
+        if (url === "/api/guest-subjects") return jsonResponse({ status: "ready" });
+        if (url.startsWith("/api/issues/feed?")) return jsonResponse(feed);
+        if (url === `/api/issues/${feed.items[0]!.id}/recommendation`) {
+          recommendationRequests.push({ url, init });
+          return jsonResponse({ recommendation: { active: true, count: 9 } });
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      }),
+    );
+
+    render(<FeedExperience />);
+
+    const button = await screen.findByRole("button", { name: "추천 7개" });
+    fireEvent.click(button);
+    expect(screen.getByRole("button", { name: "추천 8개" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(await screen.findByRole("button", { name: "추천 9개" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(recommendationRequests).toHaveLength(1);
+    expect(JSON.parse(String(recommendationRequests[0]?.init?.body))).toEqual({ active: true });
   });
 
   it("replaces the static principle with result-free participation links", async () => {
