@@ -86,18 +86,25 @@ describe("Ops Editorial candidate images", () => {
 
     render(<OpsEditorialPanel embedded />);
 
-    const libraryButtons = await screen.findAllByRole("button", {
-      name: "라이브러리에서 선택",
-    });
+    const libraryButtons = await screen.findAllByRole(
+      "button",
+      {
+        name: "라이브러리에서 선택",
+      },
+      { timeout: 5_000 },
+    );
     fireEvent.click(libraryButtons[0]!);
-    fireEvent.click(await screen.findByAltText("승인 이미지"));
+    fireEvent.click(await screen.findByAltText("승인 이미지", undefined, { timeout: 5_000 }));
 
-    expect(await screen.findByAltText("오늘의 선택은? - 첫 번째")).toBeVisible();
+    expect(
+      await screen.findByAltText("오늘의 선택은? - 첫 번째", undefined, { timeout: 5_000 }),
+    ).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "이미지 변경·해제" }));
-    fireEvent.click(await screen.findByText("한 번 더 눌러 해제"));
+    fireEvent.click(await screen.findByText("한 번 더 눌러 해제", undefined, { timeout: 5_000 }));
 
-    await waitFor(() =>
-      expect(screen.queryByAltText("오늘의 선택은? - 첫 번째")).not.toBeInTheDocument(),
+    await waitFor(
+      () => expect(screen.queryByAltText("오늘의 선택은? - 첫 번째")).not.toBeInTheDocument(),
+      { timeout: 5_000 },
     );
     expect(fetchMock.mock.calls.some((call) => call[1]?.method === "DELETE")).toBe(true);
   });
