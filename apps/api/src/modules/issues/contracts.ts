@@ -27,6 +27,13 @@ export type PublicIssueTally = {
     "NORMAL" | "MONITORING" | "DEGRADED" | "UNDER_REVIEW" | "RESULT_LOCKED" | "CORRECTED";
 };
 
+export type PublicIssueEngagement = {
+  recommendationCount: number;
+  commentCount: number;
+  viewerRecommended: boolean;
+  viewerReported: boolean;
+};
+
 export type PublicIssue = {
   id: string;
   version: number;
@@ -43,6 +50,7 @@ export type PublicIssue = {
     handle: string;
     avatar: { kind: "INITIALS"; initials: string } | { kind: "IMAGE"; url: string };
   } | null;
+  engagement: PublicIssueEngagement;
   result: {
     visibility:
       | "PRE_VOTE_HIDDEN"
@@ -58,12 +66,6 @@ export type PublicFeedIssue = Omit<
   PublicIssue,
   "context" | "experienceModeCode" | "result" | "author"
 > & {
-  engagement: {
-    recommendationCount: number;
-    commentCount: number;
-    viewerRecommended: boolean;
-    viewerReported: boolean;
-  };
   recommendation: FeedItemRecommendation & { requestId: string };
 };
 

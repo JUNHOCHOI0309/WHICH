@@ -15,6 +15,7 @@ import type {
   CommentSide,
   CommentSort,
   IssueChoice,
+  IssueReportReason,
   MemberPointShopView,
   PublicComment,
   PublicFeedIssue,
@@ -36,7 +37,9 @@ import {
   loadExistingVote,
   loadPublicIssue,
   reportComment,
+  reportIssue,
   recordAnalyticsEvent,
+  setIssueRecommendation,
   submitMemberComment,
   submitGuestVote,
   toggleCommentReaction,
@@ -51,6 +54,20 @@ type PendingAction = {
   choice: IssueChoice;
   idempotencyKey: string;
 };
+
+type IssueReportDraft = { reasonCode: IssueReportReason; detail: string };
+
+const ISSUE_REPORT_REASONS: Array<{ value: IssueReportReason; label: string }> = [
+  { value: "SPAM", label: "스팸 또는 반복 게시" },
+  { value: "INSULT_OR_HARASSMENT", label: "모욕 또는 괴롭힘" },
+  { value: "HATE", label: "혐오 표현" },
+  { value: "THREAT", label: "위협 또는 폭력" },
+  { value: "PRIVACY", label: "개인정보 침해" },
+  { value: "SEXUAL", label: "선정적 콘텐츠" },
+  { value: "IMPERSONATION", label: "사칭" },
+  { value: "ILLEGAL_ACTIVITY", label: "불법 행위" },
+  { value: "OTHER", label: "기타" },
+];
 
 function savedResultKey(issueId: string) {
   return `which:vote-result:${issueId}`;
@@ -304,6 +321,21 @@ export function IssueExperience({
     [screen, sendPendingVote],
   );
 
+  const updateEngagement = useCallback((engagement: PublicIssue["engagement"]) => {
+    setIssue((current) => (current ? { ...current, engagement } : current));
+  }, []);
+
+  const hideReportedIssue = useCallback(() => {
+    setLoadError(
+      new WebApiError(
+        "ISSUE_NOT_AVAILABLE",
+        409,
+        "The reported Issue is hidden while it is reviewed.",
+      ),
+    );
+    setScreen("load-error");
+  }, []);
+
   if (screen === "loading") {
     return (
       <ExperienceShell>
@@ -343,6 +375,8 @@ export function IssueExperience({
         kakaoLoginEnabled={kakaoLoginEnabled}
         naverLoginEnabled={naverLoginEnabled}
         onMediaLoad={recordMediaLoad}
+        onEngagementChange={updateEngagement}
+        onIssueHidden={hideReportedIssue}
       />
     );
   }
@@ -400,6 +434,12 @@ export function IssueExperience({
           ))}
         </div>
 
+        <IssueEngagementActions
+          issue={issue}
+          onChange={updateEngagement}
+          onHidden={hideReportedIssue}
+        />
+
         {screen === "submitting" ? (
           <p className={styles.inlineStatus} role="status">
             선택을 안전하게 기록하고 있어요…
@@ -455,12 +495,16 @@ function ResultScreen({
   kakaoLoginEnabled,
   naverLoginEnabled,
   onMediaLoad,
+  onEngagementChange,
+  onIssueHidden,
 }: {
   issue: PublicIssue;
   result: VoteResponse;
   kakaoLoginEnabled: boolean;
   naverLoginEnabled: boolean;
   onMediaLoad: (choice: IssueChoice, outcome: "SUCCESS" | "FAILURE") => void;
+  onEngagementChange: (engagement: PublicIssue["engagement"]) => void;
+  onIssueHidden: () => void;
 }) {
   const total = result.result.displayedTotal;
   const duplicate = result.outcome === "REJECTED_DUPLICATE";
@@ -534,6 +578,11 @@ function ResultScreen({
           selectedChoice={result.choice}
         />
         <p className={styles.totalCount}>현재 유효한 선택 {total.toLocaleString("ko-KR")}개</p>
+        <IssueEngagementActions
+          issue={issue}
+          onChange={onEngagementChange}
+          onHidden={onIssueHidden}
+        />
         <ResultSharePanel issue={issue} result={result} />
         <CommentSection
           issueId={issue.id}
@@ -548,6 +597,207 @@ function ResultScreen({
         />
       </article>
     </ExperienceShell>
+  );
+}
+
+function IssueEngagementActions({
+  issue,
+  onChange,
+  onHidden,
+}: {
+  issue: PublicIssue;
+  onChange: (engagement: PublicIssue["engagement"]) => void;
+  onHidden: () => void;
+}) {
+  const [recommendationPending, setRecommendationPending] = useState(false);
+  const [reportDraft, setReportDraft] = useState<IssueReportDraft | null>(null);
+  const [reportPending, setReportPending] = useState(false);
+  const [reportError, setReportError] = useState<string | null>(null);
+  const reportKey = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!reportDraft) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !reportPending) setReportDraft(null);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [reportDraft, reportPending]);
+
+  async function recommend() {
+    if (recommendationPending) return;
+    const previous = issue.engagement;
+    const active = !previous.viewerRecommended;
+    onChange({
+      ...previous,
+      viewerRecommended: active,
+      recommendationCount: Math.max(0, previous.recommendationCount + (active ? 1 : -1)),
+    });
+    setRecommendationPending(true);
+    try {
+      const result = await setIssueRecommendation({ issueId: issue.id, active });
+      onChange({
+        ...previous,
+        viewerRecommended: result.recommendation.active,
+        recommendationCount: result.recommendation.count,
+      });
+    } catch (error) {
+      onChange(previous);
+      if (error instanceof WebApiError && error.status === 401) {
+        toast.info("질문을 추천하려면 로그인해 주세요.");
+      } else {
+        toast.error(error instanceof Error ? error.message : "추천 상태를 저장하지 못했어요.");
+      }
+    } finally {
+      setRecommendationPending(false);
+    }
+  }
+
+  async function submitReport() {
+    if (!reportDraft || reportPending) return;
+    const detail = reportDraft.detail.trim();
+    if (reportDraft.reasonCode === "OTHER" && !detail) {
+      setReportError("기타 신고 사유를 입력해 주세요.");
+      return;
+    }
+
+    reportKey.current ??= crypto.randomUUID();
+    setReportPending(true);
+    setReportError(null);
+    try {
+      const result = await reportIssue({
+        issueId: issue.id,
+        idempotencyKey: reportKey.current,
+        reasonCode: reportDraft.reasonCode,
+        detail: reportDraft.reasonCode === "OTHER" ? detail : undefined,
+      });
+      if (result.target.hidden) {
+        toast.success("신고가 접수되어 질문이 검토 전까지 숨겨졌어요.");
+        setReportDraft(null);
+        onHidden();
+        return;
+      }
+      onChange({ ...issue.engagement, viewerReported: true });
+      setReportDraft(null);
+      reportKey.current = null;
+      toast.success("신고가 접수됐어요. 검토에 반영하겠습니다.");
+    } catch (error) {
+      if (error instanceof WebApiError && error.code === "REPORT_ALREADY_EXISTS") {
+        onChange({ ...issue.engagement, viewerReported: true });
+        setReportDraft(null);
+        reportKey.current = null;
+        toast.info("이미 신고한 질문이에요.");
+      } else if (error instanceof WebApiError && error.code === "REPORT_RATE_LIMITED") {
+        setReportError("오늘 신고할 수 있는 횟수를 모두 사용했어요.");
+      } else {
+        setReportError(error instanceof Error ? error.message : "질문 신고를 접수하지 못했어요.");
+      }
+    } finally {
+      setReportPending(false);
+    }
+  }
+
+  return (
+    <>
+      <div className={styles.issueEngagement} aria-label="질문 반응">
+        <button
+          type="button"
+          className={issue.engagement.viewerRecommended ? styles.issueRecommended : undefined}
+          aria-label={`추천 ${issue.engagement.recommendationCount}개`}
+          aria-pressed={issue.engagement.viewerRecommended}
+          disabled={recommendationPending}
+          onClick={() => void recommend()}
+        >
+          <Image src="/icons/feed/like.png" width={19} height={19} alt="" aria-hidden="true" />
+          추천 {issue.engagement.recommendationCount}
+        </button>
+        <button
+          type="button"
+          className={issue.engagement.viewerReported ? styles.issueReported : undefined}
+          aria-label={issue.engagement.viewerReported ? "신고한 질문" : "질문 신고"}
+          disabled={issue.engagement.viewerReported}
+          onClick={() => {
+            reportKey.current = null;
+            setReportError(null);
+            setReportDraft({ reasonCode: "SPAM", detail: "" });
+          }}
+        >
+          <Image src="/icons/feed/flagged.png" width={19} height={19} alt="" aria-hidden="true" />
+          {issue.engagement.viewerReported ? "신고됨" : "신고"}
+        </button>
+      </div>
+
+      {reportDraft ? (
+        <div
+          className={styles.issueReportBackdrop}
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !reportPending) setReportDraft(null);
+          }}
+        >
+          <form
+            className={styles.issueReportDialog}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="detail-issue-report-title"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void submitReport();
+            }}
+          >
+            <p className={styles.commentEyebrow}>REPORT QUESTION</p>
+            <h2 id="detail-issue-report-title">이 질문을 신고할까요?</h2>
+            <p>신고 내용은 운영 검토에 반영되며, 누적 기준을 넘으면 질문이 임시 숨김됩니다.</p>
+            <label htmlFor="detail-issue-report-reason">신고 사유</label>
+            <select
+              id="detail-issue-report-reason"
+              autoFocus
+              value={reportDraft.reasonCode}
+              disabled={reportPending}
+              onChange={(event) => {
+                setReportError(null);
+                setReportDraft({
+                  reasonCode: event.target.value as IssueReportReason,
+                  detail: "",
+                });
+                reportKey.current = null;
+              }}
+            >
+              {ISSUE_REPORT_REASONS.map((reason) => (
+                <option key={reason.value} value={reason.value}>
+                  {reason.label}
+                </option>
+              ))}
+            </select>
+            {reportDraft.reasonCode === "OTHER" ? (
+              <textarea
+                rows={4}
+                aria-label="기타 신고 사유"
+                value={reportDraft.detail}
+                disabled={reportPending}
+                onChange={(event) => {
+                  setReportDraft({ ...reportDraft, detail: event.target.value });
+                  reportKey.current = null;
+                }}
+              />
+            ) : null}
+            {reportError ? (
+              <p className={styles.issueReportError} role="alert">
+                {reportError}
+              </p>
+            ) : null}
+            <div className={styles.issueReportActions}>
+              <button type="button" disabled={reportPending} onClick={() => setReportDraft(null)}>
+                취소
+              </button>
+              <button type="submit" disabled={reportPending}>
+                {reportPending ? "접수 중…" : "신고 접수"}
+              </button>
+            </div>
+          </form>
+        </div>
+      ) : null}
+    </>
   );
 }
 

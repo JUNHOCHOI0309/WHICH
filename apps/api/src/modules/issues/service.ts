@@ -205,6 +205,11 @@ export function createIssueReadService(
 ): IssueReadService {
   return {
     async getGuestIssue(issueId, viewer = {}) {
+      const viewerProfile = await loadRankingProfile(database, {
+        anonymousSubjectId: viewer.anonymousSubjectId,
+        sessionToken: viewer.sessionToken,
+        enabled: false,
+      });
       const loaded = await database.transaction(async (transaction) => {
         const [issue] = await transaction
           .select({
@@ -325,6 +330,77 @@ export function createIssueReadService(
           }
         }
 
+        let reportSubjectId = viewerProfile.subjectId;
+        let viewerMemberId: string | null = null;
+        if (viewerProfile.subjectId) {
+          const [viewerSubject] = await transaction
+            .select({ kind: voterSubjects.kind, userId: voterSubjects.userId })
+            .from(voterSubjects)
+            .where(eq(voterSubjects.id, viewerProfile.subjectId))
+            .limit(1);
+
+          if (
+            viewerSubject?.userId &&
+            (viewerSubject.kind === "MEMBER" || viewerSubject.kind === "VERIFIED_MEMBER")
+          ) {
+            viewerMemberId = viewerSubject.userId;
+          } else if (viewerSubject?.kind === "GUEST") {
+            const [linkedMember] = await transaction
+              .select({ memberSubjectId: guestMemberLinks.memberSubjectId })
+              .from(guestMemberLinks)
+              .where(eq(guestMemberLinks.guestSubjectId, viewerProfile.subjectId))
+              .limit(1);
+            reportSubjectId = linkedMember?.memberSubjectId ?? reportSubjectId;
+          }
+        }
+
+        const recommendationCountRows = await transaction
+          .select({ count: sql<number>`count(*)::int` })
+          .from(issueRecommendations)
+          .where(
+            and(eq(issueRecommendations.issueId, issueId), eq(issueRecommendations.active, true)),
+          );
+        const commentCountRows = await transaction
+          .select({ count: sql<number>`count(*)::int` })
+          .from(comments)
+          .where(
+            and(
+              eq(comments.issueId, issueId),
+              eq(comments.issueVersion, version.version),
+              eq(comments.publicationState, "PUBLISHED"),
+              inArray(comments.visibility, ["VISIBLE", "DEPRIORITIZED", "COLLAPSED"]),
+              eq(comments.integrityState, "NORMAL"),
+              isNull(comments.deletedAt),
+            ),
+          );
+        const viewerRecommendations = viewerMemberId
+          ? await transaction
+              .select({ issueId: issueRecommendations.issueId })
+              .from(issueRecommendations)
+              .where(
+                and(
+                  eq(issueRecommendations.issueId, issueId),
+                  eq(issueRecommendations.memberId, viewerMemberId),
+                  eq(issueRecommendations.active, true),
+                ),
+              )
+              .limit(1)
+          : [];
+        const viewerReports = reportSubjectId
+          ? await transaction
+              .select({ issueId: contentReports.targetId })
+              .from(contentReports)
+              .where(
+                and(
+                  eq(contentReports.targetType, "ISSUE"),
+                  eq(contentReports.targetId, issueId),
+                  eq(contentReports.subjectId, reportSubjectId),
+                  eq(contentReports.counted, true),
+                ),
+              )
+              .limit(1)
+          : [];
+
         return {
           id: issue.id,
           version: version.version,
@@ -348,6 +424,12 @@ export function createIssueReadService(
                     },
               }
             : null,
+          engagement: {
+            recommendationCount: Number(recommendationCountRows[0]?.count ?? 0),
+            commentCount: Number(commentCountRows[0]?.count ?? 0),
+            viewerRecommended: viewerRecommendations.length > 0,
+            viewerReported: viewerReports.length > 0,
+          },
           result: {
             visibility: issue.resultVisibility,
             tally,

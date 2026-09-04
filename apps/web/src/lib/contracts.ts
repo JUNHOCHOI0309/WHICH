@@ -26,6 +26,13 @@ export type IssueTally = {
 
 export type MemberAvatar = { kind: "INITIALS"; initials: string } | { kind: "IMAGE"; url: string };
 
+export type IssueEngagement = {
+  recommendationCount: number;
+  commentCount: number;
+  viewerRecommended: boolean;
+  viewerReported: boolean;
+};
+
 export type PublicIssue = {
   id: string;
   version: number;
@@ -42,6 +49,7 @@ export type PublicIssue = {
     handle: string;
     avatar: MemberAvatar;
   } | null;
+  engagement: IssueEngagement;
   result: {
     visibility:
       | "PRE_VOTE_HIDDEN"
@@ -144,12 +152,6 @@ export type PublicFeedIssue = Omit<
   PublicIssue,
   "context" | "experienceModeCode" | "result" | "author"
 > & {
-  engagement: {
-    recommendationCount: number;
-    commentCount: number;
-    viewerRecommended: boolean;
-    viewerReported: boolean;
-  };
   recommendation: {
     requestId: string;
     score: number;

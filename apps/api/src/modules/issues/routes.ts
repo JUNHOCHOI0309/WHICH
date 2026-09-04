@@ -67,6 +67,12 @@ const issueResponseSchema = Type.Object({
     }),
     Type.Null(),
   ]),
+  engagement: Type.Object({
+    recommendationCount: Type.Integer({ minimum: 0 }),
+    commentCount: Type.Integer({ minimum: 0 }),
+    viewerRecommended: Type.Boolean(),
+    viewerReported: Type.Boolean(),
+  }),
   result: Type.Object({
     visibility: Type.Union([
       Type.Literal("PRE_VOTE_HIDDEN"),

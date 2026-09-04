@@ -28,6 +28,12 @@ const issue: PublicIssue = {
     { id: "choice-b", code: "B", label: "근거와 원문 링크까지 보여주기", media: null },
   ],
   author: null,
+  engagement: {
+    recommendationCount: 0,
+    commentCount: 0,
+    viewerRecommended: false,
+    viewerReported: false,
+  },
   result: { visibility: "PRE_VOTE_HIDDEN", tally: null },
 };
 
