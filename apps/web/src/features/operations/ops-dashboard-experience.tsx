@@ -15,16 +15,12 @@ function PanelLoading() {
   );
 }
 
-const OpsIssueReviewPanel = dynamic(
-  () => import("./ops-issue-review-panel").then((module) => module.OpsIssueReviewPanel),
+const OpsReviewWorkspace = dynamic(
+  () => import("./ops-review-workspace").then((module) => module.OpsReviewWorkspace),
   { loading: PanelLoading },
 );
 const OpsMembersPanel = dynamic(
   () => import("./ops-members-panel").then((module) => module.OpsMembersPanel),
-  { loading: PanelLoading },
-);
-const OpsMediaReviewPanel = dynamic(
-  () => import("./ops-media-review-panel").then((module) => module.OpsMediaReviewPanel),
   { loading: PanelLoading },
 );
 const OpsReportedMembersPanel = dynamic(
@@ -47,14 +43,7 @@ const OpsRankingPreviewPanel = dynamic(
 type WindowDays = 1 | 7 | 30;
 type Screen = "loading" | "ready" | "login" | "denied" | "error";
 type Tab =
-  | "overview"
-  | "members"
-  | "editorial"
-  | "moderation"
-  | "media"
-  | "reportedMembers"
-  | "pointShop"
-  | "ranking";
+  "overview" | "members" | "review" | "moderation" | "reportedMembers" | "pointShop" | "ranking";
 
 const stageLabels: Array<[keyof OpsDashboardSnapshot["funnel"]["stages"], string]> = [
   ["viewable", "Viewable"],
@@ -224,9 +213,8 @@ export function OpsDashboardExperience() {
               [
                 ["overview", "Overview"],
                 ["members", "사용자 DB"],
-                ["editorial", "Issue Review"],
+                ["review", "Review Center"],
                 ["moderation", "Moderation Queue"],
-                ["media", "Image Review"],
                 ["reportedMembers", "신고 인원 관리"],
                 ["pointShop", "Point Shop"],
                 ["ranking", "Ranking Preview"],
@@ -505,10 +493,8 @@ export function OpsDashboardExperience() {
             <OpsModerationQueuePanel />
           ) : tab === "members" ? (
             <OpsMembersPanel />
-          ) : tab === "editorial" ? (
-            <OpsIssueReviewPanel />
-          ) : tab === "media" ? (
-            <OpsMediaReviewPanel />
+          ) : tab === "review" ? (
+            <OpsReviewWorkspace />
           ) : tab === "reportedMembers" ? (
             <OpsReportedMembersPanel onOpenModeration={() => setTab("moderation")} />
           ) : tab === "pointShop" ? (

@@ -21,6 +21,7 @@ COPY --from=build --chown=node:node /api-runtime/node_modules ./apps/api/node_mo
 COPY --from=build --chown=node:node /api-runtime/package.json ./apps/api/package.json
 COPY --from=build --chown=node:node /app/apps/api/dist ./apps/api/dist
 COPY --from=build --chown=node:node /app/apps/api/content ./apps/api/content
+COPY --from=build --chown=node:node /app/apps/api/migrations ./apps/api/migrations
 COPY --from=build --chown=node:node /app/scripts/cloud-run ./scripts/cloud-run
 USER node
 EXPOSE 8080

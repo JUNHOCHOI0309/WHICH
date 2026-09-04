@@ -185,11 +185,19 @@ export type OpsEditorialDecision = {
   };
 };
 
+export type OpsEditorialCandidateMedia = {
+  assetId: string;
+  status: "PENDING" | "APPROVED" | "REJECTED" | "HIDDEN" | "DELETED";
+  rightsState: "ASSERTED" | "CHALLENGED" | "CLEARED" | "WITHDRAWN";
+  altText: string;
+  cropMode: "COVER" | "CONTAIN";
+};
+
 export type OpsEditorialCandidate = {
   candidateId: string;
   question: string;
   context: string;
-  choices: Array<{ code: string; label: string }>;
+  choices: Array<{ code: string; label: string; media: OpsEditorialCandidateMedia | null }>;
   category: string;
   interestCardCodes: string[];
   editorialArea: string;
@@ -347,6 +355,13 @@ export class OpsReviewConflictError extends Error {
   }
 }
 
+export class OpsReviewValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "OpsReviewValidationError";
+  }
+}
+
 export class OpsPublishedIssueConflictError extends Error {
   constructor(message: string) {
     super(message);
@@ -406,6 +421,21 @@ export interface OpsDashboardService {
     checks: OpsEditorialDecision["checks"];
     requestId?: string;
   }): Promise<OpsEditorialDecision | null>;
+  attachEditorialCandidateMedia(input: {
+    memberId: string;
+    candidateId: string;
+    choiceCode: string;
+    assetId: string;
+    altText: string;
+    cropMode: "COVER" | "CONTAIN";
+    requestId?: string;
+  }): Promise<OpsEditorialCandidateMedia | null>;
+  detachEditorialCandidateMedia(input: {
+    memberId: string;
+    candidateId: string;
+    choiceCode: string;
+    requestId?: string;
+  }): Promise<{ detached: boolean } | null>;
   readPublishedIssues(input: {
     memberId: string;
     state?: OpsPublishedIssueState;

@@ -45,7 +45,13 @@ async function json<T>(response: Response): Promise<T> {
   return body;
 }
 
-export function OpsMediaReviewPanel() {
+export function OpsMediaReviewPanel({
+  embedded = false,
+  onBackToIssues,
+}: {
+  embedded?: boolean;
+  onBackToIssues?: () => void;
+} = {}) {
   const [page, setPage] = useState<OpsMediaReviewPage | null>(null);
   const [rights, setRights] = useState<OpsMediaRightsRequest[]>([]);
   const [library, setLibrary] = useState<OpsMediaLibraryPair[]>([]);
@@ -353,14 +359,26 @@ export function OpsMediaReviewPanel() {
   }
 
   return (
-    <section className={styles.page}>
-      <div className={styles.intro}>
-        <div>
-          <p className={styles.eyebrow}>MEDIA SAFETY</p>
-          <h1>Issue 이미지 검수</h1>
+    <section className={embedded ? styles.embeddedReviewPanel : styles.page}>
+      {!embedded ? (
+        <div className={styles.intro}>
+          <div>
+            <p className={styles.eyebrow}>MEDIA SAFETY</p>
+            <h1>Issue 이미지 검수</h1>
+          </div>
+          <span>승인 전 비공개 · 모든 판단 이력 보존</span>
         </div>
-        <span>승인 전 비공개 · 모든 판단 이력 보존</span>
-      </div>
+      ) : (
+        <div className={styles.embeddedReviewHeading}>
+          <div>
+            <p className={styles.eyebrow}>IMAGE REVIEW</p>
+            <h2>이미지 안전·권리 검수</h2>
+          </div>
+          <button type="button" onClick={onBackToIssues}>
+            질문 검수로 돌아가기
+          </button>
+        </div>
+      )}
       <div className={styles.filters}>
         <input
           type="file"

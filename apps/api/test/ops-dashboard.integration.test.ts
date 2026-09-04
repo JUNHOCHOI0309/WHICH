@@ -16,6 +16,7 @@ import {
   issueVersions,
   operatorAccessGrants,
   operatorAuditLogs,
+  operatorEditorialCandidateMedia,
   operatorEditorialDecisions,
   pointCatalogItems,
   pointCatalogItemVersions,
@@ -113,7 +114,7 @@ function readDashboard(days = 7) {
 }
 
 function opsRequest(
-  method: "GET" | "POST" | "PUT" | "PATCH",
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
   url: string,
   payload?: Record<string, unknown>,
   sessionToken = token,
@@ -665,5 +666,88 @@ describe("operator dashboard", () => {
     const rows = await database.db.select().from(operatorEditorialDecisions);
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ candidateId: candidate.candidateId, revision: 1 });
+  });
+
+  it("attaches and detaches approved library images from Editorial choices", async () => {
+    const listResponse = await opsRequest("GET", "/v1/internal/ops/editorial?limit=1");
+    const candidate = listResponse.json<{
+      items: Array<{
+        candidateId: string;
+        choices: Array<{ code: string; media: { assetId: string } | null }>;
+      }>;
+    }>().items[0]!;
+    const [asset] = await database.db
+      .insert(issueMediaAssets)
+      .values({
+        uploadedByMemberId: memberId,
+        sourceType: "OPERATOR_UPLOAD",
+        rightsAttestation: "운영자가 직접 제작하고 서비스 게시 권리를 확인한 테스트 이미지입니다.",
+        rightsAttestedAt: new Date(),
+        sha256: "e".repeat(64),
+        perceptualHash: "f".repeat(16),
+        inputMimeType: "image/png",
+        inputByteSize: 100,
+        inputWidth: 100,
+        inputHeight: 100,
+        outputByteSize: 80,
+        outputWidth: 100,
+        outputHeight: 100,
+        moderationState: "APPROVED",
+        storageState: "PUBLISHED",
+        rightsState: "ASSERTED",
+        publishedObjectKey: "issue-media/published/editorial-choice-test.webp",
+        publishedAt: new Date(),
+      })
+      .returning({ id: issueMediaAssets.id });
+
+    const attach = await opsRequest(
+      "PUT",
+      `/v1/internal/ops/editorial/${candidate.candidateId}/choices/A/media`,
+      {
+        assetId: asset!.id,
+        altText: "A 선택지 테스트 이미지",
+        cropMode: "COVER",
+      },
+    );
+    expect(attach.statusCode, attach.body).toBe(200);
+    expect(attach.json()).toMatchObject({ media: { assetId: asset!.id, status: "APPROVED" } });
+
+    const refreshed = await opsRequest("GET", "/v1/internal/ops/editorial?limit=1");
+    expect(
+      refreshed.json<{ items: Array<{ choices: Array<{ code: string; media: unknown }> }> }>()
+        .items[0]!.choices,
+    ).toContainEqual(
+      expect.objectContaining({
+        code: "A",
+        media: {
+          assetId: asset!.id,
+          status: "APPROVED",
+          rightsState: "ASSERTED",
+          altText: "A 선택지 테스트 이미지",
+          cropMode: "COVER",
+        },
+      }),
+    );
+
+    const partialApproval = await opsRequest(
+      "PUT",
+      `/v1/internal/ops/editorial/${candidate.candidateId}/decision`,
+      {
+        expectedRevision: 1,
+        status: "APPROVED",
+        note: "이미지 연결 완성 전 승인 시도",
+        checks: { binaryFit: true, choiceParity: true, duplicateReview: true, sourceReview: true },
+      },
+    );
+    expect(partialApproval.statusCode).toBe(409);
+    expect(partialApproval.json()).toMatchObject({ code: "EDITORIAL_MEDIA_CONFLICT" });
+
+    const detach = await opsRequest(
+      "DELETE",
+      `/v1/internal/ops/editorial/${candidate.candidateId}/choices/A/media`,
+    );
+    expect(detach.statusCode, detach.body).toBe(200);
+    expect(detach.json()).toEqual({ detached: true });
+    expect(await database.db.select().from(operatorEditorialCandidateMedia)).toHaveLength(0);
   });
 });

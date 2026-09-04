@@ -4,10 +4,13 @@ import { and, eq, inArray, or, sql } from "drizzle-orm";
 
 import type { Database } from "../../database/client.js";
 import {
+  issueChoiceMedia,
   issueChoices,
   issueInterestCards,
+  issueMediaAssets,
   issues,
   issueVersions,
+  operatorEditorialCandidateMedia,
   outboxEvents,
   resultSnapshots,
   voteAggregates,
@@ -78,6 +81,7 @@ async function inspectIssueManifest(
       primaryCategoryCode: issueVersions.primaryCategoryCode,
       experienceModeCode: issueVersions.experienceModeCode,
       taxonomyVersion: issueVersions.taxonomyVersion,
+      mediaMode: issueVersions.mediaMode,
       publishedAt: issueVersions.publishedAt,
     })
     .from(issueVersions)
@@ -104,6 +108,40 @@ async function inspectIssueManifest(
     })
     .from(issueChoices)
     .where(or(inArray(issueChoices.issueId, issueIds), inArray(issueChoices.id, choiceIds)));
+
+  const candidateMedia = await database
+    .select({
+      issueId: operatorEditorialCandidateMedia.targetIssueId,
+      issueVersion: operatorEditorialCandidateMedia.targetIssueVersion,
+      choiceId: operatorEditorialCandidateMedia.targetChoiceId,
+      choiceCode: operatorEditorialCandidateMedia.choiceCode,
+      assetId: operatorEditorialCandidateMedia.mediaAssetId,
+      altText: operatorEditorialCandidateMedia.altText,
+      cropMode: operatorEditorialCandidateMedia.cropMode,
+      linkedByMemberId: operatorEditorialCandidateMedia.linkedByMemberId,
+      storageState: issueMediaAssets.storageState,
+      moderationState: issueMediaAssets.moderationState,
+      rightsState: issueMediaAssets.rightsState,
+    })
+    .from(operatorEditorialCandidateMedia)
+    .innerJoin(
+      issueMediaAssets,
+      eq(issueMediaAssets.id, operatorEditorialCandidateMedia.mediaAssetId),
+    )
+    .where(inArray(operatorEditorialCandidateMedia.targetIssueId, issueIds));
+
+  const storedChoiceMedia = await database
+    .select({
+      issueId: issueChoiceMedia.issueId,
+      issueVersion: issueChoiceMedia.issueVersion,
+      choiceId: issueChoiceMedia.choiceId,
+      assetId: issueChoiceMedia.mediaAssetId,
+      altText: issueChoiceMedia.altText,
+      cropMode: issueChoiceMedia.cropMode,
+      displayPosition: issueChoiceMedia.displayPosition,
+    })
+    .from(issueChoiceMedia)
+    .where(inArray(issueChoiceMedia.issueId, issueIds));
 
   const storedAggregates = await database
     .select({
@@ -137,6 +175,20 @@ async function inspectIssueManifest(
     grouped.push(choice);
     choicesByVersion.set(key, grouped);
   }
+  const candidateMediaByVersion = new Map<string, typeof candidateMedia>();
+  for (const media of candidateMedia) {
+    const key = issueVersionKey(media.issueId, media.issueVersion);
+    const grouped = candidateMediaByVersion.get(key) ?? [];
+    grouped.push(media);
+    candidateMediaByVersion.set(key, grouped);
+  }
+  const storedMediaByVersion = new Map<string, typeof storedChoiceMedia>();
+  for (const media of storedChoiceMedia) {
+    const key = issueVersionKey(media.issueId, media.issueVersion);
+    const grouped = storedMediaByVersion.get(key) ?? [];
+    grouped.push(media);
+    storedMediaByVersion.set(key, grouped);
+  }
   const interestCardsByVersion = new Map<string, typeof storedInterestCards>();
   for (const card of storedInterestCards) {
     const key = issueVersionKey(card.issueId, card.issueVersion);
@@ -165,6 +217,12 @@ async function inspectIssueManifest(
     const versionChoices = [...(choicesByVersion.get(key) ?? [])].sort((left, right) =>
       left.code.localeCompare(right.code),
     );
+    const desiredMedia = [...(candidateMediaByVersion.get(key) ?? [])].sort((left, right) =>
+      left.choiceCode.localeCompare(right.choiceCode),
+    );
+    const versionMedia = [...(storedMediaByVersion.get(key) ?? [])].sort(
+      (left, right) => left.displayPosition - right.displayPosition,
+    );
     const versionInterestCards = [...(interestCardsByVersion.get(key) ?? [])].sort((left, right) =>
       left.cardCode.localeCompare(right.cardCode),
     );
@@ -177,6 +235,26 @@ async function inspectIssueManifest(
         (storedChoice.issueId !== expected.id || storedChoice.issueVersion !== expected.version)
       );
     });
+    const mediaReasons: string[] = [];
+    if (desiredMedia.length > 0) {
+      if (desiredMedia.length !== expected.choices.length) {
+        mediaReasons.push("Editorial media must cover every Choice or none of them.");
+      }
+      expected.choices.forEach((choice, index) => {
+        const media = desiredMedia[index];
+        if (!media) return;
+        if (media.choiceId !== choice.id || media.choiceCode !== choice.code) {
+          mediaReasons.push(`Editorial media for Choice ${choice.code} targets another Choice.`);
+        }
+        if (
+          media.storageState !== "PUBLISHED" ||
+          media.moderationState !== "APPROVED" ||
+          !["ASSERTED", "CLEARED"].includes(media.rightsState)
+        ) {
+          mediaReasons.push(`Editorial media for Choice ${choice.code} is not publishable.`);
+        }
+      });
+    }
 
     const hasAnyExistingState =
       Boolean(storedIssue) ||
@@ -191,12 +269,12 @@ async function inspectIssueManifest(
       return {
         issueId: expected.id,
         issueVersion: expected.version,
-        action: "CREATE",
-        reasons: [],
+        action: mediaReasons.length === 0 ? "CREATE" : "CONFLICT",
+        reasons: mediaReasons,
       };
     }
 
-    const reasons: string[] = [];
+    const reasons: string[] = [...mediaReasons];
     if (!storedIssue) {
       reasons.push("Issue row is missing while dependent or colliding state already exists.");
     } else {
@@ -253,6 +331,12 @@ async function inspectIssueManifest(
         storedVersion.taxonomyVersion,
         expected.taxonomyVersion,
       );
+      addMismatch(
+        reasons,
+        "version.mediaMode",
+        storedVersion.mediaMode,
+        desiredMedia.length > 0 ? "OPTION_IMAGES" : "TEXT_ONLY",
+      );
       if (!sameTimestamp(storedVersion.publishedAt, expected.publishedAt)) {
         reasons.push("version.publishedAt differs from the approved Manifest.");
       }
@@ -272,6 +356,22 @@ async function inspectIssueManifest(
 
     if (foreignChoiceConflicts.length > 0) {
       reasons.push("One or more Choice IDs are already owned by another Issue Version.");
+    }
+    if (
+      versionMedia.length !== desiredMedia.length ||
+      versionMedia.some((stored, index) => {
+        const desired = desiredMedia[index];
+        return (
+          !desired ||
+          stored.choiceId !== desired.choiceId ||
+          stored.assetId !== desired.assetId ||
+          stored.altText !== desired.altText ||
+          stored.cropMode !== desired.cropMode ||
+          stored.displayPosition !== index
+        );
+      })
+    ) {
+      reasons.push("Issue Choice media differs from the approved Editorial media mapping.");
     }
     const expectedInterestCards = [...expected.interestCardCodes].sort();
     if (
@@ -389,6 +489,24 @@ export async function publishIssueManifest(
 
       if (createItems.length > 0) {
         const occurredAt = new Date();
+        const publicationMedia = await transaction
+          .select({
+            issueId: operatorEditorialCandidateMedia.targetIssueId,
+            issueVersion: operatorEditorialCandidateMedia.targetIssueVersion,
+            choiceId: operatorEditorialCandidateMedia.targetChoiceId,
+            assetId: operatorEditorialCandidateMedia.mediaAssetId,
+            altText: operatorEditorialCandidateMedia.altText,
+            cropMode: operatorEditorialCandidateMedia.cropMode,
+            linkedByMemberId: operatorEditorialCandidateMedia.linkedByMemberId,
+          })
+          .from(operatorEditorialCandidateMedia)
+          .where(inArray(operatorEditorialCandidateMedia.targetIssueId, [...createIds]));
+        const mediaByIssue = new Map<string, typeof publicationMedia>();
+        for (const media of publicationMedia) {
+          const grouped = mediaByIssue.get(media.issueId) ?? [];
+          grouped.push(media);
+          mediaByIssue.set(media.issueId, grouped);
+        }
         await transaction.insert(issues).values(createItems.map(toIssueInsert));
         await transaction.insert(issueVersions).values(
           createItems.map((issue) => ({
@@ -400,6 +518,8 @@ export async function publishIssueManifest(
             primaryCategoryCode: issue.primaryCategoryCode,
             experienceModeCode: issue.experienceModeCode,
             taxonomyVersion: issue.taxonomyVersion,
+            mediaMode:
+              (mediaByIssue.get(issue.id)?.length ?? 0) > 0 ? "OPTION_IMAGES" : "TEXT_ONLY",
             publishedAt: new Date(issue.publishedAt),
           })),
         );
@@ -414,6 +534,25 @@ export async function publishIssueManifest(
             })),
           ),
         );
+        if (publicationMedia.length > 0) {
+          const choicePosition = new Map(
+            createItems.flatMap((issue) =>
+              issue.choices.map((choice, index) => [`${issue.id}:${choice.id}`, index] as const),
+            ),
+          );
+          await transaction.insert(issueChoiceMedia).values(
+            publicationMedia.map((media) => ({
+              issueId: media.issueId,
+              issueVersion: media.issueVersion,
+              choiceId: media.choiceId,
+              mediaAssetId: media.assetId,
+              altText: media.altText,
+              cropMode: media.cropMode,
+              displayPosition: choicePosition.get(`${media.issueId}:${media.choiceId}`)!,
+              linkedByMemberId: media.linkedByMemberId,
+            })),
+          );
+        }
         const sealedSnapshots = new Map<string, { inputHash: string }>();
         for (const issue of createItems) {
           const sealed = await sealIssueVersionSnapshot(transaction, issue.id, issue.version);

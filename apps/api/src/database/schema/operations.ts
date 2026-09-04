@@ -15,6 +15,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 import { members } from "./identity.js";
+import { issueMediaAssets } from "./issue-media.js";
 
 export const operatorAccessGrants = pgTable(
   "operator_access_grants",
@@ -118,6 +119,61 @@ export const operatorEditorialDecisions = pgTable(
       sql`${table.status} <> 'APPROVED' or (
         ${table.binaryFit} and ${table.choiceParity} and ${table.duplicateReview} and ${table.sourceReview}
       )`,
+    ),
+  ],
+);
+
+export const operatorEditorialCandidateMedia = pgTable(
+  "operator_editorial_candidate_media",
+  {
+    id: uuid("operator_editorial_candidate_media_id").defaultRandom().primaryKey(),
+    catalogId: varchar("catalog_id", { length: 128 }).notNull(),
+    candidateId: varchar("candidate_id", { length: 32 }).notNull(),
+    choiceCode: varchar("choice_code", { length: 1 }).notNull(),
+    targetIssueId: uuid("target_issue_id").notNull(),
+    targetIssueVersion: integer("target_issue_version").notNull(),
+    targetChoiceId: uuid("target_choice_id").notNull(),
+    mediaAssetId: uuid("media_asset_id")
+      .notNull()
+      .references(() => issueMediaAssets.id, { onDelete: "restrict" }),
+    altText: varchar("alt_text", { length: 300 }).notNull(),
+    cropMode: varchar("crop_mode", { length: 16 }).default("COVER").notNull(),
+    linkedByMemberId: uuid("linked_by_member_id")
+      .notNull()
+      .references(() => members.id, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    unique("operator_editorial_candidate_media_choice_unique").on(
+      table.catalogId,
+      table.candidateId,
+      table.choiceCode,
+    ),
+    unique("operator_editorial_candidate_media_target_choice_unique").on(
+      table.targetIssueId,
+      table.targetIssueVersion,
+      table.targetChoiceId,
+    ),
+    index("operator_editorial_candidate_media_candidate_idx").on(
+      table.catalogId,
+      table.candidateId,
+    ),
+    check(
+      "operator_editorial_candidate_media_choice_code_check",
+      sql`${table.choiceCode} in ('A', 'B', 'C', 'D')`,
+    ),
+    check(
+      "operator_editorial_candidate_media_alt_text_check",
+      sql`char_length(${table.altText}) between 2 and 300`,
+    ),
+    check(
+      "operator_editorial_candidate_media_crop_mode_check",
+      sql`${table.cropMode} in ('COVER', 'CONTAIN')`,
+    ),
+    check(
+      "operator_editorial_candidate_media_target_version_check",
+      sql`${table.targetIssueVersion} > 0`,
     ),
   ],
 );
