@@ -17,7 +17,10 @@ if (!databaseUrl) {
 }
 
 const migrationsFolder = resolve(process.cwd(), "migrations");
-const database = createDatabase(databaseUrl);
+const database = createDatabase(databaseUrl, {
+  connectionTimeoutMillis: 30_000,
+  maxConnections: 1,
+});
 
 try {
   // PostgreSQL requires a newly added enum value to commit before a later

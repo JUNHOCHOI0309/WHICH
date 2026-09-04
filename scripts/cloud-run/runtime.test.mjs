@@ -132,6 +132,7 @@ test("Cloud Build deploys the private elastic worker before switching web dispat
     "which-db-migrate",
     "scripts/cloud-run/migrate.mjs",
     "gcloud run jobs execute",
+    "--max-retries=2",
     "--concurrency=1",
     "--min=1",
     '--max="${_MODERATION_MAX_INSTANCES}"',
