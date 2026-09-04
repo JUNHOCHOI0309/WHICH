@@ -69,6 +69,12 @@
   margin: 4px 0 0;
   font-size: 24px;
 }
+.embeddedReviewHeading span {
+  display: block;
+  margin-top: 7px;
+  color: #687984;
+  font-size: 13px;
+}
 .embeddedReviewHeading > button {
   padding: 11px 16px;
   border: 1px solid #9edce4;
@@ -892,6 +898,55 @@
 .choices b {
   color: #0798ae;
 }
+.editorialCreateForm {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 20px;
+  border: 1px solid #b9dfe5;
+  border-radius: 16px;
+  background: #f5fbfc;
+}
+.editorialCreateForm h3,
+.editorialCreateForm textarea,
+.editorialCreateForm > input {
+  grid-column: 1 / -1;
+}
+.editorialCreateForm h3 {
+  margin: 0;
+}
+.editorialCreateForm input,
+.editorialCreateForm textarea,
+.editorialCreateForm select {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid #cbdade;
+  border-radius: 10px;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+}
+.editorialCreateForm textarea {
+  min-height: 88px;
+  resize: vertical;
+}
+.editorialCreateForm > div {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.editorialCreateForm > button {
+  min-height: 44px;
+  border: 0;
+  border-radius: 10px;
+  background: #078ea4;
+  color: #fff;
+  font: inherit;
+  font-weight: 850;
+  cursor: pointer;
+}
 .candidateMediaSection {
   position: relative;
   display: grid;
@@ -920,7 +975,8 @@
 }
 .candidateMediaHeading button,
 .mediaLibraryHeader button,
-.candidateMediaGrid article > button {
+.candidateMediaGrid article > button,
+.candidateMediaUpload {
   padding: 9px 12px;
   border: 1px solid #9bdbe4;
   border-radius: 10px;
@@ -930,6 +986,17 @@
   font-size: 12px;
   font-weight: 800;
   cursor: pointer;
+}
+.candidateMediaUpload {
+  display: grid;
+  place-items: center;
+}
+.candidateMediaUpload input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
 }
 .candidateMediaHeading button:disabled,
 .candidateMediaGrid article > button:disabled {
@@ -1283,6 +1350,29 @@
   gap: 18px;
   margin-top: 24px;
 }
+.libraryDetails {
+  border: 1px solid #d2e0e4;
+  border-radius: 16px;
+  background: #fff;
+}
+.libraryDetails summary {
+  padding: 16px 18px;
+  color: #087e91;
+  font-weight: 850;
+  cursor: pointer;
+}
+.libraryDetails .libraryForm {
+  border: 0;
+  border-top: 1px solid #e3ecef;
+  border-radius: 0 0 16px 16px;
+}
+.libraryForm p {
+  grid-column: span 2;
+  margin: 0;
+  color: #687980;
+  font-size: 12px;
+  line-height: 1.5;
+}
 .libraryForm {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1376,6 +1466,10 @@
     flex-direction: column;
   }
   .filters {
+    grid-template-columns: 1fr;
+  }
+  .editorialCreateForm,
+  .editorialCreateForm > div {
     grid-template-columns: 1fr;
   }
   .editorialFilters {

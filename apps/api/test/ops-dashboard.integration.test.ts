@@ -617,50 +617,29 @@ describe("operator dashboard", () => {
       items: Array<{ candidateId: string; decision: { revision: number } | null }>;
     }>().items[0]!;
 
-    const invalidApproval = await opsRequest(
-      "PUT",
-      `/v1/internal/ops/editorial/${candidate.candidateId}/decision`,
-      {
-        expectedRevision: candidate.decision?.revision ?? 0,
-        status: "APPROVED",
-        note: "검수 미완료",
-        checks: {
-          binaryFit: false,
-          choiceParity: false,
-          duplicateReview: false,
-          sourceReview: false,
-        },
-      },
-    );
-    expect(invalidApproval.statusCode).toBe(400);
-
     const savedResponse = await opsRequest(
       "PUT",
       `/v1/internal/ops/editorial/${candidate.candidateId}/decision`,
       {
         expectedRevision: 0,
-        status: "NEEDS_CHANGES",
-        note: "선택지 표현을 맞춰 주세요.",
-        checks: { binaryFit: true, choiceParity: false, duplicateReview: true, sourceReview: true },
+        status: "REJECTED",
       },
     );
     expect(savedResponse.statusCode, savedResponse.body).toBe(200);
-    expect(savedResponse.json()).toMatchObject({ status: "NEEDS_CHANGES", revision: 1 });
+    expect(savedResponse.json()).toMatchObject({ status: "REJECTED", revision: 1, note: "" });
 
     const staleResponse = await opsRequest(
       "PUT",
       `/v1/internal/ops/editorial/${candidate.candidateId}/decision`,
       {
         expectedRevision: 0,
-        status: "REJECTED",
-        note: "stale",
-        checks: { binaryFit: true, choiceParity: true, duplicateReview: true, sourceReview: true },
+        status: "APPROVED",
       },
     );
     expect(staleResponse.statusCode).toBe(409);
     expect(staleResponse.json()).toMatchObject({
       code: "REVISION_CONFLICT",
-      current: { status: "NEEDS_CHANGES", revision: 1 },
+      current: { status: "REJECTED", revision: 1 },
     });
 
     const rows = await database.db.select().from(operatorEditorialDecisions);
@@ -735,8 +714,6 @@ describe("operator dashboard", () => {
       {
         expectedRevision: 1,
         status: "APPROVED",
-        note: "이미지 연결 완성 전 승인 시도",
-        checks: { binaryFit: true, choiceParity: true, duplicateReview: true, sourceReview: true },
       },
     );
     expect(partialApproval.statusCode).toBe(409);
@@ -767,8 +744,6 @@ describe("operator dashboard", () => {
       {
         expectedRevision: 1,
         status: "APPROVED",
-        note: "네 가지 검수 완료",
-        checks: { binaryFit: true, choiceParity: true, duplicateReview: true, sourceReview: true },
       },
     );
     expect(approval.statusCode, approval.body).toBe(200);
@@ -815,12 +790,38 @@ describe("operator dashboard", () => {
       `/v1/internal/ops/editorial/${candidate.candidateId}/decision`,
       {
         expectedRevision: 2,
-        status: "NEEDS_CHANGES",
-        note: "게시 후 변경 시도",
-        checks: { binaryFit: true, choiceParity: true, duplicateReview: true, sourceReview: true },
+        status: "REJECTED",
       },
     );
     expect(mutateAfterPublish.statusCode).toBe(409);
     expect(mutateAfterPublish.json()).toMatchObject({ code: "EDITORIAL_PUBLICATION_CONFLICT" });
+  });
+
+  it("adds an administrator-authored question to the persistent review queue", async () => {
+    const created = await opsRequest("POST", "/v1/internal/ops/editorial", {
+      question: "관리자 검수로 추가한 질문은?",
+      context: "관리자 질문 추가 기능 통합 테스트",
+      choices: ["바로 인가", "조금 더 검토"],
+      interestCardCode: "DAILY_LIFE",
+    });
+    expect(created.statusCode, created.body).toBe(201);
+    expect(created.body).toContain('"candidateId":"ADMIN-');
+    expect(created.json()).toMatchObject({
+      candidate: {
+        question: "관리자 검수로 추가한 질문은?",
+        category: "LIFE",
+        decision: null,
+      },
+    });
+
+    const listed = await opsRequest(
+      "GET",
+      "/v1/internal/ops/editorial?q=" + encodeURIComponent("관리자 검수로 추가한 질문은?"),
+    );
+    expect(listed.statusCode, listed.body).toBe(200);
+    expect(listed.body).toContain('"PENDING":');
+    expect(listed.json()).toMatchObject({
+      items: [{ question: "관리자 검수로 추가한 질문은?" }],
+    });
   });
 });

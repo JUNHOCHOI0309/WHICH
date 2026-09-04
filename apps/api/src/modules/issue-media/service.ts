@@ -609,16 +609,18 @@ export function createIssueMediaService(
           normalizedObjectRef: `issue-media://asset/${id}/version/1`,
           inputHash: normalizedSha256,
         });
-        const moderationEvents = createModerationSubmissionEvents({
-          targetType: "ISSUE_MEDIA_ASSET",
-          targetId: id,
-          targetVersion: 1,
-          privateObjectReference: `issue-media://asset/${id}/version/1`,
-          normalizedInputHash: normalizedSha256,
-          reason: "CREATE",
-          occurredAt: rightsAttestedAt,
-        });
-        await transaction.insert(outboxEvents).values(moderationEvents.rows);
+        if (input.sourceType === "MEMBER_SUBMISSION") {
+          const moderationEvents = createModerationSubmissionEvents({
+            targetType: "ISSUE_MEDIA_ASSET",
+            targetId: id,
+            targetVersion: 1,
+            privateObjectReference: `issue-media://asset/${id}/version/1`,
+            normalizedInputHash: normalizedSha256,
+            reason: "CREATE",
+            occurredAt: rightsAttestedAt,
+          });
+          await transaction.insert(outboxEvents).values(moderationEvents.rows);
+        }
         await transaction
           .insert(issueMediaRuleFindings)
           .values(canonicalFindings.map((finding) => ({ mediaAssetId: id, ...finding })));

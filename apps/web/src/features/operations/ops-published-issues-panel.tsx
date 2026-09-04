@@ -77,7 +77,7 @@ function ChoiceMediaPreview({
       if (preview) URL.revokeObjectURL(preview);
     };
   }, [preview]);
-  const source = preview ?? (assetId ? `/api/ops/media-review/assets/${assetId}/content` : null);
+  const source = preview ?? (assetId ? `/api/ops/editorial/media-assets/${assetId}/content` : null);
   return source ? <img src={source} alt={alt} /> : <span>등록된 이미지 없음</span>;
 }
 
@@ -221,7 +221,7 @@ export function OpsPublishedIssuesPanel() {
           if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
             throw new Error(`${choice.code} 이미지는 JPG, PNG, WebP만 사용할 수 있습니다.`);
           }
-          const uploadResponse = await fetch("/api/ops/media-review/assets", {
+          const uploadResponse = await fetch("/api/ops/editorial/media-assets", {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({
@@ -244,17 +244,8 @@ export function OpsPublishedIssuesPanel() {
             uploadBody.asset.storageState !== "PUBLISHED"
           ) {
             const approvalResponse = await fetch(
-              `/api/ops/media-review/assets/${encodeURIComponent(assetId)}/decision`,
-              {
-                method: "PUT",
-                headers: { "content-type": "application/json" },
-                body: JSON.stringify({
-                  status: "APPROVED",
-                  reasonCode: "OPS_ISSUE_MEDIA_REVISION",
-                  rationale: "게시 질문 선택지 이미지 관리자 승인",
-                  policyVersion: "issue-media-review-v1",
-                }),
-              },
+              `/api/ops/editorial/media-assets/${encodeURIComponent(assetId)}/publish`,
+              { method: "POST" },
             );
             const approvalBody = (await approvalResponse.json()) as { message?: string };
             if (!approvalResponse.ok) {

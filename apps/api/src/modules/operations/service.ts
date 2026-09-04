@@ -17,6 +17,7 @@ import {
   members,
   operatorAccessGrants,
   operatorAuditLogs,
+  operatorEditorialCandidates,
   operatorEditorialCandidateMedia,
   operatorEditorialDecisions,
   pointCatalogItems,
@@ -28,7 +29,10 @@ import {
   outboxEvents,
 } from "../../database/schema/index.js";
 import { defaultReviewConsolePaths } from "../../editorial-review-console.js";
-import { computeManifestDigest } from "../issue-publication/content-hash.js";
+import {
+  computeIssueContentHash,
+  computeManifestDigest,
+} from "../issue-publication/content-hash.js";
 import { loadIssueInventoryReadiness } from "../issue-publication/inventory.js";
 import { parseIssueManifest } from "../issue-publication/manifest.js";
 import { EditorialReviewConsole } from "../issue-publication/review-console.js";
@@ -50,6 +54,7 @@ import {
   type OpsDashboardSnapshot,
   type OpsDashboardWindow,
   type OpsEditorialDecision,
+  type OpsEditorialCandidate,
   type OpsEditorialCandidateMedia,
   type OpsEditorialPage,
   type OpsMemberPage,
@@ -179,6 +184,7 @@ type OpsManagementMethods = Pick<
   | "readMembers"
   | "readReportedMembers"
   | "readEditorial"
+  | "createEditorialCandidate"
   | "saveEditorialDecision"
   | "publishEditorialCandidate"
   | "attachEditorialCandidateMedia"
@@ -187,6 +193,23 @@ type OpsManagementMethods = Pick<
   | "updatePublishedIssue"
   | "revisePublishedIssueMedia"
 >;
+
+const editorialCategoryByInterest: Record<string, string> = {
+  DAILY_LIFE: "LIFE",
+  FOOD: "LIFE",
+  TRAVEL: "LIFE",
+  RELATIONSHIP: "RELATIONSHIP",
+  WORK: "WORK_CAREER",
+  ECONOMY_CONSUMPTION: "ECONOMY_CONSUMPTION",
+  TECH: "TECH",
+  GAME: "CULTURE_ENT",
+  MOVIE_DRAMA: "CULTURE_ENT",
+  MUSIC_CONTENT: "CULTURE_ENT",
+  SPORTS: "SPORTS",
+  EDUCATION: "EDUCATION",
+  SOCIETY: "SOCIETY",
+  HOBBY: "LIFE",
+};
 
 function effectiveMediaStatus(row: {
   storageState: string;
@@ -576,6 +599,78 @@ function createOpsManagementMethods(
     }
   }
 
+  type EditorialCandidateState = Awaited<
+    ReturnType<typeof editorialReviewState>
+  >["candidates"][number];
+
+  async function editorialState() {
+    const base = await editorialReviewState();
+    const rows = await database
+      .select()
+      .from(operatorEditorialCandidates)
+      .where(eq(operatorEditorialCandidates.catalogId, base.catalog.id));
+    const adminCandidates = rows.map(
+      (row): EditorialCandidateState =>
+        ({
+          id: row.id,
+          version: 1,
+          candidateId: row.candidateId,
+          question: row.question,
+          context: row.context,
+          choices: row.choices as EditorialCandidateState["choices"],
+          category: row.categoryCode,
+          interestCardCodes: [row.interestCardCode],
+          experienceModeCode: "PLAYFUL_QUICK",
+          taxonomyVersion: "interest_cards_v1",
+          editorialArea: row.editorialArea,
+          riskLevel: "LOW",
+          isPolitical: false,
+          contentHash: row.contentHash,
+          inventoryScope: row.inventoryScope,
+          sourceProfile: {
+            discoveryLead: "EDITORIAL",
+            sourceRequirement: "NOT_REQUIRED_SUBJECTIVE",
+            communitySignalIds: [],
+            communitySignalRole: "관리자 직접 등록",
+            factSourceIds: [],
+            asOf: null,
+            reviewAfter: null,
+            expiresAt: null,
+            evergreen: true,
+            sourceFitReview: "관리자 검수",
+          },
+          sources: [],
+          automatedReview: {
+            status: "ADMIN_CREATED_PENDING_REVIEW",
+            humanApproval: "PENDING",
+            binaryFit: "PENDING",
+            choiceParity: "PENDING",
+            duplicateReview: "PENDING",
+            sourceReview: "PENDING",
+          },
+          decision: null,
+        }) as unknown as EditorialCandidateState,
+    );
+    const candidates = [...adminCandidates, ...base.candidates];
+    return {
+      ...base,
+      catalog: { ...base.catalog, total: candidates.length },
+      inventory: {
+        ...base.inventory,
+        active:
+          base.inventory.active +
+          adminCandidates.filter((candidate) => candidate.inventoryScope === "ACTIVE").length,
+        reserve:
+          base.inventory.reserve +
+          adminCandidates.filter((candidate) => candidate.inventoryScope === "RESERVE").length,
+        longTerm:
+          base.inventory.longTerm +
+          adminCandidates.filter((candidate) => candidate.inventoryScope === "LONG_TERM").length,
+      },
+      candidates,
+    };
+  }
+
   return {
     async readMembers(input): Promise<OpsMemberPage | null> {
       const actor = await operator(input.memberId);
@@ -813,6 +908,96 @@ function createOpsManagementMethods(
       return { schemaVersion: 1, generatedAt: now.toISOString(), items };
     },
 
+    async createEditorialCandidate(input): Promise<OpsEditorialCandidate | null> {
+      const actor = await operator(input.memberId);
+      if (!actor) {
+        await audit({
+          memberId: input.memberId,
+          eventType: "OPS_EDITORIAL_CANDIDATE_CREATE",
+          outcome: "DENIED",
+          requestId: input.requestId,
+          metadata: { reason: "OPERATOR_ROLE_REQUIRED" },
+        });
+        return null;
+      }
+
+      const question = input.question.trim().normalize("NFC");
+      const context = input.context.trim().normalize("NFC");
+      const choiceLabels = input.choices.map((choice) => choice.trim().normalize("NFC")) as [
+        string,
+        string,
+      ];
+      const categoryCode = editorialCategoryByInterest[input.interestCardCode];
+      if (
+        !categoryCode ||
+        question.length < 1 ||
+        question.length > 200 ||
+        context.length < 1 ||
+        context.length > 500 ||
+        choiceLabels.some((choice) => choice.length < 1 || choice.length > 100) ||
+        choiceLabels[0] === choiceLabels[1]
+      ) {
+        throw new OpsReviewValidationError("질문, 설명, 서로 다른 A/B 선택지를 확인해 주세요.");
+      }
+
+      const state = await editorialState();
+      if (
+        state.candidates.some(
+          (candidate) =>
+            candidate.question.toLocaleLowerCase("ko") === question.toLocaleLowerCase("ko"),
+        )
+      ) {
+        throw new OpsReviewValidationError("같은 질문이 이미 검수 후보에 있습니다.");
+      }
+
+      const issueId = randomUUID();
+      const choices = (["A", "B"] as const).map((code, index) => ({
+        id: randomUUID(),
+        code,
+        label: choiceLabels[index]!,
+      })) as [{ id: string; code: "A"; label: string }, { id: string; code: "B"; label: string }];
+      const candidateId = `ADMIN-${Date.now().toString(36).toUpperCase()}-${randomUUID().slice(0, 4).toUpperCase()}`;
+      const contentHash = computeIssueContentHash({ question, context, choices });
+      await database.insert(operatorEditorialCandidates).values({
+        id: issueId,
+        catalogId: state.catalog.id,
+        candidateId,
+        question,
+        context,
+        choices,
+        categoryCode,
+        interestCardCode: input.interestCardCode,
+        editorialArea: categoryCode,
+        inventoryScope: "ACTIVE",
+        contentHash,
+        createdByMemberId: input.memberId,
+      });
+      await audit({
+        memberId: input.memberId,
+        eventType: "OPS_EDITORIAL_CANDIDATE_CREATE",
+        outcome: "SUCCEEDED",
+        requestId: input.requestId,
+        metadata: { candidateId, issueId, categoryCode },
+      });
+      return {
+        candidateId,
+        question,
+        context,
+        choices: choices.map((choice) => ({ ...choice, media: null })),
+        category: categoryCode,
+        interestCardCodes: [input.interestCardCode],
+        editorialArea: categoryCode,
+        riskLevel: "LOW",
+        inventoryScope: "ACTIVE",
+        discoveryLead: "EDITORIAL",
+        sourceRequirement: "NOT_REQUIRED_SUBJECTIVE",
+        sources: [],
+        automatedReviewStatus: "ADMIN_CREATED_PENDING_REVIEW",
+        decision: null,
+        publication: null,
+      };
+    },
+
     async readEditorial(input): Promise<OpsEditorialPage | null> {
       const actor = await operator(input.memberId);
       if (!actor) {
@@ -827,7 +1012,7 @@ function createOpsManagementMethods(
       }
 
       try {
-        const state = await editorialReviewState();
+        const state = await editorialState();
         const storedRows = await database
           .select({
             candidateId: operatorEditorialDecisions.candidateId,
@@ -1015,15 +1200,12 @@ function createOpsManagementMethods(
         });
         return null;
       }
-      const state = await editorialReviewState();
+      const state = await editorialState();
       const baselineCandidate = state.candidates.find(
         (candidate) => candidate.candidateId === input.candidateId,
       );
       if (!baselineCandidate) throw new Error("The Editorial candidate does not exist.");
       await assertEditorialCandidateIsUnpublished(baselineCandidate);
-      if (input.status === "APPROVED" && Object.values(input.checks).some((value) => !value)) {
-        throw new Error("승인하려면 네 가지 편집 검수 항목을 모두 확인해야 합니다.");
-      }
       if (input.status === "APPROVED") {
         const linkedMedia = await database
           .select({
@@ -1091,12 +1273,12 @@ function createOpsManagementMethods(
         const savedRow = await database.transaction(async (transaction) => {
           const values = {
             status: input.status,
-            note: input.note,
+            note: "",
             reviewedByMemberId: input.memberId,
-            binaryFit: input.checks.binaryFit,
-            choiceParity: input.checks.choiceParity,
-            duplicateReview: input.checks.duplicateReview,
-            sourceReview: input.checks.sourceReview,
+            binaryFit: true,
+            choiceParity: true,
+            duplicateReview: true,
+            sourceReview: true,
             reviewedAt: new Date(),
             updatedAt: new Date(),
           };
@@ -1174,7 +1356,7 @@ function createOpsManagementMethods(
         return null;
       }
 
-      const state = await editorialReviewState();
+      const state = await editorialState();
       const candidate = state.candidates.find((item) => item.candidateId === input.candidateId);
       if (!candidate) {
         throw new OpsEditorialPublicationError("게시할 Editorial 후보를 찾을 수 없습니다.");
@@ -1235,13 +1417,8 @@ function createOpsManagementMethods(
       if ((decision?.revision ?? 0) !== input.expectedRevision) {
         throw new OpsReviewConflictError(decision);
       }
-      if (
-        decision?.status !== "APPROVED" ||
-        Object.values(decision.checks).some((checked) => !checked)
-      ) {
-        throw new OpsEditorialPublicationError(
-          "네 가지 검수를 모두 통과해 인가된 후보만 게시할 수 있습니다.",
-        );
+      if (decision?.status !== "APPROVED") {
+        throw new OpsEditorialPublicationError("인가된 후보만 게시할 수 있습니다.");
       }
       if (candidate.riskLevel !== "LOW" || candidate.isPolitical) {
         throw new OpsEditorialPublicationError(
@@ -1378,7 +1555,7 @@ function createOpsManagementMethods(
         });
         return null;
       }
-      const state = await editorialReviewState();
+      const state = await editorialState();
       const candidate = state.candidates.find((item) => item.candidateId === input.candidateId);
       if (!candidate) throw new OpsReviewValidationError("The Editorial candidate does not exist.");
       await assertEditorialCandidateIsUnpublished(candidate);
@@ -1466,7 +1643,7 @@ function createOpsManagementMethods(
         });
         return null;
       }
-      const state = await editorialReviewState();
+      const state = await editorialState();
       const candidate = state.candidates.find((item) => item.candidateId === input.candidateId);
       if (!candidate?.choices.some((choice) => choice.code === input.choiceCode)) {
         throw new OpsReviewValidationError("The Editorial candidate choice does not exist.");

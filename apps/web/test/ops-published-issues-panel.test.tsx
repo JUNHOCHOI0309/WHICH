@@ -94,7 +94,7 @@ describe("Ops published Issue controls", () => {
     let uploadCount = 0;
     const request = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url = String(input);
-      if (url === "/api/ops/media-review/assets" && init?.method === "POST") {
+      if (url === "/api/ops/editorial/media-assets" && init?.method === "POST") {
         uploadCount += 1;
         return new Response(
           JSON.stringify({
@@ -107,7 +107,7 @@ describe("Ops published Issue controls", () => {
           { status: 201, headers: { "content-type": "application/json" } },
         );
       }
-      if (url.includes("/api/ops/media-review/assets/") && init?.method === "PUT") {
+      if (url.includes("/api/ops/editorial/media-assets/") && init?.method === "POST") {
         return new Response(JSON.stringify({ status: "APPROVED" }), {
           status: 200,
           headers: { "content-type": "application/json" },
