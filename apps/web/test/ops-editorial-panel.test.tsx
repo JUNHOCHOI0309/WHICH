@@ -16,7 +16,110 @@ function response(body: unknown) {
 
 afterEach(() => vi.unstubAllGlobals());
 
-describe("Ops Editorial candidate images", () => {
+function candidate(candidateId: string, question: string) {
+  return {
+    candidateId,
+    question,
+    context: "테스트",
+    choices: [
+      { code: "A", label: "첫 번째", media: null },
+      { code: "B", label: "두 번째", media: null },
+    ],
+    category: "DAILY",
+    interestCardCodes: ["DAILY_LIFE"],
+    editorialArea: "LIFE",
+    riskLevel: "LOW",
+    inventoryScope: "ACTIVE",
+    discoveryLead: "test",
+    sourceRequirement: "NOT_REQUIRED_SUBJECTIVE",
+    sources: [],
+    automatedReviewStatus: "PASSED",
+    decision: null,
+    publication: null,
+  };
+}
+
+function page(items: ReturnType<typeof candidate>[], nextCursor: string | null) {
+  return {
+    schemaVersion: 1,
+    generatedAt: "2026-09-05T00:00:00.000Z",
+    catalog: { id: "catalog", total: 100, approval: "PENDING" },
+    inventory: { active: 100, reserve: 0, longTerm: 0 },
+    counts: { PENDING: 100, APPROVED: 0, NEEDS_CHANGES: 0, REJECTED: 0 },
+    items,
+    nextCursor,
+  };
+}
+
+describe("Ops Editorial panel", () => {
+  it("loads the next candidate page without replacing the current list", async () => {
+    const first = candidate("WEXP-0001", "첫 페이지 질문");
+    const second = candidate("WEXP-0051", "두 번째 페이지 질문");
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.includes("cursor=WEXP-0001")) return response(page([second], null));
+      if (url.startsWith("/api/ops/editorial?")) return response(page([first], "WEXP-0001"));
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<OpsEditorialPanel embedded />);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "다음 50개 불러오기" }, { timeout: 5_000 }),
+    );
+    expect(
+      await screen.findByText("두 번째 페이지 질문", undefined, { timeout: 5_000 }),
+    ).toBeVisible();
+    expect(screen.getAllByText("첫 페이지 질문")[0]).toBeVisible();
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes("cursor=WEXP-0001"))).toBe(
+      true,
+    );
+  });
+
+  it("replenishes a filtered pending list after a decision", async () => {
+    const first = candidate("WEXP-0001", "검수할 첫 질문");
+    const second = candidate("WEXP-0002", "자동으로 채워진 다음 질문");
+    let pendingLoads = 0;
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      if (url.startsWith("/api/ops/editorial?") && url.includes("status=PENDING")) {
+        pendingLoads += 1;
+        return response(page([pendingLoads === 1 ? first : second], null));
+      }
+      if (url.startsWith("/api/ops/editorial?")) return response(page([first], null));
+      if (url.endsWith("/decision") && init?.method === "PUT") {
+        return response({
+          status: "REJECTED",
+          note: "",
+          reviewedBy: "운영자",
+          reviewedAt: "2026-09-05T01:00:00.000Z",
+          revision: 1,
+          checks: {
+            binaryFit: false,
+            choiceParity: false,
+            duplicateReview: false,
+            sourceReview: false,
+          },
+        });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<OpsEditorialPanel embedded />);
+    fireEvent.change((await screen.findAllByRole("combobox"))[0]!, {
+      target: { value: "PENDING" },
+    });
+    await waitFor(() => expect(pendingLoads).toBe(1), { timeout: 5_000 });
+    fireEvent.click(await screen.findByRole("button", { name: "반려" }, { timeout: 5_000 }));
+
+    expect(
+      await screen.findByRole("heading", { name: "자동으로 채워진 다음 질문" }, { timeout: 5_000 }),
+    ).toBeVisible();
+    expect(pendingLoads).toBe(2);
+  });
+
   it("selects an approved image and removes it when selected again", async () => {
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url = String(input);

@@ -584,6 +584,33 @@
   overflow-y: auto;
   scrollbar-gutter: stable;
 }
+.candidateListMore {
+  display: grid;
+  gap: 10px;
+  justify-items: center;
+  padding: 16px;
+  border-top: 1px solid #e5ecef;
+  background: #f8fbfc;
+}
+.candidateListMore span {
+  color: #6b7b83;
+  font-size: 11px;
+  font-weight: 700;
+}
+.candidateListMore button {
+  min-height: 40px;
+  padding: 0 18px;
+  border: 1px solid #0a93aa;
+  border-radius: 999px;
+  background: #fff;
+  color: #087f93;
+  font-weight: 800;
+  cursor: pointer;
+}
+.candidateListMore button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
 .detail {
   padding: 24px;
 }
