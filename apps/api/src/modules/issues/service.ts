@@ -29,7 +29,9 @@ import {
   issueMediaAssets,
   analyticsEvents,
   analyticsSessions,
+  comments,
   guestMemberLinks,
+  issueRecommendations,
   issues,
   issueVersions,
   memberProfiles,
@@ -589,6 +591,7 @@ export function createIssueReadService(
         }
 
         let subjectId = profile.subjectId;
+        let viewerMemberId: string | null = null;
         if (!subjectId && query.anonymousSubjectId) {
           const [subject] = await transaction
             .select({ id: voterSubjects.id })
@@ -611,6 +614,7 @@ export function createIssueReadService(
             (viewerSubject.kind === "MEMBER" || viewerSubject.kind === "VERIFIED_MEMBER")
               ? viewerSubject.userId
               : null;
+          viewerMemberId = memberId;
 
           if (memberId) {
             const [memberSubjects, linkedGuestSubjects] = await Promise.all([
@@ -978,6 +982,64 @@ export function createIssueReadService(
               .orderBy(issueChoices.issueId, issueChoices.code)
           : [];
 
+        const pageIssueIds = pageRows.map((row) => row.id);
+        const commentFilters = pageRows.map((row) =>
+          and(eq(comments.issueId, row.id), eq(comments.issueVersion, row.version)),
+        );
+        const [recommendationCounts, commentCounts, viewerRecommendations] = pageRows.length
+          ? await Promise.all([
+              transaction
+                .select({
+                  issueId: issueRecommendations.issueId,
+                  count: sql<number>`count(*)::int`,
+                })
+                .from(issueRecommendations)
+                .where(
+                  and(
+                    inArray(issueRecommendations.issueId, pageIssueIds),
+                    eq(issueRecommendations.active, true),
+                  ),
+                )
+                .groupBy(issueRecommendations.issueId),
+              transaction
+                .select({
+                  issueId: comments.issueId,
+                  issueVersion: comments.issueVersion,
+                  count: sql<number>`count(*)::int`,
+                })
+                .from(comments)
+                .where(
+                  and(
+                    or(...commentFilters),
+                    eq(comments.publicationState, "PUBLISHED"),
+                    inArray(comments.visibility, ["VISIBLE", "DEPRIORITIZED", "COLLAPSED"]),
+                    eq(comments.integrityState, "NORMAL"),
+                    isNull(comments.deletedAt),
+                  ),
+                )
+                .groupBy(comments.issueId, comments.issueVersion),
+              viewerMemberId
+                ? transaction
+                    .select({ issueId: issueRecommendations.issueId })
+                    .from(issueRecommendations)
+                    .where(
+                      and(
+                        inArray(issueRecommendations.issueId, pageIssueIds),
+                        eq(issueRecommendations.memberId, viewerMemberId),
+                        eq(issueRecommendations.active, true),
+                      ),
+                    )
+                : Promise.resolve([]),
+            ])
+          : [[], [], []];
+        const recommendationCountByIssue = new Map(
+          recommendationCounts.map((row) => [row.issueId, Number(row.count)]),
+        );
+        const commentCountByIssueVersion = new Map(
+          commentCounts.map((row) => [`${row.issueId}:${row.issueVersion}`, Number(row.count)]),
+        );
+        const viewerRecommendedIssueIds = new Set(viewerRecommendations.map((row) => row.issueId));
+
         const items = pageRows.map((row) => ({
           id: row.id,
           version: row.version,
@@ -990,6 +1052,11 @@ export function createIssueReadService(
             .map(({ id, code, label }) => ({ id, code, label, media: null })),
           mediaMode: "TEXT_ONLY" as const,
           sourceMediaMode: row.mediaMode,
+          engagement: {
+            recommendationCount: recommendationCountByIssue.get(row.id) ?? 0,
+            commentCount: commentCountByIssueVersion.get(`${row.id}:${row.version}`) ?? 0,
+            viewerRecommended: viewerRecommendedIssueIds.has(row.id),
+          },
           recommendation: {
             requestId: rankingRequestId,
             score: row.ranked.score,

@@ -1205,6 +1205,11 @@ describe("Member identity and Guest vote linking", () => {
     expect(profile.statusCode).toBe(200);
     expect(profile.json()).toMatchObject({
       member: { displayName: "테스트 회원", participationCount: 1 },
+      choiceSummary: {
+        majorityMatchPercent: 100,
+        minorityChoicePercent: 0,
+        recentSevenDayCount: 1,
+      },
       votes: {
         items: [
           {

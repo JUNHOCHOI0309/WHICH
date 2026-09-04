@@ -58,6 +58,11 @@ export type PublicFeedIssue = Omit<
   PublicIssue,
   "context" | "experienceModeCode" | "result" | "author"
 > & {
+  engagement: {
+    recommendationCount: number;
+    commentCount: number;
+    viewerRecommended: boolean;
+  };
   recommendation: FeedItemRecommendation & { requestId: string };
 };
 

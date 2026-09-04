@@ -89,6 +89,11 @@ const feedResponseSchema = Type.Object({
       categoryCode: Type.String(),
       mediaMode: Type.Union([Type.Literal("TEXT_ONLY"), Type.Literal("OPTION_IMAGES")]),
       choices: Type.Array(choiceSchema, { minItems: 2, maxItems: 4 }),
+      engagement: Type.Object({
+        recommendationCount: Type.Integer({ minimum: 0 }),
+        commentCount: Type.Integer({ minimum: 0 }),
+        viewerRecommended: Type.Boolean(),
+      }),
       recommendation: Type.Object({
         requestId: uuidSchema,
         score: Type.Integer({ minimum: 0 }),

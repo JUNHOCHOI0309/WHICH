@@ -1,11 +1,13 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { WhichParticipationAside, WhichShell } from "@/components/layout/which-shell";
 import { RotatingCommentHighlights } from "@/components/comments/rotating-comment-highlights";
 import { FloatingTopButton } from "@/components/navigation/floating-top-button";
+import { toast } from "@/components/feedback/toast-provider";
 import { BalanceResultBar } from "@/components/vote/balance-result-bar";
 import { ChoiceMediaPair, VoteChoiceRow } from "@/components/vote/vote-choice-row";
 import {
@@ -13,7 +15,9 @@ import {
   loadCommentHighlights,
   loadIssueFeed,
   recordAnalyticsEvent,
+  setIssueRecommendation,
   submitGuestVote,
+  WebApiError,
 } from "@/features/issues/client";
 import type {
   CommentHighlights,
@@ -73,6 +77,7 @@ export function FeedExperience({ creationEnabled = false }: { creationEnabled?: 
   const [loadingMore, setLoadingMore] = useState(false);
   const [cardStates, setCardStates] = useState<Record<string, CardVoteState>>({});
   const [highlightStates, setHighlightStates] = useState<Record<string, HighlightState>>({});
+  const [recommendationPending, setRecommendationPending] = useState<Record<string, boolean>>({});
   const viewedRecommendationRequests = useRef(new Set<string>());
   const decisionStartedAt = useRef(new Map<string, number>());
   const recordedMediaLoads = useRef(new Set<string>());
@@ -306,6 +311,61 @@ export function FeedExperience({ creationEnabled = false }: { creationEnabled?: 
     [],
   );
 
+  const recommend = useCallback(
+    async (issue: PublicFeedIssue) => {
+      if (recommendationPending[issue.id]) return;
+      const previous = issue.engagement;
+      const active = !previous.viewerRecommended;
+      setRecommendationPending((current) => ({ ...current, [issue.id]: true }));
+      setItems((current) =>
+        current.map((item) =>
+          item.id === issue.id
+            ? {
+                ...item,
+                engagement: {
+                  ...item.engagement,
+                  viewerRecommended: active,
+                  recommendationCount: Math.max(
+                    0,
+                    item.engagement.recommendationCount + (active ? 1 : -1),
+                  ),
+                },
+              }
+            : item,
+        ),
+      );
+      try {
+        const result = await setIssueRecommendation({ issueId: issue.id, active });
+        setItems((current) =>
+          current.map((item) =>
+            item.id === issue.id
+              ? {
+                  ...item,
+                  engagement: {
+                    ...item.engagement,
+                    viewerRecommended: result.recommendation.active,
+                    recommendationCount: result.recommendation.count,
+                  },
+                }
+              : item,
+          ),
+        );
+      } catch (error) {
+        setItems((current) =>
+          current.map((item) => (item.id === issue.id ? { ...item, engagement: previous } : item)),
+        );
+        if (error instanceof WebApiError && error.status === 401) {
+          toast.info("질문을 추천하려면 로그인해 주세요.");
+        } else {
+          toast.error(error instanceof Error ? error.message : "추천 상태를 저장하지 못했어요.");
+        }
+      } finally {
+        setRecommendationPending((current) => ({ ...current, [issue.id]: false }));
+      }
+    },
+    [recommendationPending],
+  );
+
   return (
     <WhichShell
       active="home"
@@ -373,6 +433,8 @@ export function FeedExperience({ creationEnabled = false }: { creationEnabled?: 
                   onViewable={recordViewable}
                   onRetryHighlights={() => void loadHighlights(item.id)}
                   onMediaLoad={(choice, outcome) => recordMediaLoad(item, choice, outcome)}
+                  onRecommend={() => void recommend(item)}
+                  recommendationPending={recommendationPending[item.id] === true}
                   key={item.id}
                 />
               ))}
@@ -437,6 +499,8 @@ function FeedCard({
   onViewable,
   onRetryHighlights,
   onMediaLoad,
+  onRecommend,
+  recommendationPending,
 }: {
   issue: PublicFeedIssue;
   state: CardVoteState;
@@ -448,6 +512,8 @@ function FeedCard({
   onViewable: (issue: PublicFeedIssue) => void;
   onRetryHighlights: () => void;
   onMediaLoad: (choice: IssueChoice, outcome: "SUCCESS" | "FAILURE") => void;
+  onRecommend: () => void;
+  recommendationPending: boolean;
 }) {
   const pendingChoice =
     state.status === "SUBMITTING" || state.status === "ERROR" ? state.choice : null;
@@ -567,8 +633,37 @@ function FeedCard({
       ) : null}
 
       <footer className={styles.cardFooter}>
-        <span>{state.status === "RESULT" ? "결과가 공개됐어요" : "결과는 선택 후 공개"}</span>
-        <Link href={`/issues/${issue.id}`} onClick={onOpen}>
+        <span className={styles.cardResultStatus}>
+          {state.status === "RESULT" ? "결과가 공개됐어요" : "결과는 선택 후 공개"}
+        </span>
+        <div className={styles.cardEngagement} aria-label="질문 반응">
+          <button
+            type="button"
+            className={issue.engagement.viewerRecommended ? styles.recommended : undefined}
+            aria-label={`추천 ${issue.engagement.recommendationCount}개`}
+            aria-pressed={issue.engagement.viewerRecommended}
+            disabled={recommendationPending}
+            onClick={onRecommend}
+          >
+            <Image src="/icons/feed/like.png" width={18} height={18} alt="" aria-hidden="true" />
+            추천 {issue.engagement.recommendationCount}
+          </button>
+          <Link
+            href={`/issues/${issue.id}#comment-title`}
+            onClick={onOpen}
+            aria-label={`댓글 ${issue.engagement.commentCount}개 보기`}
+          >
+            <Image
+              src="/icons/feed/chat-box.png"
+              width={18}
+              height={18}
+              alt=""
+              aria-hidden="true"
+            />
+            댓글 {issue.engagement.commentCount}
+          </Link>
+        </div>
+        <Link className={styles.cardDetailLink} href={`/issues/${issue.id}`} onClick={onOpen}>
           상세·댓글 보기 <span aria-hidden="true">↗</span>
         </Link>
       </footer>

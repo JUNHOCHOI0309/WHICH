@@ -8,6 +8,7 @@ import {
   PATCH as updateComment,
 } from "@/app/api/comments/[commentId]/route";
 import { POST as publishComment } from "@/app/api/issues/[issueId]/comments/route";
+import { PUT as recommendIssue } from "@/app/api/issues/[issueId]/recommendation/route";
 import { POST as submitVote } from "@/app/api/issues/[issueId]/votes/route";
 
 const issueId = "591f2e90-996a-50c5-af46-967dd0793000";
@@ -119,6 +120,29 @@ describe("Comment mutation BFF Origin handling", () => {
 
     expect(response.status).toBe(200);
     expect(upstream).toHaveBeenCalledTimes(1);
+  });
+
+  it("protects and forwards an authenticated Issue recommendation", async () => {
+    vi.stubEnv("AUTH_BASE_URL", "https://whichone.site");
+    const upstream = vi.fn(async () =>
+      jsonResponse({ recommendation: { active: true, count: 4 } }),
+    );
+    vi.stubGlobal("fetch", upstream);
+
+    const response = await recommendIssue(
+      mutationRequest(`/api/issues/${issueId}/recommendation`, { active: true }, undefined, "PUT"),
+      { params: Promise.resolve({ issueId }) },
+    );
+
+    expect(response.status).toBe(200);
+    expect(upstream).toHaveBeenCalledWith(
+      new URL(`http://localhost:4000/v1/issues/${issueId}/recommendation`),
+      expect.objectContaining({
+        method: "PUT",
+        headers: expect.objectContaining({ authorization: "Bearer member-token" }),
+        body: JSON.stringify({ active: true }),
+      }),
+    );
   });
 
   it("uses the same public Origin rule for reports", async () => {

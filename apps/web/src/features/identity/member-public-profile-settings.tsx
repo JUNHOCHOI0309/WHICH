@@ -113,7 +113,7 @@ export function MemberPublicProfileSettings({
           <legend>
             <Image
               className={styles.lockIcon}
-              src="/icons/locked.png"
+              src={visibility === "PUBLIC" ? "/icons/profile/unlock.png" : "/icons/locked.png"}
               width={22}
               height={22}
               alt=""

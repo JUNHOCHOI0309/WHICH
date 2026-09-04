@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useRef, useState } from "react";
 
 import { toast } from "@/components/feedback/toast-provider";
@@ -122,7 +123,11 @@ export function MemberAvatarSettings({
           )}
           {pending || !customAvatar ? (
             <span className={styles.avatarPickerHint} aria-hidden="true">
-              {pending ? "저장 중" : "변경"}
+              {pending ? (
+                "…"
+              ) : (
+                <Image src="/icons/profile/camera.png" width={15} height={15} alt="" />
+              )}
             </span>
           ) : null}
           <input

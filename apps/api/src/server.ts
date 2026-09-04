@@ -33,6 +33,7 @@ import { createPointShopService } from "./modules/point-shop/service.js";
 import { createContentReportService } from "./modules/reports/service.js";
 import { createContentRevisionService } from "./modules/content-revisions/service.js";
 import { createMemberModerationService } from "./modules/member-moderation/service.js";
+import { createIssueRecommendationService } from "./modules/issue-recommendations/service.js";
 import {
   moderationProviderRuntimeConfig,
   providerRuntimeDiagnostic,
@@ -103,6 +104,7 @@ const app = await buildApp(config, {
     mediaConsentVersion: config.featureFlags.issueMediaConsentVersion,
     authSecurity: config.auth.security,
   }),
+  issueRecommendations: createIssueRecommendationService(database.db),
   interestProfiles: createInterestProfileService(database.db),
   analytics: createAnalyticsService(database.db),
   shareCards: createShareCardService(database.db, {

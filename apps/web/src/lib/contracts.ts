@@ -144,6 +144,11 @@ export type PublicFeedIssue = Omit<
   PublicIssue,
   "context" | "experienceModeCode" | "result" | "author"
 > & {
+  engagement: {
+    recommendationCount: number;
+    commentCount: number;
+    viewerRecommended: boolean;
+  };
   recommendation: {
     requestId: string;
     score: number;
@@ -151,6 +156,13 @@ export type PublicFeedIssue = Omit<
       "INTEREST_MATCH" | "DEFAULT_TOPIC_BOOST" | "EXPLORATION" | "RECENT_FALLBACK"
     >;
     matchedCardCodes: InterestCardCode[];
+  };
+};
+
+export type IssueRecommendationResponse = {
+  recommendation: {
+    active: boolean;
+    count: number;
   };
 };
 
@@ -286,6 +298,11 @@ export type MemberPrivateProfile = {
     avatarSource: "INITIALS" | "SOCIAL" | "CUSTOM";
     joinedAt: string;
     participationCount: number;
+  };
+  choiceSummary?: {
+    majorityMatchPercent: number;
+    minorityChoicePercent: number;
+    recentSevenDayCount: number;
   };
   publicProfile: MemberProfileSettings | null;
   identities: Array<{

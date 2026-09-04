@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 import { and, eq, inArray } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -13,19 +13,25 @@ import {
   seedDevelopmentIssues,
 } from "../src/database/development-seed.js";
 import {
+  comments,
   issueChoices,
   issueChoiceMedia,
   issueMediaAssets,
+  issueRecommendations,
   issues,
   issueVersions,
   members,
+  memberSessions,
   recommendationRequests,
+  voterSubjects,
+  votes,
   voteAggregates,
 } from "../src/database/schema/index.js";
 import { createIssueReadService } from "../src/modules/issues/service.js";
 import { createMemberIdentityService } from "../src/modules/identity/service.js";
 import { createCommentReadService } from "../src/modules/comments/service.js";
 import { createGuestVoteService } from "../src/modules/voting/service.js";
+import { createIssueRecommendationService } from "../src/modules/issue-recommendations/service.js";
 import { createTestDatabase } from "./helpers/test-database.js";
 
 type PublicIssueBody = {
@@ -113,6 +119,7 @@ beforeAll(async () => {
       sessionTtlSeconds: 3_600,
       allowDevelopmentProvider: true,
     }),
+    issueRecommendations: createIssueRecommendationService(database.db),
   });
 }, 30_000);
 
@@ -499,6 +506,118 @@ describe("public Issue discovery catalog API", () => {
 });
 
 describe("Guest Issue feed API", () => {
+  it("shows public engagement counts and stores one recommendation per Member", async () => {
+    const issue = await createReadableIssue({}, new Date("2025-01-01T00:00:00.000Z"));
+    const memberId = randomUUID();
+    const sessionToken = `recommend-${randomUUID()}`;
+    await database.db
+      .insert(members)
+      .values({ id: memberId, displayName: "Recommendation Member" });
+    await database.db.insert(voterSubjects).values({ kind: "MEMBER", userId: memberId });
+    await database.db.insert(memberSessions).values({
+      memberId,
+      tokenHash: createHash("sha256").update(sessionToken).digest("hex"),
+      expiresAt: new Date(Date.now() + 3_600_000),
+    });
+
+    const first = await app.inject({
+      method: "PUT",
+      url: `/v1/issues/${issue.issueId}/recommendation`,
+      headers: { authorization: `Bearer ${sessionToken}` },
+      payload: { active: true },
+    });
+    const duplicate = await app.inject({
+      method: "PUT",
+      url: `/v1/issues/${issue.issueId}/recommendation`,
+      headers: { authorization: `Bearer ${sessionToken}` },
+      payload: { active: true },
+    });
+    const guestResponse = await app.inject({ method: "POST", url: "/v1/guest-subjects" });
+    const anonymousSubjectId = guestResponse.json<{ anonymousSubjectId: string }>()
+      .anonymousSubjectId;
+    const guestVote = await app.inject({
+      method: "POST",
+      url: `/v1/issues/${issue.issueId}/votes`,
+      headers: {
+        "idempotency-key": randomUUID(),
+        "x-anonymous-subject-id": anonymousSubjectId,
+      },
+      payload: { issueVersion: 1, choiceId: issue.choiceAId },
+    });
+    expect(guestVote.statusCode).toBe(201);
+    const [guestSubject] = await database.db
+      .select({ id: voterSubjects.id })
+      .from(voterSubjects)
+      .where(eq(voterSubjects.anonymousSubjectId, anonymousSubjectId))
+      .limit(1);
+    const [acceptedVote] = await database.db
+      .select({ id: votes.id })
+      .from(votes)
+      .where(and(eq(votes.issueId, issue.issueId), eq(votes.subjectId, guestSubject!.id)))
+      .limit(1);
+    await database.db.insert(comments).values([
+      {
+        issueId: issue.issueId,
+        issueVersion: 1,
+        authorSubjectId: guestSubject!.id,
+        acceptedVoteId: acceptedVote!.id,
+        choice: "A",
+        authorDisplayName: "공개 댓글러",
+        body: "집계되어야 하는 공개 댓글",
+        publicationState: "PUBLISHED",
+      },
+      {
+        issueId: issue.issueId,
+        issueVersion: 1,
+        authorSubjectId: guestSubject!.id,
+        acceptedVoteId: acceptedVote!.id,
+        choice: "A",
+        authorDisplayName: "검수 대기 댓글러",
+        body: "집계되면 안 되는 검수 대기 댓글",
+        publicationState: "PENDING_AUTOMOD",
+      },
+    ]);
+    const feedResponse = await app.inject({
+      method: "GET",
+      url: "/v1/issues/feed?limit=20",
+      headers: { authorization: `Bearer ${sessionToken}` },
+    });
+    const feedItem = feedResponse
+      .json<{
+        items: Array<{
+          id: string;
+          engagement: {
+            recommendationCount: number;
+            commentCount: number;
+            viewerRecommended: boolean;
+          };
+        }>;
+      }>()
+      .items.find((item) => item.id === issue.issueId);
+    const stored = await database.db
+      .select()
+      .from(issueRecommendations)
+      .where(eq(issueRecommendations.issueId, issue.issueId));
+
+    expect(first.statusCode).toBe(200);
+    expect(first.json()).toEqual({ recommendation: { active: true, count: 1 } });
+    expect(duplicate.json()).toEqual({ recommendation: { active: true, count: 1 } });
+    expect(stored).toHaveLength(1);
+    expect(feedItem?.engagement).toEqual({
+      recommendationCount: 1,
+      commentCount: 1,
+      viewerRecommended: true,
+    });
+
+    const removed = await app.inject({
+      method: "PUT",
+      url: `/v1/issues/${issue.issueId}/recommendation`,
+      headers: { authorization: `Bearer ${sessionToken}` },
+      payload: { active: false },
+    });
+    expect(removed.json()).toEqual({ recommendation: { active: false, count: 0 } });
+  });
+
   it("returns a result-free participation rail ordered by recent valid votes", async () => {
     const popular = await createReadableIssue({}, new Date("2026-07-01T00:00:00.000Z"));
     await createReadableIssue({}, new Date("2026-07-02T00:00:00.000Z"));
