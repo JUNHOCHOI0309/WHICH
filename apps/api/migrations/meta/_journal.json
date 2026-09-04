@@ -428,6 +428,20 @@
       "when": 1788524176337,
       "tag": "0060_real_scarlet_spider",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1788533222470,
+      "tag": "0061_powerful_zeigeist",
+      "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1788533357015,
+      "tag": "0062_aberrant_shiver_man",
+      "breakpoints": true
     }
   ]
 }

@@ -5,6 +5,7 @@ substitutions:
   _ARTIFACT_REPOSITORY: which
   _IMAGE_NAME: web
   _SERVICE: which-web
+  _MIGRATION_JOB: which-db-migrate
   _MODERATION_WORKER_SERVICE: which-moderation-worker
   _MODERATION_JOB: which-moderation
   _MODERATION_QUEUE: which-moderation
@@ -41,6 +42,26 @@ steps:
     args:
       - push
       - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_ARTIFACT_REPOSITORY}/${_IMAGE_NAME}:$COMMIT_SHA
+
+  - id: migrate-database
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        IMAGE="${_REGION}-docker.pkg.dev/$PROJECT_ID/${_ARTIFACT_REPOSITORY}/${_IMAGE_NAME}:$COMMIT_SHA"
+        gcloud run jobs deploy "${_MIGRATION_JOB}" \
+          --project="$PROJECT_ID" --region="${_REGION}" --image="$$IMAGE" \
+          --command=node --args=scripts/cloud-run/migrate.mjs \
+          --service-account="which-web@$PROJECT_ID.iam.gserviceaccount.com" \
+          --execution-environment=gen2 --tasks=1 --max-retries=0 --task-timeout=10m \
+          --network=which-run-vpc --subnet=which-run-subnet --vpc-egress=all-traffic \
+          --set-secrets=/var/run/which/runtime.json=which-runtime-env:1 \
+          --set-env-vars="CLOUD_RUN_ENV_FILE=/var/run/which/runtime.json,RELEASE_ID=$COMMIT_SHA" \
+          --labels=app=which,component=db-migration --quiet
+
+        gcloud run jobs execute "${_MIGRATION_JOB}" \
+          --project="$PROJECT_ID" --region="${_REGION}" --wait --quiet
 
   - id: deploy-moderation-worker
     name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim

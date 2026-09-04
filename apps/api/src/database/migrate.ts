@@ -1,4 +1,3 @@
-import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 
 import { config as loadEnvironment } from "dotenv";
@@ -17,7 +16,7 @@ if (!databaseUrl) {
   throw new Error("DATABASE_URL is required to run database migrations.");
 }
 
-const migrationsFolder = fileURLToPath(new URL("../../migrations", import.meta.url));
+const migrationsFolder = resolve(process.cwd(), "migrations");
 const database = createDatabase(databaseUrl);
 
 try {

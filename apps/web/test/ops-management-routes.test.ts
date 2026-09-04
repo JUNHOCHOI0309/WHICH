@@ -8,6 +8,10 @@ vi.mock("jose", () => ({
 
 import { GET as getEditorial } from "@/app/api/ops/editorial/route";
 import { PUT as putDecision } from "@/app/api/ops/editorial/[candidateId]/decision/route";
+import {
+  DELETE as deleteEditorialMedia,
+  PUT as putEditorialMedia,
+} from "@/app/api/ops/editorial/[candidateId]/choices/[choiceCode]/media/route";
 import { GET as getMembers } from "@/app/api/ops/members/route";
 import { GET as getPointShop } from "@/app/api/ops/point-shop/route";
 import { PATCH as patchPointShopItem } from "@/app/api/ops/point-shop/[itemId]/route";
@@ -117,6 +121,46 @@ describe("operator management BFF", () => {
     );
     expect(response.status).toBe(409);
     expect(await response.json()).toMatchObject({ code: "REVISION_CONFLICT" });
+  });
+
+  it("forwards candidate media linking and unlinking through the Ops boundary", async () => {
+    const upstream = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      expect(String(input)).toBe(
+        "http://localhost:4000/v1/internal/ops/editorial/WEXP-0001/choices/A/media",
+      );
+      return new Response(JSON.stringify({ ok: true, method: init?.method }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    });
+    vi.stubGlobal("fetch", upstream);
+    const context = { params: Promise.resolve({ candidateId: "WEXP-0001", choiceCode: "A" }) };
+    const attach = await putEditorialMedia(
+      new NextRequest("https://whichone.site/api/ops/editorial/WEXP-0001/choices/A/media", {
+        method: "PUT",
+        headers: {
+          cookie: "which_member_session=member-token",
+          origin: "https://whichone.site",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          assetId: crypto.randomUUID(),
+          altText: "선택지 이미지",
+          cropMode: "COVER",
+        }),
+      }),
+      context,
+    );
+    const detach = await deleteEditorialMedia(
+      new NextRequest("https://whichone.site/api/ops/editorial/WEXP-0001/choices/A/media", {
+        method: "DELETE",
+        headers: { cookie: "which_member_session=member-token", origin: "https://whichone.site" },
+      }),
+      context,
+    );
+    expect(attach.status).toBe(200);
+    expect(detach.status).toBe(200);
+    expect(upstream.mock.calls.map((call) => call[1]?.method)).toEqual(["PUT", "DELETE"]);
   });
 
   it("forwards Point Shop reads through the protected Ops boundary", async () => {

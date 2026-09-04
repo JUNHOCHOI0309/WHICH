@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsup src/server.ts src/local-media-scanner.ts src/outbox-worker.ts src/moderation-worker.ts src/moderation-job-dispatcher.ts src/moderation-evaluator.ts src/point-worker.ts src/point-operator.ts src/launch-gate.ts src/issue-publisher.ts src/analytics-operator.ts src/beta-operator.ts src/ops-operator.ts --format esm --platform node --target node22 --clean --sourcemap",
+    "build": "tsup src/server.ts src/local-media-scanner.ts src/outbox-worker.ts src/moderation-worker.ts src/moderation-job-dispatcher.ts src/moderation-evaluator.ts src/point-worker.ts src/point-operator.ts src/launch-gate.ts src/issue-publisher.ts src/analytics-operator.ts src/beta-operator.ts src/ops-operator.ts src/database/migrate.ts --format esm --platform node --target node22 --clean --sourcemap",
     "media:diagnose-local-scanner": "tsx src/local-media-scanner.ts diagnose",
     "analytics:aggregate": "tsx src/analytics-operator.ts aggregate",
     "analytics:retention": "tsx src/analytics-operator.ts retention",

@@ -11,7 +11,13 @@ const OpsPublishedIssuesPanel = dynamic(
   { loading: () => <p className={styles.empty}>게시 질문 관리 도구를 불러오고 있습니다.</p> },
 );
 
-export function OpsIssueReviewPanel() {
+export function OpsIssueReviewPanel({
+  embedded = false,
+  onOpenMediaReview,
+}: {
+  embedded?: boolean;
+  onOpenMediaReview?: () => void;
+} = {}) {
   const [mode, setMode] = useState<"candidates" | "published">("candidates");
 
   return (
@@ -32,7 +38,11 @@ export function OpsIssueReviewPanel() {
           게시된 질문
         </button>
       </nav>
-      {mode === "candidates" ? <OpsEditorialPanel /> : <OpsPublishedIssuesPanel />}
+      {mode === "candidates" ? (
+        <OpsEditorialPanel embedded={embedded} onOpenMediaReview={onOpenMediaReview} />
+      ) : (
+        <OpsPublishedIssuesPanel />
+      )}
     </>
   );
 }

@@ -126,8 +126,12 @@ test("moderation task service is production-only and bound to claimed submission
 });
 test("Cloud Build deploys the private elastic worker before switching web dispatch", () => {
   const build = readFileSync(resolve(import.meta.dirname, "../../cloudbuild.yaml"), "utf8");
+  assert.ok(build.indexOf("id: migrate-database") < build.indexOf("id: deploy-moderation-worker"));
   assert.ok(build.indexOf("id: deploy-moderation-worker") < build.indexOf("id: deploy-revision"));
   for (const required of [
+    "which-db-migrate",
+    "scripts/cloud-run/migrate.mjs",
+    "gcloud run jobs execute",
     "--concurrency=1",
     "--min=1",
     '--max="${_MODERATION_MAX_INSTANCES}"',

@@ -17,6 +17,7 @@ import {
   members,
   operatorAccessGrants,
   operatorAuditLogs,
+  operatorEditorialCandidateMedia,
   operatorEditorialDecisions,
   pointCatalogItems,
   pointCatalogItemVersions,
@@ -36,11 +37,13 @@ import { createModerationSubmissionEvents } from "../moderation-dispatch/contrac
 import {
   OpsPublishedIssueConflictError,
   OpsReviewConflictError,
+  OpsReviewValidationError,
   OpsPointShopConflictError,
   type OpsDashboardService,
   type OpsDashboardSnapshot,
   type OpsDashboardWindow,
   type OpsEditorialDecision,
+  type OpsEditorialCandidateMedia,
   type OpsEditorialPage,
   type OpsMemberPage,
   type OpsPublishedIssue,
@@ -170,10 +173,27 @@ type OpsManagementMethods = Pick<
   | "readReportedMembers"
   | "readEditorial"
   | "saveEditorialDecision"
+  | "attachEditorialCandidateMedia"
+  | "detachEditorialCandidateMedia"
   | "readPublishedIssues"
   | "updatePublishedIssue"
   | "revisePublishedIssueMedia"
 >;
+
+function effectiveMediaStatus(row: {
+  storageState: string;
+  moderationState: string;
+}): OpsEditorialCandidateMedia["status"] {
+  if (row.storageState === "PURGED") return "DELETED";
+  if (row.storageState === "PUBLISHED" && row.moderationState === "APPROVED") {
+    return "APPROVED";
+  }
+  if (row.moderationState === "REJECTED") return "REJECTED";
+  if (row.storageState === "QUARANTINED" || row.moderationState === "REVOKED") {
+    return "HIDDEN";
+  }
+  return "PENDING";
+}
 
 type OpsPointShopMethods = Pick<
   OpsDashboardService,
@@ -778,8 +798,37 @@ function createOpsManagementMethods(
           .from(operatorEditorialDecisions)
           .innerJoin(members, eq(members.id, operatorEditorialDecisions.reviewedByMemberId))
           .where(eq(operatorEditorialDecisions.catalogId, state.catalog.id));
+        const mediaRows = await database
+          .select({
+            candidateId: operatorEditorialCandidateMedia.candidateId,
+            choiceCode: operatorEditorialCandidateMedia.choiceCode,
+            assetId: operatorEditorialCandidateMedia.mediaAssetId,
+            altText: operatorEditorialCandidateMedia.altText,
+            cropMode: operatorEditorialCandidateMedia.cropMode,
+            storageState: issueMediaAssets.storageState,
+            moderationState: issueMediaAssets.moderationState,
+            rightsState: issueMediaAssets.rightsState,
+          })
+          .from(operatorEditorialCandidateMedia)
+          .innerJoin(
+            issueMediaAssets,
+            eq(issueMediaAssets.id, operatorEditorialCandidateMedia.mediaAssetId),
+          )
+          .where(eq(operatorEditorialCandidateMedia.catalogId, state.catalog.id));
         const storedByCandidate = new Map(
           storedRows.map((row) => [row.candidateId, mapDecision(row)]),
+        );
+        const mediaByChoice = new Map(
+          mediaRows.map((row) => [
+            `${row.candidateId}:${row.choiceCode}`,
+            {
+              assetId: row.assetId,
+              status: effectiveMediaStatus(row),
+              rightsState: row.rightsState as OpsEditorialCandidateMedia["rightsState"],
+              altText: row.altText,
+              cropMode: row.cropMode as OpsEditorialCandidateMedia["cropMode"],
+            },
+          ]),
         );
         const all = state.candidates
           .map((candidate) => {
@@ -801,6 +850,7 @@ function createOpsManagementMethods(
               choices: candidate.choices.map((choice) => ({
                 code: choice.code,
                 label: choice.label,
+                media: mediaByChoice.get(`${candidate.candidateId}:${choice.code}`) ?? null,
               })),
               category: candidate.category,
               interestCardCodes: candidate.interestCardCodes,
@@ -895,6 +945,39 @@ function createOpsManagementMethods(
       if (!baselineCandidate) throw new Error("The Editorial candidate does not exist.");
       if (input.status === "APPROVED" && Object.values(input.checks).some((value) => !value)) {
         throw new Error("승인하려면 네 가지 편집 검수 항목을 모두 확인해야 합니다.");
+      }
+      if (input.status === "APPROVED") {
+        const linkedMedia = await database
+          .select({
+            choiceCode: operatorEditorialCandidateMedia.choiceCode,
+            storageState: issueMediaAssets.storageState,
+            moderationState: issueMediaAssets.moderationState,
+            rightsState: issueMediaAssets.rightsState,
+          })
+          .from(operatorEditorialCandidateMedia)
+          .innerJoin(
+            issueMediaAssets,
+            eq(issueMediaAssets.id, operatorEditorialCandidateMedia.mediaAssetId),
+          )
+          .where(
+            and(
+              eq(operatorEditorialCandidateMedia.catalogId, state.catalog.id),
+              eq(operatorEditorialCandidateMedia.candidateId, input.candidateId),
+            ),
+          );
+        if (
+          linkedMedia.length > 0 &&
+          (linkedMedia.length !== baselineCandidate.choices.length ||
+            linkedMedia.some(
+              (media) =>
+                effectiveMediaStatus(media) !== "APPROVED" ||
+                !["ASSERTED", "CLEARED"].includes(media.rightsState),
+            ))
+        ) {
+          throw new OpsReviewValidationError(
+            "이미지를 사용하는 질문은 모든 선택지에 승인된 이미지를 연결해야 합니다.",
+          );
+        }
       }
 
       const readCurrent = async () => {
@@ -998,6 +1081,135 @@ function createOpsManagementMethods(
         }
         throw error;
       }
+    },
+
+    async attachEditorialCandidateMedia(input): Promise<OpsEditorialCandidateMedia | null> {
+      const actor = await operator(input.memberId);
+      if (!actor) {
+        await audit({
+          memberId: input.memberId,
+          eventType: "OPS_EDITORIAL_MEDIA_ATTACH",
+          outcome: "DENIED",
+          requestId: input.requestId,
+          metadata: { candidateId: input.candidateId, choiceCode: input.choiceCode },
+        });
+        return null;
+      }
+      const state = await editorialReviewState();
+      const candidate = state.candidates.find((item) => item.candidateId === input.candidateId);
+      if (!candidate) throw new OpsReviewValidationError("The Editorial candidate does not exist.");
+      const targetChoice = candidate.choices.find((choice) => choice.code === input.choiceCode);
+      if (!targetChoice) {
+        throw new OpsReviewValidationError("The Editorial candidate choice does not exist.");
+      }
+      const [asset] = await database
+        .select({
+          id: issueMediaAssets.id,
+          storageState: issueMediaAssets.storageState,
+          moderationState: issueMediaAssets.moderationState,
+          rightsState: issueMediaAssets.rightsState,
+        })
+        .from(issueMediaAssets)
+        .where(eq(issueMediaAssets.id, input.assetId))
+        .limit(1);
+      if (!asset) throw new OpsReviewValidationError("The image asset does not exist.");
+      if (
+        effectiveMediaStatus(asset) !== "APPROVED" ||
+        !["ASSERTED", "CLEARED"].includes(asset.rightsState)
+      ) {
+        throw new OpsReviewValidationError(
+          "승인되고 사용 권리가 확인된 이미지만 선택지에 연결할 수 있습니다.",
+        );
+      }
+      await database
+        .insert(operatorEditorialCandidateMedia)
+        .values({
+          catalogId: state.catalog.id,
+          candidateId: input.candidateId,
+          choiceCode: input.choiceCode,
+          targetIssueId: candidate.id,
+          targetIssueVersion: candidate.version,
+          targetChoiceId: targetChoice.id,
+          mediaAssetId: input.assetId,
+          altText: input.altText.trim(),
+          cropMode: input.cropMode,
+          linkedByMemberId: input.memberId,
+        })
+        .onConflictDoUpdate({
+          target: [
+            operatorEditorialCandidateMedia.catalogId,
+            operatorEditorialCandidateMedia.candidateId,
+            operatorEditorialCandidateMedia.choiceCode,
+          ],
+          set: {
+            mediaAssetId: input.assetId,
+            altText: input.altText.trim(),
+            cropMode: input.cropMode,
+            linkedByMemberId: input.memberId,
+            updatedAt: new Date(),
+          },
+        });
+      await audit({
+        memberId: input.memberId,
+        eventType: "OPS_EDITORIAL_MEDIA_ATTACH",
+        outcome: "SUCCEEDED",
+        requestId: input.requestId,
+        metadata: {
+          catalogId: state.catalog.id,
+          candidateId: input.candidateId,
+          choiceCode: input.choiceCode,
+          assetId: input.assetId,
+        },
+      });
+      return {
+        assetId: asset.id,
+        status: "APPROVED",
+        rightsState: asset.rightsState as OpsEditorialCandidateMedia["rightsState"],
+        altText: input.altText.trim(),
+        cropMode: input.cropMode,
+      };
+    },
+
+    async detachEditorialCandidateMedia(input): Promise<{ detached: boolean } | null> {
+      const actor = await operator(input.memberId);
+      if (!actor) {
+        await audit({
+          memberId: input.memberId,
+          eventType: "OPS_EDITORIAL_MEDIA_DETACH",
+          outcome: "DENIED",
+          requestId: input.requestId,
+          metadata: { candidateId: input.candidateId, choiceCode: input.choiceCode },
+        });
+        return null;
+      }
+      const state = await editorialReviewState();
+      const candidate = state.candidates.find((item) => item.candidateId === input.candidateId);
+      if (!candidate?.choices.some((choice) => choice.code === input.choiceCode)) {
+        throw new OpsReviewValidationError("The Editorial candidate choice does not exist.");
+      }
+      const removed = await database
+        .delete(operatorEditorialCandidateMedia)
+        .where(
+          and(
+            eq(operatorEditorialCandidateMedia.catalogId, state.catalog.id),
+            eq(operatorEditorialCandidateMedia.candidateId, input.candidateId),
+            eq(operatorEditorialCandidateMedia.choiceCode, input.choiceCode),
+          ),
+        )
+        .returning({ assetId: operatorEditorialCandidateMedia.mediaAssetId });
+      await audit({
+        memberId: input.memberId,
+        eventType: "OPS_EDITORIAL_MEDIA_DETACH",
+        outcome: "SUCCEEDED",
+        requestId: input.requestId,
+        metadata: {
+          catalogId: state.catalog.id,
+          candidateId: input.candidateId,
+          choiceCode: input.choiceCode,
+          assetId: removed[0]?.assetId ?? null,
+        },
+      });
+      return { detached: removed.length > 0 };
     },
 
     async readPublishedIssues(input): Promise<OpsPublishedIssuePage | null> {

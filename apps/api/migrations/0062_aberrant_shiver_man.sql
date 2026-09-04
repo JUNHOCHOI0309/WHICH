@@ -1,0 +1,1 @@
+ALTER TABLE "operator_editorial_candidate_media" DROP CONSTRAINT "operator_editorial_candidate_media_asset_unique";

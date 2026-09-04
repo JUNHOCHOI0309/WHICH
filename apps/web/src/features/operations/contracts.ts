@@ -191,11 +191,19 @@ export type OpsEditorialDecision = {
   };
 };
 
+export type OpsEditorialCandidateMedia = {
+  assetId: string;
+  status: "PENDING" | "APPROVED" | "REJECTED" | "HIDDEN" | "DELETED";
+  rightsState: "ASSERTED" | "CHALLENGED" | "CLEARED" | "WITHDRAWN";
+  altText: string;
+  cropMode: "COVER" | "CONTAIN";
+};
+
 export type OpsEditorialCandidate = {
   candidateId: string;
   question: string;
   context: string;
-  choices: Array<{ code: string; label: string }>;
+  choices: Array<{ code: string; label: string; media: OpsEditorialCandidateMedia | null }>;
   category: string;
   interestCardCodes: string[];
   editorialArea: string;

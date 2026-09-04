@@ -221,6 +221,8 @@ export class EditorialReviewConsole {
       this.documents.communitySources.sources.map((source) => [source.id, source]),
     );
     const candidates = this.documents.catalog.issues.map((issue) => ({
+      id: issue.id,
+      version: issue.version,
       candidateId: issue.candidateId,
       question: issue.question,
       context: issue.context,

@@ -7,9 +7,13 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import type { Database } from "../src/database/client.js";
 import {
+  issueChoiceMedia,
   issueChoices,
+  issueMediaAssets,
   issues,
   issueVersions,
+  members,
+  operatorEditorialCandidateMedia,
   outboxEvents,
   resultSnapshots,
   voteAggregates,
@@ -44,6 +48,50 @@ beforeAll(async () => {
   const source = await readFile(manifestPath);
   manifestDigest = computeManifestDigest(source);
   manifest = parseIssueManifest(JSON.parse(source.toString("utf8")) as unknown);
+  const issue = manifest.issues[0]!;
+  const [operator] = await database.db
+    .insert(members)
+    .values({ displayName: "Publication media operator" })
+    .returning({ id: members.id });
+  const assets = await database.db
+    .insert(issueMediaAssets)
+    .values(
+      issue.choices.map((choice, index) => ({
+        uploadedByMemberId: operator!.id,
+        sourceType: "OPERATOR_UPLOAD",
+        rightsAttestation: `Operator owns and approves publication rights for Choice ${choice.code}.`,
+        rightsAttestedAt: new Date(),
+        sha256: String(index + 1).repeat(64),
+        perceptualHash: String(index + 1).repeat(16),
+        inputMimeType: "image/png",
+        inputByteSize: 100,
+        inputWidth: 100,
+        inputHeight: 100,
+        outputByteSize: 80,
+        outputWidth: 100,
+        outputHeight: 100,
+        moderationState: "APPROVED",
+        storageState: "PUBLISHED",
+        rightsState: "ASSERTED",
+        publishedObjectKey: `issue-media/published/publication-${choice.code}.webp`,
+        publishedAt: new Date(),
+      })),
+    )
+    .returning({ id: issueMediaAssets.id });
+  await database.db.insert(operatorEditorialCandidateMedia).values(
+    issue.choices.map((choice, index) => ({
+      catalogId: "publication-test-catalog",
+      candidateId: `PUBLICATION-TEST-${index}`,
+      choiceCode: choice.code,
+      targetIssueId: issue.id,
+      targetIssueVersion: issue.version,
+      targetChoiceId: choice.id,
+      mediaAssetId: assets[index]!.id,
+      altText: `${choice.label} 선택지 이미지`,
+      cropMode: "COVER",
+      linkedByMemberId: operator!.id,
+    })),
+  );
 }, 30_000);
 
 afterAll(async () => {
@@ -81,6 +129,18 @@ describe("WHICH-19 production Issue publication", () => {
     expect(
       await database.db.select().from(issueChoices).where(inArray(issueChoices.issueId, issueIds)),
     ).toHaveLength(24);
+    expect(
+      await database.db
+        .select()
+        .from(issueChoiceMedia)
+        .where(eq(issueChoiceMedia.issueId, manifest.issues[0]!.id)),
+    ).toHaveLength(2);
+    expect(
+      await database.db
+        .select({ mediaMode: issueVersions.mediaMode })
+        .from(issueVersions)
+        .where(eq(issueVersions.issueId, manifest.issues[0]!.id)),
+    ).toEqual([{ mediaMode: "OPTION_IMAGES" }]);
     expect(
       await database.db
         .select()

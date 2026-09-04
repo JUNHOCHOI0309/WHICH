@@ -17,6 +17,7 @@ import {
   OpsPointShopConflictError,
   OpsPublishedIssueConflictError,
   OpsReviewConflictError,
+  OpsReviewValidationError,
   type OpsDashboardService,
   type OpsDashboardWindow,
 } from "./contracts.js";
@@ -93,6 +94,12 @@ export async function registerOpsRoutes(
           code: "REVISION_CONFLICT",
           message: "다른 운영자가 먼저 이 후보의 심사 결정을 변경했습니다.",
           current: error.current,
+        });
+      }
+      if (error instanceof OpsReviewValidationError) {
+        return reply.code(409).send({
+          code: "EDITORIAL_MEDIA_CONFLICT",
+          message: error.message,
         });
       }
       if (
@@ -471,6 +478,84 @@ export async function registerOpsRoutes(
           });
         }
         return reply.send(decision);
+      },
+    );
+
+    opsApp.put<{
+      Headers: OpsHeaders;
+      Params: { candidateId: string; choiceCode: string };
+      Body: { assetId: string; altText: string; cropMode: "COVER" | "CONTAIN" };
+    }>(
+      "/v1/internal/ops/editorial/:candidateId/choices/:choiceCode/media",
+      {
+        schema: {
+          hide: true,
+          headers: opsHeadersSchema,
+          params: Type.Object({
+            candidateId: Type.String({ minLength: 1, maxLength: 32 }),
+            choiceCode: Type.String({ pattern: "^[A-D]$" }),
+          }),
+          body: Type.Object(
+            {
+              assetId: Type.String({ format: "uuid" }),
+              altText: Type.String({ minLength: 2, maxLength: 300 }),
+              cropMode: Type.Union([Type.Literal("COVER"), Type.Literal("CONTAIN")]),
+            },
+            { additionalProperties: false },
+          ),
+        },
+      },
+      async (request, reply) => {
+        const memberId = await authenticate(request, reply);
+        if (!memberId) return;
+        const media = await service.attachEditorialCandidateMedia({
+          memberId,
+          candidateId: request.params.candidateId,
+          choiceCode: request.params.choiceCode,
+          ...request.body,
+          requestId: request.id,
+        });
+        if (!media) {
+          return reply.code(403).send({
+            code: "OPERATOR_ROLE_REQUIRED",
+            message: "This Member does not have active OPERATOR access.",
+          });
+        }
+        return reply.send({ media });
+      },
+    );
+
+    opsApp.delete<{
+      Headers: OpsHeaders;
+      Params: { candidateId: string; choiceCode: string };
+    }>(
+      "/v1/internal/ops/editorial/:candidateId/choices/:choiceCode/media",
+      {
+        schema: {
+          hide: true,
+          headers: opsHeadersSchema,
+          params: Type.Object({
+            candidateId: Type.String({ minLength: 1, maxLength: 32 }),
+            choiceCode: Type.String({ pattern: "^[A-D]$" }),
+          }),
+        },
+      },
+      async (request, reply) => {
+        const memberId = await authenticate(request, reply);
+        if (!memberId) return;
+        const result = await service.detachEditorialCandidateMedia({
+          memberId,
+          candidateId: request.params.candidateId,
+          choiceCode: request.params.choiceCode,
+          requestId: request.id,
+        });
+        if (!result) {
+          return reply.code(403).send({
+            code: "OPERATOR_ROLE_REQUIRED",
+            message: "This Member does not have active OPERATOR access.",
+          });
+        }
+        return reply.send(result);
       },
     );
 
