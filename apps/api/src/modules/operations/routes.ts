@@ -14,6 +14,7 @@ import {
   OPS_PUBLISHED_ISSUE_STATES,
   OPS_POINT_SHOP_EQUIP_SLOTS,
   OPS_POINT_SHOP_THEME_FAMILIES,
+  OpsEditorialPublicationError,
   OpsPointShopConflictError,
   OpsPublishedIssueConflictError,
   OpsReviewConflictError,
@@ -86,6 +87,12 @@ export async function registerOpsRoutes(
       if (error instanceof OpsPublishedIssueConflictError) {
         return reply.code(409).send({
           code: "PUBLISHED_ISSUE_CONFLICT",
+          message: error.message,
+        });
+      }
+      if (error instanceof OpsEditorialPublicationError) {
+        return reply.code(409).send({
+          code: "EDITORIAL_PUBLICATION_CONFLICT",
           message: error.message,
         });
       }
@@ -478,6 +485,50 @@ export async function registerOpsRoutes(
           });
         }
         return reply.send(decision);
+      },
+    );
+
+    opsApp.post<{
+      Headers: OpsHeaders;
+      Params: { candidateId: string };
+      Body: { expectedRevision: number };
+    }>(
+      "/v1/internal/ops/editorial/:candidateId/publish",
+      {
+        schema: {
+          hide: true,
+          headers: opsHeadersSchema,
+          params: Type.Object({ candidateId: Type.String({ minLength: 1, maxLength: 32 }) }),
+          body: Type.Object(
+            { expectedRevision: Type.Integer({ minimum: 0 }) },
+            { additionalProperties: false },
+          ),
+          response: {
+            200: Type.Any(),
+            400: Type.Object({ code: Type.String(), message: Type.String() }),
+            401: Type.Object({ code: Type.String(), message: Type.String() }),
+            403: Type.Object({ code: Type.String(), message: Type.String() }),
+            409: Type.Any(),
+            500: Type.Object({ code: Type.String(), message: Type.String() }),
+          },
+        },
+      },
+      async (request, reply) => {
+        const memberId = await authenticate(request, reply);
+        if (!memberId) return;
+        const issue = await service.publishEditorialCandidate({
+          memberId,
+          candidateId: request.params.candidateId,
+          expectedRevision: request.body.expectedRevision,
+          requestId: request.id,
+        });
+        if (!issue) {
+          return reply.code(403).send({
+            code: "OPERATOR_ROLE_REQUIRED",
+            message: "This Member does not have active OPERATOR access.",
+          });
+        }
+        return reply.send({ issue });
       },
     );
 

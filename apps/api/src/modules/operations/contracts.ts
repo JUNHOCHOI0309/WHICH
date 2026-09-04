@@ -208,6 +208,7 @@ export type OpsEditorialCandidate = {
   sources: Array<{ id: string; kind: "FACT" | "COMMUNITY"; title?: string; url?: string }>;
   automatedReviewStatus: string;
   decision: OpsEditorialDecision | null;
+  publication: { issueId: string; version: number; publishedAt: string } | null;
 };
 
 export type OpsEditorialPage = {
@@ -362,6 +363,13 @@ export class OpsReviewValidationError extends Error {
   }
 }
 
+export class OpsEditorialPublicationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "OpsEditorialPublicationError";
+  }
+}
+
 export class OpsPublishedIssueConflictError extends Error {
   constructor(message: string) {
     super(message);
@@ -421,6 +429,12 @@ export interface OpsDashboardService {
     checks: OpsEditorialDecision["checks"];
     requestId?: string;
   }): Promise<OpsEditorialDecision | null>;
+  publishEditorialCandidate(input: {
+    memberId: string;
+    candidateId: string;
+    expectedRevision: number;
+    requestId?: string;
+  }): Promise<OpsPublishedIssue | null>;
   attachEditorialCandidateMedia(input: {
     memberId: string;
     candidateId: string;

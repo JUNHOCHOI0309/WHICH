@@ -39,7 +39,11 @@ export function OpsIssueReviewPanel({
         </button>
       </nav>
       {mode === "candidates" ? (
-        <OpsEditorialPanel embedded={embedded} onOpenMediaReview={onOpenMediaReview} />
+        <OpsEditorialPanel
+          embedded={embedded}
+          onOpenMediaReview={onOpenMediaReview}
+          onPublished={() => setMode("published")}
+        />
       ) : (
         <OpsPublishedIssuesPanel />
       )}

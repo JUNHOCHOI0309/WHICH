@@ -13,6 +13,7 @@ import type {
   OpsEditorialStatus,
   OpsMediaReviewAsset,
   OpsMediaReviewPage,
+  OpsPublishedIssue,
 } from "./contracts";
 import styles from "./ops-management.module.css";
 
@@ -40,9 +41,11 @@ function selectedForm(candidate: OpsEditorialCandidate) {
 export function OpsEditorialPanel({
   embedded = false,
   onOpenMediaReview,
+  onPublished,
 }: {
   embedded?: boolean;
   onOpenMediaReview?: () => void;
+  onPublished?: () => void;
 } = {}) {
   const [query, setQuery] = useState("");
   const [submittedQuery, setSubmittedQuery] = useState("");
@@ -54,6 +57,7 @@ export function OpsEditorialPanel({
   const [checks, setChecks] = useState(emptyChecks);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [publishing, setPublishing] = useState(false);
   const [mediaBusy, setMediaBusy] = useState(false);
   const [mediaChoiceCode, setMediaChoiceCode] = useState<string | null>(null);
   const [libraryAssets, setLibraryAssets] = useState<OpsMediaReviewAsset[]>([]);
@@ -256,6 +260,46 @@ export function OpsEditorialPanel({
     }
   }
 
+  async function publish() {
+    if (!selected || selected.decision?.status !== "APPROVED" || selected.publication) return;
+    setPublishing(true);
+    setFeedback(null);
+    try {
+      const response = await fetch(
+        `/api/ops/editorial/${encodeURIComponent(selected.candidateId)}/publish`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ expectedRevision: selected.decision.revision }),
+        },
+      );
+      const body = (await response.json()) as { issue?: OpsPublishedIssue; message?: string };
+      if (!response.ok || !body.issue) {
+        if (response.status === 409) await load();
+        throw new Error(body.message || "승인된 질문을 게시하지 못했습니다.");
+      }
+      const updated: OpsEditorialCandidate = {
+        ...selected,
+        publication: {
+          issueId: body.issue.issueId,
+          version: body.issue.version,
+          publishedAt: body.issue.publishedAt ?? new Date().toISOString(),
+        },
+      };
+      updateCandidate(updated);
+      setMediaChoiceCode(null);
+      toast.success("승인된 질문을 게시했어요.");
+      onPublished?.();
+    } catch (caught) {
+      setFeedback({
+        message: caught instanceof Error ? caught.message : "승인된 질문을 게시하지 못했습니다.",
+        error: true,
+      });
+    } finally {
+      setPublishing(false);
+    }
+  }
+
   return (
     <section className={embedded ? styles.embeddedReviewPanel : styles.page}>
       {!embedded ? (
@@ -334,7 +378,9 @@ export function OpsEditorialPanel({
                 <span>
                   {candidate.candidateId} · {candidate.inventoryScope}
                 </span>
-                <span>{candidate.decision?.status ?? "PENDING"}</span>
+                <span>
+                  {candidate.publication ? "게시 완료" : (candidate.decision?.status ?? "PENDING")}
+                </span>
               </span>
               <strong>{candidate.question}</strong>
             </button>
@@ -345,6 +391,12 @@ export function OpsEditorialPanel({
         </div>
         {selected ? (
           <article className={styles.detail}>
+            {selected.publication ? (
+              <div className={styles.publicationComplete}>
+                <strong>게시 완료</strong>
+                <span>{new Date(selected.publication.publishedAt).toLocaleString("ko-KR")}</span>
+              </div>
+            ) : null}
             <p className={styles.eyebrow}>
               {selected.candidateId} · {selected.automatedReviewStatus}
             </p>
@@ -367,7 +419,7 @@ export function OpsEditorialPanel({
                   <h3 id="candidate-media-title">선택지 이미지</h3>
                   <p>승인 라이브러리에서 지정하거나 Image Review에서 새 이미지를 등록하세요.</p>
                 </div>
-                <button type="button" onClick={onOpenMediaReview}>
+                <button type="button" disabled={!!selected.publication} onClick={onOpenMediaReview}>
                   새 이미지 업로드
                 </button>
               </div>
@@ -392,7 +444,7 @@ export function OpsEditorialPanel({
                     <small>{choice.media ? choice.media.status : "TEXT ONLY"}</small>
                     <button
                       type="button"
-                      disabled={mediaBusy}
+                      disabled={mediaBusy || !!selected.publication}
                       onClick={() => void openMediaLibrary(choice.code)}
                     >
                       {choice.media ? "이미지 변경·해제" : "라이브러리에서 선택"}
@@ -476,6 +528,7 @@ export function OpsEditorialPanel({
                     <input
                       type="checkbox"
                       checked={checks[key]}
+                      disabled={!!selected.publication}
                       onChange={(event) =>
                         setChecks((current) => ({ ...current, [key]: event.target.checked }))
                       }
@@ -487,22 +540,58 @@ export function OpsEditorialPanel({
               <textarea
                 value={note}
                 maxLength={2000}
+                disabled={!!selected.publication}
                 onChange={(event) => setNote(event.target.value)}
                 placeholder="수정 요청 또는 심사 근거를 남겨 주세요."
               />
               <div className={styles.decisionActions}>
-                <button type="button" disabled={saving} onClick={() => void decide("APPROVED")}>
+                <button
+                  type="button"
+                  disabled={saving || publishing || !!selected.publication}
+                  onClick={() => void decide("APPROVED")}
+                >
                   인가
                 </button>
                 <button
                   type="button"
-                  disabled={saving}
+                  disabled={saving || publishing || !!selected.publication}
                   onClick={() => void decide("NEEDS_CHANGES")}
                 >
                   수정 요청
                 </button>
-                <button type="button" disabled={saving} onClick={() => void decide("REJECTED")}>
+                <button
+                  type="button"
+                  disabled={saving || publishing || !!selected.publication}
+                  onClick={() => void decide("REJECTED")}
+                >
                   반려
+                </button>
+              </div>
+              <div className={styles.publicationAction} data-complete={!!selected.publication}>
+                <div>
+                  <strong>
+                    {selected.publication ? "이 질문은 게시되었습니다." : "게시 실행"}
+                  </strong>
+                  <span>
+                    {selected.publication
+                      ? "게시된 질문 탭에서 공개 상태와 이미지를 관리할 수 있습니다."
+                      : "인가된 질문을 공개 피드에 즉시 반영합니다."}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  disabled={
+                    publishing || !!selected.publication || selected.decision?.status !== "APPROVED"
+                  }
+                  onClick={() => void publish()}
+                >
+                  {selected.publication
+                    ? "게시 완료"
+                    : publishing
+                      ? "게시 중…"
+                      : selected.decision?.status === "APPROVED"
+                        ? "승인된 질문 게시"
+                        : "인가 후 게시 가능"}
                 </button>
               </div>
               {selected.decision ? (

@@ -750,4 +750,77 @@ describe("operator dashboard", () => {
     expect(detach.json()).toEqual({ detached: true });
     expect(await database.db.select().from(operatorEditorialCandidateMedia)).toHaveLength(0);
   });
+
+  it("publishes an approved Editorial candidate once and locks its review state", async () => {
+    const listResponse = await opsRequest("GET", "/v1/internal/ops/editorial?limit=1");
+    const candidate = listResponse.json<{
+      items: Array<{
+        candidateId: string;
+        publication: { issueId: string; version: number } | null;
+      }>;
+    }>().items[0]!;
+    expect(candidate.publication).toBeNull();
+
+    const approval = await opsRequest(
+      "PUT",
+      `/v1/internal/ops/editorial/${candidate.candidateId}/decision`,
+      {
+        expectedRevision: 1,
+        status: "APPROVED",
+        note: "네 가지 검수 완료",
+        checks: { binaryFit: true, choiceParity: true, duplicateReview: true, sourceReview: true },
+      },
+    );
+    expect(approval.statusCode, approval.body).toBe(200);
+    expect(approval.json()).toMatchObject({ status: "APPROVED", revision: 2 });
+
+    const stale = await opsRequest(
+      "POST",
+      `/v1/internal/ops/editorial/${candidate.candidateId}/publish`,
+      { expectedRevision: 1 },
+    );
+    expect(stale.statusCode).toBe(409);
+    expect(stale.json()).toMatchObject({ code: "REVISION_CONFLICT" });
+
+    const published = await opsRequest(
+      "POST",
+      `/v1/internal/ops/editorial/${candidate.candidateId}/publish`,
+      { expectedRevision: 2 },
+    );
+    expect(published.statusCode, published.body).toBe(200);
+    const issue = published.json<{ issue: { issueId: string; version: number; state: string } }>()
+      .issue;
+    expect(issue).toMatchObject({ version: 1, state: "ACTIVE" });
+
+    const repeated = await opsRequest(
+      "POST",
+      `/v1/internal/ops/editorial/${candidate.candidateId}/publish`,
+      { expectedRevision: 2 },
+    );
+    expect(repeated.statusCode, repeated.body).toBe(200);
+    expect(repeated.json()).toMatchObject({ issue: { issueId: issue.issueId, version: 1 } });
+
+    const refreshed = await opsRequest("GET", "/v1/internal/ops/editorial?limit=1");
+    expect(refreshed.json()).toMatchObject({
+      items: [{ publication: { issueId: issue.issueId, version: 1 } }],
+    });
+    const storedVersions = await database.db
+      .select({ issueId: issueVersions.issueId, version: issueVersions.version })
+      .from(issueVersions)
+      .where(eq(issueVersions.issueId, issue.issueId));
+    expect(storedVersions).toEqual([{ issueId: issue.issueId, version: 1 }]);
+
+    const mutateAfterPublish = await opsRequest(
+      "PUT",
+      `/v1/internal/ops/editorial/${candidate.candidateId}/decision`,
+      {
+        expectedRevision: 2,
+        status: "NEEDS_CHANGES",
+        note: "게시 후 변경 시도",
+        checks: { binaryFit: true, choiceParity: true, duplicateReview: true, sourceReview: true },
+      },
+    );
+    expect(mutateAfterPublish.statusCode).toBe(409);
+    expect(mutateAfterPublish.json()).toMatchObject({ code: "EDITORIAL_PUBLICATION_CONFLICT" });
+  });
 });
