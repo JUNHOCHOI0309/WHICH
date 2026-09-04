@@ -1,11 +1,13 @@
-# Expanded Editorial Catalog 500 v2
+# Expanded Editorial Catalog 500 v2 + YouTube Immediate v1
 
 이 디렉터리는 전달받은 `WHICH_Expanded_Issue_Catalog_500_v1_2026-08-25.zip`을 검수한 뒤
 보정한 **편집 후보 재고**다. Production Issue Manifest가 아니며, 현재 상태로 게시하면 안 된다.
 
 ## 현재 상태
 
-- 총 500개: Active 후보 72, Reserve 후보 108, Long-term 후보 320
+- 총 662개: Active 후보 72, Reserve 후보 108, Long-term 후보 482
+- `WHICH_YOUTUBE_POLL_ORIGINALIZED_ISSUE_POOL_v1.xlsx`의 `즉시사용` 162개를
+  `WEXP-0501`~`WEXP-0662` Long-term 검수 후보로 추가
 - 기존 WHICH-19/49와 겹친 문항 25개: 새 의미와 새 UUID로 교체
 - A/B가 함께 성립하거나 정답처럼 보인 문항 5개: 선택지 재작성
 - 직접 근거가 확인된 공식 출처 재연결: 10개
@@ -19,7 +21,7 @@
 
 ## 파일
 
-- `which-expanded-500-catalog-v2.json`: 보정된 500개 후보 원장
+- `which-expanded-500-catalog-v2.json`: 기존 500개와 YouTube 재구성 후보 162개를 합친 후보 원장
 - `fact-source-registry-v2.json`: 공식 사실 출처 원장
 - `community-source-registry-v2.json`: 커뮤니티 주제 발견 신호 원장
 - `inventory-candidates-v2.json`: Active/Reserve/Long-term 후보 ID 분할
@@ -55,7 +57,7 @@ pnpm --filter @which/api issues:build \
 
 ## 사람 편집 승인 콘솔
 
-500개 원장을 직접 수정하지 않고 로컬 전용 검토 화면에서 승인 결정을 기록한다.
+662개 원장을 직접 수정하지 않고 로컬 전용 검토 화면에서 승인 결정을 기록한다.
 
 ```bash
 pnpm --filter @which/api issues:review
@@ -73,7 +75,7 @@ pnpm --filter @which/api issues:review
 - 내보낸 파일도 곧바로 게시하지 않는다. Diff 검토, Builder v2, 전체 테스트, Manifest Digest 승인,
   Publisher dry-run을 순서대로 통과해야 한다.
 
-Active 72개를 먼저 완료한 뒤 Reserve 108개, Long-term 320개 순서로 진행한다. MEDIUM 후보는
+Active 72개를 먼저 완료한 뒤 Reserve 108개, Long-term 482개 순서로 진행한다. MEDIUM 후보는
 승인 결정을 기록할 수 있어도 Public Publication Plan에서는 제외된다.
 
 ## 원본 재생성

@@ -38,12 +38,12 @@ afterEach(async () => {
 });
 
 describe("Editorial Review Console", () => {
-  it("loads the 500 candidate inventory and stores decisions separately", async () => {
+  it("loads the complete candidate inventory and stores decisions separately", async () => {
     const { service, paths } = await createConsole();
     const before = service.getState();
-    expect(before.catalog.total).toBe(500);
-    expect(before.inventory).toEqual({ active: 72, reserve: 108, longTerm: 320 });
-    expect(before.counts.PENDING).toBe(500);
+    expect(before.catalog.total).toBe(662);
+    expect(before.inventory).toEqual({ active: 72, reserve: 108, longTerm: 482 });
+    expect(before.counts.PENDING).toBe(662);
 
     const saved = await service.saveDecision("WEXP-0001", {
       status: "APPROVED",

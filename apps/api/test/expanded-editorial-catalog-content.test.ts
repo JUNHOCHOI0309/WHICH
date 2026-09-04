@@ -16,8 +16,8 @@ async function readJson(path: URL) {
   return JSON.parse(await readFile(fileURLToPath(path), "utf8")) as unknown;
 }
 
-describe("WHICH Expanded 500 remediation", () => {
-  it("keeps 500 structurally valid candidates and a complete inventory partition", async () => {
+describe("WHICH expanded editorial catalog", () => {
+  it("keeps 662 structurally valid candidates and a complete inventory partition", async () => {
     const [catalogValue, registryValue, inventoryValue] = await Promise.all([
       readJson(new URL("which-expanded-500-catalog-v2.json", contentRoot)),
       readJson(new URL("fact-source-registry-v2.json", contentRoot)),
@@ -31,7 +31,7 @@ describe("WHICH Expanded 500 remediation", () => {
       longTermCandidateIds: string[];
     };
 
-    expect(catalog.issues).toHaveLength(500);
+    expect(catalog.issues).toHaveLength(662);
     expect(catalog.approval.status).toBe("PENDING_HUMAN_EDITORIAL_APPROVAL");
     expect(catalog.issues.every((issue) => issue.editorialReview.status !== "HUMAN_APPROVED")).toBe(
       true,
@@ -43,8 +43,8 @@ describe("WHICH Expanded 500 remediation", () => {
     ];
     expect(inventory.activePoolCandidateIds).toHaveLength(72);
     expect(inventory.approvedReserveCandidateIds).toHaveLength(108);
-    expect(inventory.longTermCandidateIds).toHaveLength(320);
-    expect(new Set(inventoryIds).size).toBe(500);
+    expect(inventory.longTermCandidateIds).toHaveLength(482);
+    expect(new Set(inventoryIds).size).toBe(662);
     expect(new Set(inventoryIds)).toEqual(
       new Set(catalog.issues.map((issue) => issue.candidateId)),
     );
@@ -83,5 +83,29 @@ describe("WHICH Expanded 500 remediation", () => {
         issue.candidateId,
       ).toBe(false);
     }
+  });
+
+  it("keeps the 162 즉시사용 imports pending with traceable workbook provenance", async () => {
+    const catalog = expandedEditorialCatalogSchema.parse(
+      await readJson(new URL("which-expanded-500-catalog-v2.json", contentRoot)),
+    );
+    const imported = catalog.issues.slice(500);
+
+    expect(imported).toHaveLength(162);
+    expect(imported[0]?.candidateId).toBe("WEXP-0501");
+    expect(imported.at(-1)?.candidateId).toBe("WEXP-0662");
+    expect(
+      imported.every((issue) => {
+        const origin = issue.editorialOrigin as
+          { importBatch?: string; sourceSheet?: string; sourceCandidateId?: string } | undefined;
+        return (
+          issue.editorialReview.status === "AUTOMATED_CHECKS_PASSED_HUMAN_PENDING" &&
+          issue.sourceProfile.sourceFitReview === "HUMAN_TOPIC_REVIEW_REQUIRED" &&
+          origin?.importBatch === "youtube-poll-originalized-immediate-v1" &&
+          origin.sourceSheet === "즉시사용" &&
+          /^YT-[0-9]{4}$/.test(origin.sourceCandidateId ?? "")
+        );
+      }),
+    ).toBe(true);
   });
 });
