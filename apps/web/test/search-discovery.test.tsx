@@ -28,6 +28,12 @@ const issue: PublicIssue = {
     { id: "choice-b", code: "B", label: "조금 더 놀기", media: null },
   ],
   author: null,
+  engagement: {
+    recommendationCount: 0,
+    commentCount: 0,
+    viewerRecommended: false,
+    viewerReported: false,
+  },
   result: { visibility: "PRE_VOTE_HIDDEN", tally: null },
 };
 

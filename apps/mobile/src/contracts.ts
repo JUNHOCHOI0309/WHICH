@@ -46,7 +46,7 @@ export type PublicFeedIssue = {
   };
 };
 
-export type PublicIssue = Omit<PublicFeedIssue, "engagement" | "recommendation"> & {
+export type PublicIssue = Omit<PublicFeedIssue, "recommendation"> & {
   context: string | null;
   experienceModeCode: string;
   result: {

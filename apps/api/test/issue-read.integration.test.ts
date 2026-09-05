@@ -45,6 +45,12 @@ type PublicIssueBody = {
     label: string;
     media: null | { url: string; altText: string; cropMode: "COVER" | "CONTAIN" };
   }>;
+  engagement: {
+    recommendationCount: number;
+    commentCount: number;
+    viewerRecommended: boolean;
+    viewerReported: boolean;
+  };
   result: {
     visibility: string;
     tally: null | {
@@ -595,6 +601,12 @@ describe("Guest Issue feed API", () => {
         }>;
       }>()
       .items.find((item) => item.id === issue.issueId);
+    const detailResponse = await app.inject({
+      method: "GET",
+      url: `/v1/issues/${issue.issueId}`,
+      headers: { authorization: `Bearer ${sessionToken}` },
+    });
+    const detail = detailResponse.json<PublicIssueBody>();
     const stored = await database.db
       .select()
       .from(issueRecommendations)
@@ -610,6 +622,8 @@ describe("Guest Issue feed API", () => {
       viewerRecommended: true,
       viewerReported: false,
     });
+    expect(detailResponse.statusCode).toBe(200);
+    expect(detail.engagement).toEqual(feedItem?.engagement);
 
     const removed = await app.inject({
       method: "PUT",

@@ -957,6 +957,155 @@
   line-height: 1.55;
 }
 
+.issueEngagement {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 22px;
+  border-top: 1px solid var(--line);
+  padding-top: 18px;
+}
+
+.issueEngagement button {
+  min-height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 850;
+  padding: 8px 14px;
+}
+
+.issueEngagement button:hover,
+.issueEngagement button:focus-visible,
+.issueEngagement .issueRecommended,
+.issueEngagement .issueReported {
+  border-color: var(--a);
+  color: var(--ink);
+}
+
+.issueEngagement button:focus-visible {
+  outline: 3px solid var(--a);
+  outline-offset: 2px;
+}
+
+.issueEngagement button:disabled {
+  cursor: default;
+  opacity: 0.72;
+}
+
+.issueEngagement .issueRecommended:disabled {
+  opacity: 1;
+}
+
+.issueEngagement img {
+  width: 19px;
+  height: 19px;
+  object-fit: contain;
+  opacity: 0.72;
+}
+
+.issueReportBackdrop {
+  position: fixed;
+  z-index: 100;
+  inset: 0;
+  background: rgb(15 23 42 / 52%);
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+
+.issueReportDialog {
+  width: min(100%, 440px);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: 0 24px 72px rgb(15 23 42 / 24%);
+  color: var(--ink);
+  display: grid;
+  gap: 12px;
+  padding: 24px;
+}
+
+.issueReportDialog h2,
+.issueReportDialog p {
+  margin: 0;
+}
+
+.issueReportDialog h2 {
+  font-size: 1.35rem;
+  letter-spacing: -0.035em;
+}
+
+.issueReportDialog > p:not(.commentEyebrow, .issueReportError) {
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.6;
+}
+
+.issueReportDialog label {
+  margin-top: 4px;
+  font-size: 0.76rem;
+  font-weight: 850;
+}
+
+.issueReportDialog select,
+.issueReportDialog textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  padding: 11px 12px;
+}
+
+.issueReportDialog textarea {
+  resize: vertical;
+}
+
+.issueReportError {
+  color: #9c2f00;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.issueReportActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.issueReportActions button {
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+  padding: 9px 16px;
+  font: inherit;
+  font-weight: 850;
+}
+
+.issueReportActions button[type="submit"] {
+  border-color: var(--b);
+  background: var(--b);
+  color: #321303;
+}
+
+.issueReportActions button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
 .inlineStatus {
   color: var(--ink);
   font-weight: 750;

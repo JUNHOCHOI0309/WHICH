@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useCallback, useEffect, useState } from "react";
+import type { ReactNode } from "react";
 
 import { toast } from "@/components/feedback/toast-provider";
 import type {
@@ -65,8 +66,10 @@ function pointAmountLabel(item: MemberPointLedgerItem) {
 
 export function MemberPointPanel({
   onShopChange,
+  footer,
 }: {
   onShopChange?: (shop: MemberPointShopView) => void;
+  footer?: ReactNode;
 } = {}) {
   const [points, setPoints] = useState<MemberPointView | null>(null);
   const [screen, setScreen] = useState<PointScreen>("loading");
@@ -204,107 +207,110 @@ export function MemberPointPanel({
 
   return (
     <>
-      <section
-        className={`${styles.pointPanel} ${styles.pointPanelRail}`}
-        aria-labelledby="point-title"
-      >
-        <div className={styles.pointHeading}>
-          <div>
-            <p>W POINT</p>
-            <h2 id="point-title">나의 W Point</h2>
+      <div className={styles.pointRailStack}>
+        <section
+          className={`${styles.pointPanel} ${styles.pointPanelRail}`}
+          aria-labelledby="point-title"
+        >
+          <div className={styles.pointHeading}>
+            <div>
+              <p>W POINT</p>
+              <h2 id="point-title">나의 W Point</h2>
+            </div>
+            {screen === "ready" && points ? (
+              <div className={styles.pointBalance}>
+                <strong>{points.account.balance.toLocaleString("ko-KR")}P</strong>
+                <span>오늘 +{points.account.todayEarned.toLocaleString("ko-KR")}P</span>
+              </div>
+            ) : null}
           </div>
-          {screen === "ready" && points ? (
-            <div className={styles.pointBalance}>
-              <strong>{points.account.balance.toLocaleString("ko-KR")}P</strong>
-              <span>오늘 +{points.account.todayEarned.toLocaleString("ko-KR")}P</span>
+
+          {screen === "loading" ? (
+            <div className={styles.pointState} aria-busy="true" aria-live="polite">
+              W Point를 확인하고 있어요.
             </div>
           ) : null}
-        </div>
-
-        {screen === "loading" ? (
-          <div className={styles.pointState} aria-busy="true" aria-live="polite">
-            W Point를 확인하고 있어요.
-          </div>
-        ) : null}
-        {screen === "error" ? (
-          <div className={styles.pointState} role="status">
-            <span>W Point만 잠시 불러오지 못했어요. 다른 기능은 그대로 사용할 수 있습니다.</span>
-            <button type="button" onClick={() => void load()}>
-              다시 확인
-            </button>
-          </div>
-        ) : null}
-        {screen === "ready" && points ? (
-          <>
-            <button type="button" className={styles.pointMore} onClick={() => void openShop()}>
-              W Point 상점
-            </button>
-            {points.account.hasPendingRecovery ? (
-              <p className={styles.pointRecovery}>
-                일부 기록을 다시 확인하고 있어 현재 사용할 수 있는 잔액만 표시합니다.
-              </p>
-            ) : null}
-            <div className={styles.pointBadgeSummary}>
-              {points.badge.current ? (
-                <Image
-                  src={badgeImages[points.badge.current.code]}
-                  alt={`${points.badge.current.label} W Point 배지`}
-                  width={104}
-                  height={104}
-                />
-              ) : (
-                <div className={styles.pointBadgePending}>첫 적립 후 배지 획득</div>
-              )}
-              <div>
-                <strong>{points.badge.current?.label ?? "배지 준비 중"}</strong>
-                <span>
-                  {points.badge.next
-                    ? `${points.badge.next.label}까지 ${Math.max(0, points.badge.next.minimumLifetimePoints - points.account.lifetimeEarned).toLocaleString("ko-KR")}P`
-                    : "최고 등급 달성"}
-                </span>
-                <div
-                  className={styles.pointBadgeProgress}
-                  role="progressbar"
-                  aria-label="다음 W Point 배지 진행률"
-                  aria-valuemin={0}
-                  aria-valuemax={100}
-                  aria-valuenow={Math.round(points.badge.progress * 100)}
-                >
-                  <i style={{ width: `${Math.round(points.badge.progress * 100)}%` }} />
+          {screen === "error" ? (
+            <div className={styles.pointState} role="status">
+              <span>W Point만 잠시 불러오지 못했어요. 다른 기능은 그대로 사용할 수 있습니다.</span>
+              <button type="button" onClick={() => void load()}>
+                다시 확인
+              </button>
+            </div>
+          ) : null}
+          {screen === "ready" && points ? (
+            <>
+              <button type="button" className={styles.pointMore} onClick={() => void openShop()}>
+                W Point 상점
+              </button>
+              {points.account.hasPendingRecovery ? (
+                <p className={styles.pointRecovery}>
+                  일부 기록을 다시 확인하고 있어 현재 사용할 수 있는 잔액만 표시합니다.
+                </p>
+              ) : null}
+              <div className={styles.pointBadgeSummary}>
+                {points.badge.current ? (
+                  <Image
+                    src={badgeImages[points.badge.current.code]}
+                    alt={`${points.badge.current.label} W Point 배지`}
+                    width={104}
+                    height={104}
+                  />
+                ) : (
+                  <div className={styles.pointBadgePending}>첫 적립 후 배지 획득</div>
+                )}
+                <div>
+                  <strong>{points.badge.current?.label ?? "배지 준비 중"}</strong>
+                  <span>
+                    {points.badge.next
+                      ? `${points.badge.next.label}까지 ${Math.max(0, points.badge.next.minimumLifetimePoints - points.account.lifetimeEarned).toLocaleString("ko-KR")}P`
+                      : "최고 등급 달성"}
+                  </span>
+                  <div
+                    className={styles.pointBadgeProgress}
+                    role="progressbar"
+                    aria-label="다음 W Point 배지 진행률"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={Math.round(points.badge.progress * 100)}
+                  >
+                    <i style={{ width: `${Math.round(points.badge.progress * 100)}%` }} />
+                  </div>
                 </div>
               </div>
-            </div>
-            {points.ledger.items.length === 0 ? (
-              <div className={styles.pointEmpty}>
-                <strong>아직 W Point 내역이 없어요.</strong>
-                <span>로그인, 투표, 확인된 공유 활동부터 차곡차곡 기록됩니다.</span>
-              </div>
-            ) : (
-              <ul className={styles.pointLedger}>
-                {points.ledger.items.map((item) => (
-                  <li key={item.id}>
-                    <div>
-                      <strong>{item.reasonLabel}</strong>
-                      <time dateTime={item.createdAt}>{pointDateLabel(item.createdAt)}</time>
-                    </div>
-                    <span data-positive={item.amount > 0}>{pointAmountLabel(item)}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {points.ledger.nextCursor ? (
-              <button
-                type="button"
-                className={styles.pointMore}
-                disabled={morePending}
-                onClick={loadMore}
-              >
-                {morePending ? "불러오는 중…" : "내역 더 보기"}
-              </button>
-            ) : null}
-          </>
-        ) : null}
-      </section>
+              {points.ledger.items.length === 0 ? (
+                <div className={styles.pointEmpty}>
+                  <strong>아직 W Point 내역이 없어요.</strong>
+                  <span>로그인, 투표, 확인된 공유 활동부터 차곡차곡 기록됩니다.</span>
+                </div>
+              ) : (
+                <ul className={styles.pointLedger}>
+                  {points.ledger.items.map((item) => (
+                    <li key={item.id}>
+                      <div>
+                        <strong>{item.reasonLabel}</strong>
+                        <time dateTime={item.createdAt}>{pointDateLabel(item.createdAt)}</time>
+                      </div>
+                      <span data-positive={item.amount > 0}>{pointAmountLabel(item)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {points.ledger.nextCursor ? (
+                <button
+                  type="button"
+                  className={styles.pointMore}
+                  disabled={morePending}
+                  onClick={loadMore}
+                >
+                  {morePending ? "불러오는 중…" : "내역 더 보기"}
+                </button>
+              ) : null}
+            </>
+          ) : null}
+        </section>
+        {footer}
+      </div>
       <MemberPointShopModal
         onAction={(item) => void mutateItem(item)}
         onClose={() => setShopOpen(false)}

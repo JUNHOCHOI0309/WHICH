@@ -368,6 +368,12 @@ describe("OpenAPI contract", () => {
         },
       ],
       author: null,
+      engagement: {
+        recommendationCount: 0,
+        commentCount: 0,
+        viewerRecommended: false,
+        viewerReported: false,
+      },
       result: { visibility: "PRE_VOTE_HIDDEN", tally: null },
     });
     const app = await buildApp(getConfig({ NODE_ENV: "test" }), {

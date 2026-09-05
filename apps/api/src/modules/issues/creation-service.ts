@@ -10,6 +10,7 @@ import {
   issueChoices,
   issueContextMedia,
   issueInterestCards,
+  issueRecommendations,
   issueMediaAssets,
   issueMediaAssetVersions,
   issueMediaLibraryAssets,
@@ -340,6 +341,10 @@ export function toSubmission(
             : row.status === "PENDING"
               ? "PROCESSING"
               : (row.status as "NEEDS_CHANGES" | "REJECTED" | "CANCELLED"),
+    engagement: {
+      recommendationCount: 0,
+      participationCount: 0,
+    },
     question: row.question,
     context: row.context,
     choiceA: row.choiceA,
@@ -360,13 +365,71 @@ export function toSubmission(
 
 type SubmissionRow = typeof memberIssueSubmissions.$inferSelect;
 type Transaction = Parameters<Parameters<Database["db"]["transaction"]>[0]>[0];
+type SubmissionEngagement = MemberIssueSubmission["engagement"];
+
+async function submissionEngagementByIssue(
+  database: Pick<Database["db"], "select">,
+  issueIds: string[],
+) {
+  const uniqueIssueIds = [...new Set(issueIds)];
+  const engagement = new Map<string, SubmissionEngagement>();
+  if (uniqueIssueIds.length === 0) return engagement;
+  const [recommendationRows, aggregateRows] = await Promise.all([
+    database
+      .select({
+        issueId: issueRecommendations.issueId,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(issueRecommendations)
+      .where(
+        and(
+          inArray(issueRecommendations.issueId, uniqueIssueIds),
+          eq(issueRecommendations.active, true),
+        ),
+      )
+      .groupBy(issueRecommendations.issueId),
+    database
+      .select({
+        issueId: voteAggregates.issueId,
+        issueVersion: voteAggregates.issueVersion,
+        participationCount: voteAggregates.displayedVoteCount,
+      })
+      .from(voteAggregates)
+      .where(inArray(voteAggregates.issueId, uniqueIssueIds))
+      .orderBy(voteAggregates.issueId, desc(voteAggregates.issueVersion)),
+  ]);
+  const recommendationCount = new Map(
+    recommendationRows.map((row) => [row.issueId, Number(row.count)]),
+  );
+  const participationCount = new Map<string, number>();
+  for (const row of aggregateRows) {
+    if (!participationCount.has(row.issueId)) {
+      participationCount.set(row.issueId, Number(row.participationCount));
+    }
+  }
+  for (const issueId of uniqueIssueIds) {
+    engagement.set(issueId, {
+      recommendationCount: recommendationCount.get(issueId) ?? 0,
+      participationCount: participationCount.get(issueId) ?? 0,
+    });
+  }
+  return engagement;
+}
 
 async function submissionView(
   database: Pick<Database["db"], "select">,
   row: SubmissionRow,
+  engagementByIssue?: ReadonlyMap<string, SubmissionEngagement>,
 ): Promise<MemberIssueSubmission> {
   const view = toSubmission(row);
   if (row.status === "CANCELLED") return view;
+  if (row.publishedIssueId) {
+    view.engagement =
+      engagementByIssue?.get(row.publishedIssueId) ??
+      (await submissionEngagementByIssue(database, [row.publishedIssueId])).get(
+        row.publishedIssueId,
+      )!;
+  }
   const ids = [
     row.contextMediaAssetId,
     row.mediaAssetAId,
@@ -1202,7 +1265,15 @@ export function createIssueWriteService(
         )
         .orderBy(desc(memberIssueSubmissions.updatedAt))
         .limit(Math.min(Math.max(command.limit, 1), 20));
-      return { items: await Promise.all(rows.map((row) => submissionView(database, row))) };
+      const engagementByIssue = await submissionEngagementByIssue(
+        database,
+        rows.flatMap((row) => (row.publishedIssueId ? [row.publishedIssueId] : [])),
+      );
+      return {
+        items: await Promise.all(
+          rows.map((row) => submissionView(database, row, engagementByIssue)),
+        ),
+      };
     },
 
     async actOnMemberIssueSubmission(command) {

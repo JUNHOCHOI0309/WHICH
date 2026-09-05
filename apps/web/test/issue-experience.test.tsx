@@ -39,6 +39,12 @@ const issue: PublicIssue = {
     { id: "choice-b", code: "B", label: "저녁형 인간", media: null },
   ],
   author: null,
+  engagement: {
+    recommendationCount: 4,
+    commentCount: 7,
+    viewerRecommended: false,
+    viewerReported: false,
+  },
   experienceModeCode: "CORE_VOTE",
   result: { visibility: "PRE_VOTE_HIDDEN", tally: null },
 };
@@ -149,6 +155,78 @@ describe("IssueExperience", () => {
       "href",
       "/user/tech_creator",
     );
+  });
+
+  it("recommends a question from the detail screen and keeps the server count", async () => {
+    const request = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/guest-subjects") return jsonResponse({ status: "ready" });
+      if (url === `/api/issues/${ISSUE_ID}`) return jsonResponse(issue);
+      if (url.includes("vote-status")) return jsonResponse({ code: "VOTE_NOT_FOUND" }, 404);
+      if (url === `/api/issues/${ISSUE_ID}/recommendation` && init?.method === "PUT") {
+        expect(JSON.parse(String(init.body))).toEqual({ active: true });
+        return jsonResponse({ recommendation: { active: true, count: 5 } });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal("fetch", request);
+
+    render(<IssueExperience issueId={ISSUE_ID} />);
+
+    const recommendButton = await screen.findByRole("button", { name: "추천 4개" });
+    fireEvent.click(recommendButton);
+
+    expect(await screen.findByRole("button", { name: "추천 5개" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
+  it("reports a question from the detail screen", async () => {
+    const reportRequests: RequestInit[] = [];
+    const request = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/guest-subjects") return jsonResponse({ status: "ready" });
+      if (url === `/api/issues/${ISSUE_ID}`) return jsonResponse(issue);
+      if (url.includes("vote-status")) return jsonResponse({ code: "VOTE_NOT_FOUND" }, 404);
+      if (url === "/api/reports" && init?.method === "POST") {
+        reportRequests.push(init);
+        return jsonResponse({
+          report: { id: "report-1", accepted: true, counted: true },
+          case: {
+            id: "case-1",
+            status: "OPEN",
+            priority: "NORMAL",
+            automationRecommendation: "NONE",
+          },
+          signals: {
+            reporterCount: 1,
+            weightedScore: 1,
+            reports15m: 1,
+            reports24h: 1,
+            clusterClassification: "BASELINE",
+            shadowOnly: true,
+          },
+          target: { hidden: false },
+        });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal("fetch", request);
+
+    render(<IssueExperience issueId={ISSUE_ID} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "질문 신고" }));
+    expect(screen.getByRole("dialog", { name: "이 질문을 신고할까요?" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "신고 접수" }));
+
+    expect(await screen.findByRole("button", { name: "신고한 질문" })).toBeDisabled();
+    expect(reportRequests).toHaveLength(1);
+    expect(JSON.parse(String(reportRequests[0]?.body))).toEqual({
+      targetType: "ISSUE",
+      targetId: ISSUE_ID,
+      reasonCode: "SPAM",
+    });
   });
 
   it("records an impression only after 50% visibility lasts for 500ms", async () => {

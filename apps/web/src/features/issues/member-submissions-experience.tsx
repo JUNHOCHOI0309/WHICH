@@ -416,6 +416,31 @@ export function MemberSubmissionsExperience({
                         </span>
                       ))}
                     </div>
+                    <div
+                      className={styles.engagementSummary}
+                      aria-label={`추천 ${item.engagement?.recommendationCount ?? 0}개, 참여자 ${item.engagement?.participationCount ?? 0}명`}
+                    >
+                      <span>
+                        <Image
+                          src="/icons/feed/like.png"
+                          width={18}
+                          height={18}
+                          alt=""
+                          aria-hidden="true"
+                        />
+                        추천 {(item.engagement?.recommendationCount ?? 0).toLocaleString("ko-KR")}
+                      </span>
+                      <span>
+                        <Image
+                          src="/icons/profile/user.png"
+                          width={18}
+                          height={18}
+                          alt=""
+                          aria-hidden="true"
+                        />
+                        참여자 {(item.engagement?.participationCount ?? 0).toLocaleString("ko-KR")}
+                      </span>
+                    </div>
                   </div>
                   {!published ? (
                     <div className={styles.submissionState}>

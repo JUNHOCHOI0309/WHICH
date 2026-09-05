@@ -24,6 +24,7 @@ const pending: MemberIssueSubmission = {
   status: "PENDING",
   publicationState: "PROCESSING",
   publishedIssueId: null,
+  engagement: { recommendationCount: 0, participationCount: 0 },
   question: "주말에는 무엇을 할까요?",
   context: null,
   choiceA: "산책",
@@ -85,6 +86,7 @@ describe("member submissions", () => {
           status: "APPROVED",
           publicationState: "PUBLISHED",
           publishedIssueId: "live",
+          engagement: { recommendationCount: 12, participationCount: 345 },
           reviewNote: "internal review note",
         },
       ],
@@ -99,6 +101,11 @@ describe("member submissions", () => {
     expect(link.querySelector("img")).toHaveAttribute("alt", "");
     expect(link).toHaveAttribute("href", "/issues/live");
     expect(row).toHaveAttribute("data-published", "true");
+    const engagement = within(row).getByLabelText("추천 12개, 참여자 345명");
+    expect(engagement).toHaveTextContent("추천 12");
+    expect(engagement).toHaveTextContent("참여자 345");
+    expect(engagement.querySelector('img[src*="like.png"]')).not.toBeNull();
+    expect(engagement.querySelector('img[src*="user.png"]')).not.toBeNull();
     expect(within(row).queryByText("글 바로가기")).not.toBeInTheDocument();
     const remove = within(row).getByRole("button", { name: `${pending.question} 삭제` });
     expect(remove).toHaveTextContent("");
