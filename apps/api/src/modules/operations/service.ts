@@ -1138,11 +1138,19 @@ function createOpsManagementMethods(
           APPROVED: 0,
           NEEDS_CHANGES: 0,
           REJECTED: 0,
+          PUBLISHED: 0,
         };
-        for (const candidate of all) counts[candidate.decision?.status ?? "PENDING"] += 1;
+        for (const candidate of all) {
+          const status = candidate.publication
+            ? "PUBLISHED"
+            : (candidate.decision?.status ?? "PENDING");
+          counts[status] += 1;
+        }
         const query = input.query?.trim().toLocaleLowerCase("ko") ?? "";
         const filtered = all.filter((candidate) => {
-          const status = candidate.decision?.status ?? "PENDING";
+          const status = candidate.publication
+            ? "PUBLISHED"
+            : (candidate.decision?.status ?? "PENDING");
           return (
             (!input.status || status === input.status) &&
             (!input.scope || candidate.inventoryScope === input.scope) &&
@@ -1420,12 +1428,6 @@ function createOpsManagementMethods(
       if (decision?.status !== "APPROVED") {
         throw new OpsEditorialPublicationError("인가된 후보만 게시할 수 있습니다.");
       }
-      if (candidate.riskLevel !== "LOW" || candidate.isPolitical) {
-        throw new OpsEditorialPublicationError(
-          "LOW·비정치 후보만 이 게시 경로를 사용할 수 있습니다.",
-        );
-      }
-
       const factSourceUrls = candidate.sourceProfile.factSourceIds.map((sourceId) => {
         const source = candidate.sources.find(
           (item) => item.kind === "FACT" && item.id === sourceId,

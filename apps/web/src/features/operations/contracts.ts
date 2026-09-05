@@ -174,11 +174,12 @@ export type OpsRankingPreview = {
   }>;
 };
 
-export type OpsEditorialStatus = "PENDING" | "APPROVED" | "NEEDS_CHANGES" | "REJECTED";
+export type OpsEditorialStatus =
+  "PENDING" | "APPROVED" | "NEEDS_CHANGES" | "REJECTED" | "PUBLISHED";
 export type OpsEditorialScope = "ACTIVE" | "RESERVE" | "LONG_TERM";
 
 export type OpsEditorialDecision = {
-  status: Exclude<OpsEditorialStatus, "PENDING">;
+  status: "APPROVED" | "NEEDS_CHANGES" | "REJECTED";
   note: string;
   reviewedBy: string;
   reviewedAt: string;

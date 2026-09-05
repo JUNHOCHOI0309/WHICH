@@ -17,6 +17,13 @@ import { OpsAdminMediaLibrary } from "./ops-admin-media-library";
 import styles from "./ops-management.module.css";
 
 const pageSize = 50;
+const editorialStatusLabels: Record<OpsEditorialStatus, string> = {
+  PENDING: "PENDING",
+  APPROVED: "APPROVED",
+  NEEDS_CHANGES: "수정 필요",
+  REJECTED: "REJECTED",
+  PUBLISHED: "게시 완료",
+};
 const interestCards = [
   ["DAILY_LIFE", "일상"],
   ["FOOD", "음식"],
@@ -589,6 +596,7 @@ export function OpsEditorialPanel({
           <option value="">모든 심사 상태</option>
           <option value="PENDING">PENDING</option>
           <option value="APPROVED">APPROVED</option>
+          <option value="PUBLISHED">게시 완료</option>
           <option value="REJECTED">REJECTED</option>
         </select>
         <select
@@ -605,9 +613,9 @@ export function OpsEditorialPanel({
 
       {page ? (
         <div className={styles.counts}>
-          {(["PENDING", "APPROVED", "REJECTED"] as const).map((value) => (
+          {(["PENDING", "APPROVED", "PUBLISHED", "REJECTED"] as const).map((value) => (
             <article key={value}>
-              <span>{value}</span>
+              <span>{editorialStatusLabels[value]}</span>
               <strong>{page.counts[value]}</strong>
             </article>
           ))}
