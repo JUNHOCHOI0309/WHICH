@@ -340,7 +340,26 @@ export function OpsEditorialPanel({
       }
       const previousStatus = selected.decision?.status ?? "PENDING";
       if (status === previousStatus && body.status !== status) {
-        await load();
+        const selectedIndex =
+          page?.items.findIndex((item) => item.candidateId === selected.candidateId) ?? 0;
+        const remainingItems =
+          page?.items.filter((item) => item.candidateId !== selected.candidateId) ?? [];
+        setSelected(
+          remainingItems[Math.min(Math.max(selectedIndex, 0), remainingItems.length - 1)] ?? null,
+        );
+        setPage((current) => {
+          if (!current) return current;
+          const items = current.items.filter((item) => item.candidateId !== selected.candidateId);
+          return {
+            ...current,
+            items,
+            counts: {
+              ...current.counts,
+              [previousStatus]: Math.max(0, current.counts[previousStatus] - 1),
+              [body.status]: current.counts[body.status] + 1,
+            },
+          };
+        });
       } else {
         const updated = { ...selected, decision: body };
         setSelected(updated);
@@ -374,37 +393,93 @@ export function OpsEditorialPanel({
     }
   }
 
-  async function publish() {
-    if (!selected || selected.decision?.status !== "APPROVED" || selected.publication) return;
+  async function publishApprovedCandidates() {
     setPublishing(true);
     setFeedback(null);
     try {
-      const response = await fetch(
-        `/api/ops/editorial/${encodeURIComponent(selected.candidateId)}/publish`,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ expectedRevision: selected.decision.revision }),
-        },
+      const approved: OpsEditorialCandidate[] = [];
+      let cursor: string | null = null;
+      do {
+        const params = new URLSearchParams({ limit: String(pageSize), status: "APPROVED" });
+        if (cursor) params.set("cursor", cursor);
+        const response = await fetch(`/api/ops/editorial?${params}`, { cache: "no-store" });
+        const body = (await response.json()) as OpsEditorialPage & { message?: string };
+        if (!response.ok) {
+          throw new Error(body.message || "승인된 질문 목록을 불러오지 못했습니다.");
+        }
+        approved.push(...body.items.filter((candidate) => !candidate.publication));
+        cursor = body.nextCursor;
+      } while (cursor);
+
+      const candidates = Array.from(
+        new Map(approved.map((candidate) => [candidate.candidateId, candidate])).values(),
       );
-      const body = (await response.json()) as { issue?: OpsPublishedIssue; message?: string };
-      if (!response.ok || !body.issue) {
-        if (response.status === 409) await load();
-        throw new Error(body.message || "승인된 질문을 게시하지 못했습니다.");
+      if (candidates.length === 0) {
+        toast.success("새로 게시할 APPROVED 질문이 없습니다.");
+        return;
       }
-      updateCandidate({
-        ...selected,
-        publication: {
-          issueId: body.issue.issueId,
-          version: body.issue.version,
-          publishedAt: body.issue.publishedAt ?? new Date().toISOString(),
-        },
-      });
-      toast.success("승인된 질문을 게시했습니다.");
+
+      let publishedCount = 0;
+      const failures: Array<{ candidateId: string; message: string }> = [];
+      const batchSize = 5;
+      for (let index = 0; index < candidates.length; index += batchSize) {
+        const results = await Promise.all(
+          candidates.slice(index, index + batchSize).map(async (candidate) => {
+            try {
+              const response = await fetch(
+                `/api/ops/editorial/${encodeURIComponent(candidate.candidateId)}/publish`,
+                {
+                  method: "POST",
+                  headers: { "content-type": "application/json" },
+                  body: JSON.stringify({ expectedRevision: candidate.decision!.revision }),
+                },
+              );
+              const body = (await response.json()) as {
+                issue?: OpsPublishedIssue;
+                message?: string;
+              };
+              return response.ok && body.issue
+                ? { published: true as const, candidateId: candidate.candidateId }
+                : {
+                    published: false as const,
+                    candidateId: candidate.candidateId,
+                    message: body.message || "게시하지 못했습니다.",
+                  };
+            } catch (caught) {
+              return {
+                published: false as const,
+                candidateId: candidate.candidateId,
+                message: caught instanceof Error ? caught.message : "게시 요청에 실패했습니다.",
+              };
+            }
+          }),
+        );
+        for (const result of results) {
+          if (result.published) publishedCount += 1;
+          else failures.push({ candidateId: result.candidateId, message: result.message });
+        }
+      }
+
+      await load();
+      if (failures.length > 0) {
+        const preview = failures
+          .slice(0, 3)
+          .map((failure) => `${failure.candidateId}: ${failure.message}`)
+          .join(" / ");
+        setFeedback({
+          message: `${publishedCount}개 게시 완료, ${failures.length}개 실패 — ${preview}`,
+          error: true,
+        });
+        toast.error(`${publishedCount}개를 게시했고 ${failures.length}개는 게시하지 못했습니다.`);
+        return;
+      }
+
+      toast.success(`${publishedCount}개의 APPROVED 질문을 게시했습니다.`);
       onPublished?.();
     } catch (caught) {
       setFeedback({
-        message: caught instanceof Error ? caught.message : "승인된 질문을 게시하지 못했습니다.",
+        message:
+          caught instanceof Error ? caught.message : "APPROVED 질문을 일괄 게시하지 못했습니다.",
         error: true,
       });
     } finally {
@@ -420,9 +495,19 @@ export function OpsEditorialPanel({
           <h2>관리자 질문 검수</h2>
           <span>관리자 질문과 이미지는 이곳에서 바로 검수하고 게시합니다.</span>
         </div>
-        <button type="button" onClick={() => setCreateOpen((current) => !current)}>
-          {createOpen ? "추가 닫기" : "새 질문 추가"}
-        </button>
+        <div className={styles.editorialHeadingActions}>
+          <button
+            type="button"
+            disabled={publishing || loading}
+            data-primary="true"
+            onClick={() => void publishApprovedCandidates()}
+          >
+            {publishing ? "APPROVED 질문 게시 중…" : "APPROVED 질문 일괄 게시"}
+          </button>
+          <button type="button" onClick={() => setCreateOpen((current) => !current)}>
+            {createOpen ? "추가 닫기" : "새 질문 추가"}
+          </button>
+        </div>
       </div>
 
       {createOpen ? (
@@ -687,15 +772,6 @@ export function OpsEditorialPanel({
                   onClick={() => void decide("REJECTED")}
                 >
                   반려
-                </button>
-                <button
-                  type="button"
-                  disabled={
-                    publishing || !!selected.publication || selected.decision?.status !== "APPROVED"
-                  }
-                  onClick={() => void publish()}
-                >
-                  {publishing ? "게시 중…" : "승인된 질문 게시"}
                 </button>
               </div>
               {selected.decision ? (
