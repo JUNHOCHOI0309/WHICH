@@ -17,6 +17,7 @@ import {
   issueMediaLibraryUsages,
   issueVersions,
   issues,
+  issueRecommendations,
   memberIssueSubmissionRevisions,
   memberIssueSubmissions,
   memberModerationNotices,
@@ -111,9 +112,9 @@ describe("Member Issue creation v1", () => {
     const url = `/v1/member/issue-submissions?limit=1&submissionId=${first.id}`;
     const own = await app.inject({ url, headers: { authorization: `Bearer ${session.token}` } });
     expect(own.statusCode).toBe(200);
-    expect(own.json<{ items: MemberIssueSubmission[] }>().items.map((r) => r.id)).toEqual([
-      first.id,
-    ]);
+    const ownItems = own.json<{ items: MemberIssueSubmission[] }>().items;
+    expect(ownItems.map((r) => r.id)).toEqual([first.id]);
+    expect(ownItems[0]?.engagement).toEqual({ recommendationCount: 0, participationCount: 0 });
     expect(
       (await app.inject({ url, headers: { authorization: `Bearer ${other.token}` } })).json<{
         items: MemberIssueSubmission[];
@@ -155,12 +156,37 @@ describe("Member Issue creation v1", () => {
         status: "APPROVED",
         publicationState: "PUBLISHED",
         revision: 2,
+        engagement: { recommendationCount: 0, participationCount: 0 },
       },
       created: true,
     });
     expect(
       typeof response.json<{ submission: MemberIssueSubmission }>().submission.publishedIssueId,
     ).toBe("string");
+    const publishedIssueId = response.json<{ submission: MemberIssueSubmission }>().submission
+      .publishedIssueId!;
+    await database.db.insert(issueRecommendations).values({
+      issueId: publishedIssueId,
+      memberId: session.member.id,
+      active: true,
+    });
+    await database.db
+      .update(voteAggregates)
+      .set({
+        acceptedACount: 3,
+        acceptedVoteCount: 3,
+        displayedVoteCount: 3,
+      })
+      .where(eq(voteAggregates.issueId, publishedIssueId));
+    const list = await app.inject({
+      url: `/v1/member/issue-submissions?limit=1&submissionId=${first.id}`,
+      headers: { authorization: `Bearer ${session.token}` },
+    });
+    expect(list.statusCode).toBe(200);
+    expect(list.json<{ items: MemberIssueSubmission[] }>().items[0]?.engagement).toEqual({
+      recommendationCount: 1,
+      participationCount: 3,
+    });
   });
   it("publishes once, lets the author remove the public question, and preserves its records", async () => {
     const session = await createSession();

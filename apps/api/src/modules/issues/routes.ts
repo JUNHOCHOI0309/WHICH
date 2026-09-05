@@ -227,6 +227,10 @@ const memberIssueSubmissionSchema = Type.Object({
       (value) => Type.Literal(value),
     ),
   ),
+  engagement: Type.Object({
+    recommendationCount: Type.Integer({ minimum: 0 }),
+    participationCount: Type.Integer({ minimum: 0 }),
+  }),
   question: Type.String(),
   context: Type.Union([Type.String(), Type.Null()]),
   choiceA: Type.String(),

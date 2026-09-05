@@ -24,12 +24,22 @@
   padding: clamp(24px, 5vw, 36px);
 }
 
+.pointRailStack {
+  min-width: 0;
+  display: grid;
+  gap: 14px;
+}
+
 @media (min-width: 1320px) {
-  .pointPanelRail {
+  .pointRailStack {
     max-height: calc(100svh - 128px);
-    overflow: auto;
-    padding: 22px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
     scrollbar-width: thin;
+  }
+
+  .pointPanelRail {
+    padding: 22px;
   }
 
   .pointPanelRail .pointHeading {
@@ -1455,6 +1465,32 @@
   opacity: 0.55;
 }
 
+.accountDeletionRail {
+  grid-template-columns: 1fr;
+  gap: 16px;
+  padding: 20px;
+  box-shadow: none;
+}
+
+.accountDeletionRail h2 {
+  font-size: 1.2rem;
+}
+
+.accountDeletionRail > div > span {
+  margin-top: 9px;
+  font-size: 0.72rem;
+  line-height: 1.6;
+}
+
+.accountDeletionRail > button {
+  width: 100%;
+}
+
+.accountDeletionRail .accountDeletionForm {
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
 @media (max-width: 720px) {
   .profile,
   .privacyNote,
@@ -1663,6 +1699,40 @@
   color: var(--which-cyan-strong);
 }
 
+.profileLogoutButton {
+  min-height: 34px;
+  border: 1px solid var(--which-border-strong);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--which-text-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 6px 14px;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.profileLogoutButton img {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  opacity: 0.72;
+}
+
+.profileLogoutButton:hover:not(:disabled) {
+  border-color: var(--which-orange);
+  color: var(--which-orange-strong);
+}
+
+.profileLogoutButton:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
 .profileMain {
   display: grid;
   grid-template-columns: minmax(380px, 1fr) minmax(370px, 1fr);
@@ -1671,9 +1741,17 @@
 }
 
 .profileIdentity {
+  position: relative;
   min-width: 0;
   align-items: center;
   gap: clamp(18px, 2.5vw, 28px);
+  padding-bottom: 44px;
+}
+
+.profileIdentity > .profileEditLink {
+  position: absolute;
+  right: 0;
+  bottom: 0;
 }
 
 .profileIdentityCopy h1 {
@@ -2098,6 +2176,20 @@
     min-width: 34px;
     padding: 0;
     font-size: 1rem;
+  }
+
+  .profileLogoutButton {
+    width: 34px;
+    min-width: 34px;
+    padding: 0;
+  }
+
+  .profileLogoutButton span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
   }
 
   .profileMain {

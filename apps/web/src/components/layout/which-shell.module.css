@@ -675,6 +675,7 @@ button.navLink {
 @media (max-width: 767px) {
   .page {
     padding-bottom: calc(68px + env(safe-area-inset-bottom));
+    overflow-x: clip;
   }
 
   .headerInner {

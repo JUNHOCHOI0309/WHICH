@@ -141,7 +141,9 @@ describe("Member private profile experience", () => {
     expect(latestResultLink.querySelector("img")?.getAttribute("src")).toContain(
       encodeURIComponent("/icons/double-chevron.png"),
     );
-    expect(screen.getByText("선택 기록은 공개 프로필과 분리됩니다.")).toBeVisible();
+    expect(screen.queryByText("선택 기록은 공개 프로필과 분리됩니다.")).not.toBeInTheDocument();
+    expect(screen.getByText("소수 의견과 일치")).toBeVisible();
+    expect(screen.queryByText("소수 의견 선택")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: /전체 투표 기록 보기/ })).toHaveAttribute(
       "href",
       "/me/votes",
@@ -166,6 +168,14 @@ describe("Member private profile experience", () => {
     expect(requests).toContain("/api/me?limit=3");
     expect(requests).toContain("/api/issue-submissions?limit=3");
     expect(screen.queryByRole("heading", { name: "로그인 수단 연결" })).not.toBeInTheDocument();
+    const logoutButton = screen.getByRole("button", { name: "로그아웃" });
+    expect(logoutButton.querySelector("img")?.getAttribute("src")).toContain(
+      encodeURIComponent("/icons/profile/logout.png"),
+    );
+    const profileEditButton = screen.getByRole("button", { name: "프로필 편집" });
+    expect(profileEditButton.closest('[class*="profileIdentity"]')).not.toBeNull();
+    const pointRail = screen.getByRole("complementary", { name: "WHICH 안내" });
+    expect(within(pointRail).getByRole("button", { name: "회원 탈퇴" })).toBeVisible();
   });
 
   it("keeps the complete private profile after changing only the avatar", async () => {

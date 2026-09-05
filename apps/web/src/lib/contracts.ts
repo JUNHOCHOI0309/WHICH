@@ -99,6 +99,10 @@ export type MemberIssueSubmission = {
   publishedIssueId: string | null;
   publicationState:
     "PROCESSING" | "PUBLISHED" | "NEEDS_CHANGES" | "REJECTED" | "QUARANTINED" | "CANCELLED";
+  engagement: {
+    recommendationCount: number;
+    participationCount: number;
+  };
   question: string;
   context: string | null;
   choiceA: string;
