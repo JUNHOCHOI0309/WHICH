@@ -111,6 +111,50 @@ describe("Ops Editorial panel", () => {
     expect(screen.queryByRole("button", { name: "수정 요청" })).not.toBeInTheDocument();
   });
 
+  it("keeps the loaded list position when approving from the PENDING filter", async () => {
+    const first = candidate("WEXP-0001", "첫 번째 대기 질문");
+    const second = candidate("WEXP-0002", "두 번째 대기 질문");
+    const editorialReads: string[] = [];
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/ops/media-library") return libraryResponse();
+      if (url.startsWith("/api/ops/editorial?") && !init?.method) {
+        editorialReads.push(url);
+        return response(page([first, second], null));
+      }
+      if (url.endsWith("/decision") && init?.method === "PUT") {
+        return response({
+          status: "APPROVED",
+          note: "",
+          reviewedBy: "운영자",
+          reviewedAt: "2026-09-05T01:00:00.000Z",
+          revision: 1,
+          checks: {
+            binaryFit: true,
+            choiceParity: true,
+            duplicateReview: true,
+            sourceReview: true,
+          },
+        });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<OpsEditorialPanel embedded />);
+    await screen.findByRole("heading", { name: "첫 번째 대기 질문" });
+    fireEvent.change(screen.getAllByRole("combobox")[0]!, { target: { value: "PENDING" } });
+    await waitFor(() =>
+      expect(editorialReads.some((url) => url.includes("status=PENDING"))).toBe(true),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "인가" }));
+
+    expect(await screen.findByRole("heading", { name: "두 번째 대기 질문" })).toBeVisible();
+    expect(screen.queryByText("첫 번째 대기 질문")).not.toBeInTheDocument();
+    expect(editorialReads).toHaveLength(2);
+  });
+
   it("uploads, immediately publishes, attaches, and removes an admin choice image", async () => {
     const first = candidate("WEXP-0001", "오늘의 선택은?");
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
@@ -193,8 +237,8 @@ describe("Ops Editorial panel", () => {
     expect(await screen.findByRole("heading", { name: "새 관리자 질문?" })).toBeVisible();
   });
 
-  it("publishes an approved candidate", async () => {
-    const approved = {
+  it("publishes every approved and unpublished candidate from the global action", async () => {
+    const firstApproved = {
       ...candidate("WEXP-0001", "오늘의 선택은?"),
       decision: {
         status: "APPROVED" as const,
@@ -205,12 +249,42 @@ describe("Ops Editorial panel", () => {
         checks: { binaryFit: true, choiceParity: true, duplicateReview: true, sourceReview: true },
       },
     };
+    const published = {
+      ...firstApproved,
+      candidateId: "WEXP-0002",
+      question: "이미 게시한 질문?",
+      publication: {
+        issueId: "c0b91a26-c41f-561c-bb72-e20cb51f5a6b",
+        version: 1,
+        publishedAt: "2026-09-05T00:30:00.000Z",
+      },
+    };
+    const nextApproved = {
+      ...firstApproved,
+      candidateId: "WEXP-0051",
+      question: "다음 페이지 승인 질문?",
+      decision: { ...firstApproved.decision, revision: 4 },
+    };
     const onPublished = vi.fn();
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url = String(input);
       if (url === "/api/ops/media-library") return libraryResponse();
-      if (url.startsWith("/api/ops/editorial?")) return response(page([approved], null));
-      if (url.endsWith("/publish") && init?.method === "POST")
+      if (url.includes("status=APPROVED") && url.includes("cursor=WEXP-0002")) {
+        return response({
+          ...page([nextApproved], null),
+          counts: { PENDING: 0, APPROVED: 3, NEEDS_CHANGES: 0, REJECTED: 0 },
+        });
+      }
+      if (url.includes("status=APPROVED")) {
+        return response({
+          ...page([firstApproved, published], "WEXP-0002"),
+          counts: { PENDING: 0, APPROVED: 3, NEEDS_CHANGES: 0, REJECTED: 0 },
+        });
+      }
+      if (url.startsWith("/api/ops/editorial?")) return response(page([firstApproved], null));
+      if (url.endsWith("/publish") && init?.method === "POST") {
+        const expectedRevision = url.includes("WEXP-0051") ? 4 : 3;
+        expect(JSON.parse(String(init.body))).toEqual({ expectedRevision });
         return response({
           issue: {
             issueId: "04f0ee31-f57c-5333-bdd2-9041a2440640",
@@ -218,12 +292,22 @@ describe("Ops Editorial panel", () => {
             publishedAt: "2026-09-05T01:00:00.000Z",
           },
         });
+      }
       throw new Error(`Unexpected request: ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);
 
     render(<OpsEditorialPanel embedded onPublished={onPublished} />);
-    fireEvent.click(await screen.findByRole("button", { name: "승인된 질문 게시" }));
+    const publishButton = await screen.findByRole("button", {
+      name: "APPROVED 질문 일괄 게시",
+    });
+    expect(screen.getAllByRole("button", { name: "APPROVED 질문 일괄 게시" })).toHaveLength(1);
+    fireEvent.click(publishButton);
     await waitFor(() => expect(onPublished).toHaveBeenCalledTimes(1));
+    expect(
+      fetchMock.mock.calls
+        .filter(([url, init]) => String(url).endsWith("/publish") && init?.method === "POST")
+        .map(([url]) => String(url)),
+    ).toEqual(["/api/ops/editorial/WEXP-0001/publish", "/api/ops/editorial/WEXP-0051/publish"]);
   });
 });
