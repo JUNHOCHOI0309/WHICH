@@ -166,13 +166,19 @@ export type OpsRankingPreview = {
   }>;
 };
 
-export const OPS_EDITORIAL_STATUSES = ["PENDING", "APPROVED", "NEEDS_CHANGES", "REJECTED"] as const;
+export const OPS_EDITORIAL_STATUSES = [
+  "PENDING",
+  "APPROVED",
+  "NEEDS_CHANGES",
+  "REJECTED",
+  "PUBLISHED",
+] as const;
 export type OpsEditorialStatus = (typeof OPS_EDITORIAL_STATUSES)[number];
 export const OPS_EDITORIAL_SCOPES = ["ACTIVE", "RESERVE", "LONG_TERM"] as const;
 export type OpsEditorialScope = (typeof OPS_EDITORIAL_SCOPES)[number];
 
 export type OpsEditorialDecision = {
-  status: Exclude<OpsEditorialStatus, "PENDING">;
+  status: "APPROVED" | "NEEDS_CHANGES" | "REJECTED";
   note: string;
   reviewedBy: string;
   reviewedAt: string;

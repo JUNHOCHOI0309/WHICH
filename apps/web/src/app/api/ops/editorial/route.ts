@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { proxyOpsApi } from "@/lib/server/ops-api";
 import { hasSamePublicOrigin } from "@/lib/server/request-origin";
 
-const statuses = new Set(["PENDING", "APPROVED", "NEEDS_CHANGES", "REJECTED"]);
+const statuses = new Set(["PENDING", "APPROVED", "NEEDS_CHANGES", "REJECTED", "PUBLISHED"]);
 const scopes = new Set(["ACTIVE", "RESERVE", "LONG_TERM"]);
 
 export async function GET(request: NextRequest) {

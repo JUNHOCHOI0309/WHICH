@@ -64,6 +64,26 @@ describe("operator management BFF", () => {
     expect(upstream).not.toHaveBeenCalled();
   });
 
+  it("forwards the published Editorial filter", async () => {
+    const upstream = vi.fn(async (input: string | URL | Request) => {
+      expect(String(input)).toBe(
+        "http://localhost:4000/v1/internal/ops/editorial?status=PUBLISHED&limit=25",
+      );
+      return new Response(JSON.stringify({ schemaVersion: 1, items: [], nextCursor: null }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    });
+    vi.stubGlobal("fetch", upstream);
+    const response = await getEditorial(
+      new NextRequest("https://whichone.site/api/ops/editorial?status=PUBLISHED", {
+        headers: { cookie: "which_member_session=member-token" },
+      }),
+    );
+    expect(response.status).toBe(200);
+    expect(upstream).toHaveBeenCalledTimes(1);
+  });
+
   it("requires a same-origin request for Editorial decisions", async () => {
     const upstream = vi.fn();
     vi.stubGlobal("fetch", upstream);

@@ -779,6 +779,20 @@ describe("operator dashboard", () => {
     expect(refreshed.json()).toMatchObject({
       items: [{ publication: { issueId: issue.issueId, version: 1 } }],
     });
+    const approvedAfterPublication = await opsRequest(
+      "GET",
+      `/v1/internal/ops/editorial?status=APPROVED&q=${candidate.candidateId}&limit=1`,
+    );
+    expect(approvedAfterPublication.statusCode, approvedAfterPublication.body).toBe(200);
+    expect(approvedAfterPublication.json()).toMatchObject({ items: [] });
+    const publishedAfterPublication = await opsRequest(
+      "GET",
+      `/v1/internal/ops/editorial?status=PUBLISHED&q=${candidate.candidateId}&limit=1`,
+    );
+    expect(publishedAfterPublication.statusCode, publishedAfterPublication.body).toBe(200);
+    expect(publishedAfterPublication.json()).toMatchObject({
+      items: [{ candidateId: candidate.candidateId, publication: { issueId: issue.issueId } }],
+    });
     const storedVersions = await database.db
       .select({ issueId: issueVersions.issueId, version: issueVersions.version })
       .from(issueVersions)
@@ -795,6 +809,32 @@ describe("operator dashboard", () => {
     );
     expect(mutateAfterPublish.statusCode).toBe(409);
     expect(mutateAfterPublish.json()).toMatchObject({ code: "EDITORIAL_PUBLICATION_CONFLICT" });
+  });
+
+  it("lets an operator publish a human-approved MEDIUM Editorial candidate", async () => {
+    const candidateId = "WEXP-0246";
+    const candidateResponse = await opsRequest(
+      "GET",
+      `/v1/internal/ops/editorial?q=${candidateId}&limit=1`,
+    );
+    expect(candidateResponse.statusCode, candidateResponse.body).toBe(200);
+    const candidate = candidateResponse.json<{
+      items: Array<{
+        candidateId: string;
+        riskLevel: string;
+        decision: { status: string; revision: number } | null;
+      }>;
+    }>().items[0]!;
+    expect(candidate).toMatchObject({ candidateId, riskLevel: "MEDIUM" });
+    expect(candidate.decision?.status).toBe("APPROVED");
+
+    const published = await opsRequest(
+      "POST",
+      `/v1/internal/ops/editorial/${candidateId}/publish`,
+      { expectedRevision: candidate.decision?.revision ?? 0 },
+    );
+    expect(published.statusCode, published.body).toBe(200);
+    expect(published.json()).toMatchObject({ issue: { version: 1, state: "ACTIVE" } });
   });
 
   it("adds an administrator-authored question to the persistent review queue", async () => {

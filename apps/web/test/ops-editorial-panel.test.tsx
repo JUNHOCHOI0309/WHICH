@@ -45,7 +45,7 @@ function page(items: unknown[], nextCursor: string | null) {
     generatedAt: "2026-09-05T00:00:00.000Z",
     catalog: { id: "catalog", total: 100, approval: "PENDING" },
     inventory: { active: 100, reserve: 0, longTerm: 0 },
-    counts: { PENDING: 100, APPROVED: 0, NEEDS_CHANGES: 0, REJECTED: 0 },
+    counts: { PENDING: 100, APPROVED: 0, NEEDS_CHANGES: 0, REJECTED: 0, PUBLISHED: 0 },
     items,
     nextCursor,
   };
@@ -272,13 +272,25 @@ describe("Ops Editorial panel", () => {
       if (url.includes("status=APPROVED") && url.includes("cursor=WEXP-0002")) {
         return response({
           ...page([nextApproved], null),
-          counts: { PENDING: 0, APPROVED: 3, NEEDS_CHANGES: 0, REJECTED: 0 },
+          counts: {
+            PENDING: 0,
+            APPROVED: 2,
+            NEEDS_CHANGES: 0,
+            REJECTED: 0,
+            PUBLISHED: 1,
+          },
         });
       }
       if (url.includes("status=APPROVED")) {
         return response({
           ...page([firstApproved, published], "WEXP-0002"),
-          counts: { PENDING: 0, APPROVED: 3, NEEDS_CHANGES: 0, REJECTED: 0 },
+          counts: {
+            PENDING: 0,
+            APPROVED: 2,
+            NEEDS_CHANGES: 0,
+            REJECTED: 0,
+            PUBLISHED: 1,
+          },
         });
       }
       if (url.startsWith("/api/ops/editorial?")) return response(page([firstApproved], null));
