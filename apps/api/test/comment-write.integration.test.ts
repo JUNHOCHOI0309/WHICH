@@ -8,6 +8,7 @@ import { getConfig } from "../src/config.js";
 import type { Database } from "../src/database/client.js";
 import {
   comments,
+  commentModerationDecisions,
   commentRevisions,
   commentWriteAttempts,
   issueChoices,
@@ -21,6 +22,7 @@ import {
 import { createCommentService } from "../src/modules/comments/service.js";
 import { createMemberIdentityService } from "../src/modules/identity/service.js";
 import { createIssueReadService } from "../src/modules/issues/service.js";
+import { createKoreanContextTextModerator } from "../src/modules/text-moderation/service.js";
 import { createGuestVoteService } from "../src/modules/voting/service.js";
 import { createTestDatabase } from "./helpers/test-database.js";
 
@@ -131,7 +133,10 @@ beforeAll(async () => {
     ...database,
     issueReader: createIssueReadService(database.db),
     guestVotes: createGuestVoteService(database.db),
-    commentReader: createCommentService(database.db),
+    commentReader: createCommentService(database.db, {
+      textModerationMode: "ENFORCE",
+      textModerator: createKoreanContextTextModerator(),
+    }),
     memberIdentity: createMemberIdentityService(database.db, {
       sessionTtlSeconds: 3_600,
       allowDevelopmentProvider: true,
@@ -640,5 +645,61 @@ describe("Member Comment write API", () => {
       "COMMENT_EDITED",
       "COMMENT_REMOVED_BY_AUTHOR",
     ]);
+  });
+
+  it("hides review-lane Korean abuse and blocks severe abuse before storage", async () => {
+    const issue = await createIssue();
+    const anonymousSubjectId = await createGuestVote(issue.issueId, issue.choiceAId);
+    const session = await createSession("context-moderation-member", anonymousSubjectId);
+
+    const review = await submitComment(
+      issue.issueId,
+      session.token,
+      randomUUID(),
+      "여자는 다 멍청한 쓰레기라서 혼나야 한다",
+      anonymousSubjectId,
+    );
+    expect(review.statusCode).toBe(201);
+    const reviewBody = review.json<{ comment: { id: string; visibility: string } }>();
+    expect(reviewBody.comment.visibility).toBe("HIDDEN");
+
+    const [stored] = await database.db
+      .select({
+        publicationState: comments.publicationState,
+        visibility: comments.visibility,
+        integrityState: comments.integrityState,
+      })
+      .from(comments)
+      .where(eq(comments.id, reviewBody.comment.id));
+    expect(stored).toEqual({
+      publicationState: "PENDING_HUMAN_REVIEW",
+      visibility: "HIDDEN",
+      integrityState: "REVIEW",
+    });
+    const decisions = await database.db
+      .select({
+        action: commentModerationDecisions.action,
+        reason: commentModerationDecisions.reasonCode,
+      })
+      .from(commentModerationDecisions)
+      .where(eq(commentModerationDecisions.commentId, reviewBody.comment.id));
+    expect(decisions).toEqual([{ action: "HIDE", reason: "KOREAN_CONTEXT_MODEL_REVIEW" }]);
+
+    const publicPage = await app.inject({
+      method: "GET",
+      url: `/v1/issues/${issue.issueId}/comments?side=ALL&limit=10`,
+      headers: { authorization: `Bearer ${session.token}` },
+    });
+    expect(publicPage.json()).toEqual({ items: [], nextCursor: null, totalCount: 0 });
+
+    const blocked = await submitComment(
+      issue.issueId,
+      session.token,
+      randomUUID(),
+      "너 같은 쓰레기 새끼는 당장 죽어버려",
+      anonymousSubjectId,
+    );
+    expect(blocked.statusCode).toBe(422);
+    expect(blocked.json()).toMatchObject({ code: "COMMENT_HARMFUL_CONTENT" });
   });
 });

@@ -11,7 +11,7 @@ export type PublicComment = {
   choice: "A" | "B" | "C" | "D";
   author: { displayName: string; avatarUrl: string | null; isManager: boolean };
   body: string;
-  visibility: "VISIBLE" | "DEPRIORITIZED" | "COLLAPSED" | "REMOVED_BY_AUTHOR";
+  visibility: "VISIBLE" | "DEPRIORITIZED" | "COLLAPSED" | "HIDDEN" | "REMOVED_BY_AUTHOR";
   threadState: "OPEN" | "LOCKED";
   createdAt: string;
   editedAt: string | null;
@@ -72,7 +72,14 @@ export type MemberCommentUpdateCommand = {
 
 export type MemberCommentUpdateResult = {
   httpStatus: 200;
-  body: { comment: { id: string; body: string; editedAt: string } };
+  body: {
+    comment: {
+      id: string;
+      body: string;
+      editedAt: string;
+      visibility: "VISIBLE" | "DEPRIORITIZED" | "COLLAPSED" | "HIDDEN";
+    };
+  };
 };
 
 export type MemberCommentDeleteCommand = {

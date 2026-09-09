@@ -1267,24 +1267,33 @@ function CommentSection({
         body: draft,
         idempotencyKey: pendingCommentKey.current,
       });
-      if (side === "ALL" || side === result.comment.choice) {
+      if (
+        result.comment.visibility !== "HIDDEN" &&
+        (side === "ALL" || side === result.comment.choice)
+      ) {
         setItems((current) => [
           result.comment,
           ...current.filter((item) => item.id !== result.comment.id),
         ]);
       }
-      setTotalCount((current) => current + 1);
+      if (result.comment.visibility !== "HIDDEN") {
+        setTotalCount((current) => current + 1);
+      }
       setState("ready");
       sessionStorage.removeItem(draftKey);
       draftTouched.current = false;
       setDraft("");
       pendingCommentKey.current = null;
-      toast.success("댓글을 게시했어요.");
-      void recordAnalyticsEvent({
-        eventType: "COMMENT_COMPLETE",
-        issueId,
-        issueVersion,
-      });
+      if (result.comment.visibility === "HIDDEN") {
+        toast.info("댓글이 문맥 검토 대상으로 분류되어 승인 전까지 숨겨져요.");
+      } else {
+        toast.success("댓글을 게시했어요.");
+        void recordAnalyticsEvent({
+          eventType: "COMMENT_COMPLETE",
+          issueId,
+          issueVersion,
+        });
+      }
     } catch (error) {
       if (error instanceof WebApiError) {
         if (error.status === 401) {
@@ -1292,6 +1301,8 @@ function CommentSection({
           setPostError("로그인이 만료됐어요. 초안은 보관했으니 다시 로그인해 주세요.");
         } else if (error.code === "VOTE_REQUIRED") {
           setPostError("이 계정에 연결된 유효한 투표가 없어 댓글을 게시할 수 없어요.");
+        } else if (error.code === "COMMENT_HARMFUL_CONTENT") {
+          setPostError(error.message);
         } else if (error.status === 422) {
           setPostError("URL·제어문자·과도한 반복 없이 2~500자로 작성해 주세요.");
         } else {
@@ -1335,26 +1346,34 @@ function CommentSection({
         body: replyDraft.body,
         idempotencyKey: pendingReplyKey.current.key,
       });
-      setItems((current) =>
-        mapCommentTree(current, (comment) =>
-          comment.id === replyDraft.parentCommentId
-            ? { ...comment, replies: [...(comment.replies ?? []), result.comment] }
-            : comment,
-        ),
-      );
-      setTotalCount((current) => current + 1);
+      if (result.comment.visibility !== "HIDDEN") {
+        setItems((current) =>
+          mapCommentTree(current, (comment) =>
+            comment.id === replyDraft.parentCommentId
+              ? { ...comment, replies: [...(comment.replies ?? []), result.comment] }
+              : comment,
+          ),
+        );
+        setTotalCount((current) => current + 1);
+      }
       pendingReplyKey.current = null;
       setReplyDraft(null);
-      toast.success("답글을 작성했어요.");
+      if (result.comment.visibility === "HIDDEN") {
+        toast.info("답글이 문맥 검토 대상으로 분류되어 승인 전까지 숨겨져요.");
+      } else {
+        toast.success("답글을 작성했어요.");
+      }
     } catch (error) {
       setCommentMutationError({
         commentId: replyDraft.parentCommentId,
         message:
           error instanceof WebApiError && error.status === 401
             ? "로그인이 만료됐어요. 다시 로그인한 뒤 작성해 주세요."
-            : error instanceof WebApiError && error.code === "REPLY_PARENT_UNAVAILABLE"
-              ? "지금은 이 댓글에 답글을 작성할 수 없어요."
-              : "답글을 작성하지 못했어요. 같은 내용으로 다시 시도할 수 있어요.",
+            : error instanceof WebApiError && error.code === "COMMENT_HARMFUL_CONTENT"
+              ? error.message
+              : error instanceof WebApiError && error.code === "REPLY_PARENT_UNAVAILABLE"
+                ? "지금은 이 댓글에 답글을 작성할 수 없어요."
+                : "답글을 작성하지 못했어요. 같은 내용으로 다시 시도할 수 있어요.",
       });
     } finally {
       setPostingReplyId(null);
@@ -1456,15 +1475,30 @@ function CommentSection({
         commentId: editDraft.commentId,
         body: editDraft.body,
       });
-      setItems((current) =>
-        mapCommentTree(current, (item) =>
-          item.id === result.comment.id
-            ? { ...item, body: result.comment.body, editedAt: result.comment.editedAt }
-            : item,
-        ),
-      );
+      if (result.comment.visibility === "HIDDEN") {
+        const removedCount = removedCommentCount(items, result.comment.id);
+        setItems((current) => removeFromCommentTree(current, result.comment.id));
+        setTotalCount((current) => Math.max(0, current - removedCount));
+      } else {
+        setItems((current) =>
+          mapCommentTree(current, (item) =>
+            item.id === result.comment.id
+              ? {
+                  ...item,
+                  body: result.comment.body,
+                  editedAt: result.comment.editedAt,
+                  visibility: result.comment.visibility,
+                }
+              : item,
+          ),
+        );
+      }
       setEditDraft(null);
-      toast.success("댓글을 수정했어요.");
+      if (result.comment.visibility === "HIDDEN") {
+        toast.info("수정한 댓글이 문맥 검토 대상으로 분류되어 승인 전까지 숨겨져요.");
+      } else {
+        toast.success("댓글을 수정했어요.");
+      }
     } catch (error) {
       if (error instanceof WebApiError && error.status === 401) {
         setAuthState("guest");
@@ -1480,11 +1514,13 @@ function CommentSection({
         message:
           error instanceof WebApiError && error.status === 401
             ? "로그인이 만료됐어요. 다시 로그인한 뒤 수정해 주세요."
-            : error instanceof WebApiError && error.status === 422
-              ? "URL·제어문자·과도한 반복 없이 2~500자로 작성해 주세요."
-              : error instanceof WebApiError && error.code === "COMMENT_AUTHOR_REQUIRED"
-                ? "본인이 작성한 댓글만 수정할 수 있어요."
-                : "댓글을 수정하지 못했어요. 잠시 후 다시 시도해 주세요.",
+            : error instanceof WebApiError && error.code === "COMMENT_HARMFUL_CONTENT"
+              ? error.message
+              : error instanceof WebApiError && error.status === 422
+                ? "URL·제어문자·과도한 반복 없이 2~500자로 작성해 주세요."
+                : error instanceof WebApiError && error.code === "COMMENT_AUTHOR_REQUIRED"
+                  ? "본인이 작성한 댓글만 수정할 수 있어요."
+                  : "댓글을 수정하지 못했어요. 잠시 후 다시 시도해 주세요.",
       });
     } finally {
       setMutatingCommentId(null);

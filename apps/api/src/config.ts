@@ -46,6 +46,7 @@ const environmentSchema = z.object({
   ISSUE_MEMBER_MEDIA_UPLOAD_MODE: z.enum(["OFF", "PILOT", "MEMBER"]).default("OFF"),
   ISSUE_MEDIA_CONSENT_VERSION: z.string().min(1).max(64).default("which-media-consent-v2"),
   QUALITY_RANKER_MODE: z.enum(["OFF", "SHADOW", "LIVE"]).default("SHADOW"),
+  TEXT_MODERATION_MODE: z.enum(["OFF", "SHADOW", "ENFORCE"]).default("ENFORCE"),
   FEATURE_POINTS_ENABLED: booleanString,
   FEATURE_RISK_CHALLENGE_ENABLED: booleanString,
 });
@@ -101,6 +102,7 @@ export function getConfig(environment: NodeJS.ProcessEnv = process.env) {
         tokenConsumeLimit: parsed.AUTH_TOKEN_CONSUME_RATE_LIMIT,
       },
     },
+    textModeration: Object.freeze({ mode: parsed.TEXT_MODERATION_MODE }),
     featureFlags: Object.freeze({
       comments: parsed.FEATURE_COMMENTS_ENABLED,
       creatorSubmissions: parsed.FEATURE_CREATOR_SUBMISSIONS_ENABLED,

@@ -39,6 +39,7 @@ import {
   providerRuntimeDiagnostic,
 } from "./modules/moderation-providers/runtime-gate.js";
 import { readModerationOperationalHealth } from "./modules/moderation-operations/operational-health.js";
+import { createKoreanContextTextModerator } from "./modules/text-moderation/service.js";
 
 loadEnvironment({
   path: [resolve(process.cwd(), "../../.env.local"), resolve(process.cwd(), "../../.env")],
@@ -51,6 +52,11 @@ const database = createDatabase(config.databaseUrl, {
 });
 const moderationProviderConfig = moderationProviderRuntimeConfig();
 const moderationRuntimeDiagnostic = providerRuntimeDiagnostic(moderationProviderConfig);
+const textModerator = createKoreanContextTextModerator();
+const textModerationOptions = {
+  textModerationMode: config.textModeration.mode,
+  textModerator,
+};
 const mediaStorageConfig = issueMediaStorageConfig();
 const issueMediaStorage = mediaStorageConfig ? createR2IssueMediaStorage(mediaStorageConfig) : null;
 const configuredIssueMediaRuleGateMode = process.env.ISSUE_MEDIA_RULE_GATE_MODE?.toUpperCase();
@@ -72,7 +78,7 @@ const issueMediaService = issueMediaStorage
       }),
     })
   : null;
-const commentService = createCommentService(database.db);
+const commentService = createCommentService(database.db, textModerationOptions);
 const issueMediaReviewService =
   issueMediaStorage && issueMediaService
     ? createIssueMediaReviewService(database.db, issueMediaStorage, issueMediaService, {
@@ -92,7 +98,9 @@ const app = await buildApp(config, {
     },
   }),
   ...(config.environment !== "production" || config.featureFlags.creatorSubmissions
-    ? { issueWriter: createIssueWriteService(database.db, issueMediaStorage) }
+    ? {
+        issueWriter: createIssueWriteService(database.db, issueMediaStorage, textModerationOptions),
+      }
     : {}),
   guestVotes: createGuestVoteService(database.db),
   commentReader: commentService,
