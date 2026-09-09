@@ -1,10 +1,12 @@
 import { randomUUID } from "node:crypto";
 
+import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { buildApp } from "../src/app.js";
 import { getConfig } from "../src/config.js";
 import type { Database } from "../src/database/client.js";
+import { outboxEvents } from "../src/database/schema/index.js";
 import { createCommentReadService } from "../src/modules/comments/service.js";
 import { createMemberIdentityService } from "../src/modules/identity/service.js";
 import { createInterestProfileService } from "../src/modules/interests/service.js";
@@ -194,5 +196,33 @@ describe("Interest Profile foundation", () => {
       selectedCardCodes: ["FOOD", "GAME", "TECH"],
       mergeCandidate: null,
     });
+  });
+
+  it("emits a Member completion Event only when entering the completed state", async () => {
+    const token = await createMemberSession();
+    const headers = { authorization: `Bearer ${token}` };
+    const before = await database.db
+      .select({ id: outboxEvents.id })
+      .from(outboxEvents)
+      .where(eq(outboxEvents.eventType, "INTEREST_PROFILE_COMPLETED"));
+
+    for (const selectedCardCodes of [
+      ["FOOD", "GAME", "TECH"],
+      ["FOOD", "SPORTS", "TRAVEL"],
+    ]) {
+      const response = await app.inject({
+        method: "PUT",
+        url: "/v1/interest-profile",
+        headers,
+        payload: { onboardingState: "COMPLETED", selectedCardCodes },
+      });
+      expect(response.statusCode).toBe(200);
+    }
+
+    const after = await database.db
+      .select({ id: outboxEvents.id })
+      .from(outboxEvents)
+      .where(eq(outboxEvents.eventType, "INTEREST_PROFILE_COMPLETED"));
+    expect(after).toHaveLength(before.length + 1);
   });
 });

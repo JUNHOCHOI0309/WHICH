@@ -5,6 +5,7 @@ import { config as loadEnvironment } from "dotenv";
 import { getConfig } from "./config.js";
 import { createDatabase } from "./database/client.js";
 import { createPointPolicyConsumer } from "./modules/points/policy.js";
+import { runPointWorker } from "./modules/points/worker-runner.js";
 
 loadEnvironment({
   path: [resolve(process.cwd(), "../../.env.local"), resolve(process.cwd(), "../../.env")],
@@ -19,7 +20,7 @@ const consumer = createPointPolicyConsumer(database.db, {
 });
 
 function wait(milliseconds: number) {
-  return new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+  return new Promise<void>((resolveWait) => setTimeout(resolveWait, milliseconds));
 }
 
 try {
@@ -29,11 +30,12 @@ try {
     let stopping = false;
     process.once("SIGINT", () => (stopping = true));
     process.once("SIGTERM", () => (stopping = true));
-    while (!stopping) {
-      const summary = await consumer.processBatch();
-      if (summary.claimed > 0) console.log(JSON.stringify(summary));
-      else await wait(2_000);
-    }
+    await runPointWorker({
+      processBatch: () => consumer.processBatch(),
+      isStopping: () => stopping,
+      wait,
+      logger: { info: console.log, error: console.error },
+    });
   } else {
     throw new Error(`Unknown Point Worker command: ${command}`);
   }

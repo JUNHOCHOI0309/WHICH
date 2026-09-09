@@ -2003,6 +2003,13 @@ export function createMemberIdentityService(
         if (owner && owner.memberId !== session.member.id) {
           throw new MemberIdentityError("HANDLE_TAKEN", 409, "This handle is already in use.");
         }
+        const [previousProfile] = await transaction
+          .select({ bio: memberProfiles.bio, visibility: memberProfiles.visibility })
+          .from(memberProfiles)
+          .where(eq(memberProfiles.memberId, session.member.id))
+          .limit(1);
+        const wasPublicProfileComplete =
+          previousProfile?.visibility === "PUBLIC" && Boolean(previousProfile.bio?.trim());
 
         const [profile] = await transaction
           .insert(memberProfiles)
@@ -2020,7 +2027,11 @@ export function createMemberIdentityService(
           })
           .returning();
         if (!profile) throw new Error("Member profile update did not return a row.");
-        if (profile.visibility === "PUBLIC" && Boolean(profile.bio?.trim())) {
+        if (
+          !wasPublicProfileComplete &&
+          profile.visibility === "PUBLIC" &&
+          Boolean(profile.bio?.trim())
+        ) {
           const eventId = randomUUID();
           await transaction.insert(outboxEvents).values({
             id: eventId,

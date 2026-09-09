@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
+  interestProfiles,
   memberDailyAttendances,
   memberProfiles,
   members,
@@ -11,6 +12,7 @@ import {
   pointAccounts,
   pointEventReceipts,
   pointLedgerEntries,
+  voterSubjects,
 } from "../src/database/schema/index.js";
 import { createPointPolicyConsumer, POINT_POLICY_VERSION } from "../src/modules/points/policy.js";
 import { createTestDatabase } from "./helpers/test-database.js";
@@ -145,6 +147,97 @@ describe("W Point policy Outbox consumer", () => {
       .from(pointAccounts)
       .where(eq(pointAccounts.memberId, memberId));
     expect(account).toMatchObject({ cachedBalance: 50, lifetimeEarned: 50, version: 1 });
+  });
+
+  it("treats a later Interest Profile completion as an account-once duplicate", async () => {
+    const memberId = await member();
+    const subjectId = randomUUID();
+    await testDatabase.database.db.insert(voterSubjects).values({
+      id: subjectId,
+      kind: "MEMBER",
+      userId: memberId,
+    });
+    await testDatabase.database.db.insert(interestProfiles).values({
+      subjectId,
+      onboardingState: "COMPLETED",
+      taxonomyVersion: "interest_cards_v1",
+      completedAt: new Date("2026-08-26T04:00:00.000Z"),
+    });
+    const first = await event({
+      eventType: "INTEREST_PROFILE_COMPLETED",
+      aggregateType: "MEMBER",
+      aggregateId: memberId,
+      occurredAt: new Date("2026-08-26T04:00:00.000Z"),
+      data: { fact_id: subjectId, member_id: memberId },
+    });
+    const later = await event({
+      eventType: "INTEREST_PROFILE_COMPLETED",
+      aggregateType: "MEMBER",
+      aggregateId: memberId,
+      occurredAt: new Date("2026-09-09T11:35:43.000Z"),
+      data: { fact_id: subjectId, member_id: memberId },
+    });
+    const consumer = createPointPolicyConsumer(testDatabase.database.db, { enabled: true });
+
+    expect(await consumer.processEvent(first)).toBe("AWARDED");
+    expect(await consumer.processEvent(later)).toBe("DUPLICATE");
+
+    const entries = await testDatabase.database.db
+      .select()
+      .from(pointLedgerEntries)
+      .where(eq(pointLedgerEntries.memberId, memberId));
+    const receipts = await testDatabase.database.db
+      .select()
+      .from(pointEventReceipts)
+      .where(eq(pointEventReceipts.eventId, later.id));
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({
+      operationDay: "2026-08-26",
+      reasonCode: "FIRST_INTEREST_PROFILE_COMPLETION",
+    });
+    expect(receipts[0]).toMatchObject({
+      outcome: "DUPLICATE",
+      ledgerEntryId: entries[0]!.id,
+      detail: "account_once_already_awarded",
+    });
+  });
+
+  it("records a deterministic source conflict and continues the batch", async () => {
+    const memberId = await member();
+    const occurredAt = new Date("2026-08-26T03:00:00.000Z");
+    const [fact] = await testDatabase.database.db
+      .insert(memberDailyAttendances)
+      .values({ memberId, operationDay: "2026-08-26", occurredAt })
+      .returning();
+    const first = await event({
+      eventType: "MEMBER_DAILY_ATTENDANCE_CONFIRMED",
+      aggregateType: "MEMBER_ATTENDANCE",
+      aggregateId: fact!.id,
+      occurredAt,
+      data: { fact_id: fact!.id, member_id: memberId },
+    });
+    const conflicting = await event({
+      eventType: "MEMBER_DAILY_ATTENDANCE_CONFIRMED",
+      aggregateType: "MEMBER_ATTENDANCE",
+      aggregateId: fact!.id,
+      occurredAt: new Date("2026-08-27T03:00:00.000Z"),
+      data: { fact_id: fact!.id, member_id: memberId },
+    });
+    const consumer = createPointPolicyConsumer(testDatabase.database.db, { enabled: true });
+
+    expect(await consumer.processEvent(first)).toBe("AWARDED");
+    expect(await consumer.processEvent(conflicting)).toBe("INELIGIBLE");
+    expect(
+      await testDatabase.database.db
+        .select()
+        .from(pointEventReceipts)
+        .where(eq(pointEventReceipts.eventId, conflicting.id)),
+    ).toEqual([
+      expect.objectContaining({
+        outcome: "INELIGIBLE",
+        detail: "POINT_IDEMPOTENCY_CONFLICT",
+      }),
+    ]);
   });
 
   it("records disabled events without awarding and ignores analytics Events", async () => {

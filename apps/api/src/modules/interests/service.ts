@@ -262,6 +262,11 @@ export function createInterestProfileService(database: Database["db"]): Interest
       await transaction.execute(
         sql`select pg_advisory_xact_lock(hashtextextended(${subjectId}, 0))`,
       );
+      const [previousProfile] = await transaction
+        .select({ onboardingState: interestProfiles.onboardingState })
+        .from(interestProfiles)
+        .where(eq(interestProfiles.subjectId, subjectId))
+        .limit(1);
       await transaction
         .insert(interestProfiles)
         .values({
@@ -295,7 +300,11 @@ export function createInterestProfileService(database: Database["db"]): Interest
           })),
         );
       }
-      if (state === "COMPLETED" && subject.userId) {
+      if (
+        state === "COMPLETED" &&
+        subject.userId &&
+        previousProfile?.onboardingState !== "COMPLETED"
+      ) {
         const eventId = randomUUID();
         await transaction.insert(outboxEvents).values({
           id: eventId,

@@ -40,6 +40,7 @@ type RewardFact = {
   counterKey: string;
   amount: number;
   dailyLimit: number;
+  accountOnce?: boolean;
 };
 
 type EventRow = typeof outboxEvents.$inferSelect;
@@ -203,6 +204,7 @@ export function createPointPolicyConsumer(
         counterKey: "ACCOUNT_ONCE_INTEREST",
         amount: 50,
         dailyLimit: 1,
+        accountOnce: true,
       };
     }
     if (event.eventType === "MEMBER_PUBLIC_PROFILE_COMPLETED") {
@@ -226,6 +228,7 @@ export function createPointPolicyConsumer(
         counterKey: "ACCOUNT_ONCE_PUBLIC_PROFILE",
         amount: 50,
         dailyLimit: 1,
+        accountOnce: true,
       };
     }
     return null;
@@ -313,6 +316,31 @@ export function createPointPolicyConsumer(
       await recordReceipt(event, operationDay, "INELIGIBLE", undefined, "domain_fact_not_eligible");
       return "INELIGIBLE" as const;
     }
+    if (fact.accountOnce) {
+      const [existing] = await database
+        .select({ id: pointLedgerEntries.id })
+        .from(pointLedgerEntries)
+        .where(
+          and(
+            eq(pointLedgerEntries.memberId, fact.memberId),
+            eq(pointLedgerEntries.entryType, "EARN"),
+            eq(pointLedgerEntries.sourceType, fact.sourceType),
+            eq(pointLedgerEntries.sourceId, fact.sourceId),
+            eq(pointLedgerEntries.reasonCode, fact.reasonCode),
+          ),
+        )
+        .limit(1);
+      if (existing) {
+        await recordReceipt(
+          event,
+          operationDay,
+          "DUPLICATE",
+          existing.id,
+          "account_once_already_awarded",
+        );
+        return "DUPLICATE" as const;
+      }
+    }
     try {
       const result = await ledger.applyEntry({
         memberId: fact.memberId,
@@ -341,6 +369,10 @@ export function createPointPolicyConsumer(
         error instanceof PointLedgerError &&
         ["MEMBER_NOT_FOUND", "MEMBER_NOT_ELIGIBLE"].includes(error.code)
       ) {
+        await recordReceipt(event, operationDay, "INELIGIBLE", undefined, error.code);
+        return "INELIGIBLE" as const;
+      }
+      if (error instanceof PointLedgerError && error.code === "POINT_IDEMPOTENCY_CONFLICT") {
         await recordReceipt(event, operationDay, "INELIGIBLE", undefined, error.code);
         return "INELIGIBLE" as const;
       }
