@@ -1250,6 +1250,52 @@ describe("Member Issue creation v1", () => {
     expect(duplicateChoices.json()).toMatchObject({ code: "INVALID_ISSUE_CONTENT" });
   });
 
+  it.each([
+    [
+      "/v1/issues",
+      {
+        ...createPayload("윤석열은 내란견인가?"),
+        context: "내란을 주도한 악마새끼인가요?",
+        choiceA: "내란견이다",
+        choiceB: "아니다",
+      },
+    ],
+    [
+      "/v1/member/issue-submissions",
+      {
+        ...createPayload("섹시자지보지?"),
+        context: "윤석열 노무현 이명박 박근혜 레츠고",
+        choiceA: "노무현",
+        choiceB: "이명박",
+      },
+    ],
+    [
+      "/v1/issues",
+      {
+        ...createPayload("이재명은 중국의 시진핑 주석의 자지를 사랑합니까?"),
+        context: "중요한 질문입니다.",
+        choiceA: "좋아합니다",
+        choiceB: "이재명은 천안문을 사랑해",
+      },
+    ],
+  ])("blocks a production high-precision rule case through %s", async (url, payload) => {
+    const session = await createSession("고정밀 규칙 검증 회원");
+    const response = await app.inject({
+      method: "POST",
+      url,
+      headers: { authorization: `Bearer ${session.token}`, "idempotency-key": randomUUID() },
+      payload,
+    });
+    expect(response.statusCode).toBe(422);
+    expect(response.json()).toMatchObject({ code: "UNSAFE_ISSUE_CONTENT" });
+    expect(
+      await database.db
+        .select({ id: memberIssueSubmissions.id })
+        .from(memberIssueSubmissions)
+        .where(eq(memberIssueSubmissions.question, payload.question)),
+    ).toEqual([]);
+  });
+
   it.each(["/v1/issues", "/v1/member/issue-submissions"])(
     "allows more than three questions per day through %s",
     async (url) => {

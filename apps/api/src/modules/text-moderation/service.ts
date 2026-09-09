@@ -2,6 +2,12 @@ import modelArtifact from "./korean-context-model-v1.json";
 
 export type TextModerationMode = "OFF" | "SHADOW" | "ENFORCE";
 export type TextModerationDecision = "ALLOW" | "REVIEW" | "BLOCK";
+export type TextModerationDecisionSource = "MODEL" | "HIGH_PRECISION_RULE";
+export type HighPrecisionTextRuleId =
+  | "DEHUMANIZING_SLUR"
+  | "EXPLICIT_SEXUAL_SLUR"
+  | "SEXUALIZED_PERSON_REFERENCE"
+  | "TARGETED_SEVERE_ABUSE";
 
 export type TextModerationInput = {
   target: string;
@@ -10,9 +16,12 @@ export type TextModerationInput = {
 
 export type TextModerationResult = {
   decision: TextModerationDecision;
+  decisionSource: TextModerationDecisionSource;
   score: number;
   modelVersion: string;
   policyVersion: string;
+  ruleId: HighPrecisionTextRuleId | null;
+  ruleVersion: string;
   thresholds: { review: number; block: number };
 };
 
@@ -36,12 +45,43 @@ type ModelArtifact = {
 };
 
 const artifact = modelArtifact as unknown as ModelArtifact;
+export const HIGH_PRECISION_TEXT_RULE_VERSION = "korean-high-precision-rules-v1";
+const RUNTIME_POLICY_VERSION = "korean-context-text-v2";
 const TOKEN_PATTERN = /[0-9a-z가-힣]+|[^\p{L}\p{N}_\s]/giu;
+const DISCUSSION_OR_REPORTING_PATTERN =
+  /(?:(?:이라는|이란|라고\s*하는).{0,12}(?:말|표현|단어)|(?:욕설|비속어|혐오\s*표현|비하\s*표현|금칙어)(?:입니다|이다|라고|를?\s*(?:인용|예시|신고|탐지|필터|설명))|(?:인용|예시|신고|탐지|필터|교육|연구|분석).{0,20}(?:욕설|비속어|혐오\s*표현|비하\s*표현|금칙어)|낮춰\s*부르는\s*(?:말|표현|비속어))/u;
+const EXPLICIT_SEXUAL_SLUR_PATTERN = /(?:자지보지|보지자지|좆|씹물|육변기)/u;
+const SEXUALIZED_BODY_PATTERN = /(?:자지|보지)/u;
+const SEXUALIZED_PERSON_PATTERN = /(?:사랑|좋아|빨|핥|만지|삽입|넣|성교|섹스|원하|탐하)/u;
+const SEXUALIZED_MODIFIER_PATTERN = /(?:섹시|야한|음란|꼴리|성적).{0,10}(?:자지|보지)/u;
+const TARGETED_SEVERE_ABUSE_PATTERN =
+  /(?:악마새끼|쓰레기새끼|병신새끼|미친놈새끼|개새끼|씹새끼|씨발|느금마|니애미|니엄마)/u;
+const DEHUMANIZING_SLUR_PATTERN = /(?:내란견|개돼지|인간쓰레기|벌레새끼|버러지새끼)/u;
 const utf8 = new TextEncoder();
 let decodedWeights: Float64Array | undefined;
 
 function normalizeText(value: string) {
   return value.normalize("NFKC").toLocaleLowerCase("ko-KR").replace(/\s+/gu, " ").trim();
+}
+
+function highPrecisionRule(target: string): HighPrecisionTextRuleId | null {
+  const normalized = normalizeText(target);
+  if (!normalized || DISCUSSION_OR_REPORTING_PATTERN.test(normalized)) return null;
+  const compact = normalized.replace(/[\s'"“”‘’()[\]{}.,!?·:_*/\\-]+/gu, "");
+
+  if (DEHUMANIZING_SLUR_PATTERN.test(compact)) return "DEHUMANIZING_SLUR";
+  if (TARGETED_SEVERE_ABUSE_PATTERN.test(compact)) return "TARGETED_SEVERE_ABUSE";
+  if (EXPLICIT_SEXUAL_SLUR_PATTERN.test(compact) || SEXUALIZED_MODIFIER_PATTERN.test(compact)) {
+    return "EXPLICIT_SEXUAL_SLUR";
+  }
+  if (
+    /[0-9a-z가-힣]{1,24}의(?:자지|보지)/u.test(compact) &&
+    SEXUALIZED_BODY_PATTERN.test(compact) &&
+    SEXUALIZED_PERSON_PATTERN.test(compact)
+  ) {
+    return "SEXUALIZED_PERSON_REFERENCE";
+  }
+  return null;
 }
 
 function fnv1a(value: string) {
@@ -111,6 +151,19 @@ function features(input: TextModerationInput) {
 export function createKoreanContextTextModerator(): TextModerator {
   return {
     moderate(input) {
+      const ruleId = highPrecisionRule(input.target);
+      if (ruleId) {
+        return {
+          decision: "BLOCK",
+          decisionSource: "HIGH_PRECISION_RULE",
+          score: 1,
+          modelVersion: artifact.modelVersion,
+          policyVersion: RUNTIME_POLICY_VERSION,
+          ruleId,
+          ruleVersion: HIGH_PRECISION_TEXT_RULE_VERSION,
+          thresholds: artifact.thresholds,
+        };
+      }
       const coefficient = weights();
       let logit = artifact.intercept;
       for (const [index, value] of features(input)) logit += coefficient[index]! * value;
@@ -123,9 +176,12 @@ export function createKoreanContextTextModerator(): TextModerator {
             : "ALLOW";
       return {
         decision,
+        decisionSource: "MODEL",
         score,
         modelVersion: artifact.modelVersion,
-        policyVersion: artifact.policyVersion,
+        policyVersion: RUNTIME_POLICY_VERSION,
+        ruleId: null,
+        ruleVersion: HIGH_PRECISION_TEXT_RULE_VERSION,
         thresholds: artifact.thresholds,
       };
     },
@@ -134,7 +190,9 @@ export function createKoreanContextTextModerator(): TextModerator {
 
 export const koreanContextTextModelMetadata = Object.freeze({
   modelVersion: artifact.modelVersion,
-  policyVersion: artifact.policyVersion,
+  modelPolicyVersion: artifact.policyVersion,
+  policyVersion: RUNTIME_POLICY_VERSION,
+  ruleVersion: HIGH_PRECISION_TEXT_RULE_VERSION,
   thresholds: Object.freeze({ ...artifact.thresholds }),
   validation: Object.freeze({ ...modelArtifact.training }),
 });
