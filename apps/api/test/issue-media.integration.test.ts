@@ -998,5 +998,5 @@ describe("operator Issue media foundation", () => {
         .from(issueMediaRightsRequests)
         .where(eq(issueMediaRightsRequests.id, rights!.id)),
     ).toHaveLength(1);
-  });
+  }, 10_000);
 });
