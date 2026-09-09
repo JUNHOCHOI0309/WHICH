@@ -48,6 +48,11 @@ import { sealIssueVersionSnapshot } from "../content-revisions/service.js";
 import { evaluateTextRules, normalizeModerationText } from "../moderation/rule-engine.js";
 import { createModerationSubmissionEvents } from "../moderation-dispatch/contracts.js";
 import { submissionWakeup } from "../moderation-dispatch/submission-wakeup-event.js";
+import type {
+  TextModerationMode,
+  TextModerationResult,
+  TextModerator,
+} from "../text-moderation/service.js";
 import { IssueWriteError } from "./errors.js";
 import { readMemberIssueAccess } from "./member-issue-access.js";
 import type { IssueMediaObjectStorage } from "../issue-media/contracts.js";
@@ -57,6 +62,11 @@ const EXPERIENCE_MODE = "PLAYFUL_QUICK";
 const URL_PATTERN = /(?:https?:\/\/|www\.|[a-z0-9-]+\.(?:com|net|org|kr|io)(?:\/|\b))/iu;
 const RESTRICTED_TOPIC_PATTERN =
   /(?:정치|정당|선거|대통령|국회의원|후보자|탄핵|politic|election|president|parliament|suicide|자살|살인|성폭행|마약|불법도박)/iu;
+
+export type IssueWriteServiceOptions = {
+  textModerationMode?: TextModerationMode;
+  textModerator?: TextModerator;
+};
 
 const PRIMARY_CATEGORY_BY_CARD: Record<InterestCardCode, string> = {
   DAILY_LIFE: "LIFE",
@@ -207,6 +217,41 @@ export function normalizeCommand(command: CreateMemberIssueCommand) {
     libraryAssetIds,
     interestCardCode: command.interestCardCode,
   };
+}
+
+function moderateIssueText(
+  normalized: ReturnType<typeof normalizeCommand>,
+  options: IssueWriteServiceOptions,
+): TextModerationResult | null {
+  if (options.textModerationMode === "OFF" || !options.textModerator) return null;
+  const fields = [
+    { label: "질문", value: normalized.question },
+    { label: "설명", value: normalized.context },
+    { label: "선택지 A", value: normalized.choiceA },
+    { label: "선택지 B", value: normalized.choiceB },
+    { label: "선택지 C", value: normalized.choiceC },
+    { label: "선택지 D", value: normalized.choiceD },
+  ].filter((field): field is { label: string; value: string } => Boolean(field.value));
+  return fields
+    .map((field) =>
+      options.textModerator!.moderate({
+        target: field.value,
+        context: fields
+          .filter((candidate) => candidate !== field)
+          .map((candidate) => `${candidate.label}: ${candidate.value}`)
+          .join(" ␞ "),
+      }),
+    )
+    .reduce((highest, result) => (result.score > highest.score ? result : highest));
+}
+
+function enforceIssueTextModeration(result: TextModerationResult | null, mode: TextModerationMode) {
+  if (mode !== "ENFORCE" || result?.decision !== "BLOCK") return;
+  throw new IssueWriteError(
+    "UNSAFE_ISSUE_CONTENT",
+    422,
+    "질문과 설명의 맥락에서 심각한 유해표현이 감지되어 제출할 수 없어요.",
+  );
 }
 
 async function requirePublishedLibraryPair(
@@ -944,7 +989,9 @@ async function removePublishedIssue(transaction: Transaction, current: Submissio
 export function createIssueWriteService(
   database: Database["db"],
   storage: IssueMediaObjectStorage | null = null,
+  options: IssueWriteServiceOptions = {},
 ): IssueWriteService {
+  const textModerationMode = options.textModerationMode ?? "OFF";
   async function requireCreationAccess(reader: Pick<Database["db"], "execute">, memberId: string) {
     const access = await readMemberIssueAccess(reader, memberId);
     if (access.canCreateNow) return;
@@ -969,6 +1016,8 @@ export function createIssueWriteService(
         );
       }
       const normalized = normalizeCommand(command);
+      const textModeration = moderateIssueText(normalized, options);
+      enforceIssueTextModeration(textModeration, textModerationMode);
       const session = await requireActiveMember(database, command.sessionToken);
       const contentHash = createHash("sha256").update(JSON.stringify(normalized)).digest("hex");
       const submissionId = deterministicUuid(
@@ -1087,6 +1136,8 @@ export function createIssueWriteService(
         );
       }
       const normalized = normalizeCommand(command);
+      const textModeration = moderateIssueText(normalized, options);
+      enforceIssueTextModeration(textModeration, textModerationMode);
       const session = await requireActiveMember(database, command.sessionToken);
       const contentHash = createHash("sha256").update(JSON.stringify(normalized)).digest("hex");
 
@@ -1426,6 +1477,8 @@ export function createIssueWriteService(
 
     async createMemberIssue(command): Promise<CreatedMemberIssue> {
       const normalized = normalizeCommand(command);
+      const textModeration = moderateIssueText(normalized, options);
+      enforceIssueTextModeration(textModeration, textModerationMode);
       if (
         normalized.contextMediaAssetId ||
         normalized.mediaAssetAId ||

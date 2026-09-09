@@ -247,7 +247,7 @@ export type PublicComment = {
   choice: ChoiceCode;
   author: { displayName: string; avatarUrl?: string | null; isManager?: boolean };
   body: string;
-  visibility: "VISIBLE" | "DEPRIORITIZED" | "COLLAPSED" | "REMOVED_BY_AUTHOR";
+  visibility: "VISIBLE" | "DEPRIORITIZED" | "COLLAPSED" | "HIDDEN" | "REMOVED_BY_AUTHOR";
   threadState: "OPEN" | "LOCKED";
   createdAt: string;
   editedAt: string | null;
@@ -278,7 +278,12 @@ export type CommentHighlights = {
 export type CommentWriteResponse = { comment: PublicComment };
 
 export type CommentUpdateResponse = {
-  comment: { id: string; body: string; editedAt: string };
+  comment: {
+    id: string;
+    body: string;
+    editedAt: string;
+    visibility: "VISIBLE" | "DEPRIORITIZED" | "COLLAPSED" | "HIDDEN";
+  };
 };
 
 export type CommentDeleteResponse = {

@@ -31,6 +31,7 @@ import {
   commentWriteAttempts,
   guestMemberLinks,
   issueChoices,
+  issueVersions,
   issues,
   memberSessions,
   members,
@@ -54,6 +55,11 @@ import type {
 import { sha256 } from "../content-revisions/service.js";
 import { createModerationSubmissionEvents } from "../moderation-dispatch/contracts.js";
 import { evaluateTextRules } from "../moderation/rule-engine.js";
+import type {
+  TextModerationMode,
+  TextModerationResult,
+  TextModerator,
+} from "../text-moderation/service.js";
 import { decodeCommentCursor, encodeCommentCursor } from "./cursor.js";
 import { CommentError } from "./errors.js";
 
@@ -67,6 +73,31 @@ const HIDE_SCORE = 20;
 const HIDE_REPORTERS = 10;
 
 type EligibleVote = { id: string; issueVersion: number; choice: "A" | "B" | "C" | "D" };
+
+export type CommentServiceOptions = {
+  textModerationMode?: TextModerationMode;
+  textModerator?: TextModerator;
+};
+
+function evaluateTextModeration(
+  options: CommentServiceOptions,
+  input: { target: string; context: string },
+): TextModerationResult | null {
+  if (options.textModerationMode === "OFF" || !options.textModerator) return null;
+  return options.textModerator.moderate(input);
+}
+
+function moderationEventSnapshot(result: TextModerationResult | null, mode: TextModerationMode) {
+  if (!result) return { mode, decision: "NOT_RUN" };
+  return {
+    mode,
+    decision: result.decision,
+    score: Number(result.score.toFixed(6)),
+    model_version: result.modelVersion,
+    policy_version: result.policyVersion,
+    thresholds: result.thresholds,
+  };
+}
 
 function hashToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
@@ -276,7 +307,11 @@ function commentsAvailable(issue: {
   );
 }
 
-export function createCommentService(database: Database["db"]): CommentService {
+export function createCommentService(
+  database: Database["db"],
+  options: CommentServiceOptions = {},
+): CommentService {
+  const textModerationMode = options.textModerationMode ?? "OFF";
   return {
     async listGuestComments(query) {
       const view = query.view ?? "NEWEST";
@@ -749,7 +784,7 @@ export function createCommentService(database: Database["db"]): CommentService {
     },
 
     async submitMemberComment(command) {
-      const { body, requiresReview } = normalizeCommentBody(command.body);
+      const { body, requiresReview: rulesRequireReview } = normalizeCommentBody(command.body);
       const now = new Date();
 
       return database.transaction(async (transaction) => {
@@ -896,8 +931,17 @@ export function createCommentService(database: Database["db"]): CommentService {
             resultVisibility: issues.resultVisibility,
             riskLevel: issues.riskLevel,
             isPolitical: issues.isPolitical,
+            question: issueVersions.question,
+            context: issueVersions.context,
           })
           .from(issues)
+          .innerJoin(
+            issueVersions,
+            and(
+              eq(issueVersions.issueId, issues.id),
+              eq(issueVersions.version, eligibleVote.issueVersion),
+            ),
+          )
           .where(eq(issues.id, command.issueId))
           .limit(1)
           .for("update");
@@ -910,10 +954,15 @@ export function createCommentService(database: Database["db"]): CommentService {
           );
         }
 
-        let parentComment: { id: string; threadRootCommentId: string | null } | undefined;
+        let parentComment:
+          { id: string; threadRootCommentId: string | null; body: string } | undefined;
         if (command.parentCommentId) {
           [parentComment] = await transaction
-            .select({ id: comments.id, threadRootCommentId: comments.threadRootCommentId })
+            .select({
+              id: comments.id,
+              threadRootCommentId: comments.threadRootCommentId,
+              body: comments.body,
+            })
             .from(comments)
             .where(
               and(
@@ -938,6 +987,21 @@ export function createCommentService(database: Database["db"]): CommentService {
           }
         }
 
+        const textModeration = evaluateTextModeration(options, {
+          target: body,
+          context: [issue.question, issue.context, parentComment?.body].filter(Boolean).join(" ␞ "),
+        });
+        if (textModerationMode === "ENFORCE" && textModeration?.decision === "BLOCK") {
+          throw new CommentError(
+            "COMMENT_HARMFUL_CONTENT",
+            422,
+            "대화 맥락상 심각한 유해표현으로 판단되어 댓글을 게시할 수 없어요.",
+          );
+        }
+        const requiresTextReview =
+          textModerationMode === "ENFORCE" && textModeration?.decision === "REVIEW";
+        const requiresReview = rulesRequireReview || requiresTextReview;
+
         await transaction.insert(commentWriteAttempts).values({
           id: command.idempotencyKey,
           memberId: session.memberId,
@@ -961,6 +1025,8 @@ export function createCommentService(database: Database["db"]): CommentService {
             body,
             textPolicyVersion: TEXT_POLICY_VERSION,
             publicationState: requiresReview ? "PENDING_HUMAN_REVIEW" : "PUBLISHED",
+            visibility: requiresTextReview ? "HIDDEN" : "VISIBLE",
+            integrityState: requiresTextReview ? "REVIEW" : "NORMAL",
           })
           .returning();
         if (!comment) throw new Error("Comment insert did not return a row.");
@@ -990,6 +1056,24 @@ export function createCommentService(database: Database["db"]): CommentService {
         });
         await transaction.insert(outboxEvents).values(moderationEvents.rows);
 
+        if (requiresTextReview && textModeration) {
+          await transaction.insert(commentModerationDecisions).values({
+            commentId: comment.id,
+            revision: 1,
+            action: "HIDE",
+            source: "SYSTEM_AUTOMATION",
+            reasonCode: "KOREAN_CONTEXT_MODEL_REVIEW",
+            fromPublicationState: "PENDING_AUTOMOD",
+            toPublicationState: "PENDING_HUMAN_REVIEW",
+            fromVisibility: "VISIBLE",
+            toVisibility: "HIDDEN",
+            fromIntegrityState: "NORMAL",
+            toIntegrityState: "REVIEW",
+            evidence: moderationEventSnapshot(textModeration, textModerationMode),
+            decidedAt: now,
+          });
+        }
+
         const eventId = randomUUID();
         await transaction.insert(outboxEvents).values({
           id: eventId,
@@ -1014,6 +1098,7 @@ export function createCommentService(database: Database["db"]): CommentService {
               choice: comment.choice,
               parent_comment_id: comment.parentCommentId,
               text_policy_version: TEXT_POLICY_VERSION,
+              text_moderation: moderationEventSnapshot(textModeration, textModerationMode),
             },
           },
         });
@@ -1042,7 +1127,7 @@ export function createCommentService(database: Database["db"]): CommentService {
     },
 
     async updateMemberComment(command) {
-      const { body, requiresReview } = normalizeCommentBody(command.body);
+      const { body, requiresReview: rulesRequireReview } = normalizeCommentBody(command.body);
       const now = new Date();
 
       return database.transaction(async (transaction): Promise<MemberCommentUpdateResult> => {
@@ -1093,12 +1178,48 @@ export function createCommentService(database: Database["db"]): CommentService {
           );
         }
 
+        const [issueContext] = await transaction
+          .select({ question: issueVersions.question, context: issueVersions.context })
+          .from(issueVersions)
+          .where(
+            and(
+              eq(issueVersions.issueId, target.issueId),
+              eq(issueVersions.version, target.issueVersion),
+            ),
+          )
+          .limit(1);
+        const [parentContext] = target.parentCommentId
+          ? await transaction
+              .select({ body: comments.body })
+              .from(comments)
+              .where(eq(comments.id, target.parentCommentId))
+              .limit(1)
+          : [];
+        const textModeration = evaluateTextModeration(options, {
+          target: body,
+          context: [issueContext?.question, issueContext?.context, parentContext?.body]
+            .filter(Boolean)
+            .join(" ␞ "),
+        });
+        if (textModerationMode === "ENFORCE" && textModeration?.decision === "BLOCK") {
+          throw new CommentError(
+            "COMMENT_HARMFUL_CONTENT",
+            422,
+            "대화 맥락상 심각한 유해표현으로 판단되어 댓글을 수정할 수 없어요.",
+          );
+        }
+        const requiresTextReview =
+          textModerationMode === "ENFORCE" && textModeration?.decision === "REVIEW";
+        const requiresReview = rulesRequireReview || requiresTextReview;
+
         const [updated] = await transaction
           .update(comments)
           .set({
             body,
             textPolicyVersion: TEXT_POLICY_VERSION,
             publicationState: requiresReview ? "PENDING_HUMAN_REVIEW" : "PUBLISHED",
+            visibility: requiresTextReview ? "HIDDEN" : target.visibility,
+            integrityState: requiresTextReview ? "REVIEW" : target.integrityState,
             editedAt: now,
             bodyRevision: sql`${comments.bodyRevision} + 1`,
             version: sql`${comments.version} + 1`,
@@ -1142,6 +1263,24 @@ export function createCommentService(database: Database["db"]): CommentService {
         });
         await transaction.insert(outboxEvents).values(moderationEvents.rows);
 
+        if (requiresTextReview && textModeration) {
+          await transaction.insert(commentModerationDecisions).values({
+            commentId: updated.id,
+            revision: sql`(select coalesce(max(revision), 0) + 1 from comment_moderation_decisions where comment_id = ${updated.id})`,
+            action: "HIDE",
+            source: "SYSTEM_AUTOMATION",
+            reasonCode: "KOREAN_CONTEXT_MODEL_REVIEW",
+            fromPublicationState: target.publicationState,
+            toPublicationState: "PENDING_HUMAN_REVIEW",
+            fromVisibility: target.visibility,
+            toVisibility: "HIDDEN",
+            fromIntegrityState: target.integrityState,
+            toIntegrityState: "REVIEW",
+            evidence: moderationEventSnapshot(textModeration, textModerationMode),
+            decidedAt: now,
+          });
+        }
+
         const eventId = randomUUID();
         await transaction.insert(outboxEvents).values({
           id: eventId,
@@ -1157,7 +1296,11 @@ export function createCommentService(database: Database["db"]): CommentService {
             occurred_at: now.toISOString(),
             aggregate_type: "COMMENT",
             aggregate_id: updated.id,
-            data: { comment_id: updated.id, text_policy_version: TEXT_POLICY_VERSION },
+            data: {
+              comment_id: updated.id,
+              text_policy_version: TEXT_POLICY_VERSION,
+              text_moderation: moderationEventSnapshot(textModeration, textModerationMode),
+            },
           },
         });
 
@@ -1168,6 +1311,8 @@ export function createCommentService(database: Database["db"]): CommentService {
               id: updated.id,
               body: updated.body,
               editedAt: updated.editedAt.toISOString(),
+              visibility:
+                updated.visibility as MemberCommentUpdateResult["body"]["comment"]["visibility"],
             },
           },
         };

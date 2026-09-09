@@ -33,6 +33,7 @@ import {
 import type { MemberIssueSubmission } from "../src/modules/issues/contracts.js";
 import { createIssueReadService } from "../src/modules/issues/service.js";
 import { createMemberIdentityService } from "../src/modules/identity/service.js";
+import { createKoreanContextTextModerator } from "../src/modules/text-moderation/service.js";
 import type { IssueMediaObjectStorage } from "../src/modules/issue-media/contracts.js";
 import { createGuestVoteService } from "../src/modules/voting/service.js";
 import { createTestDatabase } from "./helpers/test-database.js";
@@ -75,7 +76,10 @@ beforeAll(async () => {
   app = await buildApp(getConfig({ NODE_ENV: "test", INTERNAL_AUTH_SECRET: INTERNAL_SECRET }), {
     ...database,
     issueReader: createIssueReadService(database.db),
-    issueWriter: createIssueWriteService(database.db),
+    issueWriter: createIssueWriteService(database.db, null, {
+      textModerationMode: "ENFORCE",
+      textModerator: createKoreanContextTextModerator(),
+    }),
     guestVotes: createGuestVoteService(database.db),
     commentReader: createCommentReadService(database.db),
     memberIdentity: createMemberIdentityService(database.db, {
@@ -1211,6 +1215,30 @@ describe("Member Issue creation v1", () => {
     });
     expect(unsafe.statusCode).toBe(422);
     expect(unsafe.json()).toMatchObject({ code: "UNSAFE_ISSUE_CONTENT" });
+
+    const harmful = await app.inject({
+      method: "POST",
+      url: "/v1/issues",
+      headers: { authorization: `Bearer ${session.token}`, "idempotency-key": randomUUID() },
+      payload: createPayload("너 같은 쓰레기 새끼는 당장 죽어버려"),
+    });
+    expect(harmful.statusCode).toBe(422);
+    expect(harmful.json()).toMatchObject({
+      code: "UNSAFE_ISSUE_CONTENT",
+      message: "질문과 설명의 맥락에서 심각한 유해표현이 감지되어 제출할 수 없어요.",
+    });
+
+    const harmfulContext = await app.inject({
+      method: "POST",
+      url: "/v1/member/issue-submissions",
+      headers: { authorization: `Bearer ${session.token}`, "idempotency-key": randomUUID() },
+      payload: {
+        ...createPayload("주말에는 무엇을 할까"),
+        context: "너 같은 쓰레기 새끼는 당장 죽어버려",
+      },
+    });
+    expect(harmfulContext.statusCode).toBe(422);
+    expect(harmfulContext.json()).toMatchObject({ code: "UNSAFE_ISSUE_CONTENT" });
 
     const duplicateChoices = await app.inject({
       method: "POST",
