@@ -20,6 +20,13 @@ and Member-authored questions. The runtime sends no text to an external provider
 The question path intentionally uses only the higher `BLOCK` threshold. The lower review threshold
 has a higher false-positive rate and every editorial submission already has a human review step.
 
+Before model scoring, runtime policy `korean-context-text-v2` applies the narrow
+`korean-high-precision-rules-v1` ruleset to the authored target text. It blocks only explicit sexual
+slur compounds, sexualized references to a person's anatomy, severe targeted abuse, and explicit
+dehumanizing slurs. The rules do not inherit a match from parent/context text, and wording that
+clearly reports, quotes, explains, or studies a prohibited expression falls back to the model. This
+keeps ordinary verb forms such as `자지 않았어요` and `보지 못했어요` out of the rule lane.
+
 ## Model
 
 The model is a deterministic logistic classifier over hashed Korean character 2–5 grams, word
@@ -39,6 +46,9 @@ These thresholds favor precision. In particular, the review lane targets at leas
 and at most a 1% false-positive rate because a review decision immediately hides user content.
 Reports and human moderation remain necessary because both automated lanes intentionally catch
 only a subset of all harmful text.
+
+Rule decisions are emitted with `decision_source`, `rule_id`, and `rule_version` so moderation audit
+events can distinguish deterministic policy matches from model scores.
 
 ## Provenance and retraining
 

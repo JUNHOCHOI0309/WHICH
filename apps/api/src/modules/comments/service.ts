@@ -92,9 +92,12 @@ function moderationEventSnapshot(result: TextModerationResult | null, mode: Text
   return {
     mode,
     decision: result.decision,
+    decision_source: result.decisionSource,
     score: Number(result.score.toFixed(6)),
     model_version: result.modelVersion,
     policy_version: result.policyVersion,
+    rule_id: result.ruleId,
+    rule_version: result.ruleVersion,
     thresholds: result.thresholds,
   };
 }
