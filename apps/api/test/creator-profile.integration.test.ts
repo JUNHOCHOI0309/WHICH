@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 
+import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { buildApp } from "../src/app.js";
@@ -10,6 +11,7 @@ import {
   issueChoices,
   issues,
   issueVersions,
+  outboxEvents,
   voteAggregates,
 } from "../src/database/schema/index.js";
 import { createCommentReadService } from "../src/modules/comments/service.js";
@@ -162,6 +164,34 @@ describe("Creator Profile v1", () => {
     });
     expect(profile.statusCode).toBe(200);
     expect(profile.json()).toMatchObject({ member: { displayName: "새 닉네임" } });
+  });
+
+  it("emits a public profile completion Event only on the incomplete-to-complete transition", async () => {
+    const session = await createSession("완료 이벤트 작성자");
+    const before = await database.db
+      .select({ id: outboxEvents.id })
+      .from(outboxEvents)
+      .where(eq(outboxEvents.eventType, "MEMBER_PUBLIC_PROFILE_COMPLETED"));
+
+    for (const bio of ["처음 완성한 소개입니다.", "완성 후 소개만 수정했습니다."]) {
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/v1/me/profile",
+        headers: { authorization: `Bearer ${session.token}` },
+        payload: {
+          handle: "completion_event_creator",
+          bio,
+          visibility: "PUBLIC",
+        },
+      });
+      expect(response.statusCode).toBe(200);
+    }
+
+    const after = await database.db
+      .select({ id: outboxEvents.id })
+      .from(outboxEvents)
+      .where(eq(outboxEvents.eventType, "MEMBER_PUBLIC_PROFILE_COMPLETED"));
+    expect(after).toHaveLength(before.length + 1);
   });
 
   it("publishes only safe Creator fields and authored Issue aggregates", async () => {
