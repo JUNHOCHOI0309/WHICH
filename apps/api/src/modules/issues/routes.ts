@@ -161,6 +161,7 @@ const publicIssueCatalogResponseSchema = Type.Object({
       contextMedia: Type.Optional(Type.Union([choiceSchema.properties.media, Type.Null()])),
       publishedAt: Type.String({ format: "date-time" }),
       categoryCode: Type.String(),
+      mediaMode: Type.Union([Type.Literal("TEXT_ONLY"), Type.Literal("OPTION_IMAGES")]),
       choices: Type.Array(choiceSchema, { minItems: 2, maxItems: 4 }),
     }),
     { maxItems: 500 },

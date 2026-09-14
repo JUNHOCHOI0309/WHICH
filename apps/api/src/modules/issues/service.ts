@@ -450,7 +450,7 @@ export function createIssueReadService(
       const requestedLimit = Number.isFinite(query.limit) ? Math.floor(query.limit) : 500;
       const limit = Math.min(500, Math.max(1, requestedLimit));
 
-      return database.transaction(async (transaction) => {
+      const catalogItems = await database.transaction(async (transaction) => {
         const now = new Date();
         const latestPublishedVersions = transaction
           .selectDistinctOn([issueVersions.issueId], {
@@ -460,6 +460,7 @@ export function createIssueReadService(
             context: issueVersions.context,
             publishedAt: issueVersions.publishedAt,
             categoryCode: issueVersions.primaryCategoryCode,
+            sourceMediaMode: issueVersions.mediaMode,
           })
           .from(issueVersions)
           .where(and(isNotNull(issueVersions.publishedAt), lte(issueVersions.publishedAt, now)))
@@ -474,6 +475,7 @@ export function createIssueReadService(
             context: latestPublishedVersions.context,
             publishedAt: latestPublishedVersions.publishedAt,
             categoryCode: latestPublishedVersions.categoryCode,
+            sourceMediaMode: latestPublishedVersions.sourceMediaMode,
           })
           .from(issues)
           .innerJoin(latestPublishedVersions, eq(latestPublishedVersions.issueId, issues.id))
@@ -533,35 +535,43 @@ export function createIssueReadService(
               .orderBy(issueChoices.issueId, issueChoices.code)
           : [];
 
-        return {
-          items: rows.flatMap((row) => {
-            const issueChoicesForVersion = choices
-              .filter((choice) => choice.issueId === row.id && choice.issueVersion === row.version)
-              .map(({ id, code, label }) => ({ id, code, label, media: null }));
-            if (
-              issueChoicesForVersion.length < 2 ||
-              issueChoicesForVersion.length > 4 ||
-              issueChoicesForVersion[0]?.code !== "A" ||
-              issueChoicesForVersion[1]?.code !== "B" ||
-              !row.publishedAt
-            ) {
-              return [];
-            }
-            return [
-              {
-                id: row.id,
-                version: row.version,
-                question: row.question,
-                context: row.context,
-                contextMedia: null,
-                publishedAt: row.publishedAt.toISOString(),
-                categoryCode: row.categoryCode,
-                choices: issueChoicesForVersion,
-              },
-            ];
-          }),
-        };
+        return rows.flatMap((row) => {
+          const issueChoicesForVersion = choices
+            .filter((choice) => choice.issueId === row.id && choice.issueVersion === row.version)
+            .map(({ id, code, label }) => ({ id, code, label, media: null }));
+          if (
+            issueChoicesForVersion.length < 2 ||
+            issueChoicesForVersion.length > 4 ||
+            issueChoicesForVersion[0]?.code !== "A" ||
+            issueChoicesForVersion[1]?.code !== "B" ||
+            !row.publishedAt
+          ) {
+            return [];
+          }
+          return [
+            {
+              id: row.id,
+              version: row.version,
+              question: row.question,
+              context: row.context,
+              contextMedia: null,
+              publishedAt: row.publishedAt.toISOString(),
+              categoryCode: row.categoryCode,
+              mediaMode: "TEXT_ONLY" as const,
+              choices: issueChoicesForVersion,
+              sourceMediaMode: row.sourceMediaMode,
+            },
+          ];
+        });
       });
+
+      const items = await withPublicChoiceMediaBatch(
+        database,
+        catalogItems,
+        options.mediaExperiment,
+        "public-content-catalog",
+      );
+      return { items };
     },
 
     async listGuestIssues(query) {
