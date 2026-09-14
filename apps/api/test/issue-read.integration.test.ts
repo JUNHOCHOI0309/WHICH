@@ -257,6 +257,16 @@ describe("Guest Issue read API", () => {
         { media: { url: "https://media.which.test/published/b.webp", altText: "B option image" } },
       ],
     });
+    const catalogItem = (await enabledReader.listPublicIssueCatalog({ limit: 500 })).items.find(
+      (item) => item.id === issue.issueId,
+    );
+    expect(catalogItem).toMatchObject({
+      mediaMode: "OPTION_IMAGES",
+      choices: [
+        { media: { url: "https://media.which.test/published/a.webp", altText: "A option image" } },
+        { media: { url: "https://media.which.test/published/b.webp", altText: "B option image" } },
+      ],
+    });
 
     await database.db
       .update(issueMediaAssets)
@@ -266,6 +276,13 @@ describe("Guest Issue read API", () => {
       anonymousSubjectId: randomUUID(),
     });
     expect(fallback).toMatchObject({
+      mediaMode: "TEXT_ONLY",
+      choices: [{ media: null }, { media: null }],
+    });
+    const fallbackCatalogItem = (
+      await enabledReader.listPublicIssueCatalog({ limit: 500 })
+    ).items.find((item) => item.id === issue.issueId);
+    expect(fallbackCatalogItem).toMatchObject({
       mediaMode: "TEXT_ONLY",
       choices: [{ media: null }, { media: null }],
     });

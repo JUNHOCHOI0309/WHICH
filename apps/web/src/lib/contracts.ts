@@ -230,7 +230,15 @@ export type PublicIssueFeed = {
 
 export type PublicIssueCatalogItem = Pick<
   PublicIssue,
-  "id" | "version" | "question" | "context" | "publishedAt" | "categoryCode" | "choices"
+  | "id"
+  | "version"
+  | "question"
+  | "context"
+  | "contextMedia"
+  | "publishedAt"
+  | "categoryCode"
+  | "mediaMode"
+  | "choices"
 >;
 
 export type PublicIssueCatalog = {

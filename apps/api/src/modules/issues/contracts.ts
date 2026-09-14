@@ -94,6 +94,7 @@ export type PublicIssueCatalogItem = Pick<
   | "contextMedia"
   | "publishedAt"
   | "categoryCode"
+  | "mediaMode"
   | "choices"
 >;
 

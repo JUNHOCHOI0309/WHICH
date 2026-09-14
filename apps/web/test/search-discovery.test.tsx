@@ -93,6 +93,7 @@ describe("search discovery foundation", () => {
       context: issue.context,
       publishedAt: issue.publishedAt,
       categoryCode: issue.categoryCode,
+      mediaMode: issue.mediaMode,
       choices: issue.choices,
     };
     const catalog: PublicIssueCatalog = {
@@ -145,6 +146,7 @@ describe("search discovery foundation", () => {
           context: issue.context,
           publishedAt: issue.publishedAt,
           categoryCode: issue.categoryCode,
+          mediaMode: issue.mediaMode,
           choices: issue.choices,
         },
       ],
@@ -174,6 +176,7 @@ describe("search discovery foundation", () => {
           context: issue.context,
           publishedAt: issue.publishedAt,
           categoryCode: issue.categoryCode,
+          mediaMode: issue.mediaMode,
           choices: issue.choices,
         },
       ],
