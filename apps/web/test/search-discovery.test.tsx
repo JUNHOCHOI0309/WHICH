@@ -49,9 +49,18 @@ describe("search discovery foundation", () => {
     const searchRule = Array.isArray(value.rules)
       ? value.rules.find((rule) => rule.userAgent === "OAI-SearchBot")
       : undefined;
-    expect(searchRule?.allow).toEqual(expect.arrayContaining(["/", "/api/share-cards/"]));
+    const chatGptUserRule = Array.isArray(value.rules)
+      ? value.rules.find((rule) => rule.userAgent === "ChatGPT-User")
+      : undefined;
+    expect(searchRule?.allow).toEqual(
+      expect.arrayContaining(["/", "/api/public/issues", "/api/share-cards/"]),
+    );
     expect(searchRule?.disallow).toEqual(expect.arrayContaining(["/me$", "/me/"]));
     expect(searchRule?.disallow).not.toContain("/me");
+    expect(chatGptUserRule).toMatchObject({
+      allow: expect.arrayContaining(["/api/public/issues"]),
+      disallow: expect.arrayContaining(["/api/", "/me/"]),
+    });
     expect(value.rules).toEqual(
       expect.arrayContaining([expect.objectContaining({ userAgent: "GPTBot", disallow: "/" })]),
     );

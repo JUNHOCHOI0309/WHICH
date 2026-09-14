@@ -16,24 +16,30 @@ const privatePaths = [
   "/interests",
   "/mobile-auth",
 ];
+const publicMachinePaths = ["/", "/api/public/issues", "/api/share-cards/"];
 
 export default function robots(): MetadataRoute.Robots {
   return {
     rules: [
-      { userAgent: "*", allow: ["/", "/api/share-cards/"], disallow: privatePaths },
+      { userAgent: "*", allow: publicMachinePaths, disallow: privatePaths },
+      {
+        userAgent: "ChatGPT-User",
+        allow: publicMachinePaths,
+        disallow: privatePaths,
+      },
       {
         userAgent: "OAI-SearchBot",
-        allow: ["/", "/api/share-cards/"],
+        allow: publicMachinePaths,
         disallow: privatePaths,
       },
       {
         userAgent: "OAI-AdsBot",
-        allow: ["/", "/api/share-cards/"],
+        allow: publicMachinePaths,
         disallow: privatePaths,
       },
       {
         userAgent: "PerplexityBot",
-        allow: ["/", "/api/share-cards/"],
+        allow: publicMachinePaths,
         disallow: privatePaths,
       },
       { userAgent: "GPTBot", disallow: "/" },

@@ -15,6 +15,8 @@ GET https://whichone.site/api/public/issues?limit=3
 - 이미지가 없거나 공개 조건을 충족하지 못하면 `media` 또는 `contextMedia`는 `null`입니다.
 - 결과·투표 수·작성자 개인정보·내부 검수 정보는 반환하지 않습니다.
 - GET 이외의 데이터 변경 메서드는 제공하지 않습니다.
+- `robots.txt`는 일반 사용자 에이전트와 `ChatGPT-User`에 이 경로만 명시적으로 허용합니다.
+  모델 학습용 `GPTBot` 차단은 그대로 유지합니다.
 
 성공 응답은 짧게 CDN 캐시되며, 원본 API 장애나 잘못된 입력에는 캐시하지 않습니다. 외부
 콘텐츠 생성 도구에서 읽을 수 있도록 `Access-Control-Allow-Origin: *`를 사용하지만, 응답 내용은
