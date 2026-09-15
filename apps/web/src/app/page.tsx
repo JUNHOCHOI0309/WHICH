@@ -9,6 +9,7 @@ export const metadata: Metadata = {
   alternates: {
     canonical: "/",
     types: {
+      "application/json": "/public/issues.json",
       "application/atom+xml": "/feed.xml",
       "application/rss+xml": "/rss.xml",
     },
