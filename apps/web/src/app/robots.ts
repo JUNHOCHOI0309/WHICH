@@ -16,7 +16,7 @@ const privatePaths = [
   "/interests",
   "/mobile-auth",
 ];
-const publicMachinePaths = ["/", "/api/public/issues", "/api/share-cards/"];
+const publicMachinePaths = ["/", "/public/issues.json", "/api/public/issues", "/api/share-cards/"];
 
 export default function robots(): MetadataRoute.Robots {
   return {

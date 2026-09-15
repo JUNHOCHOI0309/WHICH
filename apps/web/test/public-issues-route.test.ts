@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { GET, OPTIONS } from "@/app/api/public/issues/route";
+import { GET as GET_INDEXABLE, OPTIONS as OPTIONS_INDEXABLE } from "@/app/public/issues.json/route";
 import type { PublicIssueCatalog } from "@/lib/contracts";
 
 const catalog: PublicIssueCatalog = {
@@ -110,5 +111,20 @@ describe("public content-generation Issue API", () => {
     const response = OPTIONS();
     expect(response.status).toBe(204);
     expect(response.headers.get("access-control-allow-methods")).toBe("GET, OPTIONS");
+  });
+
+  it("serves the same catalog from the indexable non-API path", async () => {
+    const upstream = vi.fn<typeof fetch>(async () => Response.json(catalog));
+    vi.stubGlobal("fetch", upstream);
+
+    const response = await GET_INDEXABLE(
+      new NextRequest("https://whichone.site/public/issues.json?limit=3"),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(catalog);
+    expect(response.headers.get("content-language")).toBe("ko");
+    expect(response.headers.get("access-control-allow-origin")).toBe("*");
+    expect(OPTIONS_INDEXABLE().status).toBe(204);
   });
 });

@@ -12,6 +12,7 @@ const staticRoutes: Array<{
   lastModified?: string;
 }> = [
   { path: "/", changeFrequency: "daily", priority: 1 },
+  { path: "/public/issues.json", changeFrequency: "hourly", priority: 0.5 },
   {
     path: "/about",
     changeFrequency: "monthly",
