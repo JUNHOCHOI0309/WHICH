@@ -40,6 +40,7 @@ const interestCards = [
   ["SOCIETY", "사회"],
   ["HOBBY", "취미"],
 ] as const;
+const interestCardCodes = new Set(interestCards.map(([value]) => value));
 
 async function fileBase64(file: File) {
   return new Promise<string>((resolve, reject) => {
@@ -78,6 +79,24 @@ export function OpsEditorialPanel({
     choiceB: "",
     interestCardCode: "DAILY_LIFE",
   });
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("create") !== "1") return;
+    const interestCardCode = params.get("interestCardCode") ?? "DAILY_LIFE";
+    // These one-time state updates apply an explicit deep link from the marketing studio.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setCreateForm({
+      question: (params.get("question") ?? "").slice(0, 200),
+      context: (params.get("context") ?? "").slice(0, 500),
+      choiceA: (params.get("choiceA") ?? "").slice(0, 100),
+      choiceB: (params.get("choiceB") ?? "").slice(0, 100),
+      interestCardCode: interestCardCodes.has(interestCardCode as (typeof interestCards)[number][0])
+        ? interestCardCode
+        : "DAILY_LIFE",
+    });
+    setCreateOpen(true);
+  }, []);
 
   const choose = useCallback((candidate: OpsEditorialCandidate) => {
     setSelected(candidate);
@@ -207,6 +226,10 @@ export function OpsEditorialPanel({
         interestCardCode: "DAILY_LIFE",
       });
       setCreateOpen(false);
+      const currentUrl = new URL(window.location.href);
+      for (const key of ["create", "question", "context", "choiceA", "choiceB", "interestCardCode"])
+        currentUrl.searchParams.delete(key);
+      window.history.replaceState(null, "", `${currentUrl.pathname}${currentUrl.search}`);
       toast.success("관리자 질문을 검수 후보에 추가했습니다.");
     } catch (caught) {
       setFeedback({
