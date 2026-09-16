@@ -10,7 +10,6 @@ const MAX_CANDIDATES = 500;
 const CATALOG_KEY = "catalog:public:v1";
 const CATALOG_FRESH_MS = 10 * 60 * 1000;
 const CANDIDATE_RUN_KEY = "youtube:last-run";
-const ADOPTED_SOURCE_PREFIX = "adopted-source:";
 const CANDIDATE_MODEL = "gpt-4.1-mini-2025-04-14";
 const PACKAGE_FORMAT_VERSION = 2;
 
@@ -96,9 +95,6 @@ export default {
         return setPrompt(request, decodeURIComponent(match[1]), env, headers);
       if (match && request.method === "DELETE")
         return resetPrompt(decodeURIComponent(match[1]), env, headers);
-      match = url.pathname.match(/^\/api\/youtube-candidates\/([0-9a-f]{64})\/adoption$/);
-      if (match && request.method === "POST")
-        return setCandidateStatus(match[1], "ADOPTED", env, headers);
       match = url.pathname.match(/^\/api\/youtube-candidates\/([0-9a-f]{64})$/);
       if (match && request.method === "DELETE")
         return setCandidateStatus(match[1], "DISMISSED", env, headers);
@@ -291,23 +287,19 @@ async function completedIds(env) {
 }
 
 async function sources(env, headers, ctx) {
-  const [{ items, recent: recentValues, fetchedAt }, completed, adopted] = await Promise.all([
+  const [{ items, recent: recentValues, fetchedAt }, completed] = await Promise.all([
     catalog(env, ctx),
     completedIds(env),
-    adoptedSources(env),
   ]);
   const recent = new Map(Object.entries(recentValues || {}));
-  const official = items.map((item) => listItem(item, recent));
-  const mapped = [
-    ...official,
-    ...adopted.map((item) => ({ ...item, popularity: 1, sourceType: "COLLECTED_CANDIDATE" })),
-  ].sort((a, b) => b.popularity - a.popularity || a.id.localeCompare(b.id));
+  const mapped = items
+    .map((item) => listItem(item, recent))
+    .sort((a, b) => b.popularity - a.popularity || a.id.localeCompare(b.id));
   return json(
     {
       today: todayKst(),
       scanned: mapped.length,
-      officialScanned: official.length,
-      adoptedScanned: adopted.length,
+      officialScanned: mapped.length,
       excludedPublished: mapped.filter((item) => completed.has(item.id)).length,
       excludedUncertain: 0,
       fetchedAt,
@@ -319,20 +311,6 @@ async function sources(env, headers, ctx) {
     200,
     headers,
   );
-}
-
-async function adoptedSources(env) {
-  const values = [];
-  let cursor;
-  do {
-    const options = { prefix: ADOPTED_SOURCE_PREFIX, limit: 1000 };
-    if (cursor) options.cursor = cursor;
-    const page = await env.STUDIO_KV.list(options);
-    const rows = await Promise.all(page.keys.map((key) => env.STUDIO_KV.get(key.name, "json")));
-    values.push(...rows.filter((row) => row?.id && row?.question && row?.choices?.length === 2));
-    cursor = page.list_complete ? undefined : page.cursor;
-  } while (cursor);
-  return values;
 }
 
 async function refreshSources(env, headers) {
@@ -482,11 +460,12 @@ async function candidates(env, headers) {
   ]);
   return json(
     {
-      candidates: items.filter((item) => item.status === "NEW"),
+      candidates: items
+        .filter((item) => item.status === "NEW")
+        .map((item) => ({ ...item, adminUrl: candidateAdminUrl(item) })),
       lastRun,
       counts: {
         new: items.filter((item) => item.status === "NEW").length,
-        adopted: items.filter((item) => item.status === "ADOPTED").length,
         dismissed: items.filter((item) => item.status === "DISMISSED").length,
       },
     },
@@ -540,6 +519,34 @@ function normalizeCandidate(value, now) {
     collectedAt: value.collectedAt || now,
     status: value.status || "NEW",
   };
+}
+
+function candidateInterestCard(category) {
+  return (
+    {
+      생활: "DAILY_LIFE",
+      취향: "HOBBY",
+      관계: "RELATIONSHIP",
+      음식: "FOOD",
+      게임: "GAME",
+      문화: "MUSIC_CONTENT",
+      밸런스: "DAILY_LIFE",
+      "정치·시사": "SOCIETY",
+      기타: "HOBBY",
+    }[category] || "HOBBY"
+  );
+}
+
+function candidateAdminUrl(candidate) {
+  const url = new URL(`${WHICH_ORIGIN}/ops`);
+  url.searchParams.set("tab", "review");
+  url.searchParams.set("create", "1");
+  url.searchParams.set("question", candidate.adaptedQuestion || candidate.question);
+  url.searchParams.set("choiceA", candidate.choiceA || candidate.adaptedChoices?.[0] || "");
+  url.searchParams.set("choiceB", candidate.choiceB || candidate.adaptedChoices?.[1] || "");
+  url.searchParams.set("interestCardCode", candidateInterestCard(candidate.category));
+  url.searchParams.set("context", "두 선택지 중 지금 더 끌리는 쪽을 골라보세요.");
+  return url.toString();
 }
 
 function youtubeUrl(value) {
@@ -805,43 +812,12 @@ async function setCandidateStatus(id, status, env, headers) {
   const all = await readCandidates(env);
   const index = all.findIndex((item) => item.id === id);
   if (index < 0) throw httpError("CANDIDATE_NOT_FOUND", 404);
-  let adoptedSourceId = all[index].adoptedSourceId || null;
-  if (status === "ADOPTED") {
-    adoptedSourceId = candidateSourceId(id);
-    const candidate = all[index];
-    await env.STUDIO_KV.put(
-      `${ADOPTED_SOURCE_PREFIX}${adoptedSourceId}`,
-      JSON.stringify({
-        id: adoptedSourceId,
-        version: 1,
-        question: candidate.adaptedQuestion || candidate.question,
-        context: null,
-        choices: [
-          { code: "A", label: candidate.choiceA || candidate.adaptedChoices?.[0] },
-          { code: "B", label: candidate.choiceB || candidate.adaptedChoices?.[1] },
-        ],
-        canonicalUrl: WHICH_ORIGIN,
-        sourceType: "COLLECTED_CANDIDATE",
-        sourceUrl: candidate.sourceUrl || null,
-        adoptedAt: new Date().toISOString(),
-      }),
-    );
-  }
-  all[index] = { ...all[index], status, adoptedSourceId, updatedAt: new Date().toISOString() };
+  all[index] = { ...all[index], status, updatedAt: new Date().toISOString() };
   await env.STUDIO_KV.put("youtube:candidates", JSON.stringify({ version: 1, candidates: all }));
   return json(all[index], 200, headers);
 }
 
-function candidateSourceId(candidateIdValue) {
-  const value = String(candidateIdValue).toLowerCase();
-  if (!ID_RE.test(value)) throw httpError("INVALID_CANDIDATE_ID", 400);
-  return `${value.slice(0, 8)}-${value.slice(8, 12)}-5${value.slice(13, 16)}-8${value.slice(17, 20)}-${value.slice(20, 32)}`;
-}
-
 async function issue(id, env) {
-  const adopted = await env.STUDIO_KV.get(`${ADOPTED_SOURCE_PREFIX}${id}`, "json");
-  if (adopted?.id === id && Array.isArray(adopted.choices) && adopted.choices.length === 2)
-    return adopted;
   const data = await fetchJson(`/api/issues/${id}`);
   if (!data || data.id !== id || !Array.isArray(data.choices) || data.choices.length !== 2)
     throw new Error("WHICH_DETAIL_SCHEMA_CHANGED");
@@ -1026,10 +1002,7 @@ async function generatePackage(request, env, headers) {
   const reasons = source.choices
     .map((choice) => `${choice.code}를 고를 때\n${creative.considerations.get(choice.code)}`)
     .join("\n\n");
-  const callToAction =
-    source.sourceType === "COLLECTED_CANDIDATE"
-      ? `WHICH에서 더 많은 선택에 참여해 보세요.\n${url}`
-      : `WHICH에서 먼저 선택하고 결과를 확인해 보세요.\n${url}`;
+  const callToAction = `WHICH에서 먼저 선택하고 결과를 확인해 보세요.\n${url}`;
   const body = [
     creative.intro,
     source.question,
@@ -1148,7 +1121,7 @@ async function packageFile(id, file, env, headers) {
 
 function page() {
   return `<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>WHICH 콘텐츠 스튜디오</title><style>
-:root{--ink:#12343a;--muted:#62777b;--teal:#087f88;--line:#d9e5e3;--paper:#f3f8f7;--white:#fff;--lime:#d9f36c;--navy:#102f35}*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font-family:Pretendard,"Malgun Gothic",sans-serif;line-height:1.5}button,input,select,textarea{font:inherit}button{cursor:pointer}.shell{min-height:100vh;display:grid;grid-template-columns:390px 1fr}aside{height:100vh;position:sticky;top:0;overflow:auto;background:var(--navy);color:#fff;padding:28px 22px}.brand{font-size:12px;font-weight:800;letter-spacing:.16em;color:#72dbe0}h1{font-size:29px;line-height:1.15}.intro,.muted{color:#bed2d3}.controls{display:grid;grid-template-columns:1fr 1fr;gap:10px}.controls input,.controls select,.search{width:100%;border:1px solid #36575d;background:#173a40;color:#fff;border-radius:10px;padding:10px}.search{margin-top:12px}.q-tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:16px 0 10px}.q-tab{border:1px solid #36575d;background:#173a40;color:#bed2d3;border-radius:9px;padding:9px 4px;font-size:11px}.q-tab.active{border-color:#72dbe0;background:#286069;color:#fff}.candidate-tools{display:none;border:1px solid #36575d;border-radius:10px;padding:10px;margin-bottom:12px}.candidate-tools.visible{display:grid;gap:8px}.candidate-tools textarea{width:100%;min-height:100px;border:1px solid #36575d;background:#173a40;color:#fff;border-radius:8px;padding:8px;font-size:11px}.candidate-tools button{width:100%;border:0;border-radius:8px;padding:8px;background:var(--lime);color:var(--ink);font-weight:800}.candidate-tools small{display:block;color:#bed2d3}.sources{display:grid;gap:8px}.source{width:100%;text-align:left;border:1px solid #36575d;background:#173a40;color:#fff;border-radius:12px;padding:12px}.source.active{border-color:var(--lime)}.source small{display:block;color:#bed2d3;margin-top:5px}.source-actions{display:flex;gap:6px;margin-top:8px}.source-actions button{border:1px solid #57767b;background:transparent;color:#fff;border-radius:8px;padding:5px 8px;font-size:11px}main{padding:38px 4vw}.top{display:flex;justify-content:space-between;gap:20px;align-items:start}.top h2{font-size:36px;margin:8px 0}.generate{border:0;background:var(--lime);color:var(--ink);font-weight:800;border-radius:14px;padding:15px 22px}.generate:disabled{opacity:.45}.status,.cap,.panel{background:#fff;border:1px solid var(--line);border-radius:16px}.status{padding:13px 16px;margin:22px 0}.cap{display:flex;flex-wrap:wrap;gap:20px;padding:13px 16px;margin-bottom:20px}.workspace{display:grid;grid-template-columns:minmax(290px,360px) 1fr;gap:18px}.panel{padding:20px}.panel textarea{width:100%;min-height:320px;border:1px solid var(--line);border-radius:12px;padding:14px}.actions{display:flex;gap:8px;flex-wrap:wrap}.actions button,.actions a{border:1px solid var(--line);background:#fff;color:var(--teal);padding:8px 11px;border-radius:9px;text-decoration:none}.result{min-height:520px}.output-title{font-size:24px;font-weight:800;margin:12px 0}.part{border-top:1px solid var(--line);padding-top:14px;margin-top:14px}.part pre{white-space:pre-wrap;font-family:inherit}.tags{color:var(--teal);font-weight:700}.error{color:#b42318}.toast{position:fixed;right:24px;bottom:24px;z-index:20;max-width:min(360px,calc(100vw - 32px));padding:13px 18px;border-radius:12px;background:var(--ink);color:#fff;box-shadow:0 12px 30px rgba(0,0,0,.2);opacity:0;transform:translateY(12px);pointer-events:none;transition:opacity .18s ease,transform .18s ease}.toast.show{opacity:1;transform:translateY(0)}@media(max-width:900px){.shell{display:block}aside{position:relative;height:auto}.workspace{grid-template-columns:1fr}.top{display:block}.generate{width:100%}}</style></head><body><div class="shell"><aside><div class="brand">WHICH / PAGES STUDIO</div><h1>콘텐츠 제작 스튜디오</h1><p class="intro">인기 신호에 가중치를 둔 WHICH 질문을 선택하세요.</p><div class="controls"><input id="date" type="date"><select id="slot"><option value="1330">13:30</option><option value="1530">15:30</option><option value="1730">17:30</option></select></div><input id="search" class="search" placeholder="질문 검색"><div class="q-tabs"><button class="q-tab active" data-view="available">사용 가능</button><button class="q-tab" data-view="completed">게시 완료</button><button class="q-tab" data-view="youtube">수집 후보</button></div><div id="candidateTools" class="candidate-tools"><button id="collect">웹에서 후보 수집</button><small id="candidateStatus">필요할 때만 실행되며 OpenAI API 비용이 발생합니다.</small><textarea id="candidateJson" placeholder="GPT 예약이 만든 JSON을 여기에 붙여넣으세요."></textarea><button id="importCandidates">JSON 후보 가져오기</button></div><div id="sources" class="sources"><span class="muted">불러오는 중…</span></div></aside><main><div class="top"><div><div class="brand">CHANNEL WORKSPACE</div><h2>통합 홍보 원고</h2><p>네이버 블로그 · 네이버 카페 · Threads에 같은 원고를 사용합니다.</p></div><button id="generate" class="generate" disabled>콘텐츠 생성</button></div><div id="status" class="status">초기화 중…</div><div id="cap" class="cap"></div><div class="workspace"><section class="panel"><h3>채널 프롬프트</h3><textarea id="prompt"></textarea><div class="actions"><button id="save">프롬프트 저장</button><button id="reset">기본값 복원</button></div><details><summary>공통 안전 프롬프트</summary><pre id="common"></pre></details></section><section id="result" class="panel result"><p>질문을 선택하세요.</p></section></div></main></div><div id="toast" class="toast" role="status" aria-live="polite"></div><script>
+:root{--ink:#12343a;--muted:#62777b;--teal:#087f88;--line:#d9e5e3;--paper:#f3f8f7;--white:#fff;--lime:#d9f36c;--navy:#102f35}*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font-family:Pretendard,"Malgun Gothic",sans-serif;line-height:1.5}button,input,select,textarea{font:inherit}button{cursor:pointer}.shell{min-height:100vh;display:grid;grid-template-columns:390px 1fr}aside{height:100vh;position:sticky;top:0;overflow:auto;background:var(--navy);color:#fff;padding:28px 22px}.brand{font-size:12px;font-weight:800;letter-spacing:.16em;color:#72dbe0}h1{font-size:29px;line-height:1.15}.intro,.muted{color:#bed2d3}.controls{display:grid;grid-template-columns:1fr 1fr;gap:10px}.controls input,.controls select,.search{width:100%;border:1px solid #36575d;background:#173a40;color:#fff;border-radius:10px;padding:10px}.search{margin-top:12px}.q-tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:16px 0 10px}.q-tab{border:1px solid #36575d;background:#173a40;color:#bed2d3;border-radius:9px;padding:9px 4px;font-size:11px}.q-tab.active{border-color:#72dbe0;background:#286069;color:#fff}.candidate-tools{display:none;border:1px solid #36575d;border-radius:10px;padding:10px;margin-bottom:12px}.candidate-tools.visible{display:grid;gap:8px}.candidate-tools textarea{width:100%;min-height:100px;border:1px solid #36575d;background:#173a40;color:#fff;border-radius:8px;padding:8px;font-size:11px}.candidate-tools button{width:100%;border:0;border-radius:8px;padding:8px;background:var(--lime);color:var(--ink);font-weight:800}.candidate-tools small{display:block;color:#bed2d3}.sources{display:grid;gap:8px}.source{width:100%;text-align:left;border:1px solid #36575d;background:#173a40;color:#fff;border-radius:12px;padding:12px}.source.active{border-color:var(--lime)}.source small{display:block;color:#bed2d3;margin-top:5px}.source-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}.source-actions button,.source-actions a{border:1px solid #57767b;background:transparent;color:#fff;border-radius:8px;padding:5px 8px;font-size:11px;text-decoration:none}main{padding:38px 4vw}.top{display:flex;justify-content:space-between;gap:20px;align-items:start}.top h2{font-size:36px;margin:8px 0}.generate{border:0;background:var(--lime);color:var(--ink);font-weight:800;border-radius:14px;padding:15px 22px}.generate:disabled{opacity:.45}.status,.cap,.panel{background:#fff;border:1px solid var(--line);border-radius:16px}.status{padding:13px 16px;margin:22px 0}.cap{display:flex;flex-wrap:wrap;gap:20px;padding:13px 16px;margin-bottom:20px}.workspace{display:grid;grid-template-columns:minmax(290px,360px) 1fr;gap:18px}.panel{padding:20px}.panel textarea{width:100%;min-height:320px;border:1px solid var(--line);border-radius:12px;padding:14px}.actions{display:flex;gap:8px;flex-wrap:wrap}.actions button,.actions a{border:1px solid var(--line);background:#fff;color:var(--teal);padding:8px 11px;border-radius:9px;text-decoration:none}.result{min-height:520px}.output-title{font-size:24px;font-weight:800;margin:12px 0}.part{border-top:1px solid var(--line);padding-top:14px;margin-top:14px}.part pre{white-space:pre-wrap;font-family:inherit}.tags{color:var(--teal);font-weight:700}.error{color:#b42318}.toast{position:fixed;right:24px;bottom:24px;z-index:20;max-width:min(360px,calc(100vw - 32px));padding:13px 18px;border-radius:12px;background:var(--ink);color:#fff;box-shadow:0 12px 30px rgba(0,0,0,.2);opacity:0;transform:translateY(12px);pointer-events:none;transition:opacity .18s ease,transform .18s ease}.toast.show{opacity:1;transform:translateY(0)}@media(max-width:900px){.shell{display:block}aside{position:relative;height:auto}.workspace{grid-template-columns:1fr}.top{display:block}.generate{width:100%}}</style></head><body><div class="shell"><aside><div class="brand">WHICH / PAGES STUDIO</div><h1>콘텐츠 제작 스튜디오</h1><p class="intro">WHICH DB에 발행된 질문 중 홍보할 질문을 선택하세요.</p><div class="controls"><input id="date" type="date"><select id="slot"><option value="1330">13:30</option><option value="1530">15:30</option><option value="1730">17:30</option></select></div><input id="search" class="search" placeholder="질문 검색"><div class="q-tabs"><button class="q-tab active" data-view="available">사용 가능</button><button class="q-tab" data-view="completed">게시 완료</button><button class="q-tab" data-view="youtube">투표 후보</button></div><div id="candidateTools" class="candidate-tools"><small>수집 후보는 WHICH 관리자에서 검수·등록한 뒤 홍보 목록에 나타납니다.</small><button id="collect">웹에서 후보 수집</button><small id="candidateStatus">필요할 때만 실행되며 OpenAI API 비용이 발생합니다.</small><textarea id="candidateJson" placeholder="GPT 예약이 만든 JSON을 여기에 붙여넣으세요."></textarea><button id="importCandidates">JSON 후보 가져오기</button></div><div id="sources" class="sources"><span class="muted">불러오는 중…</span></div></aside><main><div class="top"><div><div class="brand">CHANNEL WORKSPACE</div><h2>통합 홍보 원고</h2><p>네이버 블로그 · 네이버 카페 · Threads에 같은 원고를 사용합니다.</p></div><button id="generate" class="generate" disabled>콘텐츠 생성</button></div><div id="status" class="status">초기화 중…</div><div id="cap" class="cap"></div><div class="workspace"><section class="panel"><h3>채널 프롬프트</h3><textarea id="prompt"></textarea><div class="actions"><button id="save">프롬프트 저장</button><button id="reset">기본값 복원</button></div><details><summary>공통 안전 프롬프트</summary><pre id="common"></pre></details></section><section id="result" class="panel result"><p>질문을 선택하세요.</p></section></div></main></div><div id="toast" class="toast" role="status" aria-live="polite"></div><script>
 const state={view:'available',selected:null,sources:[],completed:[],candidates:[],lastRun:null,pkg:null};
 const el=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -1164,16 +1137,17 @@ function renderSources(){
   rows=rows.filter(x=>[x.question,x.originalQuestion,x.channel].join(' ').toLowerCase().includes(q));
   el('sources').innerHTML=rows.length?rows.map(x=>{
     const detail=state.view==='youtube'?[x.choiceA+' / '+x.choiceB,x.channel,x.category,x.status].filter(Boolean).join(' · '):'인기도 '+Number(x.popularity||0).toFixed(1);
-    const link=state.view==='youtube'&&x.sourceUrl?'<a href="'+esc(x.sourceUrl)+'" target="_blank" rel="noopener">원문 확인</a>':'';
-    const actions=state.view==='available'?'<button data-action="select">선택</button><button data-action="complete">게시 완료</button>':state.view==='completed'?'<button data-action="view">글 보기</button><button data-action="reopen">다시 사용</button>':'<button data-action="adopt">채택</button><button data-action="dismiss">제외</button>'+link;
+    const sourceLink=state.view==='youtube'&&x.sourceUrl?'<a href="'+esc(x.sourceUrl)+'" target="_blank" rel="noopener">원문 확인</a>':'';
+    const adminLink=state.view==='youtube'&&x.adminUrl?'<a href="'+esc(x.adminUrl)+'" target="_blank" rel="noopener">WHICH 관리자에서 등록</a>':'';
+    const actions=state.view==='available'?'<button data-action="select">선택</button><button data-action="complete">게시 완료</button>':state.view==='completed'?'<button data-action="view">글 보기</button><button data-action="reopen">다시 사용</button>':adminLink+'<button data-action="dismiss">처리 완료</button>'+sourceLink;
     return '<div class="source '+(state.selected?.id===x.id?'active':'')+'" data-id="'+esc(x.id)+'"><b>'+esc(x.question)+'</b><small>'+esc(detail)+'</small><div class="source-actions">'+actions+'</div></div>'
   }).join(''):'<span class="muted">해당 항목이 없습니다.</span>';
-  document.querySelectorAll('.source').forEach(card=>card.onclick=async e=>{const row=rows.find(x=>x.id===card.dataset.id);let action=e.target.dataset.action;if(!action&&state.view==='completed')action='view';if(!action)return;if(action==='select'){state.selected=row;state.pkg=null;renderSources();renderResult();updateButton();showToast('질문을 선택했습니다.');return}try{if(action==='complete'){const d=await api('/api/sources/'+row.id+'/completion',{method:'POST',body:'{}'});await loadSources();showToast(d.contentSaved?'게시 완료로 이동하고 통합 본문을 저장했습니다.':'게시 완료로 이동했습니다. 연결된 생성 원고는 없습니다.')}if(action==='view'){const d=await api('/api/sources/'+row.id+'/completion');renderCompletion(d,row);showToast(d.content?'저장된 통합 본문을 불러왔습니다.':'연결된 통합 본문이 없습니다.')}if(action==='reopen'){await api('/api/sources/'+row.id+'/completion',{method:'DELETE'});await loadSources();showToast('사용 가능한 질문으로 되돌렸습니다.')}if(action==='adopt'){const d=await api('/api/youtube-candidates/'+row.id+'/adoption',{method:'POST',body:'{}'});await Promise.all([loadSources(),loadCandidates()]);state.view='available';state.selected=state.sources.find(x=>x.id===d.adoptedSourceId)||null;renderSources();renderResult();updateButton();showToast('후보를 사용 가능한 질문으로 옮겼습니다.')}if(action==='dismiss'){await api('/api/youtube-candidates/'+row.id,{method:'DELETE'});await loadCandidates();showToast('후보를 제외했습니다.')}}catch(err){setStatus(err.message,true);showToast('작업을 완료하지 못했습니다.')}})
+  document.querySelectorAll('.source').forEach(card=>card.onclick=async e=>{const row=rows.find(x=>x.id===card.dataset.id);let action=e.target.dataset.action;if(!action&&state.view==='completed')action='view';if(!action)return;if(action==='select'){state.selected=row;state.pkg=null;renderSources();renderResult();updateButton();showToast('질문을 선택했습니다.');return}try{if(action==='complete'){const d=await api('/api/sources/'+row.id+'/completion',{method:'POST',body:'{}'});await loadSources();showToast(d.contentSaved?'게시 완료로 이동하고 통합 본문을 저장했습니다.':'게시 완료로 이동했습니다. 연결된 생성 원고는 없습니다.')}if(action==='view'){const d=await api('/api/sources/'+row.id+'/completion');renderCompletion(d,row);showToast(d.content?'저장된 통합 본문을 불러왔습니다.':'연결된 통합 본문이 없습니다.')}if(action==='reopen'){await api('/api/sources/'+row.id+'/completion',{method:'DELETE'});await loadSources();showToast('사용 가능한 질문으로 되돌렸습니다.')}if(action==='dismiss'){await api('/api/youtube-candidates/'+row.id,{method:'DELETE'});await loadCandidates();showToast('관리자 등록 처리를 완료했습니다.')}}catch(err){setStatus(err.message,true);showToast('작업을 완료하지 못했습니다.')}})
 }
 function updateButton(){el('generate').disabled=!state.selected;el('generate').textContent='콘텐츠 생성'}
 function renderResult(){if(!state.pkg){el('result').innerHTML=state.selected?'<h3>'+esc(state.selected.question)+'</h3><p>통합 원고를 생성할 준비가 됐습니다.</p>':'<p>질문을 선택하세요.</p>';return}const p=state.pkg,c=p.channels[0];el('result').innerHTML='<div class="actions"><button id="copy">전체 복사</button><a href="/api/packages/'+p.id+'/files/'+c.file+'" download>TXT</a></div><div class="output-title">'+esc(c.title)+'</div>'+c.parts.map(x=>'<div class="part"><b>'+esc(x.label)+'</b><pre>'+esc(x.text)+'</pre></div>').join('')+'<div class="part"><b>카페 투표</b><pre>'+esc(c.poll.question+'\\n'+c.poll.choices.join('\\n'))+'</pre></div><p class="tags">'+esc(c.tags.map(x=>'#'+x).join(' '))+'</p><p>모델 '+esc(p.model)+' · 비용 $'+Number(p.costUsd).toFixed(4)+'</p>';el('copy').onclick=()=>copyText([c.title,c.text,c.tags.map(x=>'#'+x).join(' ')].join('\\n\\n'))}
 function renderCompletion(record,row){const c=record.content;if(!c){el('result').innerHTML='<div class="output-title">'+esc(row.question)+'</div><p>이 항목은 이전 방식으로 완료되어 연결된 통합 본문이 없습니다.</p>';return}const poll=c.poll?'<div class="part"><b>카페 투표</b><pre>'+esc(c.poll.question+'\\n'+(c.poll.choices||[]).join('\\n'))+'</pre></div>':'';el('result').innerHTML='<div class="actions"><button id="copyCompleted">전체 복사</button></div><div class="output-title">'+esc(c.title)+'</div><div class="part"><b>통합 본문</b><pre>'+esc(c.text)+'</pre></div>'+poll+'<p class="tags">'+esc((c.tags||[]).map(x=>'#'+x).join(' '))+'</p><p>완료 '+esc(record.at||'')+(c.generatedAt?' · 생성 '+esc(c.generatedAt):'')+'</p>';el('copyCompleted').onclick=()=>copyText([c.title,c.text,(c.tags||[]).map(x=>'#'+x).join(' ')].join('\\n\\n'))}
-async function loadSources(){const d=await api('/api/sources');state.sources=d.sources;state.completed=d.completedSources;if(state.selected&&!state.sources.some(x=>x.id===state.selected.id))state.selected=null;renderSources();updateButton();setStatus('WHICH 공식 '+d.officialScanned+'개 · 채택 후보 '+d.adoptedScanned+'개 · 게시 완료 '+d.completedSources.length+'개')}
+async function loadSources(){const d=await api('/api/sources');state.sources=d.sources;state.completed=d.completedSources;if(state.selected&&!state.sources.some(x=>x.id===state.selected.id))state.selected=null;renderSources();updateButton();setStatus('WHICH DB '+d.officialScanned+'개 · 홍보 가능 '+d.sources.length+'개 · 게시 완료 '+d.completedSources.length+'개')}
 async function loadCandidates(){const d=await api('/api/youtube-candidates');state.candidates=d.candidates;state.lastRun=d.lastRun;renderSources()}
 document.querySelectorAll('.q-tab').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;state.selected=null;renderSources();renderResult();updateButton()});
 el('search').oninput=renderSources;
@@ -1198,4 +1172,5 @@ export const testHooks = {
   safeError,
   normalizeCandidate,
   youtubeUrl,
+  candidateAdminUrl,
 };

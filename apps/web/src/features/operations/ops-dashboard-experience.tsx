@@ -94,6 +94,13 @@ export function OpsDashboardExperience() {
   const [refreshing, setRefreshing] = useState(false);
   const dashboardRequest = useRef<AbortController | null>(null);
 
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("tab") !== "review") return;
+    // This one-time state update applies an explicit deep link from an operator tool.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setTab("review");
+  }, []);
+
   const load = useCallback(async (days: WindowDays, background = false) => {
     dashboardRequest.current?.abort();
     const controller = new AbortController();

@@ -145,7 +145,7 @@ test("completion preserves the latest generated article", async () => {
   assert.equal((await stored.json()).content.text, "통합 본문");
 });
 
-test("adopting a collected candidate moves it into available sources", async () => {
+test("collected candidates link to ops and never enter promotion sources directly", async () => {
   const testEnv = env();
   await testEnv.STUDIO_KV.put(
     "catalog:public:v1",
@@ -180,18 +180,6 @@ test("adopting a collected candidate moves it into available sources", async () 
   );
   const candidate = (await imported.json()).candidates[0];
 
-  const adopted = await worker.fetch(
-    new Request(`https://studio.whichone.site/api/youtube-candidates/${candidate.id}/adoption`, {
-      method: "POST",
-      headers: requestHeaders,
-      body: "{}",
-    }),
-    testEnv,
-  );
-  assert.equal(adopted.status, 200);
-  const adoptedBody = await adopted.json();
-  assert.match(adoptedBody.adoptedSourceId, /^[0-9a-f-]{36}$/);
-
   const sourceResponse = await worker.fetch(
     new Request("https://studio.whichone.site/api/sources", {
       headers: { "cf-connecting-ip": allowedIp },
@@ -200,12 +188,7 @@ test("adopting a collected candidate moves it into available sources", async () 
   );
   const sourceBody = await sourceResponse.json();
   assert.equal(sourceBody.officialScanned, 0);
-  assert.equal(sourceBody.adoptedScanned, 1);
-  assert.equal(sourceBody.sources[0].question, "주말에는 어디로 갈까요?");
-  assert.deepEqual(
-    sourceBody.sources[0].choices.map((choice) => choice.label),
-    ["산", "바다"],
-  );
+  assert.equal(sourceBody.sources.length, 0);
 
   const candidatesResponse = await worker.fetch(
     new Request("https://studio.whichone.site/api/youtube-candidates", {
@@ -214,6 +197,23 @@ test("adopting a collected candidate moves it into available sources", async () 
     testEnv,
   );
   const candidatesBody = await candidatesResponse.json();
-  assert.equal(candidatesBody.candidates.length, 0);
-  assert.equal(candidatesBody.counts.adopted, 1);
+  assert.equal(candidatesBody.candidates.length, 1);
+  const adminUrl = new URL(candidatesBody.candidates[0].adminUrl);
+  assert.equal(adminUrl.origin, "https://whichone.site");
+  assert.equal(adminUrl.pathname, "/ops");
+  assert.equal(adminUrl.searchParams.get("tab"), "review");
+  assert.equal(adminUrl.searchParams.get("create"), "1");
+  assert.equal(adminUrl.searchParams.get("question"), "주말에는 어디로 갈까요?");
+  assert.equal(adminUrl.searchParams.get("choiceA"), "산");
+  assert.equal(adminUrl.searchParams.get("choiceB"), "바다");
+  assert.equal(adminUrl.searchParams.get("interestCardCode"), "HOBBY");
+
+  const dismissed = await worker.fetch(
+    new Request(`https://studio.whichone.site/api/youtube-candidates/${candidate.id}`, {
+      method: "DELETE",
+      headers: requestHeaders,
+    }),
+    testEnv,
+  );
+  assert.equal(dismissed.status, 200);
 });
