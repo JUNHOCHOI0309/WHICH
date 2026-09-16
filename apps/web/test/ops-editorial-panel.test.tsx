@@ -210,6 +210,59 @@ describe("Ops Editorial panel", () => {
     );
   });
 
+  it("uploads a dropped image to the choice card it was dropped on", async () => {
+    const first = candidate("WEXP-0001", "드래그 업로드 질문");
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/ops/media-library") return libraryResponse();
+      if (url.startsWith("/api/ops/editorial?")) return response(page([first], null));
+      if (url === "/api/ops/editorial/media-assets" && init?.method === "POST") {
+        return response(
+          { asset: { id: "asset-drop", moderationState: "APPROVED", storageState: "PUBLISHED" } },
+          201,
+        );
+      }
+      if (url.endsWith("/choices/B/media") && init?.method === "PUT") {
+        return response({
+          media: {
+            assetId: "asset-drop",
+            status: "APPROVED",
+            rightsState: "ASSERTED",
+            altText: "드래그 업로드 질문 - 두 번째",
+            cropMode: "COVER",
+          },
+        });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<OpsEditorialPanel embedded />);
+    const uploads = await screen.findAllByLabelText("새 이미지 업로드");
+    const choiceCard = uploads[1]!.closest("article");
+    expect(choiceCard).not.toBeNull();
+    const file = new File(["image"], "dropped.webp", { type: "image/webp" });
+
+    fireEvent.dragEnter(choiceCard!, {
+      dataTransfer: { files: [file], dropEffect: "none" },
+    });
+    expect(screen.getByRole("status")).toHaveTextContent("여기에 놓아 업로드");
+    expect(choiceCard).toHaveAttribute("data-drop-active", "true");
+
+    fireEvent.drop(choiceCard!, {
+      dataTransfer: { files: [file], dropEffect: "copy" },
+    });
+
+    expect(await screen.findByAltText("드래그 업로드 질문 - 두 번째")).toBeVisible();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual(
+      expect.arrayContaining([
+        "/api/ops/editorial/media-assets",
+        "/api/ops/editorial/WEXP-0001/choices/B/media",
+      ]),
+    );
+  });
+
   it("adds a new administrator question to the review queue", async () => {
     const existing = candidate("WEXP-0001", "기존 질문");
     const created = candidate("ADMIN-NEW-0001", "새 관리자 질문?");

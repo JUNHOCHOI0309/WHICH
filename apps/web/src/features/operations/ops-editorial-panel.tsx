@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useCallback, useEffect, useState } from "react";
-import type { FormEvent } from "react";
+import type { DragEvent, FormEvent } from "react";
 
 import { toast } from "@/components/feedback/toast-provider";
 import type {
@@ -69,6 +69,7 @@ export function OpsEditorialPanel({
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [mediaBusy, setMediaBusy] = useState<string | null>(null);
+  const [mediaDropTarget, setMediaDropTarget] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{ message: string; error: boolean } | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -317,6 +318,34 @@ export function OpsEditorialPanel({
     } finally {
       setMediaBusy(null);
     }
+  }
+
+  function handleChoiceMediaDrag(event: DragEvent<HTMLElement>, choiceCode: string) {
+    event.preventDefault();
+    if (mediaBusy !== null || !!selected?.publication) {
+      event.dataTransfer.dropEffect = "none";
+      return;
+    }
+    event.dataTransfer.dropEffect = "copy";
+    setMediaDropTarget(choiceCode);
+  }
+
+  function handleChoiceMediaDragLeave(event: DragEvent<HTMLElement>, choiceCode: string) {
+    const nextTarget = event.relatedTarget;
+    if (nextTarget && event.currentTarget.contains(nextTarget as Node)) return;
+    setMediaDropTarget((current) => (current === choiceCode ? null : current));
+  }
+
+  function handleChoiceMediaDrop(event: DragEvent<HTMLElement>, choiceCode: string) {
+    event.preventDefault();
+    setMediaDropTarget(null);
+    if (mediaBusy !== null || !!selected?.publication) return;
+    const file = event.dataTransfer.files?.[0];
+    if (!file) {
+      setFeedback({ message: "드롭한 항목에서 이미지 파일을 찾지 못했습니다.", error: true });
+      return;
+    }
+    void uploadChoiceMedia(choiceCode, file);
   }
 
   async function detachChoiceMedia(choiceCode: string) {
@@ -710,12 +739,23 @@ export function OpsEditorialPanel({
               <div className={styles.candidateMediaHeading}>
                 <div>
                   <h3>선택지 이미지</h3>
-                  <p>관리자 업로드는 별도 이미지 검수 없이 즉시 승인되어 선택지에 연결됩니다.</p>
+                  <p>
+                    버튼을 누르거나 A/B 카드에 이미지를 끌어다 놓으세요. 관리자 업로드는 별도 이미지
+                    검수 없이 즉시 승인되어 선택지에 연결됩니다.
+                  </p>
                 </div>
               </div>
               <div className={styles.candidateMediaGrid}>
                 {selected.choices.map((choice) => (
-                  <article key={choice.code} data-linked={!!choice.media}>
+                  <article
+                    key={choice.code}
+                    data-linked={!!choice.media}
+                    data-drop-active={mediaDropTarget === choice.code}
+                    onDragEnter={(event) => handleChoiceMediaDrag(event, choice.code)}
+                    onDragOver={(event) => handleChoiceMediaDrag(event, choice.code)}
+                    onDragLeave={(event) => handleChoiceMediaDragLeave(event, choice.code)}
+                    onDrop={(event) => handleChoiceMediaDrop(event, choice.code)}
+                  >
                     <div className={styles.candidateMediaPreview}>
                       {choice.media ? (
                         <Image
@@ -728,6 +768,11 @@ export function OpsEditorialPanel({
                       ) : (
                         <span>이미지 없음</span>
                       )}
+                      {mediaDropTarget === choice.code ? (
+                        <span className={styles.candidateMediaDropPrompt} role="status">
+                          여기에 놓아 업로드
+                        </span>
+                      ) : null}
                       <b>{choice.code}</b>
                     </div>
                     <strong>{choice.label}</strong>

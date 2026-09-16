@@ -1035,6 +1035,11 @@
   border-color: #58cbd9;
   box-shadow: 0 8px 20px rgba(8, 144, 165, 0.1);
 }
+.candidateMediaGrid article[data-drop-active="true"] {
+  border-color: #05a9bf;
+  background: #edfbfd;
+  box-shadow: 0 0 0 3px rgba(5, 169, 191, 0.16);
+}
 .candidateMediaGrid article > strong {
   font-size: 13px;
 }
@@ -1071,6 +1076,19 @@
   background: #fff;
   color: #078ea4;
   box-shadow: 0 3px 10px rgba(16, 33, 41, 0.14);
+}
+.candidateMediaDropPrompt {
+  position: absolute;
+  inset: 8px;
+  display: grid;
+  place-items: center;
+  border: 2px dashed #05a9bf;
+  border-radius: 8px;
+  background: rgba(237, 251, 253, 0.94);
+  color: #087f92;
+  font-size: 13px;
+  font-weight: 850;
+  pointer-events: none;
 }
 .mediaLibrary {
   position: absolute;
