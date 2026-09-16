@@ -54,35 +54,54 @@ export default {
       const url = new URL(request.url);
       if (request.method === "GET" && url.pathname === "/") {
         return new Response(page(), {
-          headers: { ...headers, "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
+          headers: {
+            ...headers,
+            "content-type": "text/html; charset=utf-8",
+            "cache-control": "no-store",
+          },
         });
       }
       if (request.method === "GET" && url.pathname === "/health") {
-        return json({ status: "ok", service: "which-marketing-studio", storage: "cloudflare-kv" }, 200, headers);
+        return json(
+          { status: "ok", service: "which-marketing-studio", storage: "cloudflare-kv" },
+          200,
+          headers,
+        );
       }
       if (url.pathname.startsWith("/api/") && isMutation(request.method) && !validOrigin(request)) {
         return json({ error: "INVALID_ORIGIN" }, 403, headers);
       }
-      if (request.method === "GET" && url.pathname === "/api/sources") return sources(env, headers, ctx);
-      if (request.method === "POST" && url.pathname === "/api/sources/refresh") return refreshSources(env, headers);
+      if (request.method === "GET" && url.pathname === "/api/sources")
+        return sources(env, headers, ctx);
+      if (request.method === "POST" && url.pathname === "/api/sources/refresh")
+        return refreshSources(env, headers);
       if (request.method === "GET" && url.pathname === "/api/prompts") return prompts(env, headers);
-      if (request.method === "GET" && url.pathname === "/api/capabilities") return capabilities(env, headers);
-      if (request.method === "GET" && url.pathname === "/api/youtube-candidates") return candidates(env, headers);
-      if (request.method === "POST" && url.pathname === "/api/youtube-candidates/import") return importCandidates(request, env, headers);
-      if (request.method === "POST" && url.pathname === "/api/youtube-candidates/collect") return collectCandidatesHttp(env, headers);
-      if (request.method === "POST" && url.pathname === "/api/packages") return generatePackage(request, env, headers);
+      if (request.method === "GET" && url.pathname === "/api/capabilities")
+        return capabilities(env, headers);
+      if (request.method === "GET" && url.pathname === "/api/youtube-candidates")
+        return candidates(env, headers);
+      if (request.method === "POST" && url.pathname === "/api/youtube-candidates/import")
+        return importCandidates(request, env, headers);
+      if (request.method === "POST" && url.pathname === "/api/youtube-candidates/collect")
+        return collectCandidatesHttp(env, headers);
+      if (request.method === "POST" && url.pathname === "/api/packages")
+        return generatePackage(request, env, headers);
 
       let match = url.pathname.match(/^\/api\/sources\/([0-9a-f-]{36})\/completion$/i);
       if (match && request.method === "GET") return getCompletion(match[1], env, headers);
       if (match && request.method === "POST") return completeSource(match[1], env, headers);
       if (match && request.method === "DELETE") return reopenSource(match[1], env, headers);
       match = url.pathname.match(/^\/api\/prompts\/([^/]+)$/);
-      if (match && request.method === "PUT") return setPrompt(request, decodeURIComponent(match[1]), env, headers);
-      if (match && request.method === "DELETE") return resetPrompt(decodeURIComponent(match[1]), env, headers);
+      if (match && request.method === "PUT")
+        return setPrompt(request, decodeURIComponent(match[1]), env, headers);
+      if (match && request.method === "DELETE")
+        return resetPrompt(decodeURIComponent(match[1]), env, headers);
       match = url.pathname.match(/^\/api\/youtube-candidates\/([0-9a-f]{64})\/adoption$/);
-      if (match && request.method === "POST") return setCandidateStatus(match[1], "ADOPTED", env, headers);
+      if (match && request.method === "POST")
+        return setCandidateStatus(match[1], "ADOPTED", env, headers);
       match = url.pathname.match(/^\/api\/youtube-candidates\/([0-9a-f]{64})$/);
-      if (match && request.method === "DELETE") return setCandidateStatus(match[1], "DISMISSED", env, headers);
+      if (match && request.method === "DELETE")
+        return setCandidateStatus(match[1], "DISMISSED", env, headers);
       match = url.pathname.match(/^\/api\/packages\/([0-9a-f]{64})\/files\/([a-z0-9-]+\.txt)$/);
       if (match && request.method === "GET") return packageFile(match[1], match[2], env, headers);
       return json({ error: "NOT_FOUND" }, 404, headers);
@@ -99,7 +118,8 @@ function securityHeaders() {
     "x-frame-options": "DENY",
     "referrer-policy": "no-referrer",
     "permissions-policy": "camera=(), microphone=(), geolocation=()",
-    "content-security-policy": "default-src 'self'; img-src 'self' https: data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+    "content-security-policy":
+      "default-src 'self'; img-src 'self' https: data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
   };
 }
 
@@ -112,7 +132,8 @@ async function isAllowed(request, env) {
 function constantTimeEqual(a, b) {
   if (a.length !== b.length) return false;
   let different = 0;
-  for (let index = 0; index < a.length; index++) different |= a.charCodeAt(index) ^ b.charCodeAt(index);
+  for (let index = 0; index < a.length; index++)
+    different |= a.charCodeAt(index) ^ b.charCodeAt(index);
   return different === 0;
 }
 
@@ -126,11 +147,25 @@ function validOrigin(request) {
 }
 
 function forbidden(headers) {
-  return new Response("접근이 허용되지 않은 네트워크입니다.", { status: 403, headers: { ...headers, "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" } });
+  return new Response("접근이 허용되지 않은 네트워크입니다.", {
+    status: 403,
+    headers: {
+      ...headers,
+      "content-type": "text/plain; charset=utf-8",
+      "cache-control": "no-store",
+    },
+  });
 }
 
 function json(value, status, headers) {
-  return new Response(JSON.stringify(value), { status, headers: { ...headers, "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
+  return new Response(JSON.stringify(value), {
+    status,
+    headers: {
+      ...headers,
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+    },
+  });
 }
 
 async function readJson(request) {
@@ -138,7 +173,11 @@ async function readJson(request) {
   if (declared > MAX_BODY_BYTES) throw httpError("REQUEST_TOO_LARGE", 413);
   const text = await request.text();
   if (encoder.encode(text).byteLength > MAX_BODY_BYTES) throw httpError("REQUEST_TOO_LARGE", 413);
-  try { return JSON.parse(text); } catch { throw httpError("INVALID_JSON", 400); }
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw httpError("INVALID_JSON", 400);
+  }
 }
 
 function httpError(message, status) {
@@ -148,16 +187,26 @@ function httpError(message, status) {
 }
 
 function safeError(error) {
-  const value = String(error?.message || error || "UNKNOWN_ERROR").toUpperCase().replace(/[^A-Z0-9_]/g, "_");
+  const value = String(error?.message || error || "UNKNOWN_ERROR")
+    .toUpperCase()
+    .replace(/[^A-Z0-9_]/g, "_");
   return value.slice(0, 100) || "UNKNOWN_ERROR";
 }
 
 function todayKst() {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
 }
 
 async function fetchJson(path) {
-  const response = await fetch(`${WHICH_ORIGIN}${path}`, { headers: { accept: "application/json" }, redirect: "manual" });
+  const response = await fetch(`${WHICH_ORIGIN}${path}`, {
+    headers: { accept: "application/json" },
+    redirect: "manual",
+  });
   if (!response.ok) throw new Error(`WHICH_SOURCE_HTTP_${response.status}`);
   const length = Number(response.headers.get("content-length") || 0);
   if (length > 2_000_000) throw new Error("WHICH_SOURCE_TOO_LARGE");
@@ -174,9 +223,14 @@ async function fetchCatalog() {
     throw new Error("WHICH_SOURCE_SCHEMA_CHANGED");
   }
   if (signalsResult.status === "fulfilled") {
-    for (const row of signalsResult.value.rightRail?.items || []) recent.set(row.issueId, row.participationCount);
+    for (const row of signalsResult.value.rightRail?.items || [])
+      recent.set(row.issueId, row.participationCount);
   }
-  return { items: catalogResult.value.items, recent: Object.fromEntries(recent), fetchedAt: new Date().toISOString() };
+  return {
+    items: catalogResult.value.items,
+    recent: Object.fromEntries(recent),
+    fetchedAt: new Date().toISOString(),
+  };
 }
 
 async function refreshCatalog(env) {
@@ -189,12 +243,22 @@ async function catalog(env, ctx) {
   const cached = await env.STUDIO_KV.get(CATALOG_KEY, "json");
   if (!cached?.items || !cached?.fetchedAt) return refreshCatalog(env);
   const stale = Date.now() - Date.parse(cached.fetchedAt) > CATALOG_FRESH_MS;
-  if (stale && ctx?.waitUntil) ctx.waitUntil(refreshCatalog(env).catch((error) => console.error(JSON.stringify({ event: "catalog_refresh_failed", code: safeError(error) }))));
+  if (stale && ctx?.waitUntil)
+    ctx.waitUntil(
+      refreshCatalog(env).catch((error) =>
+        console.error(JSON.stringify({ event: "catalog_refresh_failed", code: safeError(error) })),
+      ),
+    );
   return cached;
 }
 
 function popularity(item, recent) {
-  return 1 + 3 * Math.log1p(recent.get(item.id) || 0) + 2 * Math.log1p(item.engagement?.recommendationCount || 0) + Math.log1p(item.engagement?.commentCount || 0);
+  return (
+    1 +
+    3 * Math.log1p(recent.get(item.id) || 0) +
+    2 * Math.log1p(item.engagement?.recommendationCount || 0) +
+    Math.log1p(item.engagement?.commentCount || 0)
+  );
 }
 
 function listItem(item, recent) {
@@ -227,17 +291,34 @@ async function completedIds(env) {
 }
 
 async function sources(env, headers, ctx) {
-  const [{ items, recent: recentValues, fetchedAt }, completed, adopted] = await Promise.all([catalog(env, ctx), completedIds(env), adoptedSources(env)]);
+  const [{ items, recent: recentValues, fetchedAt }, completed, adopted] = await Promise.all([
+    catalog(env, ctx),
+    completedIds(env),
+    adoptedSources(env),
+  ]);
   const recent = new Map(Object.entries(recentValues || {}));
   const official = items.map((item) => listItem(item, recent));
-  const mapped = [...official, ...adopted.map((item) => ({ ...item, popularity: 1, sourceType: "COLLECTED_CANDIDATE" }))]
-    .sort((a, b) => b.popularity - a.popularity || a.id.localeCompare(b.id));
-  return json({
-    today: todayKst(), scanned: mapped.length, officialScanned: official.length, adoptedScanned: adopted.length,
-    excludedPublished: mapped.filter((item) => completed.has(item.id)).length, excludedUncertain: 0, fetchedAt,
-    sources: mapped.filter((item) => !completed.has(item.id)),
-    completedSources: mapped.filter((item) => completed.has(item.id)).map((item) => ({ ...item, reopenable: true })),
-  }, 200, headers);
+  const mapped = [
+    ...official,
+    ...adopted.map((item) => ({ ...item, popularity: 1, sourceType: "COLLECTED_CANDIDATE" })),
+  ].sort((a, b) => b.popularity - a.popularity || a.id.localeCompare(b.id));
+  return json(
+    {
+      today: todayKst(),
+      scanned: mapped.length,
+      officialScanned: official.length,
+      adoptedScanned: adopted.length,
+      excludedPublished: mapped.filter((item) => completed.has(item.id)).length,
+      excludedUncertain: 0,
+      fetchedAt,
+      sources: mapped.filter((item) => !completed.has(item.id)),
+      completedSources: mapped
+        .filter((item) => completed.has(item.id))
+        .map((item) => ({ ...item, reopenable: true })),
+    },
+    200,
+    headers,
+  );
 }
 
 async function adoptedSources(env) {
@@ -256,16 +337,24 @@ async function adoptedSources(env) {
 
 async function refreshSources(env, headers) {
   const value = await refreshCatalog(env);
-  return json({ refreshed: true, scanned: value.items.length, fetchedAt: value.fetchedAt }, 200, headers);
+  return json(
+    { refreshed: true, scanned: value.items.length, fetchedAt: value.fetchedAt },
+    200,
+    headers,
+  );
 }
 
 async function completeSource(id, env, headers) {
   if (!UUID_RE.test(id)) throw httpError("INVALID_ISSUE_ID", 400);
   const existed = await env.STUDIO_KV.get(`completed:${id}`);
   const latest = await env.STUDIO_KV.get(`latest-package:${id}`, "json");
-  const pkg = latest?.packageId ? await env.STUDIO_KV.get(`package:${latest.packageId}`, "json") : await findLatestPackageForSource(id, env);
+  const pkg = latest?.packageId
+    ? await env.STUDIO_KV.get(`package:${latest.packageId}`, "json")
+    : await findLatestPackageForSource(id, env);
   const record = {
-    at: new Date().toISOString(), source: "USER_CONFIRMED_PUBLISHED", packageId: pkg?.id || null,
+    at: new Date().toISOString(),
+    source: "USER_CONFIRMED_PUBLISHED",
+    packageId: pkg?.id || null,
     content: completionContent(pkg),
   };
   await env.STUDIO_KV.put(`completed:${id}`, JSON.stringify(record));
@@ -282,7 +371,11 @@ async function getCompletion(id, env, headers) {
     if (content) {
       record = { ...record, packageId: pkg.id, content };
       await env.STUDIO_KV.put(`completed:${id}`, JSON.stringify(record));
-      await env.STUDIO_KV.put(`latest-package:${id}`, JSON.stringify({ packageId: pkg.id, generatedAt: pkg.generatedAt }), { expirationTtl: 60 * 60 * 24 * 90 });
+      await env.STUDIO_KV.put(
+        `latest-package:${id}`,
+        JSON.stringify({ packageId: pkg.id, generatedAt: pkg.generatedAt }),
+        { expirationTtl: 60 * 60 * 24 * 90 },
+      );
     }
   }
   return json({ id, ...record }, 200, headers);
@@ -290,7 +383,17 @@ async function getCompletion(id, env, headers) {
 
 function completionContent(pkg) {
   const channel = pkg?.channels?.[0];
-  return channel ? { title: channel.title, text: channel.text, tags: channel.tags, poll: channel.poll, trackedUrl: channel.trackedUrl, generatedAt: pkg.generatedAt, model: pkg.model } : null;
+  return channel
+    ? {
+        title: channel.title,
+        text: channel.text,
+        tags: channel.tags,
+        poll: channel.poll,
+        trackedUrl: channel.trackedUrl,
+        generatedAt: pkg.generatedAt,
+        model: pkg.model,
+      }
+    : null;
 }
 
 async function findLatestPackageForSource(sourceId, env) {
@@ -303,7 +406,8 @@ async function findLatestPackageForSource(sourceId, env) {
     const packages = await Promise.all(page.keys.map((key) => env.STUDIO_KV.get(key.name, "json")));
     for (const pkg of packages) {
       if (pkg?.source?.id !== sourceId || !pkg?.channels?.[0]) continue;
-      if (!latest || Date.parse(pkg.generatedAt || 0) > Date.parse(latest.generatedAt || 0)) latest = pkg;
+      if (!latest || Date.parse(pkg.generatedAt || 0) > Date.parse(latest.generatedAt || 0))
+        latest = pkg;
     }
     cursor = page.list_complete ? undefined : page.cursor;
   } while (cursor);
@@ -323,14 +427,23 @@ async function currentPrompt(env) {
 
 async function prompts(env, headers) {
   const prompt = await currentPrompt(env);
-  return json({ common: COMMON_PROMPT, prompts: { [CHANNEL]: prompt }, defaults: { [CHANNEL]: DEFAULT_PROMPT } }, 200, headers);
+  return json(
+    {
+      common: COMMON_PROMPT,
+      prompts: { [CHANNEL]: prompt },
+      defaults: { [CHANNEL]: DEFAULT_PROMPT },
+    },
+    200,
+    headers,
+  );
 }
 
 async function setPrompt(request, channel, env, headers) {
   if (channel !== CHANNEL) throw httpError("INVALID_CHANNEL", 400);
   const body = await readJson(request);
   const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
-  if (prompt.length < 20 || prompt.length > MAX_PROMPT_LENGTH) throw httpError("INVALID_PROMPT", 400);
+  if (prompt.length < 20 || prompt.length > MAX_PROMPT_LENGTH)
+    throw httpError("INVALID_PROMPT", 400);
   await env.STUDIO_KV.put(`prompt:${CHANNEL}`, prompt);
   return json({ prompt }, 200, headers);
 }
@@ -342,12 +455,19 @@ async function resetPrompt(channel, env, headers) {
 }
 
 async function capabilities(env, headers) {
-  return json({
-    apiKeyName: env.OPENAI_KEY_NAME || null,
-    apiKeyNameVerified: false,
-    textModel: { id: env.OPENAI_MODEL || "UNCONFIGURED", accessible: Boolean(env.OPENAI_API_KEY) },
-    imageModel: { id: "NOT_USED", accessible: false },
-  }, 200, headers);
+  return json(
+    {
+      apiKeyName: env.OPENAI_KEY_NAME || null,
+      apiKeyNameVerified: false,
+      textModel: {
+        id: env.OPENAI_MODEL || "UNCONFIGURED",
+        accessible: Boolean(env.OPENAI_API_KEY),
+      },
+      imageModel: { id: "NOT_USED", accessible: false },
+    },
+    200,
+    headers,
+  );
 }
 
 async function readCandidates(env) {
@@ -356,47 +476,82 @@ async function readCandidates(env) {
 }
 
 async function candidates(env, headers) {
-  const [items, lastRun] = await Promise.all([readCandidates(env), env.STUDIO_KV.get(CANDIDATE_RUN_KEY, "json")]);
-  return json({
-    candidates: items.filter((item) => item.status === "NEW"),
-    lastRun,
-    counts: {
-      new: items.filter((item) => item.status === "NEW").length,
-      adopted: items.filter((item) => item.status === "ADOPTED").length,
-      dismissed: items.filter((item) => item.status === "DISMISSED").length,
+  const [items, lastRun] = await Promise.all([
+    readCandidates(env),
+    env.STUDIO_KV.get(CANDIDATE_RUN_KEY, "json"),
+  ]);
+  return json(
+    {
+      candidates: items.filter((item) => item.status === "NEW"),
+      lastRun,
+      counts: {
+        new: items.filter((item) => item.status === "NEW").length,
+        adopted: items.filter((item) => item.status === "ADOPTED").length,
+        dismissed: items.filter((item) => item.status === "DISMISSED").length,
+      },
     },
-  }, 200, headers);
+    200,
+    headers,
+  );
 }
 
 async function candidateId(value) {
-  return sha256(JSON.stringify([value.adaptedQuestion || value.question, ...(value.adaptedChoices || [value.choiceA, value.choiceB])].map((part) => String(part || "").trim().toLowerCase())));
+  return sha256(
+    JSON.stringify(
+      [
+        value.adaptedQuestion || value.question,
+        ...(value.adaptedChoices || [value.choiceA, value.choiceB]),
+      ].map((part) =>
+        String(part || "")
+          .trim()
+          .toLowerCase(),
+      ),
+    ),
+  );
 }
 
 function normalizeCandidate(value, now) {
-  const adaptedChoices = value.adaptedChoices || value.choices || [value.choiceA || value.choice_a, value.choiceB || value.choice_b];
+  const adaptedChoices = value.adaptedChoices ||
+    value.choices || [value.choiceA || value.choice_a, value.choiceB || value.choice_b];
   const question = String(value.adaptedQuestion || value.question || value.title || "").trim();
   const choiceA = String(adaptedChoices?.[0] || "").trim();
   const choiceB = String(adaptedChoices?.[1] || "").trim();
   if (!question || !choiceA || !choiceB) return null;
-  const originalChoices = Array.isArray(value.originalChoices) ? value.originalChoices.map((item) => cleanText(item, 120)).filter(Boolean).slice(0, 6) : [];
+  const originalChoices = Array.isArray(value.originalChoices)
+    ? value.originalChoices
+        .map((item) => cleanText(item, 120))
+        .filter(Boolean)
+        .slice(0, 6)
+    : [];
   return {
-    question: question.slice(0, 240), choiceA: choiceA.slice(0, 120), choiceB: choiceB.slice(0, 120),
-    adaptedQuestion: question.slice(0, 240), adaptedChoices: [choiceA.slice(0, 120), choiceB.slice(0, 120)],
-    channel: cleanText(value.channel, 100) || null, observedDate: DATE_RE.test(value.observedDate || "") ? value.observedDate : null,
-    originalQuestion: cleanText(value.originalQuestion, 300) || question.slice(0, 240), originalChoices,
-    participationText: cleanText(value.participationText, 100) || null, category: cleanText(value.category, 30) || "기타",
-    political: Boolean(value.political), sourceUrl: youtubeUrl(value.sourceUrl || value.url),
-    collectedAt: value.collectedAt || now, status: value.status || "NEW",
+    question: question.slice(0, 240),
+    choiceA: choiceA.slice(0, 120),
+    choiceB: choiceB.slice(0, 120),
+    adaptedQuestion: question.slice(0, 240),
+    adaptedChoices: [choiceA.slice(0, 120), choiceB.slice(0, 120)],
+    channel: cleanText(value.channel, 100) || null,
+    observedDate: DATE_RE.test(value.observedDate || "") ? value.observedDate : null,
+    originalQuestion: cleanText(value.originalQuestion, 300) || question.slice(0, 240),
+    originalChoices,
+    participationText: cleanText(value.participationText, 100) || null,
+    category: cleanText(value.category, 30) || "기타",
+    political: Boolean(value.political),
+    sourceUrl: youtubeUrl(value.sourceUrl || value.url),
+    collectedAt: value.collectedAt || now,
+    status: value.status || "NEW",
   };
 }
 
 function youtubeUrl(value) {
   try {
     const url = new URL(String(value || ""));
-    if (!["youtube.com", "www.youtube.com", "m.youtube.com"].includes(url.hostname.toLowerCase())) return null;
+    if (!["youtube.com", "www.youtube.com", "m.youtube.com"].includes(url.hostname.toLowerCase()))
+      return null;
     url.hash = "";
     return url.toString();
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 
 async function importCandidates(request, env, headers) {
@@ -405,38 +560,79 @@ async function importCandidates(request, env, headers) {
   if (rows.length > 200) throw httpError("TOO_MANY_CANDIDATES", 400);
   const existing = await readCandidates(env);
   const byId = new Map(existing.map((item) => [item.id, item]));
-  let imported = 0, duplicates = 0;
+  let imported = 0,
+    duplicates = 0;
   const now = new Date().toISOString();
   for (const row of rows) {
     const item = normalizeCandidate(row, now);
     if (!item) continue;
     const id = await candidateId(item);
-    if (byId.has(id)) { duplicates++; continue; }
+    if (byId.has(id)) {
+      duplicates++;
+      continue;
+    }
     byId.set(id, { id, ...item });
     imported++;
   }
   const all = [...byId.values()].slice(-MAX_CANDIDATES);
   await env.STUDIO_KV.put("youtube:candidates", JSON.stringify({ version: 1, candidates: all }));
-  return json({ reportStatus: rows.length ? "ok" : "no_data", imported, duplicates, total: all.length, candidates: all }, 200, headers);
+  return json(
+    {
+      reportStatus: rows.length ? "ok" : "no_data",
+      imported,
+      duplicates,
+      total: all.length,
+      candidates: all,
+    },
+    200,
+    headers,
+  );
 }
 
 function candidateSchema() {
   return {
-    type: "object", additionalProperties: false,
+    type: "object",
+    additionalProperties: false,
     properties: {
       status: { type: "string", enum: ["ok", "no_data", "error"] },
       message: { type: ["string", "null"] },
-      candidates: { type: "array", maxItems: 12, items: {
-        type: "object", additionalProperties: false,
-        properties: {
-          channel: { type: "string" }, observedDate: { type: ["string", "null"] }, originalQuestion: { type: "string" },
-          originalChoices: { type: "array", minItems: 2, maxItems: 6, items: { type: "string" } }, participationText: { type: ["string", "null"] },
-          sourceUrl: { type: "string" }, category: { type: "string", enum: ["생활", "취향", "관계", "음식", "게임", "문화", "밸런스", "정치·시사", "기타"] },
-          political: { type: "boolean" }, adaptedQuestion: { type: "string" }, adaptedChoices: { type: "array", minItems: 2, maxItems: 2, items: { type: "string" } },
+      candidates: {
+        type: "array",
+        maxItems: 12,
+        items: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            channel: { type: "string" },
+            observedDate: { type: ["string", "null"] },
+            originalQuestion: { type: "string" },
+            originalChoices: { type: "array", minItems: 2, maxItems: 6, items: { type: "string" } },
+            participationText: { type: ["string", "null"] },
+            sourceUrl: { type: "string" },
+            category: {
+              type: "string",
+              enum: ["생활", "취향", "관계", "음식", "게임", "문화", "밸런스", "정치·시사", "기타"],
+            },
+            political: { type: "boolean" },
+            adaptedQuestion: { type: "string" },
+            adaptedChoices: { type: "array", minItems: 2, maxItems: 2, items: { type: "string" } },
+          },
+          required: [
+            "channel",
+            "observedDate",
+            "originalQuestion",
+            "originalChoices",
+            "participationText",
+            "sourceUrl",
+            "category",
+            "political",
+            "adaptedQuestion",
+            "adaptedChoices",
+          ],
         },
-        required: ["channel", "observedDate", "originalQuestion", "originalChoices", "participationText", "sourceUrl", "category", "political", "adaptedQuestion", "adaptedChoices"],
-      } },
-    }, required: ["status", "message", "candidates"],
+      },
+    },
+    required: ["status", "message", "candidates"],
   };
 }
 
@@ -453,10 +649,14 @@ function webSearchSourceUrls(body) {
 
 function sameYoutubeUrl(a, b) {
   try {
-    const left = new URL(a), right = new URL(b);
-    const clean = (url) => `${url.hostname.replace(/^www\./, "")}${url.pathname.replace(/\/$/, "")}`;
+    const left = new URL(a),
+      right = new URL(b);
+    const clean = (url) =>
+      `${url.hostname.replace(/^www\./, "")}${url.pathname.replace(/\/$/, "")}`;
     return clean(left) === clean(right);
-  } catch { return false; }
+  } catch {
+    return false;
+  }
 }
 
 async function collectYoutubeCandidates(env, { trigger = "manual" } = {}) {
@@ -464,11 +664,16 @@ async function collectYoutubeCandidates(env, { trigger = "manual" } = {}) {
   const now = new Date().toISOString();
   const today = todayKst();
   const previous = await env.STUDIO_KV.get(CANDIDATE_RUN_KEY, "json");
-  if (previous?.runDate === today && ["ok", "no_data"].includes(previous.status)) return { ...previous, cached: true };
+  if (previous?.runDate === today && ["ok", "no_data"].includes(previous.status))
+    return { ...previous, cached: true };
   const existing = await readCandidates(env);
-  const knownUrls = existing.map((item) => item.sourceUrl).filter(Boolean).slice(-100);
+  const knownUrls = existing
+    .map((item) => item.sourceUrl)
+    .filter(Boolean)
+    .slice(-100);
   const payload = {
-    model: env.CANDIDATE_MODEL || CANDIDATE_MODEL, store: false,
+    model: env.CANDIDATE_MODEL || CANDIDATE_MODEL,
+    store: false,
     instructions: `한국 WHICH 서비스에 맞는 유튜브 커뮤니티 투표 후보를 수집한다.
 검색 우선 절차를 반드시 따른다.
 1. YouTube 채널 페이지를 먼저 열지 말고 검색엔진에서 site:youtube.com/post 형태로 최근 개별 게시물 URL을 찾는다.
@@ -478,47 +683,115 @@ async function collectYoutubeCandidates(env, { trigger = "manual" } = {}) {
 5. 일부 게시물 확인 실패는 전체 error로 만들지 말고 그 항목만 제외한다. 검색 자체가 광범위하게 실패했을 때만 error, 정상 검색 후 신규가 없으면 no_data로 판정한다.
 추정하거나 URL을 만들지 않는다. 생활·취향·관계·음식·게임·문화·밸런스를 우선한다. 정치·시사는 political=true로 표시한다. 원문 의미를 유지하면서 WHICH용 양자택일 질문과 정확히 두 선택지로 각색한다.`,
     input: `오늘은 ${today}이다. 다음 채널명을 각각 site:youtube.com/post 검색과 함께 사용해 최근 2일의 커뮤니티 투표를 찾아라: 진행빵집, 뭉케뭉케, 궁금해소, 만렙백수, 짤툰, 쩝쩝박사, 닥터딩요. 비슷한 참여도 높은 한국 채널도 검색 결과가 명확할 때 포함한다. 이미 저장된 URL은 제외한다: ${JSON.stringify(knownUrls)}`,
-    tools: [{ type: "web_search", search_context_size: "low", user_location: { type: "approximate", country: "KR" } }],
-    tool_choice: "required", max_tool_calls: 6, max_output_tokens: 1800,
+    tools: [
+      {
+        type: "web_search",
+        search_context_size: "low",
+        user_location: { type: "approximate", country: "KR" },
+      },
+    ],
+    tool_choice: "required",
+    max_tool_calls: 6,
+    max_output_tokens: 1800,
     include: ["web_search_call.action.sources"],
-    text: { format: { type: "json_schema", name: "which_youtube_poll_candidates", strict: true, schema: candidateSchema() } },
+    text: {
+      format: {
+        type: "json_schema",
+        name: "which_youtube_poll_candidates",
+        strict: true,
+        schema: candidateSchema(),
+      },
+    },
   };
   const dailyLimit = Math.min(0.5, Math.max(0, Number(env.DAILY_BUDGET_USD || 0.5)));
   const budgetKey = `budget:${today}`;
   const budget = (await env.STUDIO_KV.get(budgetKey, "json")) || { spentUsd: 0, requests: 0 };
   const reserve = 0.065;
   if (budget.spentUsd + reserve > dailyLimit) throw httpError("DAILY_MODEL_BUDGET_EXCEEDED", 429);
-  const response = await fetch("https://api.openai.com/v1/responses", { method: "POST", headers: { authorization: `Bearer ${env.OPENAI_API_KEY}`, "content-type": "application/json" }, body: JSON.stringify(payload) });
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: { authorization: `Bearer ${env.OPENAI_API_KEY}`, "content-type": "application/json" },
+    body: JSON.stringify(payload),
+  });
   if (!response.ok) {
-    const record = { runDate: today, ranAt: now, trigger, status: "error", message: `MODEL_HTTP_${response.status}`, imported: 0 };
+    const record = {
+      runDate: today,
+      ranAt: now,
+      trigger,
+      status: "error",
+      message: `MODEL_HTTP_${response.status}`,
+      imported: 0,
+    };
     await env.STUDIO_KV.put(CANDIDATE_RUN_KEY, JSON.stringify(record));
-    throw httpError(response.status === 429 ? "MODEL_QUOTA_OR_RATE_LIMIT" : "CANDIDATE_COLLECTION_FAILED", response.status === 429 ? 429 : 503);
+    throw httpError(
+      response.status === 429 ? "MODEL_QUOTA_OR_RATE_LIMIT" : "CANDIDATE_COLLECTION_FAILED",
+      response.status === 429 ? 429 : 503,
+    );
   }
   const body = await response.json();
   const usage = body.usage || {};
   const searchCalls = (body.output || []).filter((item) => item.type === "web_search_call").length;
-  const costUsd = (Number(usage.input_tokens || 0) * 0.4 + Number(usage.output_tokens || 0) * 1.6) / 1_000_000 + searchCalls * 0.01;
-  await env.STUDIO_KV.put(budgetKey, JSON.stringify({ ...budget, spentUsd: Number(budget.spentUsd || 0) + costUsd, requests: Number(budget.requests || 0) + 1, collectorRequests: Number(budget.collectorRequests || 0) + 1, updatedAt: now }), { expirationTtl: 60 * 60 * 24 * 14 });
+  const costUsd =
+    (Number(usage.input_tokens || 0) * 0.4 + Number(usage.output_tokens || 0) * 1.6) / 1_000_000 +
+    searchCalls * 0.01;
+  await env.STUDIO_KV.put(
+    budgetKey,
+    JSON.stringify({
+      ...budget,
+      spentUsd: Number(budget.spentUsd || 0) + costUsd,
+      requests: Number(budget.requests || 0) + 1,
+      collectorRequests: Number(budget.collectorRequests || 0) + 1,
+      updatedAt: now,
+    }),
+    { expirationTtl: 60 * 60 * 24 * 14 },
+  );
   let parsed;
-  try { parsed = JSON.parse(responseText(body)); } catch { parsed = { status: "error", message: "검색 결과를 구조화하지 못했습니다.", candidates: [] }; }
+  try {
+    parsed = JSON.parse(responseText(body));
+  } catch {
+    parsed = { status: "error", message: "검색 결과를 구조화하지 못했습니다.", candidates: [] };
+  }
   const citedUrls = webSearchSourceUrls(body);
   const verified = (parsed.candidates || []).filter((row) => {
     const url = youtubeUrl(row.sourceUrl);
     return url && [...citedUrls].some((cited) => sameYoutubeUrl(url, cited));
   });
   const byId = new Map(existing.map((item) => [item.id, item]));
-  let imported = 0, duplicates = 0;
+  let imported = 0,
+    duplicates = 0;
   for (const row of verified) {
     const item = normalizeCandidate(row, now);
     if (!item?.sourceUrl) continue;
     const id = await candidateId(item);
-    if (byId.has(id) || [...byId.values()].some((old) => old.sourceUrl && sameYoutubeUrl(old.sourceUrl, item.sourceUrl))) { duplicates++; continue; }
-    byId.set(id, { id, ...item }); imported++;
+    if (
+      byId.has(id) ||
+      [...byId.values()].some(
+        (old) => old.sourceUrl && sameYoutubeUrl(old.sourceUrl, item.sourceUrl),
+      )
+    ) {
+      duplicates++;
+      continue;
+    }
+    byId.set(id, { id, ...item });
+    imported++;
   }
   const all = [...byId.values()].slice(-MAX_CANDIDATES);
   await env.STUDIO_KV.put("youtube:candidates", JSON.stringify({ version: 2, candidates: all }));
-  const status = imported || verified.length ? "ok" : parsed.status === "error" ? "error" : "no_data";
-  const record = { runDate: today, ranAt: now, trigger, status, message: cleanText(parsed.message, 240) || null, found: (parsed.candidates || []).length, verified: verified.length, imported, duplicates, total: all.length, model: payload.model };
+  const status =
+    imported || verified.length ? "ok" : parsed.status === "error" ? "error" : "no_data";
+  const record = {
+    runDate: today,
+    ranAt: now,
+    trigger,
+    status,
+    message: cleanText(parsed.message, 240) || null,
+    found: (parsed.candidates || []).length,
+    verified: verified.length,
+    imported,
+    duplicates,
+    total: all.length,
+    model: payload.model,
+  };
   await env.STUDIO_KV.put(CANDIDATE_RUN_KEY, JSON.stringify(record));
   return record;
 }
@@ -536,20 +809,23 @@ async function setCandidateStatus(id, status, env, headers) {
   if (status === "ADOPTED") {
     adoptedSourceId = candidateSourceId(id);
     const candidate = all[index];
-    await env.STUDIO_KV.put(`${ADOPTED_SOURCE_PREFIX}${adoptedSourceId}`, JSON.stringify({
-      id: adoptedSourceId,
-      version: 1,
-      question: candidate.adaptedQuestion || candidate.question,
-      context: null,
-      choices: [
-        { code: "A", label: candidate.choiceA || candidate.adaptedChoices?.[0] },
-        { code: "B", label: candidate.choiceB || candidate.adaptedChoices?.[1] },
-      ],
-      canonicalUrl: WHICH_ORIGIN,
-      sourceType: "COLLECTED_CANDIDATE",
-      sourceUrl: candidate.sourceUrl || null,
-      adoptedAt: new Date().toISOString(),
-    }));
+    await env.STUDIO_KV.put(
+      `${ADOPTED_SOURCE_PREFIX}${adoptedSourceId}`,
+      JSON.stringify({
+        id: adoptedSourceId,
+        version: 1,
+        question: candidate.adaptedQuestion || candidate.question,
+        context: null,
+        choices: [
+          { code: "A", label: candidate.choiceA || candidate.adaptedChoices?.[0] },
+          { code: "B", label: candidate.choiceB || candidate.adaptedChoices?.[1] },
+        ],
+        canonicalUrl: WHICH_ORIGIN,
+        sourceType: "COLLECTED_CANDIDATE",
+        sourceUrl: candidate.sourceUrl || null,
+        adoptedAt: new Date().toISOString(),
+      }),
+    );
   }
   all[index] = { ...all[index], status, adoptedSourceId, updatedAt: new Date().toISOString() };
   await env.STUDIO_KV.put("youtube:candidates", JSON.stringify({ version: 1, candidates: all }));
@@ -564,9 +840,11 @@ function candidateSourceId(candidateIdValue) {
 
 async function issue(id, env) {
   const adopted = await env.STUDIO_KV.get(`${ADOPTED_SOURCE_PREFIX}${id}`, "json");
-  if (adopted?.id === id && Array.isArray(adopted.choices) && adopted.choices.length === 2) return adopted;
+  if (adopted?.id === id && Array.isArray(adopted.choices) && adopted.choices.length === 2)
+    return adopted;
   const data = await fetchJson(`/api/issues/${id}`);
-  if (!data || data.id !== id || !Array.isArray(data.choices) || data.choices.length !== 2) throw new Error("WHICH_DETAIL_SCHEMA_CHANGED");
+  if (!data || data.id !== id || !Array.isArray(data.choices) || data.choices.length !== 2)
+    throw new Error("WHICH_DETAIL_SCHEMA_CHANGED");
   return data;
 }
 
@@ -577,44 +855,107 @@ async function sha256(value) {
 
 function trackedUrl(sourceId, date, slot, canonicalUrl = `${WHICH_ORIGIN}/issues/${sourceId}`) {
   const url = new URL(canonicalUrl);
-  url.search = new URLSearchParams({ utm_source: "owned_social", utm_medium: CHANNEL, utm_campaign: `studio_${date.replaceAll("-", "")}`, utm_content: `s${slot}_${sourceId.slice(0, 8)}_${CHANNEL}` }).toString();
+  url.search = new URLSearchParams({
+    utm_source: "owned_social",
+    utm_medium: CHANNEL,
+    utm_campaign: `studio_${date.replaceAll("-", "")}`,
+    utm_content: `s${slot}_${sourceId.slice(0, 8)}_${CHANNEL}`,
+  }).toString();
   return url.toString();
 }
 
 function outputSchema() {
   return {
-    type: "object", additionalProperties: false,
+    type: "object",
+    additionalProperties: false,
     properties: {
-      titleHook: { type: "string" }, intro: { type: "string" },
-      considerations: { type: "array", minItems: 2, maxItems: 2, items: { type: "object", additionalProperties: false, properties: { choiceCode: { type: "string", enum: ["A", "B"] }, text: { type: "string" } }, required: ["choiceCode", "text"] } },
-      closing: { type: "string" }, tags: { type: "array", minItems: 2, maxItems: 3, items: { type: "string" } },
-    }, required: ["titleHook", "intro", "considerations", "closing", "tags"],
+      titleHook: { type: "string" },
+      intro: { type: "string" },
+      considerations: {
+        type: "array",
+        minItems: 2,
+        maxItems: 2,
+        items: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            choiceCode: { type: "string", enum: ["A", "B"] },
+            text: { type: "string" },
+          },
+          required: ["choiceCode", "text"],
+        },
+      },
+      closing: { type: "string" },
+      tags: { type: "array", minItems: 2, maxItems: 3, items: { type: "string" } },
+    },
+    required: ["titleHook", "intro", "considerations", "closing", "tags"],
   };
 }
 
 function responseText(body) {
-  return (body.output || []).flatMap((item) => item.content || []).filter((item) => item.type === "output_text").map((item) => item.text || "").join("");
+  return (body.output || [])
+    .flatMap((item) => item.content || [])
+    .filter((item) => item.type === "output_text")
+    .map((item) => item.text || "")
+    .join("");
 }
 
 function cleanText(value, max) {
-  return String(value || "").replace(/[\u0000-\u001f]+/g, " ").trim().slice(0, max);
+  return String(value || "")
+    .replace(/[\u0000-\u001f]+/g, " ")
+    .trim()
+    .slice(0, max);
 }
 
 function validateCreative(value) {
-  if (!value || typeof value !== "object" || !Array.isArray(value.considerations) || !Array.isArray(value.tags)) throw new Error("INVALID_MODEL_OUTPUT");
-  const byCode = new Map(value.considerations.map((item) => [item.choiceCode, cleanText(item.text, 320)]));
+  if (
+    !value ||
+    typeof value !== "object" ||
+    !Array.isArray(value.considerations) ||
+    !Array.isArray(value.tags)
+  )
+    throw new Error("INVALID_MODEL_OUTPUT");
+  const byCode = new Map(
+    value.considerations.map((item) => [item.choiceCode, cleanText(item.text, 320)]),
+  );
   if (!byCode.get("A") || !byCode.get("B")) throw new Error("INVALID_MODEL_OUTPUT");
-  return { titleHook: cleanText(value.titleHook, 80), intro: cleanText(value.intro, 400), considerations: byCode, closing: cleanText(value.closing, 240), tags: [...new Set(value.tags.map((tag) => cleanText(tag, 30).replace(/^#/, "")).filter(Boolean))].slice(0, 3) };
+  return {
+    titleHook: cleanText(value.titleHook, 80),
+    intro: cleanText(value.intro, 400),
+    considerations: byCode,
+    closing: cleanText(value.closing, 240),
+    tags: [
+      ...new Set(value.tags.map((tag) => cleanText(tag, 30).replace(/^#/, "")).filter(Boolean)),
+    ].slice(0, 3),
+  };
 }
 
 async function generatePackage(request, env, headers) {
   const input = await readJson(request);
-  if (!UUID_RE.test(input.sourceId || "") || !DATE_RE.test(input.date || "") || !SLOTS.has(input.slot) || input.channel !== CHANNEL) throw httpError("INVALID_PACKAGE_REQUEST", 400);
-  if (await env.STUDIO_KV.get(`completed:${input.sourceId}`)) throw httpError("SOURCE_ALREADY_USED", 409);
+  if (
+    !UUID_RE.test(input.sourceId || "") ||
+    !DATE_RE.test(input.date || "") ||
+    !SLOTS.has(input.slot) ||
+    input.channel !== CHANNEL
+  )
+    throw httpError("INVALID_PACKAGE_REQUEST", 400);
+  if (await env.STUDIO_KV.get(`completed:${input.sourceId}`))
+    throw httpError("SOURCE_ALREADY_USED", 409);
   if (!env.OPENAI_API_KEY) throw httpError("OPENAI_API_KEY_UNCONFIGURED", 503);
   const [source, prompt] = await Promise.all([issue(input.sourceId, env), currentPrompt(env)]);
   const model = env.OPENAI_MODEL || "gpt-4.1-mini-2025-04-14";
-  const id = await sha256(JSON.stringify([PACKAGE_FORMAT_VERSION, source.id, source.version, source.question, input.date, input.slot, model, prompt]));
+  const id = await sha256(
+    JSON.stringify([
+      PACKAGE_FORMAT_VERSION,
+      source.id,
+      source.version,
+      source.question,
+      input.date,
+      input.slot,
+      model,
+      prompt,
+    ]),
+  );
   const cached = await env.STUDIO_KV.get(`package:${id}`, "json");
   if (cached) return json({ package: cached, cached: true }, 200, headers);
   const dailyLimit = Math.min(0.5, Math.max(0, Number(env.DAILY_BUDGET_USD || 0.5)));
@@ -622,49 +963,186 @@ async function generatePackage(request, env, headers) {
   const budget = (await env.STUDIO_KV.get(budgetKey, "json")) || { spentUsd: 0, requests: 0 };
   const maxOutputTokens = 900;
   const payload = {
-    model, store: false,
+    model,
+    store: false,
     instructions: `${COMMON_PROMPT}\n\n편집 가능한 채널 지침:\n${prompt}`,
-    input: JSON.stringify({ SOURCE: { question: source.question, context: source.context, choices: source.choices.map(({ code, label }) => ({ code, label })) } }),
+    input: JSON.stringify({
+      SOURCE: {
+        question: source.question,
+        context: source.context,
+        choices: source.choices.map(({ code, label }) => ({ code, label })),
+      },
+    }),
     max_output_tokens: maxOutputTokens,
-    text: { format: { type: "json_schema", name: "which_studio_creative", strict: true, schema: outputSchema() } },
+    text: {
+      format: {
+        type: "json_schema",
+        name: "which_studio_creative",
+        strict: true,
+        schema: outputSchema(),
+      },
+    },
   };
   const estimatedInputTokens = Math.ceil(JSON.stringify(payload).length / 3.2);
-  const reserve = estimatedInputTokens * 0.4 / 1_000_000 + maxOutputTokens * 1.6 / 1_000_000;
+  const reserve = (estimatedInputTokens * 0.4) / 1_000_000 + (maxOutputTokens * 1.6) / 1_000_000;
   if (budget.requests >= 30) throw httpError("DAILY_REQUEST_LIMIT", 429);
   if (budget.spentUsd + reserve > dailyLimit) throw httpError("DAILY_MODEL_BUDGET_EXCEEDED", 429);
-  const response = await fetch("https://api.openai.com/v1/responses", { method: "POST", headers: { authorization: `Bearer ${env.OPENAI_API_KEY}`, "content-type": "application/json" }, body: JSON.stringify(payload) });
-  if (!response.ok) throw httpError(response.status === 429 ? "MODEL_QUOTA_OR_RATE_LIMIT" : "MODEL_REQUEST_FAILED", response.status === 429 ? 429 : 503);
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: { authorization: `Bearer ${env.OPENAI_API_KEY}`, "content-type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok)
+    throw httpError(
+      response.status === 429 ? "MODEL_QUOTA_OR_RATE_LIMIT" : "MODEL_REQUEST_FAILED",
+      response.status === 429 ? 429 : 503,
+    );
   const modelBody = await response.json();
   if (modelBody.status !== "completed") throw new Error("MODEL_INCOMPLETE");
   let parsed;
-  try { parsed = JSON.parse(responseText(modelBody)); } catch { throw new Error("INVALID_MODEL_OUTPUT"); }
+  try {
+    parsed = JSON.parse(responseText(modelBody));
+  } catch {
+    throw new Error("INVALID_MODEL_OUTPUT");
+  }
   const creative = validateCreative(parsed);
   const usage = modelBody.usage || {};
-  const costUsd = usage.input_tokens != null && usage.output_tokens != null ? (usage.input_tokens * 0.4 + usage.output_tokens * 1.6) / 1_000_000 : reserve;
-  await env.STUDIO_KV.put(budgetKey, JSON.stringify({ spentUsd: budget.spentUsd + costUsd, requests: budget.requests + 1, updatedAt: new Date().toISOString() }), { expirationTtl: 60 * 60 * 24 * 14 });
+  const costUsd =
+    usage.input_tokens != null && usage.output_tokens != null
+      ? (usage.input_tokens * 0.4 + usage.output_tokens * 1.6) / 1_000_000
+      : reserve;
+  await env.STUDIO_KV.put(
+    budgetKey,
+    JSON.stringify({
+      spentUsd: budget.spentUsd + costUsd,
+      requests: budget.requests + 1,
+      updatedAt: new Date().toISOString(),
+    }),
+    { expirationTtl: 60 * 60 * 24 * 14 },
+  );
   const canonicalUrl = source.canonicalUrl || `${WHICH_ORIGIN}/issues/${source.id}`;
   const url = trackedUrl(source.id, input.date, input.slot, canonicalUrl);
   const choices = source.choices.map((choice) => `${choice.code}. ${choice.label}`).join("\n");
-  const reasons = source.choices.map((choice) => `${choice.code}를 고를 때\n${creative.considerations.get(choice.code)}`).join("\n\n");
-  const callToAction = source.sourceType === "COLLECTED_CANDIDATE" ? `WHICH에서 더 많은 선택에 참여해 보세요.\n${url}` : `WHICH에서 먼저 선택하고 결과를 확인해 보세요.\n${url}`;
-  const body = [creative.intro, source.question, source.context, choices, reasons, creative.closing, callToAction, "결과는 WHICH 참여자의 선택이며 전체 인구를 대표하지 않습니다."].filter(Boolean).join("\n\n");
-  const output = { id: CHANNEL, label: "블로그 · 카페 · Threads 통합 원고", format: "ARTICLE", title: creative.titleHook, text: body, tags: ["WHICH", ...creative.tags.filter((tag) => tag !== "WHICH")], trackedUrl: url, parts: [{ label: "통합 본문", text: body }], poll: { question: `[오늘의 선택] ${source.question}`, choices: source.choices.map((choice) => choice.label) }, file: "unified-post.txt" };
-  const media = [...source.choices.flatMap((choice) => choice.media ? [{ role: "CHOICE", choiceCode: choice.code, url: choice.media.url, alt: choice.media.altText, origin: "WHICH_R2_PUBLIC" }] : []), ...(source.contextMedia ? [{ role: "CONTEXT", choiceCode: null, url: source.contextMedia.url, alt: source.contextMedia.altText, origin: "WHICH_R2_PUBLIC" }] : [])];
-  const studioPackage = { schema: "which-content-studio-v2", id, generatedAt: new Date().toISOString(), date: input.date, slot: input.slot, source: { id: source.id, version: source.version, question: source.question, context: source.context, choices: source.choices.map(({ code, label }) => ({ code, label })), canonicalUrl, sourceType: source.sourceType || "WHICH_ISSUE", sourceUrl: source.sourceUrl || null }, media, channels: [output], model, costUsd, publishable: false, notice: "콘텐츠 제작 패키지입니다. 이미지 카드를 만들거나 플랫폼 게시·예약·계정 조작을 수행하지 않습니다.", promptHash: await sha256(prompt) };
-  await env.STUDIO_KV.put(`package:${id}`, JSON.stringify(studioPackage), { expirationTtl: 60 * 60 * 24 * 90 });
-  await env.STUDIO_KV.put(`latest-package:${source.id}`, JSON.stringify({ packageId: id, generatedAt: studioPackage.generatedAt }), { expirationTtl: 60 * 60 * 24 * 90 });
+  const reasons = source.choices
+    .map((choice) => `${choice.code}를 고를 때\n${creative.considerations.get(choice.code)}`)
+    .join("\n\n");
+  const callToAction =
+    source.sourceType === "COLLECTED_CANDIDATE"
+      ? `WHICH에서 더 많은 선택에 참여해 보세요.\n${url}`
+      : `WHICH에서 먼저 선택하고 결과를 확인해 보세요.\n${url}`;
+  const body = [
+    creative.intro,
+    source.question,
+    source.context,
+    choices,
+    reasons,
+    creative.closing,
+    callToAction,
+    "결과는 WHICH 참여자의 선택이며 전체 인구를 대표하지 않습니다.",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+  const output = {
+    id: CHANNEL,
+    label: "블로그 · 카페 · Threads 통합 원고",
+    format: "ARTICLE",
+    title: creative.titleHook,
+    text: body,
+    tags: ["WHICH", ...creative.tags.filter((tag) => tag !== "WHICH")],
+    trackedUrl: url,
+    parts: [{ label: "통합 본문", text: body }],
+    poll: {
+      question: `[오늘의 선택] ${source.question}`,
+      choices: source.choices.map((choice) => choice.label),
+    },
+    file: "unified-post.txt",
+  };
+  const media = [
+    ...source.choices.flatMap((choice) =>
+      choice.media
+        ? [
+            {
+              role: "CHOICE",
+              choiceCode: choice.code,
+              url: choice.media.url,
+              alt: choice.media.altText,
+              origin: "WHICH_R2_PUBLIC",
+            },
+          ]
+        : [],
+    ),
+    ...(source.contextMedia
+      ? [
+          {
+            role: "CONTEXT",
+            choiceCode: null,
+            url: source.contextMedia.url,
+            alt: source.contextMedia.altText,
+            origin: "WHICH_R2_PUBLIC",
+          },
+        ]
+      : []),
+  ];
+  const studioPackage = {
+    schema: "which-content-studio-v2",
+    id,
+    generatedAt: new Date().toISOString(),
+    date: input.date,
+    slot: input.slot,
+    source: {
+      id: source.id,
+      version: source.version,
+      question: source.question,
+      context: source.context,
+      choices: source.choices.map(({ code, label }) => ({ code, label })),
+      canonicalUrl,
+      sourceType: source.sourceType || "WHICH_ISSUE",
+      sourceUrl: source.sourceUrl || null,
+    },
+    media,
+    channels: [output],
+    model,
+    costUsd,
+    publishable: false,
+    notice:
+      "콘텐츠 제작 패키지입니다. 이미지 카드를 만들거나 플랫폼 게시·예약·계정 조작을 수행하지 않습니다.",
+    promptHash: await sha256(prompt),
+  };
+  await env.STUDIO_KV.put(`package:${id}`, JSON.stringify(studioPackage), {
+    expirationTtl: 60 * 60 * 24 * 90,
+  });
+  await env.STUDIO_KV.put(
+    `latest-package:${source.id}`,
+    JSON.stringify({ packageId: id, generatedAt: studioPackage.generatedAt }),
+    { expirationTtl: 60 * 60 * 24 * 90 },
+  );
   return json({ package: studioPackage, cached: false }, 200, headers);
 }
 
 function channelFile(output) {
-  return [`제목: ${output.title}`, ...output.parts.map((part) => `[${part.label}]\n${part.text}`), `[카페 투표]\n${output.poll.question}\n${output.poll.choices.map((choice, index) => `${index + 1}. ${choice}`).join("\n")}`, `[태그]\n${output.tags.join(", ")}`, `[추적 링크]\n${output.trackedUrl}`].join("\n\n") + "\n";
+  return (
+    [
+      `제목: ${output.title}`,
+      ...output.parts.map((part) => `[${part.label}]\n${part.text}`),
+      `[카페 투표]\n${output.poll.question}\n${output.poll.choices.map((choice, index) => `${index + 1}. ${choice}`).join("\n")}`,
+      `[태그]\n${output.tags.join(", ")}`,
+      `[추적 링크]\n${output.trackedUrl}`,
+    ].join("\n\n") + "\n"
+  );
 }
 
 async function packageFile(id, file, env, headers) {
   if (!ID_RE.test(id)) throw httpError("INVALID_PACKAGE_ID", 400);
   const pkg = await env.STUDIO_KV.get(`package:${id}`, "json");
   if (!pkg) throw httpError("STUDIO_PACKAGE_NOT_FOUND", 404);
-  if (file === "unified-post.txt") return new Response(channelFile(pkg.channels[0]), { headers: { ...headers, "content-type": "text/plain; charset=utf-8", "content-disposition": `attachment; filename="${file}"` } });
+  if (file === "unified-post.txt")
+    return new Response(channelFile(pkg.channels[0]), {
+      headers: {
+        ...headers,
+        "content-type": "text/plain; charset=utf-8",
+        "content-disposition": `attachment; filename="${file}"`,
+      },
+    });
   throw httpError("STUDIO_FILE_NOT_AVAILABLE", 404);
 }
 
@@ -712,4 +1190,12 @@ async function init(){
 init();</script></body></html>`;
 }
 
-export const testHooks = { constantTimeEqual, popularity, validateCreative, trackedUrl, safeError, normalizeCandidate, youtubeUrl };
+export const testHooks = {
+  constantTimeEqual,
+  popularity,
+  validateCreative,
+  trackedUrl,
+  safeError,
+  normalizeCandidate,
+  youtubeUrl,
+};

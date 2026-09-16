@@ -6,14 +6,14 @@
   "kv_namespaces": [
     {
       "binding": "STUDIO_KV",
-      "id": "2f9efd58c6e444f882001b99be98e4e6"
-    }
+      "id": "2f9efd58c6e444f882001b99be98e4e6",
+    },
   ],
   "vars": {
     "ALLOWED_IP_SHA256": "67ff42870213513b27c2c1831e2c1de417c4d70a84a64672d0240e99136aa270",
     "OPENAI_MODEL": "gpt-4.1-mini-2025-04-14",
     "CANDIDATE_MODEL": "gpt-4.1-mini-2025-04-14",
     "OPENAI_KEY_NAME": "WHICH-advertising-key",
-    "DAILY_BUDGET_USD": "0.5"
-  }
+    "DAILY_BUDGET_USD": "0.5",
+  },
 }
