@@ -1277,7 +1277,7 @@ async function api(path,opt={}){const r=await fetch(path,{...opt,headers:{'conte
 function setStatus(s,e=false){el('status').textContent=s;el('status').className='status'+(e?' error':'')}
 let toastTimer;function showToast(message){const toast=el('toast');toast.textContent=message;toast.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>toast.classList.remove('show'),2600)}
 async function copyText(value){try{await navigator.clipboard.writeText(value);showToast('클립보드에 복사했습니다.')}catch{showToast('복사하지 못했습니다. 브라우저 권한을 확인해 주세요.')}}
-function downloadVideo(v){const frame=document.createElement('iframe');frame.hidden=true;frame.src=LOCAL_RENDERER+'/render/'+v.id;document.body.appendChild(frame);setTimeout(()=>frame.remove(),180000)}
+function downloadVideo(v){window.location.assign(LOCAL_RENDERER+'/render/'+v.id)}
 function tabs(){document.querySelectorAll('.q-tab').forEach(b=>b.classList.toggle('active',b.dataset.view===state.view));el('candidateTools').classList.toggle('visible',state.view==='youtube')}
 function candidateSummary(){const r=state.lastRun;if(!r)return '필요할 때만 실행되며 OpenAI API 비용이 발생합니다.';const when=r.ranAt?new Date(r.ranAt).toLocaleString('ko-KR'):'-';return when+' · '+r.status+' · 검증 '+(r.verified||0)+'개 · 추가 '+(r.imported||0)+'개'+(r.message?' · '+r.message:'')}
 function renderSources(){

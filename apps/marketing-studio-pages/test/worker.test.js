@@ -181,6 +181,7 @@ test("renders executable browser script", async () => {
   assert.doesNotThrow(() => new Function(script));
   assert.match(html, /5초 쇼츠 만들기/);
   assert.match(html, /http:\/\/127\.0\.0\.1:8783/);
+  assert.match(html, /window\.location\.assign/);
   assert.match(html, /LOCAL_RENDERER\+'\/render\/'\+v\.id/);
   assert.match(response.headers.get("content-security-policy"), /http:\/\/127\.0\.0\.1:8783/);
 });
