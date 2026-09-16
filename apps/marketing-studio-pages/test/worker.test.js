@@ -329,7 +329,8 @@ test("HyperFrames package stays deterministic, short, and free of invented resul
   );
 
   assert.equal(pkg.schema, "which-hyperframes-short-v1");
-  assert.equal(pkg.render.durationSeconds, 12);
+  assert.equal(pkg.render.durationSeconds, 5);
+  assert.equal(pkg.render.estimatedFrames, 150);
   assert.equal(pkg.render.externalGenerationCostUsd, 0);
   assert.equal(pkg.variables.choiceA, "산책");
   assert.equal(pkg.variables.choiceB, "집에서 휴식");
