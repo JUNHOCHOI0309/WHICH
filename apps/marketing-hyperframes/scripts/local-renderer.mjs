@@ -15,6 +15,7 @@ const RENDER_TIMEOUT_MS = 180_000;
 const REQUIRED_VARIABLES = ["question", "context", "choiceA", "choiceB", "cta", "url"];
 const PRODUCTION_ORIGIN = "https://studio.whichone.site";
 const PACKAGE_FILE_PATH = "/files/hyperframes-input.json";
+const VIDEO_PACKAGE_PATH = "/api/video-packages";
 const projectDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const renderScript = resolve(projectDir, "scripts/render-input.mjs");
 let rendering = false;
@@ -138,7 +139,36 @@ async function loadPackage(id) {
   }
 }
 
-async function renderVideo(input, response, headers) {
+export function validateSourceRequest(url) {
+  const sourceId = String(url.searchParams.get("sourceId") || "").toLowerCase();
+  const date = String(url.searchParams.get("date") || "");
+  const slot = String(url.searchParams.get("slot") || "");
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(sourceId))
+    throw new Error("INVALID_SOURCE_ID");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("INVALID_DATE");
+  if (!new Set(["1330", "1530", "1730"]).has(slot)) throw new Error("INVALID_SLOT");
+  return { sourceId, date, slot };
+}
+
+async function createPackage(input) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15_000);
+  try {
+    const response = await fetch(`${PRODUCTION_ORIGIN}${VIDEO_PACKAGE_PATH}`, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: PRODUCTION_ORIGIN },
+      body: JSON.stringify(input),
+      signal: controller.signal,
+    });
+    if (!response.ok) throw new Error(`PACKAGE_CREATE_HTTP_${response.status}`);
+    const body = await response.json();
+    return validateRenderPayload(body.package);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function renderVideo(input, response, headers, attachment = true) {
   if (rendering) return json(response, 409, headers);
   rendering = true;
   let inputPath;
@@ -154,12 +184,14 @@ async function renderVideo(input, response, headers) {
     await rm(outputPath, { force: true });
     await runRender(inputPath, outputPath);
     const info = await stat(outputPath);
-    response.writeHead(200, {
+    const responseHeaders = {
       ...headers,
       "content-type": "video/mp4",
       "content-length": String(info.size),
-      "content-disposition": `attachment; filename="${downloadName(id)}"`,
-    });
+    };
+    if (attachment)
+      responseHeaders["content-disposition"] = `attachment; filename="${downloadName(id)}"`;
+    response.writeHead(200, responseHeaders);
     await pipeline(createReadStream(outputPath), response);
   } catch (error) {
     console.error(`[which-hyperframes] ${error instanceof Error ? error.message : "UNKNOWN"}`);
@@ -172,13 +204,26 @@ async function renderVideo(input, response, headers) {
 }
 
 async function handleRender(request, response, headers) {
-  return renderVideo(validateRenderPayload(await readJson(request)), response, headers);
+  return renderVideo(validateRenderPayload(await readJson(request)), response, headers, false);
 }
 
 export function createRendererServer() {
   return createServer(async (request, response) => {
     const origin = request.headers.origin || "";
     const headers = corsHeaders(origin);
+    const requestUrl = new URL(request.url || "/", `http://${HOST}:${PORT}`);
+    if (request.method === "GET" && requestUrl.pathname === "/render-source") {
+      try {
+        return await renderVideo(
+          await createPackage(validateSourceRequest(requestUrl)),
+          response,
+          headers,
+        );
+      } catch (error) {
+        console.error(`[which-hyperframes] ${error instanceof Error ? error.message : "UNKNOWN"}`);
+        return json(response, 500, headers);
+      }
+    }
     const directDownload = request.url?.match(/^\/render\/([0-9a-f]{64})$/i);
     if (request.method === "GET" && directDownload) {
       try {
