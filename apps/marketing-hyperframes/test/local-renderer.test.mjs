@@ -6,6 +6,7 @@ import {
   corsHeaders,
   downloadName,
   validateRenderPayload,
+  validateSourceRequest,
 } from "../scripts/local-renderer.mjs";
 
 test("local renderer accepts only the WHICH studio and local development origins", () => {
@@ -41,5 +42,27 @@ test("local renderer validates fixed WHICH composition variables", () => {
         variables: { ...parsed.variables, url: "https://evil.example" },
       }),
     /INVALID_VARIABLE_URL/,
+  );
+});
+
+test("local renderer accepts only fixed source render inputs", () => {
+  const parsed = validateSourceRequest(
+    new URL(
+      "http://127.0.0.1:8783/render-source?sourceId=04c97bbf-7a89-560e-8b41-750019c5d3e8&date=2026-09-16&slot=1330",
+    ),
+  );
+  assert.deepEqual(parsed, {
+    sourceId: "04c97bbf-7a89-560e-8b41-750019c5d3e8",
+    date: "2026-09-16",
+    slot: "1330",
+  });
+  assert.throws(
+    () =>
+      validateSourceRequest(
+        new URL(
+          "http://127.0.0.1:8783/render-source?sourceId=../../secret&date=2026-09-16&slot=1330",
+        ),
+      ),
+    /INVALID_SOURCE_ID/,
   );
 });
