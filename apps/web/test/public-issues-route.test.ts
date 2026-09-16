@@ -46,13 +46,22 @@ const catalog: PublicIssueCatalog = {
   ],
 };
 
+function catalogFetch(value: PublicIssueCatalog = catalog, completedIssueIds: string[] = []) {
+  return vi.fn<typeof fetch>(async (input) => {
+    const url = new URL(String(input));
+    return url.hostname === "studio.whichone.site"
+      ? Response.json({ issueIds: completedIssueIds })
+      : Response.json(value);
+  });
+}
+
 afterEach(() => {
   vi.unstubAllGlobals();
 });
 
 describe("public content-generation Issue API", () => {
   it("returns the safe catalog through a cacheable anonymous endpoint", async () => {
-    const upstream = vi.fn<typeof fetch>(async () => Response.json(catalog));
+    const upstream = catalogFetch();
     vi.stubGlobal("fetch", upstream);
 
     const response = await GET(
@@ -64,23 +73,45 @@ describe("public content-generation Issue API", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual(catalog);
     expect(response.headers.get("access-control-allow-origin")).toBe("*");
-    expect(response.headers.get("cache-control")).toContain("s-maxage=60");
+    expect(response.headers.get("cache-control")).toContain("s-maxage=15");
     expect(upstream).toHaveBeenCalledWith(
-      new URL("http://localhost:4000/v1/issues/catalog?limit=3"),
+      new URL("http://localhost:4000/v1/issues/catalog?limit=500"),
       expect.objectContaining({
         cache: "no-store",
         headers: { accept: "application/json" },
       }),
     );
-    expect(new Headers(upstream.mock.calls[0]?.[1]?.headers).has("authorization")).toBe(false);
+    expect(upstream).toHaveBeenCalledWith(
+      "https://studio.whichone.site/api/public/completions",
+      expect.objectContaining({ cache: "no-store", headers: { accept: "application/json" } }),
+    );
+    const catalogCall = upstream.mock.calls.find(([input]) =>
+      String(input).includes("/v1/issues/catalog"),
+    );
+    expect(new Headers(catalogCall?.[1]?.headers).has("authorization")).toBe(false);
+  });
+
+  it("excludes completed Studio questions before applying the requested limit", async () => {
+    const completed = catalog.items[0]!;
+    const available: (typeof catalog.items)[number] = {
+      ...completed,
+      id: "10000000-0000-4000-8000-000000000002",
+      question: "다음 질문",
+    };
+    vi.stubGlobal("fetch", catalogFetch({ items: [completed, available] }, [completed.id]));
+
+    const response = await GET(new NextRequest("https://whichone.site/api/public/issues?limit=1"));
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ items: [available] });
   });
 
   it("uses a conservative default and rejects malformed or excessive limits", async () => {
-    const upstream = vi.fn<typeof fetch>(async () => Response.json(catalog));
+    const upstream = catalogFetch();
     vi.stubGlobal("fetch", upstream);
 
     await GET(new NextRequest("https://whichone.site/api/public/issues"));
-    expect(String(upstream.mock.calls[0]?.[0])).toContain("limit=100");
+    expect(upstream.mock.calls.some(([input]) => String(input).includes("limit=500"))).toBe(true);
 
     for (const value of ["0", "501", "3.5", "3items", "-1"]) {
       const response = await GET(
@@ -89,13 +120,17 @@ describe("public content-generation Issue API", () => {
       expect(response.status).toBe(400);
       expect(response.headers.get("cache-control")).toBe("no-store");
     }
-    expect(upstream).toHaveBeenCalledTimes(1);
+    expect(upstream).toHaveBeenCalledTimes(2);
   });
 
   it("does not expose upstream failures", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => Response.json({ secret: "internal detail" }, { status: 503 })),
+      vi.fn(async (input) =>
+        String(input).includes("studio.whichone.site")
+          ? Response.json({ issueIds: [] })
+          : Response.json({ secret: "internal detail" }, { status: 503 }),
+      ),
     );
 
     const response = await GET(new NextRequest("https://whichone.site/api/public/issues?limit=3"));
@@ -114,7 +149,7 @@ describe("public content-generation Issue API", () => {
   });
 
   it("serves the same catalog from the indexable non-API path", async () => {
-    const upstream = vi.fn<typeof fetch>(async () => Response.json(catalog));
+    const upstream = catalogFetch();
     vi.stubGlobal("fetch", upstream);
 
     const response = await GET_INDEXABLE(

@@ -71,6 +71,99 @@ test("rejects cross-origin mutations", async () => {
   assert.equal(response.status, 403);
 });
 
+test("exposes only completed Issue ids through the public read endpoint", async () => {
+  const testEnv = env();
+  const firstId = "00000000-0000-4000-8000-000000000002";
+  const secondId = "00000000-0000-4000-8000-000000000001";
+  await testEnv.STUDIO_KV.put(
+    `completed:${firstId}`,
+    JSON.stringify({ content: { text: "비공개 원고" } }),
+  );
+  await testEnv.STUDIO_KV.put(
+    `completed:${secondId}`,
+    JSON.stringify({ content: { text: "다른 비공개 원고" } }),
+  );
+  await testEnv.STUDIO_KV.put(
+    "completed:not-an-issue",
+    JSON.stringify({ content: { text: "무시" } }),
+  );
+
+  const response = await worker.fetch(
+    new Request("https://studio.whichone.site/api/public/completions", {
+      headers: { "cf-connecting-ip": "198.51.100.8" },
+    }),
+    testEnv,
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { issueIds: [secondId, firstId] });
+  assert.equal(response.headers.get("access-control-allow-origin"), "*");
+  assert.match(response.headers.get("cache-control"), /s-maxage=15/);
+});
+
+test("keeps the public completion endpoint read-only", async () => {
+  const response = await worker.fetch(
+    new Request("https://studio.whichone.site/api/public/completions", { method: "POST" }),
+    env(),
+  );
+  assert.equal(response.status, 405);
+  assert.equal(response.headers.get("allow"), "GET, OPTIONS");
+});
+
+test("retains completed source details after the public catalog filters them", async () => {
+  const testEnv = env();
+  const sourceId = "00000000-0000-4000-8000-000000000003";
+  await testEnv.STUDIO_KV.put(
+    "catalog:public:v1",
+    JSON.stringify({
+      items: [
+        {
+          id: sourceId,
+          question: "이미 게시한 질문",
+          choices: [
+            { code: "A", label: "첫 번째" },
+            { code: "B", label: "두 번째" },
+          ],
+          engagement: { recommendationCount: 2, commentCount: 1 },
+        },
+      ],
+      recent: {},
+      fetchedAt: "2026-09-15T00:00:00.000Z",
+    }),
+  );
+  await testEnv.STUDIO_KV.put(`completed:${sourceId}`, JSON.stringify({ at: "2026-09-15" }));
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input) =>
+    String(input).includes("/public/issues.json")
+      ? Response.json({ items: [] })
+      : Response.json({ rightRail: { items: [] } });
+
+  try {
+    const headers = { "cf-connecting-ip": allowedIp, origin: "https://studio.whichone.site" };
+    const refreshed = await worker.fetch(
+      new Request("https://studio.whichone.site/api/sources/refresh", {
+        method: "POST",
+        headers,
+      }),
+      testEnv,
+    );
+    assert.equal(refreshed.status, 200);
+
+    const response = await worker.fetch(
+      new Request("https://studio.whichone.site/api/sources", {
+        headers: { "cf-connecting-ip": allowedIp },
+      }),
+      testEnv,
+    );
+    const body = await response.json();
+    assert.deepEqual(body.sources, []);
+    assert.equal(body.completedSources[0].id, sourceId);
+    assert.equal(body.completedSources[0].question, "이미 게시한 질문");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("popularity weights recent participation above comments", () => {
   const item = { id: "x", engagement: { recommendationCount: 0, commentCount: 1 } };
   assert.ok(

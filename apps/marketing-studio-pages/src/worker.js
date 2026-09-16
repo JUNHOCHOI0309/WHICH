@@ -49,8 +49,13 @@ export default {
   async fetch(request, env, ctx) {
     const headers = securityHeaders();
     try {
-      if (!(await isAllowed(request, env))) return forbidden(headers);
       const url = new URL(request.url);
+      if (url.pathname === "/api/public/completions") {
+        if (request.method === "GET") return publicCompletions(env, headers);
+        if (request.method === "OPTIONS") return publicCompletionsOptions(headers);
+        return new Response(null, { status: 405, headers: { ...headers, allow: "GET, OPTIONS" } });
+      }
+      if (!(await isAllowed(request, env))) return forbidden(headers);
       if (request.method === "GET" && url.pathname === "/") {
         return new Response(page(), {
           headers: {
@@ -230,9 +235,19 @@ async function fetchCatalog() {
 }
 
 async function refreshCatalog(env) {
-  const value = await fetchCatalog();
-  await env.STUDIO_KV.put(CATALOG_KEY, JSON.stringify(value));
-  return value;
+  const [value, previous, completed] = await Promise.all([
+    fetchCatalog(),
+    env.STUDIO_KV.get(CATALOG_KEY, "json"),
+    completedIds(env),
+  ]);
+  const currentIds = new Set(value.items.map((item) => item.id));
+  const retainedCompleted = new Map();
+  for (const item of [...(previous?.items || []), ...(previous?.completedItems || [])]) {
+    if (completed.has(item.id) && !currentIds.has(item.id)) retainedCompleted.set(item.id, item);
+  }
+  const next = { ...value, completedItems: [...retainedCompleted.values()] };
+  await env.STUDIO_KV.put(CATALOG_KEY, JSON.stringify(next));
+  return next;
 }
 
 async function catalog(env, ctx) {
@@ -286,15 +301,42 @@ async function completedIds(env) {
   return values;
 }
 
+async function publicCompletions(env, headers) {
+  const issueIds = [...(await completedIds(env))].filter((id) => UUID_RE.test(id)).sort();
+  return new Response(JSON.stringify({ issueIds }), {
+    status: 200,
+    headers: {
+      ...headers,
+      "access-control-allow-origin": "*",
+      "cache-control": "public, max-age=15, s-maxage=15, stale-while-revalidate=30",
+      "content-type": "application/json; charset=utf-8",
+    },
+  });
+}
+
+function publicCompletionsOptions(headers) {
+  return new Response(null, {
+    status: 204,
+    headers: {
+      ...headers,
+      "access-control-allow-headers": "Accept",
+      "access-control-allow-methods": "GET, OPTIONS",
+      "access-control-allow-origin": "*",
+      "cache-control": "public, max-age=86400",
+    },
+  });
+}
+
 async function sources(env, headers, ctx) {
-  const [{ items, recent: recentValues, fetchedAt }, completed] = await Promise.all([
-    catalog(env, ctx),
-    completedIds(env),
-  ]);
+  const [{ items, completedItems = [], recent: recentValues, fetchedAt }, completed] =
+    await Promise.all([catalog(env, ctx), completedIds(env)]);
   const recent = new Map(Object.entries(recentValues || {}));
   const mapped = items
     .map((item) => listItem(item, recent))
     .sort((a, b) => b.popularity - a.popularity || a.id.localeCompare(b.id));
+  const completedMapped = [...mapped, ...completedItems.map((item) => listItem(item, recent))]
+    .filter((item) => completed.has(item.id))
+    .filter((item, index, all) => all.findIndex((candidate) => candidate.id === item.id) === index);
   return json(
     {
       today: todayKst(),
@@ -304,9 +346,7 @@ async function sources(env, headers, ctx) {
       excludedUncertain: 0,
       fetchedAt,
       sources: mapped.filter((item) => !completed.has(item.id)),
-      completedSources: mapped
-        .filter((item) => completed.has(item.id))
-        .map((item) => ({ ...item, reopenable: true })),
+      completedSources: completedMapped.map((item) => ({ ...item, reopenable: true })),
     },
     200,
     headers,
@@ -396,6 +436,7 @@ async function reopenSource(id, env, headers) {
   if (!UUID_RE.test(id)) throw httpError("INVALID_ISSUE_ID", 400);
   const existed = await env.STUDIO_KV.get(`completed:${id}`);
   await env.STUDIO_KV.delete(`completed:${id}`);
+  if (existed) await refreshCatalog(env);
   return json({ reopened: Boolean(existed) }, 200, headers);
 }
 
