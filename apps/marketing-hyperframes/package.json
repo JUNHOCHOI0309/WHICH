@@ -7,6 +7,8 @@
     "check": "npx --yes hyperframes@0.8.41 check",
     "render": "npx --yes hyperframes@0.8.41 render",
     "render:input": "node scripts/render-input.mjs",
+    "render:server": "node scripts/local-renderer.mjs",
+    "test": "node --test test/*.test.mjs",
     "publish": "npx --yes hyperframes@0.8.41 publish"
   }
 }

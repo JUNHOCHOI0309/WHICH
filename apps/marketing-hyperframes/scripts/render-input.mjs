@@ -3,7 +3,9 @@ import { basename, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 
-const cliArgs = process.argv.slice(2).filter((value) => value !== "--");
+const rawArgs = process.argv.slice(2).filter((value) => value !== "--");
+const skipCheck = rawArgs.includes("--skip-check");
+const cliArgs = rawArgs.filter((value) => value !== "--skip-check");
 const input = cliArgs[0];
 const outputArg = cliArgs[1];
 if (!input) {
@@ -46,7 +48,7 @@ function run(args) {
   if (result.status !== 0) process.exit(result.status || 1);
 }
 
-run(["--yes", "hyperframes@0.8.41", "check"]);
+if (!skipCheck) run(["--yes", "hyperframes@0.8.41", "check"]);
 run([
   "--yes",
   "hyperframes@0.8.41",
