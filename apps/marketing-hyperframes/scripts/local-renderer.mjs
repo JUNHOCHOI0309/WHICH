@@ -4,6 +4,7 @@ import { mkdir, rm, stat, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
+import { pipeline } from "node:stream/promises";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 
@@ -13,6 +14,7 @@ const MAX_BODY_BYTES = 32 * 1024;
 const RENDER_TIMEOUT_MS = 180_000;
 const REQUIRED_VARIABLES = ["question", "context", "choiceA", "choiceB", "cta", "url"];
 const PRODUCTION_ORIGIN = "https://studio.whichone.site";
+const PACKAGE_FILE_PATH = "/files/hyperframes-input.json";
 const projectDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const renderScript = resolve(projectDir, "scripts/render-input.mjs");
 let rendering = false;
@@ -66,6 +68,12 @@ export function downloadName(id) {
   return `which-short-${id.slice(0, 8)}-5s.mp4`;
 }
 
+function validPackageId(value) {
+  const id = String(value || "").toLowerCase();
+  if (!/^[0-9a-f]{64}$/.test(id)) throw new Error("INVALID_PACKAGE_ID");
+  return id;
+}
+
 function json(response, status, headers) {
   response.writeHead(status, { ...headers, "content-type": "application/json; charset=utf-8" });
   response.end(JSON.stringify(status < 400 ? { status: "ok" } : { error: "RENDER_FAILED" }));
@@ -115,13 +123,28 @@ async function removeFiles(paths) {
   await Promise.all(paths.map((path) => rm(path, { force: true }).catch(() => {})));
 }
 
-async function handleRender(request, response, headers) {
+async function loadPackage(id) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15_000);
+  try {
+    const response = await fetch(
+      `${PRODUCTION_ORIGIN}/api/video-packages/${id}${PACKAGE_FILE_PATH}`,
+      { signal: controller.signal },
+    );
+    if (!response.ok) throw new Error(`PACKAGE_HTTP_${response.status}`);
+    return validateRenderPayload({ id, variables: await response.json() });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function renderVideo(input, response, headers) {
   if (rendering) return json(response, 409, headers);
   rendering = true;
   let inputPath;
   let outputPath;
   try {
-    const { id, variables } = validateRenderPayload(await readJson(request));
+    const { id, variables } = input;
     const jobDir = resolve(tmpdir(), "which-hyperframes-renderer");
     await mkdir(jobDir, { recursive: true });
     const jobId = randomUUID();
@@ -137,26 +160,38 @@ async function handleRender(request, response, headers) {
       "content-length": String(info.size),
       "content-disposition": `attachment; filename="${downloadName(id)}"`,
     });
-    const stream = createReadStream(outputPath);
-    stream.pipe(response);
-    stream.once("close", () => removeFiles([inputPath, outputPath]));
-    stream.once("error", () => {
-      response.destroy();
-      removeFiles([inputPath, outputPath]);
-    });
+    await pipeline(createReadStream(outputPath), response);
   } catch (error) {
     console.error(`[which-hyperframes] ${error instanceof Error ? error.message : "UNKNOWN"}`);
-    await removeFiles([inputPath, outputPath].filter(Boolean));
-    json(response, error?.message === "BODY_TOO_LARGE" ? 413 : 500, headers);
+    if (response.headersSent) response.destroy();
+    else json(response, error?.message === "BODY_TOO_LARGE" ? 413 : 500, headers);
   } finally {
+    await removeFiles([inputPath, outputPath].filter(Boolean));
     rendering = false;
   }
+}
+
+async function handleRender(request, response, headers) {
+  return renderVideo(validateRenderPayload(await readJson(request)), response, headers);
 }
 
 export function createRendererServer() {
   return createServer(async (request, response) => {
     const origin = request.headers.origin || "";
     const headers = corsHeaders(origin);
+    const directDownload = request.url?.match(/^\/render\/([0-9a-f]{64})$/i);
+    if (request.method === "GET" && directDownload) {
+      try {
+        return await renderVideo(
+          await loadPackage(validPackageId(directDownload[1])),
+          response,
+          headers,
+        );
+      } catch (error) {
+        console.error(`[which-hyperframes] ${error instanceof Error ? error.message : "UNKNOWN"}`);
+        return json(response, 500, headers);
+      }
+    }
     if (!allowedOrigin(origin)) return json(response, 403, headers);
     if (request.method === "OPTIONS") {
       response.writeHead(204, headers);
