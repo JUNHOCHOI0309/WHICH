@@ -1,0 +1,14 @@
+{
+  "name": "@which/marketing-studio-pages",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build-pages.mjs",
+    "test": "node --test test/*.test.js",
+    "check": "node --check src/worker.js"
+  },
+  "devDependencies": {
+    "wrangler": "4.132.0"
+  }
+}
