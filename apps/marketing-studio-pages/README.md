@@ -11,6 +11,7 @@ Cloudflare Pages와 Pages Functions에서 실행되는 비공개 콘텐츠 제�
 - 후보는 검색 도구가 실제 출처로 반환한 YouTube URL과 일치할 때만 KV에 저장합니다.
 - 프롬프트, 완료 표시, 수집 후보, 생성 패키지와 일일 비용 원장을 KV에 저장합니다.
 - 이미지 카드는 생성하지 않습니다.
+- 선택한 WHICH 질문으로 12초 세로형 HyperFrames 제작 패키지를 비용 없이 생성할 수 있습니다. 스튜디오는 렌더 입력 JSON을 만들고, 실제 MP4 렌더는 로컬 `apps/marketing-hyperframes`에서 수행합니다.
 - 질문별 최신 생성 원고를 기억하고, 게시 완료 처리 시 통합 본문을 완료 기록에 함께 보관합니다.
 - 게시 완료 목록에서 항목을 누르면 저장된 원고를 다시 볼 수 있습니다. 이전 방식으로 완료된 항목은 원고가 없다는 안내가 표시됩니다.
 - 수집 후보는 홍보 질문으로 직접 복제하지 않습니다. `WHICH 관리자에서 등록`을 누르면 `/ops` 질문 검수 화면의 새 질문 폼에 질문·A/B 선택지·분류가 미리 채워집니다.
@@ -30,5 +31,13 @@ pnpm --filter @which/marketing-studio-pages check
 배포 파일은 `pnpm --filter @which/marketing-studio-pages build`가 만드는 `dist/_worker.js`입니다. 현재 프로젝트는 Git 자동 배포가 아닌 Pages Direct Upload 방식이므로 변경 후 `dist`를 다시 배포해야 합니다.
 
 배포 후 공인 IP가 바뀌면 `ALLOWED_IP_SHA256`를 새 IP의 SHA-256으로 갱신해야 합니다.
+
+HyperFrames 쇼츠 렌더:
+
+```powershell
+pnpm --dir apps/marketing-hyperframes render:input -- C:\Downloads\hyperframes-input.json
+```
+
+기본 템플릿은 1080×1920, 30fps, 12초 무음 키네틱 타이포그래피입니다. 외부 영상·이미지·TTS API를 호출하지 않으며 확인되지 않은 투표 수치도 사용하지 않습니다.
 
 스튜디오의 `수집 후보` 탭에서 마지막 실행 상태를 확인하고 필요할 때만 수동 실행할 수 있습니다. 같은 날 성공한 실행은 캐시를 반환합니다.

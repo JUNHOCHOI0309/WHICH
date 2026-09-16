@@ -1,0 +1,353 @@
+<!doctype html>
+<html
+  lang="ko"
+  data-resolution="portrait"
+  data-composition-variables='[{"id":"question","type":"string","label":"질문","default":"오늘 하나만 고른다면 어느 쪽인가요?"},{"id":"context","type":"string","label":"조건","default":"지금 더 끌리는 쪽을 골라보세요."},{"id":"choiceA","type":"string","label":"선택지 A","default":"첫 번째 선택"},{"id":"choiceB","type":"string","label":"선택지 B","default":"두 번째 선택"},{"id":"cta","type":"string","label":"마무리 문구","default":"먼저 고르고, 결과와 이유를 확인하세요"},{"id":"url","type":"string","label":"추적 URL","default":"https://whichone.site"}]'
+>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1080, height=1920" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      @font-face {
+        font-family: "Pretendard";
+        src: local("Pretendard");
+      }
+      @font-face {
+        font-family: "Malgun Gothic";
+        src: local("Malgun Gothic");
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        width: 1080px;
+        height: 1920px;
+        margin: 0;
+        overflow: hidden;
+        background: #102f35;
+        color: #fff;
+        font-family: Pretendard, "Malgun Gothic", sans-serif;
+      }
+      #root {
+        position: relative;
+        width: 1080px;
+        height: 1920px;
+        overflow: hidden;
+        background: #102f35;
+      }
+      .clip,
+      .scene {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+      }
+      .scene {
+        overflow: hidden;
+        padding: 120px 92px;
+      }
+      .scene::before {
+        content: "";
+        position: absolute;
+        width: 780px;
+        height: 780px;
+        border-radius: 50%;
+        right: -360px;
+        top: -250px;
+        background: rgba(114, 219, 224, 0.18);
+      }
+      .scene::after {
+        content: "";
+        position: absolute;
+        left: 92px;
+        right: 92px;
+        bottom: 92px;
+        height: 5px;
+        background: #d9f36c;
+      }
+      .hook {
+        background: #102f35;
+      }
+      .choice-a {
+        background: #087f88;
+      }
+      .choice-b {
+        background: #ff6b35;
+        color: #12343a;
+      }
+      .cta {
+        background: #f3f8f7;
+        color: #12343a;
+      }
+      .eyebrow {
+        position: absolute;
+        top: 110px;
+        left: 92px;
+        font-family: "JetBrains Mono", Consolas, monospace;
+        font-size: 26px;
+        font-weight: 800;
+        letter-spacing: 0.16em;
+      }
+      .question {
+        position: absolute;
+        left: 92px;
+        right: 92px;
+        top: 360px;
+        margin: 0;
+        font-size: 100px;
+        font-weight: 900;
+        line-height: 1.08;
+        letter-spacing: -0.045em;
+        word-break: keep-all;
+      }
+      .context {
+        position: absolute;
+        left: 92px;
+        right: 140px;
+        bottom: 190px;
+        margin: 0;
+        font-size: 38px;
+        font-weight: 350;
+        line-height: 1.5;
+      }
+      .letter {
+        position: absolute;
+        right: 42px;
+        bottom: 50px;
+        font-family: "JetBrains Mono", Consolas, monospace;
+        font-size: 500px;
+        font-weight: 900;
+        line-height: 0.78;
+        color: rgba(255, 255, 255, 0.75);
+      }
+      .choice-b .letter {
+        color: rgba(18, 52, 58, 0.75);
+      }
+      .choice-label {
+        position: absolute;
+        left: 92px;
+        top: 500px;
+        width: 820px;
+        margin: 0;
+        font-size: 126px;
+        font-weight: 900;
+        line-height: 1.02;
+        letter-spacing: -0.05em;
+        word-break: keep-all;
+      }
+      .pick {
+        position: absolute;
+        left: 92px;
+        bottom: 170px;
+        font-size: 42px;
+        font-weight: 300;
+      }
+      .which {
+        position: absolute;
+        left: 92px;
+        top: 160px;
+        font-family: "JetBrains Mono", Consolas, monospace;
+        font-size: 34px;
+        font-weight: 800;
+        letter-spacing: 0.18em;
+        color: #087f88;
+      }
+      .cta-copy {
+        position: absolute;
+        left: 92px;
+        right: 92px;
+        top: 480px;
+        margin: 0;
+        font-size: 112px;
+        font-weight: 900;
+        line-height: 1.05;
+        letter-spacing: -0.05em;
+        word-break: keep-all;
+      }
+      .url {
+        position: absolute;
+        left: 92px;
+        bottom: 180px;
+        padding: 24px 34px;
+        border-radius: 999px;
+        background: #102f35;
+        color: #d9f36c;
+        font-family: "JetBrains Mono", Consolas, monospace;
+        font-size: 32px;
+        font-weight: 800;
+      }
+      .pulse {
+        position: absolute;
+        right: -120px;
+        bottom: 140px;
+        width: 540px;
+        height: 540px;
+        border: 70px solid #72dbe0;
+        border-radius: 50%;
+      }
+    </style>
+  </head>
+  <body>
+    <main
+      id="root"
+      class="clip"
+      data-composition-id="which-choice-short"
+      data-start="0"
+      data-duration="12"
+      data-width="1080"
+      data-height="1920"
+      data-fps="30"
+    >
+      <section
+        id="hook"
+        class="clip scene hook"
+        data-start="0"
+        data-duration="2.6"
+        data-track-index="0"
+      >
+        <div class="eyebrow">WHICH / TODAY</div>
+        <h1 id="question" class="question"></h1>
+        <p id="context" class="context"></p>
+        <div class="pulse" data-layout-allow-overflow></div>
+      </section>
+      <section
+        id="choiceA"
+        class="clip scene choice-a"
+        data-start="2.3"
+        data-duration="3.3"
+        data-track-index="1"
+      >
+        <div class="eyebrow">OPTION / A</div>
+        <div class="letter" data-layout-allow-overflow>A</div>
+        <h2 id="choiceAText" class="choice-label"></h2>
+        <div class="pick">이쪽이라면 화면을 한 번 탭</div>
+      </section>
+      <section
+        id="choiceB"
+        class="clip scene choice-b"
+        data-start="5.3"
+        data-duration="3.3"
+        data-track-index="2"
+      >
+        <div class="eyebrow">OPTION / B</div>
+        <div class="letter" data-layout-allow-overflow>B</div>
+        <h2 id="choiceBText" class="choice-label"></h2>
+        <div class="pick">아직 고민이라면 마지막까지</div>
+      </section>
+      <section
+        id="cta"
+        class="clip scene cta"
+        data-start="8.3"
+        data-duration="3.7"
+        data-track-index="3"
+      >
+        <div class="which">WHICH</div>
+        <h2 id="ctaText" class="cta-copy"></h2>
+        <div class="url">whichone.site</div>
+        <div class="pulse" data-layout-allow-overflow></div>
+      </section>
+    </main>
+    <script>
+      window.__timelines = window.__timelines || {};
+      const variables = window.__hyperframes.getVariables();
+      document.querySelector("#question").textContent = variables.question;
+      document.querySelector("#context").textContent = variables.context;
+      document.querySelector("#choiceAText").textContent = variables.choiceA;
+      document.querySelector("#choiceBText").textContent = variables.choiceB;
+      document.querySelector("#ctaText").textContent = variables.cta;
+      const timeline = gsap.timeline({ paused: true });
+      timeline.from(
+        "#hook .eyebrow",
+        { opacity: 0, x: -100, duration: 0.28, ease: "expo.out" },
+        0.14,
+      );
+      timeline.from(
+        "#hook .question",
+        { opacity: 0, scale: 1.16, duration: 0.58, ease: "power4.out" },
+        0.24,
+      );
+      timeline.from("#hook .context", { opacity: 0, x: 90, duration: 0.42, ease: "sine.out" }, 0.7);
+      timeline.from(
+        "#hook .pulse",
+        { scale: 0.4, rotation: -35, duration: 1.1, ease: "power2.out" },
+        0.2,
+      );
+      timeline.from(
+        "#choiceA",
+        { clipPath: "inset(0 0 0 100%)", duration: 0.3, ease: "power4.inOut" },
+        2.3,
+      );
+      timeline.from(
+        "#choiceA .eyebrow",
+        { opacity: 0, x: 120, duration: 0.24, ease: "expo.out" },
+        2.52,
+      );
+      timeline.from(
+        "#choiceA .letter",
+        { opacity: 0, scale: 1.35, rotation: 8, duration: 0.62, ease: "power3.out" },
+        2.58,
+      );
+      timeline.from(
+        "#choiceA .choice-label",
+        { opacity: 0, x: -130, duration: 0.46, ease: "power2.out" },
+        2.7,
+      );
+      timeline.from(
+        "#choiceA .pick",
+        { opacity: 0, y: 70, duration: 0.35, ease: "sine.out" },
+        3.05,
+      );
+      timeline.from(
+        "#choiceB",
+        { clipPath: "inset(0 100% 0 0)", duration: 0.3, ease: "power4.inOut" },
+        5.3,
+      );
+      timeline.from(
+        "#choiceB .eyebrow",
+        { opacity: 0, x: -120, duration: 0.22, ease: "expo.out" },
+        5.5,
+      );
+      timeline.from(
+        "#choiceB .letter",
+        { opacity: 0, scale: 0.55, rotation: -10, duration: 0.72, ease: "power3.out" },
+        5.55,
+      );
+      timeline.from(
+        "#choiceB .choice-label",
+        { opacity: 0, x: 140, duration: 0.43, ease: "power2.out" },
+        5.72,
+      );
+      timeline.from(
+        "#choiceB .pick",
+        { opacity: 0, y: -60, duration: 0.31, ease: "sine.out" },
+        6.02,
+      );
+      timeline.from(
+        "#cta",
+        { clipPath: "circle(0% at 82% 78%)", duration: 0.48, ease: "expo.inOut" },
+        8.3,
+      );
+      timeline.from(
+        "#cta .which",
+        { opacity: 0, x: -100, duration: 0.38, ease: "power2.out" },
+        8.62,
+      );
+      timeline.from(
+        "#cta .cta-copy",
+        { opacity: 0, y: 150, duration: 0.62, ease: "power4.out" },
+        8.72,
+      );
+      timeline.from("#cta .url", { opacity: 0, scale: 0.7, duration: 0.3, ease: "expo.out" }, 9.28);
+      timeline.from(
+        "#cta .pulse",
+        { scale: 0, rotation: 45, duration: 0.9, ease: "power3.out" },
+        8.5,
+      );
+      timeline.to("#cta", { opacity: 0, duration: 0.7, ease: "sine.in" }, 11.3);
+      window.__timelines["which-choice-short"] = timeline;
+      timeline.seek(0);
+    </script>
+  </body>
+</html>

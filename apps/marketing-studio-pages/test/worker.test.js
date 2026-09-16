@@ -217,3 +217,29 @@ test("collected candidates link to ops and never enter promotion sources directl
   );
   assert.equal(dismissed.status, 200);
 });
+
+test("HyperFrames package stays deterministic, short, and free of invented results", () => {
+  const pkg = testHooks.hyperframesPackage(
+    {
+      id: "00000000-0000-4000-8000-000000000001",
+      version: 7,
+      question: "퇴근 후 하나만 한다면?",
+      context: "오늘 저녁 기준",
+      choices: [
+        { code: "A", label: "산책" },
+        { code: "B", label: "집에서 휴식" },
+      ],
+      canonicalUrl: "https://whichone.site/issues/00000000-0000-4000-8000-000000000001",
+    },
+    { date: "2026-09-16", slot: "1330" },
+    "b".repeat(64),
+  );
+
+  assert.equal(pkg.schema, "which-hyperframes-short-v1");
+  assert.equal(pkg.render.durationSeconds, 12);
+  assert.equal(pkg.render.externalGenerationCostUsd, 0);
+  assert.equal(pkg.variables.choiceA, "산책");
+  assert.equal(pkg.variables.choiceB, "집에서 휴식");
+  assert.equal(pkg.timeline.length, 4);
+  assert.ok(!JSON.stringify(pkg).includes("50%"));
+});
