@@ -179,6 +179,10 @@ test("renders executable browser script", async () => {
   const html = await response.text();
   const script = html.slice(html.indexOf("<script>") + 8, html.indexOf("</script>"));
   assert.doesNotThrow(() => new Function(script));
+  assert.match(html, /5초 쇼츠 만들기/);
+  assert.match(html, /http:\/\/127\.0\.0\.1:8783/);
+  assert.match(html, /LOCAL_RENDERER\+'\/render'/);
+  assert.match(response.headers.get("content-security-policy"), /http:\/\/127\.0\.0\.1:8783/);
 });
 
 test("normalizes the scheduled collector schema", () => {
