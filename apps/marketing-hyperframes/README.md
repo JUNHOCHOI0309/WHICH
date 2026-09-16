@@ -1,6 +1,6 @@
 # WHICH Marketing HyperFrames
 
-콘텐츠 스튜디오가 내려주는 `hyperframes-input.json`을 12초 세로형 MP4로 렌더링합니다.
+콘텐츠 스튜디오가 내려주는 `hyperframes-input.json`을 5초 세로형 MP4로 렌더링합니다.
 
 ```powershell
 pnpm --dir apps/marketing-hyperframes render:input -- C:\Downloads\hyperframes-input.json
