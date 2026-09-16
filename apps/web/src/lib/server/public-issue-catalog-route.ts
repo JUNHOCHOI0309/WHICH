@@ -5,6 +5,7 @@ import { fetchWhichApi } from "@/lib/server/which-api";
 
 const DEFAULT_LIMIT = 100;
 const MAXIMUM_LIMIT = 500;
+const DEFAULT_COMPLETIONS_URL = "https://studio.whichone.site/api/public/completions";
 const publicHeaders = {
   "Access-Control-Allow-Headers": "Accept",
   "Access-Control-Allow-Methods": "GET, OPTIONS",
@@ -24,6 +25,34 @@ function parseLimit(request: NextRequest) {
 
   const limit = Number(value);
   return limit >= 1 && limit <= MAXIMUM_LIMIT ? limit : null;
+}
+
+function completionIds(value: unknown) {
+  if (typeof value !== "object" || value === null || !("issueIds" in value)) return null;
+  const issueIds = (value as { issueIds?: unknown }).issueIds;
+  if (!Array.isArray(issueIds) || issueIds.length > 10_000) return null;
+  if (
+    !issueIds.every(
+      (id) =>
+        typeof id === "string" &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(id),
+    )
+  ) {
+    return null;
+  }
+  return new Set(issueIds);
+}
+
+async function readCompletedIssueIds() {
+  const configured = process.env.MARKETING_STUDIO_COMPLETIONS_URL?.trim();
+  const response = await fetch(configured || DEFAULT_COMPLETIONS_URL, {
+    cache: "no-store",
+    headers: { accept: "application/json" },
+  });
+  if (!response.ok) throw new Error(`Content Studio completions returned ${response.status}.`);
+  const ids = completionIds(await response.json());
+  if (!ids) throw new Error("Content Studio completions returned an invalid payload.");
+  return ids;
 }
 
 export function publicIssueCatalogOptions() {
@@ -46,15 +75,34 @@ export async function publicIssueCatalogGet(request: NextRequest) {
   }
 
   try {
-    const upstream = await fetchWhichApi(`/v1/issues/catalog?limit=${limit}`, {
-      headers: { accept: "application/json" },
-    });
+    const [upstream, completed] = await Promise.all([
+      fetchWhichApi(`/v1/issues/catalog?limit=${MAXIMUM_LIMIT}`, {
+        headers: { accept: "application/json" },
+      }),
+      readCompletedIssueIds(),
+    ]);
     if (!upstream.ok) throw new Error(`Public Issue catalog returned ${upstream.status}.`);
 
-    return NextResponse.json(await upstream.json(), {
-      status: 200,
-      headers: responseHeaders("public, max-age=30, s-maxage=60, stale-while-revalidate=120"),
-    });
+    const catalog = (await upstream.json()) as { items?: unknown };
+    if (!Array.isArray(catalog.items))
+      throw new Error("Public Issue catalog returned an invalid payload.");
+    const items = catalog.items
+      .filter(
+        (item): item is { id: string } & Record<string, unknown> =>
+          typeof item === "object" &&
+          item !== null &&
+          typeof (item as { id?: unknown }).id === "string" &&
+          !completed.has((item as { id: string }).id),
+      )
+      .slice(0, limit);
+
+    return NextResponse.json(
+      { ...catalog, items },
+      {
+        status: 200,
+        headers: responseHeaders("public, max-age=15, s-maxage=15, stale-while-revalidate=30"),
+      },
+    );
   } catch {
     return NextResponse.json(
       {
