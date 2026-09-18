@@ -19,6 +19,10 @@ const OpsReviewWorkspace = dynamic(
   () => import("./ops-review-workspace").then((module) => module.OpsReviewWorkspace),
   { loading: PanelLoading },
 );
+const OpsPollCandidatesPanel = dynamic(
+  () => import("./ops-poll-candidates-panel").then((module) => module.OpsPollCandidatesPanel),
+  { loading: PanelLoading },
+);
 const OpsMembersPanel = dynamic(
   () => import("./ops-members-panel").then((module) => module.OpsMembersPanel),
   { loading: PanelLoading },
@@ -43,7 +47,14 @@ const OpsRankingPreviewPanel = dynamic(
 type WindowDays = 1 | 7 | 30;
 type Screen = "loading" | "ready" | "login" | "denied" | "error";
 type Tab =
-  "overview" | "members" | "review" | "moderation" | "reportedMembers" | "pointShop" | "ranking";
+  | "overview"
+  | "members"
+  | "review"
+  | "polls"
+  | "moderation"
+  | "reportedMembers"
+  | "pointShop"
+  | "ranking";
 
 const stageLabels: Array<[keyof OpsDashboardSnapshot["funnel"]["stages"], string]> = [
   ["viewable", "Viewable"],
@@ -95,10 +106,11 @@ export function OpsDashboardExperience() {
   const dashboardRequest = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).get("tab") !== "review") return;
+    const initialTab = new URLSearchParams(window.location.search).get("tab");
+    if (initialTab !== "review" && initialTab !== "polls") return;
     // This one-time state update applies an explicit deep link from an operator tool.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setTab("review");
+    setTab(initialTab);
   }, []);
 
   const load = useCallback(async (days: WindowDays, background = false) => {
@@ -221,6 +233,7 @@ export function OpsDashboardExperience() {
                 ["overview", "Overview"],
                 ["members", "사용자 DB"],
                 ["review", "Review Center"],
+                ["polls", "투표 후보"],
                 ["moderation", "Moderation Queue"],
                 ["reportedMembers", "신고 인원 관리"],
                 ["pointShop", "Point Shop"],
@@ -500,6 +513,8 @@ export function OpsDashboardExperience() {
             <OpsModerationQueuePanel />
           ) : tab === "members" ? (
             <OpsMembersPanel />
+          ) : tab === "polls" ? (
+            <OpsPollCandidatesPanel />
           ) : tab === "review" ? (
             <OpsReviewWorkspace />
           ) : tab === "reportedMembers" ? (

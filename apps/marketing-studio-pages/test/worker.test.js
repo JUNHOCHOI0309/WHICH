@@ -243,77 +243,46 @@ test("completion preserves the latest generated article", async () => {
   assert.equal((await stored.json()).content.text, "통합 본문");
 });
 
-test("collected candidates link to ops and never enter promotion sources directly", async () => {
+test("moves the poll inbox to ops while preserving private legacy exports", async () => {
   const testEnv = env();
-  await testEnv.STUDIO_KV.put(
-    "catalog:public:v1",
-    JSON.stringify({
-      items: [],
-      recent: {},
-      fetchedAt: new Date().toISOString(),
-    }),
-  );
-  const requestHeaders = {
-    "cf-connecting-ip": allowedIp,
-    origin: "https://studio.whichone.site",
-    "content-type": "application/json",
+  const legacy = {
+    channel: "진행빵집",
+    originalQuestion: "어디로 갈까요?",
+    originalChoices: ["산", "바다", "집"],
+    sourceUrl: "https://www.youtube.com/post/UgkxLegacy12345",
+    status: "NEW",
   };
-  const imported = await worker.fetch(
-    new Request("https://studio.whichone.site/api/youtube-candidates/import", {
-      method: "POST",
-      headers: requestHeaders,
-      body: JSON.stringify({
-        candidates: [
-          {
-            channel: "예시 채널",
-            adaptedQuestion: "주말에는 어디로 갈까요?",
-            adaptedChoices: ["산", "바다"],
-            sourceUrl: "https://www.youtube.com/post/example",
-            category: "취향",
-          },
-        ],
+  await testEnv.STUDIO_KV.put("youtube:candidates", JSON.stringify({ candidates: [legacy] }));
+  const headers = { "cf-connecting-ip": allowedIp, origin: "https://studio.whichone.site" };
+  const pageResponse = await worker.fetch(
+    new Request("https://studio.whichone.site/", { headers }),
+    testEnv,
+  );
+  const html = await pageResponse.text();
+  assert.doesNotMatch(html, /data-view="youtube"|id="collect"|id="candidateJson"/);
+  assert.match(html, /ops\?tab=polls/);
+  const exported = await worker.fetch(
+    new Request("https://studio.whichone.site/api/youtube-candidates/export", { headers }),
+    testEnv,
+  );
+  assert.deepEqual((await exported.json()).candidates, [legacy]);
+  assert.match(exported.headers.get("content-disposition"), /attachment/);
+  const denied = await worker.fetch(
+    new Request("https://studio.whichone.site/api/youtube-candidates/export"),
+    testEnv,
+  );
+  assert.equal(denied.status, 403);
+  for (const endpoint of ["import", "collect"]) {
+    const retired = await worker.fetch(
+      new Request("https://studio.whichone.site/api/youtube-candidates/" + endpoint, {
+        method: "POST",
+        headers,
+        body: "{}",
       }),
-    }),
-    testEnv,
-  );
-  const candidate = (await imported.json()).candidates[0];
-
-  const sourceResponse = await worker.fetch(
-    new Request("https://studio.whichone.site/api/sources", {
-      headers: { "cf-connecting-ip": allowedIp },
-    }),
-    testEnv,
-  );
-  const sourceBody = await sourceResponse.json();
-  assert.equal(sourceBody.officialScanned, 0);
-  assert.equal(sourceBody.sources.length, 0);
-
-  const candidatesResponse = await worker.fetch(
-    new Request("https://studio.whichone.site/api/youtube-candidates", {
-      headers: { "cf-connecting-ip": allowedIp },
-    }),
-    testEnv,
-  );
-  const candidatesBody = await candidatesResponse.json();
-  assert.equal(candidatesBody.candidates.length, 1);
-  const adminUrl = new URL(candidatesBody.candidates[0].adminUrl);
-  assert.equal(adminUrl.origin, "https://whichone.site");
-  assert.equal(adminUrl.pathname, "/ops");
-  assert.equal(adminUrl.searchParams.get("tab"), "review");
-  assert.equal(adminUrl.searchParams.get("create"), "1");
-  assert.equal(adminUrl.searchParams.get("question"), "주말에는 어디로 갈까요?");
-  assert.equal(adminUrl.searchParams.get("choiceA"), "산");
-  assert.equal(adminUrl.searchParams.get("choiceB"), "바다");
-  assert.equal(adminUrl.searchParams.get("interestCardCode"), "HOBBY");
-
-  const dismissed = await worker.fetch(
-    new Request(`https://studio.whichone.site/api/youtube-candidates/${candidate.id}`, {
-      method: "DELETE",
-      headers: requestHeaders,
-    }),
-    testEnv,
-  );
-  assert.equal(dismissed.status, 200);
+      testEnv,
+    );
+    assert.equal(retired.status, 410);
+  }
 });
 
 test("HyperFrames package stays deterministic, short, and free of invented results", () => {

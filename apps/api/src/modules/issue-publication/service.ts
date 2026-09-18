@@ -342,8 +342,8 @@ async function inspectIssueManifest(
       }
     }
 
-    if (versionChoices.length !== 2) {
-      reasons.push("Issue Version does not contain exactly two Choices.");
+    if (versionChoices.length !== expected.choices.length) {
+      reasons.push("Issue Version choice count differs from the approved Manifest.");
     } else {
       expected.choices.forEach((expectedChoice, index) => {
         const storedChoice = versionChoices[index];

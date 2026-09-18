@@ -28,7 +28,7 @@ const sha256 = z.string().regex(/^[a-f0-9]{64}$/, "Expected a lowercase SHA-256 
 const choiceSchema = z
   .object({
     id: z.string().uuid(),
-    code: z.enum(["A", "B"]),
+    code: z.enum(["A", "B", "C", "D"]),
     label: normalizedText(1, 100),
   })
   .strict();
@@ -68,7 +68,9 @@ const issueSchema = z
     version: z.number().int().positive(),
     question: normalizedText(1, 200),
     context: normalizedText(1, 500),
-    choices: z.tuple([choiceSchema, choiceSchema]),
+    choices: z
+      .tuple([choiceSchema, choiceSchema], choiceSchema)
+      .refine((choices) => choices.length <= 4, "At most four Choices are supported."),
     primaryCategoryCode: normalizedText(1, 64),
     interestCardCodes: z
       .array(z.enum(INTEREST_CARD_CODES))
@@ -91,11 +93,11 @@ const issueSchema = z
   })
   .strict()
   .superRefine((issue, context) => {
-    if (issue.choices[0].code !== "A" || issue.choices[1].code !== "B") {
+    if (issue.choices.some((choice, index) => choice.code !== ["A", "B", "C", "D"][index])) {
       context.addIssue({
         code: "custom",
         path: ["choices"],
-        message: "Choices must be ordered as exactly one A followed by exactly one B.",
+        message: "Choices must be ordered A, B, C, D without gaps.",
       });
     }
 

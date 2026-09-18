@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { DragEvent, FormEvent } from "react";
 
 import { toast } from "@/components/feedback/toast-provider";
@@ -72,6 +72,7 @@ export function OpsEditorialPanel({
   const [mediaDropTarget, setMediaDropTarget] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{ message: string; error: boolean } | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const loadSequence = useRef(0);
   const [creating, setCreating] = useState(false);
   const [createForm, setCreateForm] = useState({
     question: "",
@@ -83,10 +84,16 @@ export function OpsEditorialPanel({
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    const candidateId = params.get("candidate");
+    if (candidateId && /^POLL-[A-F0-9]{20}$/.test(candidateId)) {
+      // Open the exact candidate handed off by the poll inbox, even beyond the first page.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setQuery(candidateId);
+      setSubmittedQuery(candidateId);
+    }
     if (params.get("create") !== "1") return;
     const interestCardCode = params.get("interestCardCode") ?? "DAILY_LIFE";
     // These one-time state updates apply an explicit deep link from the marketing studio.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setCreateForm({
       question: (params.get("question") ?? "").slice(0, 200),
       context: (params.get("context") ?? "").slice(0, 500),
@@ -120,10 +127,12 @@ export function OpsEditorialPanel({
   );
 
   const load = useCallback(async () => {
+    const sequence = ++loadSequence.current;
     setLoading(true);
     setFeedback(null);
     try {
       const body = await requestPage();
+      if (sequence !== loadSequence.current) return;
       setPage(body);
       setSelected(
         (current) =>
@@ -132,12 +141,13 @@ export function OpsEditorialPanel({
           null,
       );
     } catch (caught) {
+      if (sequence !== loadSequence.current) return;
       setFeedback({
         message: caught instanceof Error ? caught.message : "질문 후보를 불러오지 못했습니다.",
         error: true,
       });
     } finally {
-      setLoading(false);
+      if (sequence === loadSequence.current) setLoading(false);
     }
   }, [requestPage]);
 
