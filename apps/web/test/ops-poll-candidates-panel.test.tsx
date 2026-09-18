@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { OpsPollCandidatesPanel } from "@/features/operations/ops-poll-candidates-panel";
 import { GET, POST } from "@/app/api/ops/poll-candidates/[[...path]]/route";
@@ -40,11 +40,17 @@ describe("Ops poll inbox", () => {
         ),
     );
     vi.stubGlobal("fetch", fetchMock);
-    render(<OpsPollCandidatesPanel />);
-    fireEvent.click(await screen.findByRole("button", { name: /쉬는 날에는 어디로/ }));
+    await act(async () => {
+      render(<OpsPollCandidatesPanel />);
+    });
+    fireEvent.click(screen.getByRole("button", { name: /쉬는 날에는 어디로/ }));
     expect(screen.getByLabelText("선택지 D")).toHaveValue("공원");
-    fireEvent.click(screen.getByRole("button", { name: "검수 후보로 보내기" }));
-    await screen.findByRole("link", { name: /Review Center에서 검수 후보 보기/ });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "검수 후보로 보내기" }));
+    });
+    expect(
+      screen.getByRole("link", { name: /Review Center에서 검수 후보 보기/ }),
+    ).toBeInTheDocument();
     const sent = fetchMock.mock.calls.find(([, init]) => init?.method === "POST");
     expect(sent?.[0]).toBe(`/api/ops/poll-candidates/${poll.id}/review`);
     expect(JSON.parse(String(sent?.[1]?.body))).toMatchObject({
@@ -72,13 +78,17 @@ describe("Ops poll inbox", () => {
           ),
       ),
     );
-    render(<OpsPollCandidatesPanel />);
+    await act(async () => {
+      render(<OpsPollCandidatesPanel />);
+    });
     await waitFor(() =>
       expect(screen.queryByText("투표 후보를 불러오고 있습니다.")).not.toBeInTheDocument(),
     );
     fireEvent.click(screen.getByText("수집 결과 JSON 가져오기"));
     fireEvent.change(screen.getByLabelText("후보 JSON"), { target: { value: '[{"bad":true}]' } });
-    fireEvent.click(screen.getByRole("button", { name: "투표 후보로 가져오기" }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "투표 후보로 가져오기" }));
+    });
     expect(await screen.findByRole("status")).toHaveTextContent("제외 1개");
     expect(screen.getByLabelText("후보 JSON")).toHaveValue('[{"bad":true}]');
   });
