@@ -78,8 +78,19 @@ export function OpsPollCandidatesPanel() {
     setPage(data);
   }, []);
   useEffect(() => {
-    void load().catch((error) => setMessage(error.message));
-  }, [load]);
+    let cancelled = false;
+    void api("").then(
+      (data: Page) => {
+        if (!cancelled) setPage(data);
+      },
+      (error: Error) => {
+        if (!cancelled) setMessage(error.message);
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   async function run(action: () => Promise<void>) {
     setBusy(true);
     setMessage("");
