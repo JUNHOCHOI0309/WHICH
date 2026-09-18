@@ -6,6 +6,7 @@
   "scripts": {
     "build": "tsup src/server.ts src/local-media-scanner.ts src/outbox-worker.ts src/moderation-worker.ts src/moderation-job-dispatcher.ts src/moderation-evaluator.ts src/point-worker.ts src/point-operator.ts src/launch-gate.ts src/issue-publisher.ts src/analytics-operator.ts src/beta-operator.ts src/ops-operator.ts src/poll-sync-worker.ts src/database/migrate.ts --format esm --platform node --target node22 --clean --sourcemap",
     "polls:sync": "tsx src/poll-sync-worker.ts",
+    "polls:probe": "tsx src/poll-sync-worker.ts --probe",
     "media:diagnose-local-scanner": "tsx src/local-media-scanner.ts diagnose",
     "analytics:aggregate": "tsx src/analytics-operator.ts aggregate",
     "analytics:retention": "tsx src/analytics-operator.ts retention",
@@ -84,6 +85,7 @@
     "pg": "8.23.0",
     "sharp": "0.35.3",
     "tesseract.js": "7.0.0",
+    "youtubei.js": "18.0.0",
     "zod": "4.4.3",
     "zxing-wasm": "3.1.3"
   },

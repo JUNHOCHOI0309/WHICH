@@ -200,6 +200,24 @@ export const operatorPollSyncRuns = pgTable(
     attempts: integer("attempts").notNull().default(1),
     imported: integer("imported").notNull().default(0),
     duplicates: integer("duplicates").notNull().default(0),
+    channelReports: jsonb("channel_reports")
+      .$type<
+        Array<{
+          channel: string;
+          channelId?: string;
+          status: string;
+          pages: number;
+          posts: number;
+          polls: number;
+          skipped: number;
+          hasMore: boolean;
+          errorCode?: string;
+          imported?: number;
+          duplicates?: number;
+        }>
+      >()
+      .notNull()
+      .default([]),
     errorCode: varchar("error_code", { length: 64 }),
     startedAt: timestamp("started_at", { withTimezone: true }).defaultNow().notNull(),
     finishedAt: timestamp("finished_at", { withTimezone: true }),

@@ -1,0 +1,1 @@
+ALTER TABLE "operator_poll_sync_runs" ADD COLUMN "channel_reports" jsonb DEFAULT '[]'::jsonb NOT NULL;

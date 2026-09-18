@@ -41,7 +41,7 @@ export const pollRowSchema = z.object({
     .regex(/^UC[\w-]{22}$/)
     .optional(),
   sourceUrl: z.string().url(),
-  originalQuestion: text(1000),
+  originalQuestion: text(10000),
   originalChoices: z.array(text(300)).min(2).max(6),
   participationText: z.string().trim().max(100).nullable().optional(),
   observedDate: z.string().date().nullable().optional(),
@@ -123,7 +123,6 @@ export function createPollCandidateMethods(
         nextCursor: rows.length > 100 ? items.at(-1)!.id : null,
         channels: POLL_CHANNELS,
         channelRegister: POLL_CHANNEL_REGISTER,
-        octoparseConfigured: sync.configured,
         sync,
       };
     },

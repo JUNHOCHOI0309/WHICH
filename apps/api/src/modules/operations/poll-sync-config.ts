@@ -6,23 +6,16 @@ export const POLL_SYNC_SCHEDULE = {
   label: "매일 오전 8시 (한국시간)",
 } as const;
 const settings = z.object({
-  taskId: z.string().trim().min(1).max(200),
-  apiKey: z.string().trim().min(1),
   memberId: z.string().uuid(),
-  exportHosts: z.array(z.string().regex(/^(?![\d.]+$)[a-z0-9-]+(?:\.[a-z0-9-]+)+$/)).min(1),
+  maxPages: z.coerce.number().int().min(1).max(10),
 });
 export type PollSyncConfig = z.infer<typeof settings>;
 export function pollSyncSettings(env: NodeJS.ProcessEnv = process.env) {
   const parsed = settings.safeParse({
-    taskId: env.OCTOPARSE_TASK_ID,
-    apiKey: env.OCTOPARSE_API_KEY,
-    memberId: env.OCTOPARSE_IMPORT_MEMBER_ID,
-    exportHosts: (env.OCTOPARSE_EXPORT_HOSTS ?? "")
-      .split(",")
-      .map((host) => host.trim())
-      .filter(Boolean),
+    memberId: env.POLL_SYNC_IMPORT_MEMBER_ID,
+    maxPages: env.POLL_SYNC_MAX_PAGES ?? "5",
   });
-  const configured = parsed.success && env.OCTOPARSE_MAPPING_VERIFIED === "true";
+  const configured = parsed.success && env.POLL_SYNC_SOURCE_VERIFIED === "true";
   return {
     configured,
     enabled: configured && env.POLL_SYNC_ENABLED === "true",
