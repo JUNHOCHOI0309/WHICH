@@ -1,3 +1,5 @@
+import type { PollCandidateMethods } from "./poll-candidates.js";
+
 export const OPS_DASHBOARD_WINDOWS = [1, 7, 30] as const;
 export type OpsDashboardWindow = (typeof OPS_DASHBOARD_WINDOWS)[number];
 
@@ -397,7 +399,7 @@ export class OpsPointShopConflictError extends Error {
   }
 }
 
-export interface OpsDashboardService {
+export interface OpsDashboardService extends PollCandidateMethods {
   recordSupportEmailEvent(input: SupportEmailEvent): Promise<"RECORDED" | "REPLAYED">;
   readDashboard(input: {
     memberId: string;

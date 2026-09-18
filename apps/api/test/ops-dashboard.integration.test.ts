@@ -864,4 +864,97 @@ describe("operator dashboard", () => {
       items: [{ question: "관리자 검수로 추가한 질문은?" }],
     });
   });
+
+  it("hands off a source poll once as text-only pending review, preserves provenance, and publishes four choices only after approval", async () => {
+    const path = "/v1/internal/ops/poll-candidates";
+    const source = {
+      channel: "진행빵집",
+      originalQuestion: "투표 후보 네 가지 선택 테스트?",
+      originalChoices: ["집", "산", "바다", "공원"],
+      sourceUrl: "https://www.youtube.com/post/UgkxIntegration123456",
+      participationText: "1.2만명 투표",
+      observedDate: "2026-09-19",
+    };
+    const denied = await opsRequest("POST", `${path}/import`, { rows: [source] }, ordinaryToken);
+    expect(denied.statusCode).toBe(403);
+    const imported = await opsRequest("POST", `${path}/import`, { rows: [source] });
+    expect(imported.statusCode, imported.body).toBe(200);
+    expect(imported.json()).toMatchObject({ imported: 1, updated: 0, errors: [] });
+    const refreshed = await opsRequest("POST", `${path}/import`, {
+      rows: [
+        {
+          ...source,
+          sourceUrl: source.sourceUrl + "?si=tracking",
+          participationText: "1.3만명 투표",
+        },
+      ],
+    });
+    expect(refreshed.json()).toMatchObject({ imported: 0, updated: 1 });
+    const listing = await opsRequest("GET", path);
+    const poll = listing.json<{ items: Array<{ id: string }> }>().items[0]!;
+    const draft = {
+      question: source.originalQuestion,
+      context: "선택지를 모두 유지하는 검수 후보 테스트입니다.",
+      choices: source.originalChoices,
+      interestCardCode: "DAILY_LIFE",
+    };
+    const handoffs = await Promise.all([
+      opsRequest("POST", `${path}/${poll.id}/review`, draft),
+      opsRequest("POST", `${path}/${poll.id}/review`, draft),
+    ]);
+    for (const response of handoffs) expect(response.statusCode, response.body).toBe(200);
+    const candidateId = handoffs[0].json<{ candidateId: string }>().candidateId;
+    expect(handoffs[1].json<{ candidateId: string }>().candidateId).toBe(candidateId);
+    expect(handoffs.map((result) => result.json<{ replayed: boolean }>().replayed).sort()).toEqual([
+      false,
+      true,
+    ]);
+    const review = await opsRequest("GET", `/v1/internal/ops/editorial?q=${candidateId}`);
+    expect(review.json()).toMatchObject({
+      items: [
+        {
+          candidateId,
+          decision: null,
+          publication: null,
+          discoveryLead: "COMMUNITY",
+          automatedReviewStatus: "EXTERNAL_POLL_PENDING_REVIEW",
+          sources: [{ url: source.sourceUrl }],
+          choices: source.originalChoices.map((label) => ({ label, media: null })),
+        },
+      ],
+    });
+    expect(
+      (
+        await opsRequest("POST", `/v1/internal/ops/editorial/${candidateId}/publish`, {
+          expectedRevision: 0,
+        })
+      ).statusCode,
+    ).toBe(409);
+    expect(
+      (await opsRequest("PATCH", `${path}/${poll.id}`, { status: "DISMISSED" })).statusCode,
+    ).toBe(409);
+    const approval = await opsRequest("PUT", `/v1/internal/ops/editorial/${candidateId}/decision`, {
+      expectedRevision: 0,
+      status: "APPROVED",
+    });
+    expect(approval.statusCode, approval.body).toBe(200);
+    const published = await opsRequest(
+      "POST",
+      `/v1/internal/ops/editorial/${candidateId}/publish`,
+      { expectedRevision: 1 },
+    );
+    expect(published.statusCode, published.body).toBe(200);
+    const publishedIssue = published.json<{
+      issue: { choices: unknown[]; acceptedVotes: number; issueId: string };
+    }>().issue;
+    expect(publishedIssue.choices).toHaveLength(4);
+    expect(publishedIssue.acceptedVotes).toBe(0);
+    const repeated = await opsRequest("POST", `/v1/internal/ops/editorial/${candidateId}/publish`, {
+      expectedRevision: 1,
+    });
+    expect(repeated.statusCode, repeated.body).toBe(200);
+    expect(repeated.json<{ issue: { issueId: string } }>().issue.issueId).toBe(
+      publishedIssue.issueId,
+    );
+  });
 });

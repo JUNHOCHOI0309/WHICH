@@ -36,6 +36,7 @@ import {
 import { loadIssueInventoryReadiness } from "../issue-publication/inventory.js";
 import { parseIssueManifest } from "../issue-publication/manifest.js";
 import { EditorialReviewConsole } from "../issue-publication/review-console.js";
+import { createPollCandidateMethods, type PollCandidateMethods } from "./poll-candidates.js";
 import {
   IssuePublicationConflictError,
   publishIssueManifest,
@@ -295,7 +296,7 @@ function createOpsManagementMethods(
     requestId?: string;
     metadata?: Record<string, unknown>;
   }) => Promise<void>,
-): OpsManagementMethods {
+): OpsManagementMethods & PollCandidateMethods {
   type PublishedIssueRow = {
     issue_id: string;
     version: number;
@@ -628,10 +629,10 @@ function createOpsManagementMethods(
           contentHash: row.contentHash,
           inventoryScope: row.inventoryScope,
           sourceProfile: {
-            discoveryLead: "EDITORIAL",
-            sourceRequirement: "NOT_REQUIRED_SUBJECTIVE",
-            communitySignalIds: [],
-            communitySignalRole: "관리자 직접 등록",
+            discoveryLead: row.source ? "COMMUNITY" : "EDITORIAL",
+            sourceRequirement: row.source ? "DISCOVERY_SIGNAL_ONLY" : "NOT_REQUIRED_SUBJECTIVE",
+            communitySignalIds: row.source ? [row.candidateId] : [],
+            communitySignalRole: row.source ? "외부 투표 참고 자료" : "관리자 직접 등록",
             factSourceIds: [],
             asOf: null,
             reviewAfter: null,
@@ -639,9 +640,18 @@ function createOpsManagementMethods(
             evergreen: true,
             sourceFitReview: "관리자 검수",
           },
-          sources: [],
+          sources: row.source
+            ? [
+                {
+                  id: row.candidateId,
+                  kind: "COMMUNITY",
+                  title: `${row.source.channel} · ${row.source.originalQuestion}`,
+                  url: row.source.sourceUrl,
+                },
+              ]
+            : [],
           automatedReview: {
-            status: "ADMIN_CREATED_PENDING_REVIEW",
+            status: row.source ? "EXTERNAL_POLL_PENDING_REVIEW" : "ADMIN_CREATED_PENDING_REVIEW",
             humanApproval: "PENDING",
             binaryFit: "PENDING",
             choiceParity: "PENDING",
@@ -672,6 +682,13 @@ function createOpsManagementMethods(
   }
 
   return {
+    ...createPollCandidateMethods(
+      database,
+      operator,
+      audit,
+      async () => (await editorialReviewState()).catalog.id,
+      editorialCategoryByInterest,
+    ),
     async readMembers(input): Promise<OpsMemberPage | null> {
       const actor = await operator(input.memberId);
       if (!actor) {

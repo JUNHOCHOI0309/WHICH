@@ -127,6 +127,127 @@ export async function registerOpsRoutes(
       });
     });
 
+    opsApp.get<{ Headers: OpsHeaders; Querystring: { before?: string } }>(
+      "/v1/internal/ops/poll-candidates",
+      {
+        schema: {
+          hide: true,
+          headers: opsHeadersSchema,
+          querystring: Type.Object({ before: Type.Optional(Type.String({ format: "uuid" })) }),
+        },
+      },
+      async (request, reply) => {
+        const memberId = await authenticate(request, reply);
+        if (!memberId) return;
+        const result = await service.readPollCandidates({
+          memberId,
+          before: request.query.before,
+          requestId: request.id,
+        });
+        return result
+          ? reply.send(result)
+          : reply.code(403).send({ message: "운영자 권한이 필요합니다." });
+      },
+    );
+
+    opsApp.post<{ Headers: OpsHeaders; Body: { rows: unknown[] } }>(
+      "/v1/internal/ops/poll-candidates/import",
+      {
+        schema: {
+          hide: true,
+          headers: opsHeadersSchema,
+          body: Type.Object(
+            { rows: Type.Array(Type.Unknown(), { minItems: 1, maxItems: 200 }) },
+            { additionalProperties: false },
+          ),
+        },
+      },
+      async (request, reply) => {
+        const memberId = await authenticate(request, reply);
+        if (!memberId) return;
+        const result = await service.importPollCandidates({
+          memberId,
+          rows: request.body.rows,
+          requestId: request.id,
+        });
+        return result
+          ? reply.send(result)
+          : reply.code(403).send({ message: "운영자 권한이 필요합니다." });
+      },
+    );
+
+    opsApp.post<{
+      Headers: OpsHeaders;
+      Params: { id: string };
+      Body: { question: string; context: string; choices: string[]; interestCardCode: string };
+    }>(
+      "/v1/internal/ops/poll-candidates/:id/review",
+      {
+        schema: {
+          hide: true,
+          headers: opsHeadersSchema,
+          params: Type.Object({ id: Type.String({ format: "uuid" }) }),
+          body: Type.Object(
+            {
+              question: Type.String({ minLength: 1, maxLength: 200 }),
+              context: Type.String({ minLength: 1, maxLength: 500 }),
+              choices: Type.Array(Type.String({ minLength: 1, maxLength: 100 }), {
+                minItems: 2,
+                maxItems: 4,
+              }),
+              interestCardCode: Type.String({ maxLength: 64 }),
+            },
+            { additionalProperties: false },
+          ),
+        },
+      },
+      async (request, reply) => {
+        const memberId = await authenticate(request, reply);
+        if (!memberId) return;
+        const result = await service.sendPollToReview({
+          memberId,
+          id: request.params.id,
+          draft: request.body,
+          requestId: request.id,
+        });
+        return result
+          ? reply.send(result)
+          : reply.code(403).send({ message: "운영자 권한이 필요합니다." });
+      },
+    );
+
+    opsApp.patch<{
+      Headers: OpsHeaders;
+      Params: { id: string };
+      Body: { status: "NEW" | "DISMISSED" };
+    }>(
+      "/v1/internal/ops/poll-candidates/:id",
+      {
+        schema: {
+          hide: true,
+          headers: opsHeadersSchema,
+          params: Type.Object({ id: Type.String({ format: "uuid" }) }),
+          body: Type.Object(
+            { status: Type.Union([Type.Literal("NEW"), Type.Literal("DISMISSED")]) },
+            { additionalProperties: false },
+          ),
+        },
+      },
+      async (request, reply) => {
+        const memberId = await authenticate(request, reply);
+        if (!memberId) return;
+        const result = await service.setPollCandidateStatus({
+          memberId,
+          id: request.params.id,
+          status: request.body.status,
+          requestId: request.id,
+        });
+        return result
+          ? reply.send(result)
+          : reply.code(403).send({ message: "운영자 권한이 필요합니다." });
+      },
+    );
+
     opsApp.post<{
       Headers: OpsHeaders;
       Body: {

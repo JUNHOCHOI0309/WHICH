@@ -16,6 +16,7 @@ import {
 
 import { members } from "./identity.js";
 import { issueMediaAssets } from "./issue-media.js";
+import type { PollSource } from "../../modules/operations/poll-candidates.js";
 
 export const operatorAccessGrants = pgTable(
   "operator_access_grants",
@@ -132,8 +133,9 @@ export const operatorEditorialCandidates = pgTable(
     question: varchar("question", { length: 200 }).notNull(),
     context: varchar("context", { length: 500 }).notNull(),
     choices: jsonb("choices")
-      .$type<Array<{ id: string; code: "A" | "B"; label: string }>>()
+      .$type<Array<{ id: string; code: "A" | "B" | "C" | "D"; label: string }>>()
       .notNull(),
+    source: jsonb("source").$type<PollSource>(),
     categoryCode: varchar("category_code", { length: 64 }).notNull(),
     interestCardCode: varchar("interest_card_code", { length: 64 }).notNull(),
     editorialArea: varchar("editorial_area", { length: 64 }).notNull(),
@@ -158,6 +160,32 @@ export const operatorEditorialCandidates = pgTable(
     check(
       "operator_editorial_candidates_content_hash_check",
       sql`${table.contentHash} ~ '^[a-f0-9]{64}$'`,
+    ),
+  ],
+);
+
+export const operatorPollCandidates = pgTable(
+  "operator_poll_candidates",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    sourceKey: varchar("source_key", { length: 64 }).notNull().unique(),
+    source: jsonb("source").$type<PollSource>().notNull(),
+    status: varchar("status", { length: 16 }).default("NEW").notNull(),
+    editorialCandidateId: varchar("editorial_candidate_id", { length: 32 }),
+    importedByMemberId: uuid("imported_by_member_id")
+      .notNull()
+      .references(() => members.id, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    check(
+      "operator_poll_candidates_status_check",
+      sql`${table.status} in ('NEW', 'REVIEW', 'DISMISSED')`,
+    ),
+    check(
+      "operator_poll_candidates_handoff_check",
+      sql`(${table.status} = 'REVIEW') = (${table.editorialCandidateId} is not null)`,
     ),
   ],
 );
