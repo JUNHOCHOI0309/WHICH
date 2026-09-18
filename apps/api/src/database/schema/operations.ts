@@ -190,6 +190,33 @@ export const operatorPollCandidates = pgTable(
   ],
 );
 
+export const operatorPollSyncRuns = pgTable(
+  "operator_poll_sync_runs",
+  {
+    day: varchar("day", { length: 10 }).primaryKey(),
+    taskId: varchar("task_id", { length: 200 }).notNull(),
+    status: varchar("status", { length: 16 }).notNull(),
+    phase: varchar("phase", { length: 16 }).notNull(),
+    attempts: integer("attempts").notNull().default(1),
+    imported: integer("imported").notNull().default(0),
+    duplicates: integer("duplicates").notNull().default(0),
+    errorCode: varchar("error_code", { length: 64 }),
+    startedAt: timestamp("started_at", { withTimezone: true }).defaultNow().notNull(),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+    nextRetryAt: timestamp("next_retry_at", { withTimezone: true }),
+  },
+  (table) => [
+    check(
+      "operator_poll_sync_runs_status_check",
+      sql`${table.status} in ('RUNNING', 'SUCCEEDED', 'FAILED')`,
+    ),
+    check(
+      "operator_poll_sync_runs_phase_check",
+      sql`${table.phase} in ('REQUESTING', 'ACCEPTED', 'IMPORTED')`,
+    ),
+  ],
+);
+
 export const operatorEditorialCandidateMedia = pgTable(
   "operator_editorial_candidate_media",
   {

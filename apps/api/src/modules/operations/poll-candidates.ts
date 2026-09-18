@@ -10,6 +10,7 @@ import {
 import { computeIssueContentHash } from "../issue-publication/content-hash.js";
 import { OpsReviewValidationError } from "./contracts.js";
 import { POLL_CHANNEL_REGISTER } from "./poll-channels.js";
+import { readPollSyncStatus } from "./poll-sync-status.js";
 
 export const POLL_CHANNELS = [
   "진행빵집",
@@ -116,12 +117,14 @@ export function createPollCandidateMethods(
         .orderBy(desc(operatorPollCandidates.createdAt), desc(operatorPollCandidates.id))
         .limit(101);
       const items = rows.slice(0, 100);
+      const sync = await readPollSyncStatus(database);
       return {
         items,
         nextCursor: rows.length > 100 ? items.at(-1)!.id : null,
         channels: POLL_CHANNELS,
         channelRegister: POLL_CHANNEL_REGISTER,
-        octoparseConfigured: false,
+        octoparseConfigured: sync.configured,
+        sync,
       };
     },
     async importPollCandidates(input: Actor & { rows: unknown[] }) {

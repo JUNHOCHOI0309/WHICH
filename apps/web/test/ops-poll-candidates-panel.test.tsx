@@ -22,6 +22,40 @@ const poll = {
   },
 };
 describe("Ops poll inbox", () => {
+  it("distinguishes the planned daily schedule from activation and shows failed imports", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            items: [],
+            channels: [],
+            nextCursor: null,
+            sync: {
+              enabled: false,
+              configured: false,
+              lastSuccessfulImportAt: null,
+              latest: {
+                day: "2026-09-19",
+                status: "FAILED",
+                imported: 0,
+                duplicates: 0,
+                attempts: 1,
+                errorCode: "AUTH_FAILED",
+              },
+            },
+          }),
+        ),
+      ),
+    );
+    await act(async () => {
+      render(<OpsPollCandidatesPanel />);
+    });
+    expect(screen.getByText(/매일 오전 8시/)).toBeInTheDocument();
+    expect(screen.getByText(/자동 실행은 아직 비활성/)).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("AUTH_FAILED");
+    expect(screen.getByText("마지막 가져오기 성공: 없음")).toBeInTheDocument();
+  });
   it("sends all four text choices to review and opens the persistent candidate", async () => {
     const fetchMock = vi.fn(
       async (_url: string, init?: RequestInit) =>
