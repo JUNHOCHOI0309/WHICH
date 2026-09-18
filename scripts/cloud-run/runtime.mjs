@@ -51,6 +51,8 @@ export function runtimeEnvironment(environment = process.env, readFile = readFil
     // A preview must never become a second production consumer on the shared DB.
     Object.assign(result, {
       POINTS_WORKER_ENABLED: "false",
+      POLL_SYNC_ENABLED: "false",
+      POLL_SYNC_SCHEDULE_ACTIVE: "false",
       MODERATION_WORKER_ENABLED: "false",
       MODERATION_JOB_DISPATCH_ENABLED: "false",
       MODERATION_PROVIDER_MODE: "OFF",

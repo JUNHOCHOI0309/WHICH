@@ -26,6 +26,20 @@ type Page = {
     identityNeedsConfirmation: boolean;
   }>;
   octoparseConfigured: boolean;
+  sync?: {
+    label: string;
+    configured: boolean;
+    enabled: boolean;
+    lastSuccessfulImportAt: string | null;
+    latest: {
+      day: string;
+      status: string;
+      imported: number;
+      duplicates: number;
+      errorCode: string | null;
+      attempts: number;
+    } | null;
+  };
 };
 const labels = { NEW: "대기", REVIEW: "검수함 전송 완료", DISMISSED: "제외" };
 const interests = [
@@ -156,11 +170,37 @@ export function OpsPollCandidatesPanel() {
         <span>원문을 확인하고 텍스트 질문을 Review Center로 보내세요.</span>
       </header>
       <section className={styles.connection} aria-label="Octoparse 연결 상태">
-        <strong>Octoparse · 연결 정보 대기</strong>
+        <strong>
+          Octoparse ·{" "}
+          {page?.sync?.enabled
+            ? "정기 수집 설정됨"
+            : page?.sync?.configured
+              ? "정기 수집 비활성"
+              : "연결 정보 대기"}
+        </strong>
+        <p>매일 오전 8시 (한국시간) · 신규 투표만 추가 · 기존 후보와 검수 상태 유지</p>
+        {!page?.sync?.enabled && (
+          <p>
+            자동 실행은 아직 비활성입니다. 작업 ID·서버 인증·실제 수집 샘플 검증과 서버 예약 연결이
+            필요합니다. JSON 가져오기는 사용할 수 있습니다.
+          </p>
+        )}
         <p>
-          채널 주소 준비 완료 · 실제 작업 ID, 서버 인증 정보와 수집 샘플은 아직 대기 중입니다.
-          현재는 아래 입력 형식으로 정리한 JSON을 가져올 수 있습니다. 자동 수집은 실행하지 않습니다.
+          마지막 가져오기 성공:{" "}
+          {page?.sync?.lastSuccessfulImportAt
+            ? new Date(page.sync.lastSuccessfulImportAt).toLocaleString("ko-KR", {
+                timeZone: "Asia/Seoul",
+              })
+            : "없음"}
         </p>
+        {page?.sync?.latest && (
+          <p role="status">
+            최근 실행 {page.sync.latest.day} · {page.sync.latest.status} · 신규{" "}
+            {page.sync.latest.imported}개 · 중복 제외 {page.sync.latest.duplicates}개 · 시도{" "}
+            {page.sync.latest.attempts}회
+            {page.sync.latest.errorCode ? ` · 확인 필요: ${page.sync.latest.errorCode}` : ""}
+          </p>
+        )}
         <details>
           <summary>수집 대상 채널 {page?.channels.length ?? 12}개</summary>
           <p>{page?.channels.join(" · ")}</p>

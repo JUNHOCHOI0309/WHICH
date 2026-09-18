@@ -13,7 +13,7 @@
 
 2026-09-19 사용자 제공 인계 ZIP의 채널 주소를 `poll-channels.ts`에 반영했습니다. 이는 실수집 검증 결과가 아닙니다. 12개 중 만렙백수는 동명 채널 확인이 필요해 초기 자동 수집 대상에서 보류합니다. 나머지 11개도 첫 수집에서 작성자와 원문을 검증해야 합니다.
 
-ZIP의 readiness.json에는 taskId=null, actualOctoparseSampleAvailable=false가 명시되어 있습니다. 실제 작업 ID, 출력 필드 샘플과 서버 자격 증명을 받은 뒤 API 연결을 구현·검증합니다. 현재는 연결 미설정이며 외부 유료 작업을 실행하지 않습니다. API 토큰은 JSON이나 브라우저에 넣지 않습니다. 인계 문서의 08:00 예약은 제안일 뿐 이 변경에서 예약 작업을 생성하거나 기존 예약을 수정하지 않습니다.
+ZIP의 readiness.json에는 taskId=null, actualOctoparseSampleAvailable=false가 명시되어 있습니다. 이후 사용자가 **매일 오전 8시(한국시간), 신규만 추가**를 확정했습니다. 일회성 실행기와 AgentTools 어댑터·실행 기록은 구현되었으며, 실제 작업 ID/출력 샘플/서버 자격 증명으로 실연동 검증 및 예약 활성화가 남아 있습니다. 현재 외부 유료 작업을 실행하지 않으며 API 토큰은 JSON이나 브라우저에 넣지 않습니다. 상세 설정과 재시도 정책은 [정기 가져오기 운영 문서](../operations/daily-poll-sync.md)를 따릅니다.
 
 필드 매핑 초안은 Channel_name→channel, Post_text→originalQuestion, Poll_options→originalChoices, Poll_vote_count→participationText, Post_URL→sourceUrl입니다. 원시 Octoparse JSON을 직접 지원한다고 가정하지 않습니다. Poll_options 자료형은 실제 샘플로 확인해야 하며 문자열을 쉼표로 나누지 않습니다. 정확한 게시일만 observedDate에 넣고 상대 날짜는 null로 둡니다. 좋아요·댓글 수를 투표 수로 대체하지 않습니다. readiness.json과 채널 설정 JSON은 후보 데이터가 아닙니다.
 

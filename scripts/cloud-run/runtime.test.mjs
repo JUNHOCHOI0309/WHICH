@@ -23,12 +23,16 @@ test("preview defaults to no consumers and no paid calls", () => {
     POINTS_WORKER_ENABLED: "true",
     MODERATION_WORKER_ENABLED: "true",
     MODERATION_JOB_DISPATCH_ENABLED: "true",
+    POLL_SYNC_ENABLED: "true",
+    POLL_SYNC_SCHEDULE_ACTIVE: "true",
   });
   assert.deepEqual(
     serviceDefinitions(env).map((x) => x.name),
     ["api", "web"],
   );
   assert.equal(env.MODERATION_PROVIDER_MODE, "OFF");
+  assert.equal(env.POLL_SYNC_ENABLED, "false");
+  assert.equal(env.POLL_SYNC_SCHEDULE_ACTIVE, "false");
   assert.equal(env.ISSUE_MEDIA_AUTO_PUBLICATION_KILL_SWITCH, "true");
 });
 test("deployment overrides imported environment, runtime identity and ports are isolated", () => {
