@@ -1,57 +1,53 @@
-# 매일 신규 투표 가져오기
+# YouTube.js 정기 투표 수집
 
-사용자 확정: **하루 한 번, 한국시간 오전 8시**, 신규 게시물만 추가. 웹 요청이나 브라우저를 열어놓는 것에 의존하지 않습니다.
+사용자 확정: 매일 **한국시간 오전 8시**, 신규 투표만 추가. 수집 서비스는 Octoparse에서 **youtubei.js 18.0.0**으로 교체했습니다. 외부 유료 API 키, Task ID, OAuth, 로그인 쿠키가 필요하지 않습니다. 기존 후보·검수 내역 및 과거 실행 기록은 삭제하지 않습니다.
 
-## 현재 배포 범위와 미완료 항목
+## 구조와 수집 범위
 
-구현: 일회성 서버 실행기, AgentTools 시작/결과 확인/전체 JSON 다운로드 어댑터, DB 단일 실행 잠금, 날짜별 실행 기록, 신규만 INSERT, 관리자 상태 표시, Cloud Run Job 진입점과 **기본 dry-run** 예약 준비 스크립트.
+Cloud Scheduler → Cloud Run Job → 공개 채널 posts/Poll 조회 → 신규 후보 INSERT → 운영자 편집 → Review Center 검수. 자동 승인·게시는 하지 않습니다.
 
-**실제 자동 수집은 활성화되지 않았습니다.** 실제 Task ID/API 키/출력 샘플이 없으며, Cloud Run Job·Cloud Scheduler 리소스도 아직 생성하지 않았습니다. 실행기 코드 배포와 예약 활성화를 혼동하지 않습니다. 신규 유료 리소스 생성은 연결 검증 및 비용 승인 후 별도 진행합니다.
+- `0 8 * * *`, `Asia/Seoul`. 브라우저나 개인 PC를 켜둘 필요 없는 서버 실행 구조입니다.
+- `poll-channels.ts`의 11개 검증 대상만 조회합니다. 만렙백수는 동명 채널 확인 전까지 HELD입니다.
+- 핸들을 해석한 채널 ID가 등록 ID와 일치해야 하고 각 투표 작성자 ID도 일치해야 합니다. 공유 게시물은 건너뜁니다.
+- 기본 **채널별 최근 최대 5페이지**(설정 1~10)를 읽습니다. 전체 과거 이력의 완전한 백필이 아닙니다. `hasMore`가 true이면 이전 게시물이 남아 있습니다. 중단 기간 동안 이 범위를 넘는 게시물이 올라오면 누락될 수 있으므로 운영자 확인 및 별도 백필이 필요합니다.
+- 게시물 ID로 중복을 제거합니다. 기존 원문/상태/Review Center 연결은 덮어쓰지 않습니다.
+- 질문·선택지·원문 URL·작성자 채널 ID·수집 시각·상대 게시일 원문을 보존합니다. `5.7만명 투표`를 정확한 정수로 추정하지 않습니다. 총투표 수가 없으면 null, 상대 날짜는 observedDate=null입니다.
+- 파서 구조 변경/빈 파싱 결과/작성자 불일치는 오류로 기록합니다. 게시물은 있지만 Poll이 없는 페이지는 정상 0건으로 구분합니다.
+- 요청은 비로그인, 고정 YouTube 호스트, 리다이렉트 거절, 요청당 20초/8MB, 채널당 90초/16요청, 전체 20분으로 제한합니다. 플레이어 다운로드/영상 다운로드/투표 참여/캡차 우회는 하지 않습니다. 쿠키·Authorization 헤더를 전달하지 않습니다.
 
-## 실행 소유자
+## 실행 기록과 실패 처리
 
-WHICH Cloud Scheduler → Cloud Run Job → 기존 Octoparse 작업 시작 → 결과 완료 대기 → 전체 JSON 검증 → 신규 후보 저장.
+- DB advisory lock으로 동시 실행을 차단합니다. 외부 요청 중 DB 트랜잭션을 유지하지 않습니다.
+- 날짜별 실행 + 채널별 결과를 보존합니다. 각 채널의 신규 후보와 체크포인트는 한 트랜잭션으로 커밋합니다.
+- 일부 실패 시 정상 채널의 후보는 남고 전체 상태는 FAILED입니다. 마지막 전체 성공 시각은 갱신하지 않습니다.
+- 같은 날 재실행은 15분 이후 최대 3회, 이미 정상 커밋된 채널은 건너뜁니다. 중단된 읽기는 다시 수행할 수 있습니다. 다음 날은 새로운 최근 범위를 읽으며 전날 실패가 영구적으로 전체 수집을 막지 않습니다.
+- 정기 예약은 하루 1회이며 시간별 재시도 예약은 없습니다. Job 자체 재시도는 0입니다. 수동 재실행에도 같은 날 성공/잠금/재시도 제한이 적용됩니다.
+- 실행 전과 쓰기 직전에 importer의 활성 운영자 권한을 확인합니다. 권한은 자동 부여하지 않습니다.
+- `channel_reports`만 추가하는 migration 0066을 사용합니다. 기존 task_id 컬럼은 호환성을 위해 유지하며 새 실행에는 `youtubei.js:18.0.0:v1`을 기록합니다.
 
-- cron `0 8 * * *`, timezone `Asia/Seoul`. Octoparse 자체 예약은 중복 설정하지 않습니다.
-- 실행기는 08시 이전에는 시작하지 않으며 하루 성공 후 재호출은 건너뜁니다.
-- 전용 DB 연결의 advisory lock으로 다중 실행을 직렬화합니다. 외부 요청을 기다리는 동안 DB 트랜잭션을 유지하지 않습니다.
-- 20분 실행 제한, HTTP 30초 제한, 응답 10MB/5000행 제한. 다운로드 호스트는 확인된 정확한 호스트만 허용하며 리다이렉트와 인증키 전달을 금지합니다.
-- 출력 전체 행 수와 dataTotal이 일치해야 합니다. sampleData는 후보 데이터로 사용하지 않습니다.
-- 전체 파일을 검증한 뒤 한 트랜잭션에서 신규 후보와 성공 기록을 저장합니다. 기존 게시물 ID는 무조건 건너뛰므로 편집/출처/검수 상태를 덮어쓰지 않습니다.
-- 수집 원본 JSON과 수집시각은 관리자 후보의 source에 보존합니다. 원문은 텍스트 검수 전송 경로를 거치며 자동 승인/게시하지 않습니다.
+## 설정과 검증
 
-## 실제 연결 전 확인
+서버 설정: `POLL_SYNC_IMPORT_MEMBER_ID`(기존 활성 운영자 UUID), `POLL_SYNC_MAX_PAGES=5`, `POLL_SYNC_SOURCE_VERIFIED=true`, `POLL_SYNC_ENABLED=true`.
 
-1. 기존 Cloud 실행 가능 Task ID와 API 키를 서버 Secret Manager에 설정합니다. 작업에 정확한 초기 11개 채널이 설정되어 있고 만렙백수가 제외됐는지 대조합니다.
-2. 실제 export에서 배열 형태 `Poll_options`와 `Channel_name`, `Post_text`, `Poll_vote_count`, `Post_URL`, `Post_date`를 확인합니다. 현 어댑터는 전체 JSON 배열 및 정확히 이 필드 매핑 또는 기존 정규화된 배열을 지원합니다. 다른 구조면 검증 실패로 중지합니다. 문자열 선택지를 쉼표로 나누지 않습니다.
-3. 원문 작성자와 설정된 채널이 일치하는지 실제 표본으로 확인합니다. 채널 ID가 있는 정규화 행은 알려진 ID와 대조합니다. 기존 지연 결과가 아닌 새 실행의 전체 export인지도 확인합니다.
-4. 실제 출력과 채널 범위를 검증한 뒤에만 `OCTOPARSE_MAPPING_VERIFIED=true`를 사용합니다. 키 존재만으로 자동 활성화하지 않습니다.
-5. `OCTOPARSE_EXPORT_HOSTS`에는 실제 인증된 export 응답에서 확인한 호스트만 넣습니다. 도메인을 추측하거나 localhost/임의 프록시를 허용하지 않습니다.
-6. `OCTOPARSE_IMPORT_MEMBER_ID`는 기존 운영자 ID입니다. 새 계정을 만들거나 권한을 자동 부여하지 않습니다.
+웹 상태용 `POLL_SYNC_SCHEDULE_ACTIVE=true`는 실제 예약 활성화 확인 후에만 설정합니다. 코드 배포나 로컬 수집 성공으로 이 플래그를 자동으로 켜지 않습니다.
 
-서버 전용 secret `which-poll-sync-env`의 필드: `OCTOPARSE_TASK_ID`, `OCTOPARSE_API_KEY`, `OCTOPARSE_IMPORT_MEMBER_ID`, `OCTOPARSE_EXPORT_HOSTS`, `OCTOPARSE_MAPPING_VERIFIED`. API 키나 서명된 export URL은 화면/로그에 표시하지 않습니다.
+1. `pnpm --filter @which/api polls:probe`: DB에 연결하지 않고 채널별 첫 페이지 결과만 출력합니다. `--recent-window`를 붙이면 기본 운영 범위인 최근 5페이지를 검증합니다. 질문 본문·인증 정보는 로그에 출력하지 않습니다.
+2. `configure-poll-sync.ps1`은 기본 계획 출력입니다. 신규 서버/예약 비용 승인 후 `-Apply`로 비활성 Job과 paused Scheduler를 준비합니다. Cloud Scheduler API와 전용 호출 서비스 계정은 사전 설정합니다.
+3. 운영 이미지에서 Job을 `--args=scripts/cloud-run/poll-sync-job.mjs,--probe`로 1회 실행하여 운영 IP 접근을 확인합니다. 로컬 성공만으로 운영 검증을 대체하지 않습니다.
+4. 운영 probe가 정상이고 기존 importer 권한 확인이 끝난 후 Job의 SOURCE_VERIFIED/ENABLED를 true로 설정하고 오전 8시 이후 1회 실행합니다. 신규 저장·재실행 중복 방지·오류 결과를 검증합니다.
+5. Scheduler를 resume하고 웹 상태 플래그를 true로 설정합니다. 중지 시 Scheduler pause, Job disable, 웹 플래그 false를 함께 적용합니다.
 
-## 준비 및 활성화
+Job 이미지는 웹과 별도로 고정됩니다. 후속 배포 시 검증된 이미지 digest로 Job도 갱신해야 합니다. Cloud Scheduler 접수 성공은 수집 성공과 다르므로 `/ops` 채널별 결과와 Cloud Run 실행 결과를 확인합니다.
 
-`scripts/cloud-run/configure-poll-sync.ps1`에 현재 운영 이미지 digest, 전용 Scheduler 호출 서비스 계정, secret의 고정 버전을 전달하면 계획만 출력합니다. 비용·권한 승인을 받은 뒤 `-Apply`로 신규 Job과 **paused** Scheduler를 준비합니다. 기존 동일 이름의 Scheduler가 있다면 새로 만들지 말고 상태를 먼저 확인합니다. 스크립트는 자동 활성화·외부 수집·예약 resume을 수행하지 않습니다.
+## 검증 증거와 한계
 
-실제 연결 검사 후 Job의 `POLL_SYNC_ENABLED=true`로 바꾸고 명시적으로 한 번 실행해 데이터/중복/권한을 확인합니다. 그다음 Scheduler를 resume하고 웹 서비스에 상태 표시용 `POLL_SYNC_SCHEDULE_ACTIVE=true`를 설정합니다. 웹 API에는 Octoparse 비밀키를 복제할 필요가 없습니다. 중지 시 Scheduler pause와 Job disable, 웹 상태 플래그 false를 함께 적용합니다.
+2026-09-19 로컬 비로그인 첫 페이지 probe: 진행빵집 2, 뭉케뭉케 10, 궁금해소 5, 그분이 알고싶다 2, 주식초등학교 10, 경제야놀자 7, 가비 걸 6, 짤툰 0, 쩝쩝박사 2, 닥터딩요 9, 캠핑한끼 1 = 투표 54개. 이는 그 시점의 첫 페이지 관측이며 채널의 모든 투표 개수가 아닙니다. 만렙백수는 조회하지 않았습니다.
 
-Job 이미지는 웹과 별도로 고정되므로 다음 릴리스에서 Job 이미지도 검증된 digest로 갱신해야 합니다. 자동 웹 배포가 Job을 몰래 만들거나 활성화하지 않습니다.
+같은 날 최근 5페이지 probe도 11개 채널 모두 성공했습니다(순서대로 10/50/22/8/45/46/37/1/29/47/4 = 299개). 닥터딩요의 1,100자 원문을 잘라내지 않도록 수집 원문 질문 상한을 10,000자로 조정했으며, Review Center 편집 질문 상한 200자는 유지합니다. probe는 운영 DB를 쓰지 않습니다.
 
-## 실패 및 재시도
+라이브러리는 MIT 라이선스의 비공식 내부 API 클라이언트입니다. YouTube 변경·운영 IP 제한에 따라 동작이 중단될 수 있습니다. 라이브러리 무료와 서버 실행 비용은 별개이며, 원문 재사용과 서비스 이용 조건은 별도로 확인해야 합니다.
 
-- 시작 요청을 보내기 전에 REQUESTING을 기록합니다. 응답 유실·이미 실행 중·거절은 확인 없이 반복 시작하지 않습니다. 운영자가 Octoparse 실행 상태를 확인해야 합니다.
-- ACCEPTED 뒤의 export 실패는 15분 이후 재호출에서 **새 수집 시작 없이** 결과 조회를 재개합니다. 최대 3회 후 수동 확인합니다. Job 자체 즉시 재시도는 0이며, 다음 날 예약도 미완료 결과부터 복구합니다. 재시도 간격은 별도 시간별 예약을 생성한다는 의미가 아닙니다.
-- 불확실한 시작 또는 재시도 한도 도달은 관리자 확인 전 후속 시작을 막습니다. 운영자가 실제 제공자 상태와 수집 범위를 대조한 후에만 실행 기록 복구를 결정합니다. 기록을 지워 무조건 재실행하지 않습니다.
-- `no_data`는 ‘신규 0건 성공’으로 취급하지 않습니다. 원본 접근/작업 설정을 확인해야 합니다. 유효한 전체 export에서 모두 기존 ID일 때만 ‘신규 0 / 중복 N’ 성공입니다.
-- 날짜 cutoff나 제공자의 삭제/내보냄 표시를 사용하지 않습니다. 누락분 복구를 위해 기존 작업은 충분한 조회 겹침 범위를 가져야 합니다.
-- 마지막 **가져오기 성공** 시각은 성공한 DB 커밋만 의미하며, 모든 채널의 수집 성공을 의미하지 않습니다. 채널별 0건/실패 판별은 실제 작업 및 하위 작업 출력 검증이 추가로 필요합니다.
-- Scheduler의 HTTP 접수 성공과 Job 실행 성공은 다릅니다. Cloud Run Job 실패와 `/ops`의 최근 실행 오류를 별도로 확인합니다.
+- [YouTube.js 프로젝트 및 라이선스](https://github.com/LuanRT/YouTube.js)
+- [Poll 파서](https://github.com/LuanRT/YouTube.js/blob/main/src/parser/classes/Poll.ts)
 
-## 검증 근거
-
-- [Octoparse 기존 작업/전체 export 흐름](https://helpcenter.octoparse.com/en/articles/15855832-run-a-scraping-workflow-with-the-octoparse-agenttools-api)
-- [Cloud Run Job 정기 실행](https://docs.cloud.google.com/run/docs/execute/jobs-on-schedule)
-
-실제 채널 수집 성공, 첫 오전 8시 실행과 다음 날 신규분 갱신은 활성화 후 따로 확인해야 합니다. 테스트 더블 성공은 실연동 성공이 아닙니다.
+예약 활성화 및 운영 서버 실수집 완료 여부는 별도의 배포 결과로 확인해야 합니다. 이 문서는 활성화 자체의 증거가 아닙니다.

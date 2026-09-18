@@ -3,13 +3,24 @@ import { config as loadEnvironment } from "dotenv";
 import { createDatabase } from "./database/client.js";
 import { runDailyPollSync } from "./modules/operations/poll-sync.js";
 import { pollSyncSettings } from "./modules/operations/poll-sync-config.js";
+import { createYouTubePollCollector } from "./modules/operations/youtube-polls.js";
+import { POLL_CHANNEL_REGISTER } from "./modules/operations/poll-channels.js";
 
 loadEnvironment({
   path: [resolve(process.cwd(), "../../.env.local"), resolve(process.cwd(), "../../.env")],
   quiet: true,
 });
 const settings = pollSyncSettings();
-if (!settings.enabled) {
+if (process.argv.includes("--probe")) {
+  // Read-only public probe. No DB connection or writes, even in production.
+  const provider = createYouTubePollCollector(process.argv.includes("--recent-window") ? 5 : 1);
+  const signal = AbortSignal.timeout(15 * 60_000);
+  for (const channel of POLL_CHANNEL_REGISTER) {
+    const result = await provider.collect(channel, signal);
+    console.info(JSON.stringify({ event: "POLL_PROBE", ...result.report }));
+    if (result.report.status === "FAILED") process.exitCode = 1;
+  }
+} else if (!settings.enabled) {
   console.info(
     JSON.stringify({
       event: "POLL_SYNC",

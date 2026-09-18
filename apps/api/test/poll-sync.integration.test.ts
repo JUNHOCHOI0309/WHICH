@@ -9,11 +9,7 @@ import {
 import { runDailyPollSync } from "../src/modules/operations/poll-sync.js";
 import { normalizePollRow } from "../src/modules/operations/poll-candidates.js";
 import { readPollSyncStatus } from "../src/modules/operations/poll-sync-status.js";
-import {
-  PollSyncError,
-  type OctoparsePollClient,
-} from "../src/modules/operations/octoparse-polls.js";
-
+import { type PollCollector } from "../src/modules/operations/youtube-polls.js";
 let testDb: Awaited<ReturnType<typeof createTestDatabase>>;
 let env: NodeJS.ProcessEnv;
 const now = new Date("2026-09-18T23:00:00Z");
@@ -25,13 +21,23 @@ const source = normalizePollRow({
 });
 function provider() {
   return {
-    start: vi.fn<OctoparsePollClient["start"]>().mockResolvedValue(undefined),
-    read: vi.fn<OctoparsePollClient["read"]>().mockResolvedValue({
-      status: "READY" as const,
-      rows: [{ source, raw: { original: true } }],
-    }),
+    collect: vi.fn<PollCollector["collect"]>().mockImplementation((channel) =>
+      Promise.resolve({
+        report: {
+          channel: channel.name,
+          status: "OK",
+          pages: 1,
+          posts: 1,
+          polls: channel.name === "진행빵집" ? 1 : 0,
+          skipped: 0,
+          hasMore: false,
+        },
+        rows: channel.name === "진행빵집" ? [{ source, raw: { original: true } }] : [],
+      }),
+    ),
   };
 }
+const wait = () => Promise.resolve();
 beforeAll(async () => {
   testDb = await createTestDatabase();
   const [member] = await testDb.database.db
@@ -43,11 +49,8 @@ beforeAll(async () => {
     .values({ memberId: member!.id, grantedBy: "test" });
   env = {
     POLL_SYNC_ENABLED: "true",
-    OCTOPARSE_MAPPING_VERIFIED: "true",
-    OCTOPARSE_TASK_ID: "task-test",
-    OCTOPARSE_API_KEY: "not-real",
-    OCTOPARSE_IMPORT_MEMBER_ID: member!.id,
-    OCTOPARSE_EXPORT_HOSTS: "export.example.com",
+    POLL_SYNC_SOURCE_VERIFIED: "true",
+    POLL_SYNC_IMPORT_MEMBER_ID: member!.id,
   };
 }, 30000);
 beforeEach(async () => {
@@ -58,39 +61,44 @@ afterAll(async () => {
   await testDb.database.close();
   await testDb.drop();
 });
-describe("daily import persistence", () => {
-  it("adds only new posts once per day and never changes a dismissed candidate", async () => {
+describe("daily YouTube import persistence", () => {
+  it("imports new posts once per day without overwriting source or review state", async () => {
     const client = provider();
     expect(
-      await runDailyPollSync(testDb.database.db, { env, now, provider: client }),
+      await runDailyPollSync(testDb.database.db, { env, now, provider: client, wait }),
     ).toMatchObject({ status: "SUCCEEDED", imported: 1 });
     expect(
-      await runDailyPollSync(testDb.database.db, { env, now, provider: client }),
+      await runDailyPollSync(testDb.database.db, { env, now, provider: client, wait }),
     ).toMatchObject({ status: "ALREADY_COMPLETED" });
     await testDb.database.db.update(operatorPollCandidates).set({ status: "DISMISSED" });
-    client.read.mockResolvedValue({
-      status: "READY",
-      rows: [{ source: { ...source, originalQuestion: "바뀐 원문" }, raw: {} }],
-    });
     expect(
       await runDailyPollSync(testDb.database.db, {
         env,
         now: new Date("2026-09-19T23:00:00Z"),
         provider: client,
+        wait,
       }),
     ).toMatchObject({ imported: 0, duplicates: 1 });
-    const [stored] = await testDb.database.db.select().from(operatorPollCandidates);
-    expect(stored).toMatchObject({
+    expect((await testDb.database.db.select().from(operatorPollCandidates))[0]).toMatchObject({
       status: "DISMISSED",
       source: { originalQuestion: source.originalQuestion },
     });
-    expect(client.start).toHaveBeenCalledTimes(2);
+    expect(client.collect).toHaveBeenCalledTimes(22);
+    expect(
+      (await readPollSyncStatus(testDb.database.db, {})).lastSuccessfulImportAt,
+    ).not.toBeNull();
   });
-  it("does not call the provider while unconfigured or before the scheduled hour", async () => {
+  it("does not call YouTube when disabled, unconfigured or before 08 KST", async () => {
     const client = provider();
     expect(await runDailyPollSync(testDb.database.db, { env: {}, provider: client })).toEqual({
       status: "NOT_CONFIGURED",
     });
+    expect(
+      await runDailyPollSync(testDb.database.db, {
+        env: { ...env, POLL_SYNC_ENABLED: "false" },
+        provider: client,
+      }),
+    ).toEqual({ status: "DISABLED" });
     expect(
       await runDailyPollSync(testDb.database.db, {
         env,
@@ -98,63 +106,108 @@ describe("daily import persistence", () => {
         provider: client,
       }),
     ).toEqual({ status: "NOT_DUE" });
-    expect(client.start).not.toHaveBeenCalled();
+    expect(client.collect).not.toHaveBeenCalled();
   });
-  it("serializes simultaneous job invocations", async () => {
+  it("serializes simultaneous jobs", async () => {
     const client = provider();
     const result = await Promise.all([
-      runDailyPollSync(testDb.database.db, { env, now, provider: client }),
-      runDailyPollSync(testDb.database.db, { env, now, provider: client }),
+      runDailyPollSync(testDb.database.db, { env, now, provider: client, wait }),
+      runDailyPollSync(testDb.database.db, { env, now, provider: client, wait }),
     ]);
     expect(result.filter((item) => item.status === "SUCCEEDED")).toHaveLength(1);
-    expect(client.start).toHaveBeenCalledTimes(1);
+    expect(client.collect).toHaveBeenCalledTimes(11);
   });
-  it("resumes a failed export without starting or paying for another extraction", async () => {
+  it("keeps healthy channels on partial failure, exposes errors and retries only failed channels", async () => {
     const client = provider();
-    client.read.mockRejectedValueOnce(new PollSyncError("SOURCE_FAILED"));
+    const original = client.collect.getMockImplementation()!;
+    client.collect.mockImplementation(async (channel, signal) =>
+      channel.name === "뭉케뭉케"
+        ? {
+            report: {
+              channel: channel.name,
+              status: "FAILED",
+              pages: 0,
+              posts: 0,
+              polls: 0,
+              skipped: 0,
+              hasMore: false,
+              errorCode: "SOURCE_HTTP_FAILED",
+            },
+            rows: [],
+          }
+        : original(channel, signal),
+    );
     expect(
-      await runDailyPollSync(testDb.database.db, { env, now, provider: client }),
-    ).toMatchObject({ status: "FAILED", code: "SOURCE_FAILED" });
-    expect((await readPollSyncStatus(testDb.database.db, {})).lastSuccessfulImportAt).toBeNull();
-    await testDb.database.db.update(operatorPollSyncRuns).set({ nextRetryAt: new Date(0) });
+      await runDailyPollSync(testDb.database.db, { env, now, provider: client, wait }),
+    ).toMatchObject({ status: "FAILED", imported: 1, failedChannels: 1 });
+    const status = await readPollSyncStatus(testDb.database.db, {});
+    expect(status.lastSuccessfulImportAt).toBeNull();
+    expect(status.latest?.channelReports).toEqual(
+      expect.arrayContaining([expect.objectContaining({ channel: "뭉케뭉케", status: "FAILED" })]),
+    );
     expect(
-      await runDailyPollSync(testDb.database.db, { env, now, provider: client }),
+      await runDailyPollSync(testDb.database.db, { env, now, provider: client, wait }),
+    ).toMatchObject({ status: "RETRY_NOT_DUE" });
+    client.collect.mockImplementation(original);
+    client.collect.mockClear();
+    expect(
+      await runDailyPollSync(testDb.database.db, {
+        env,
+        now: new Date(now.getTime() + 16 * 60_000),
+        provider: client,
+        wait,
+      }),
     ).toMatchObject({ status: "SUCCEEDED", imported: 1 });
-    expect(client.start).toHaveBeenCalledTimes(1);
+    expect(client.collect).toHaveBeenCalledTimes(1);
   });
-  it("never repeats an uncertain start, even on another day", async () => {
+  it("does not let yesterday's failure block today's recent-window refresh", async () => {
     const client = provider();
-    client.start.mockRejectedValueOnce(new Error("secret transport details"));
-    expect(await runDailyPollSync(testDb.database.db, { env, now, provider: client })).toEqual({
-      status: "FAILED",
-      code: "SYNC_FAILED",
-    });
+    client.collect.mockRejectedValueOnce(new Error("secret transport details"));
+    expect(
+      await runDailyPollSync(testDb.database.db, { env, now, provider: client, wait }),
+    ).toMatchObject({ status: "FAILED", code: "SYNC_FAILED" });
     expect(
       await runDailyPollSync(testDb.database.db, {
         env,
         now: new Date("2026-09-19T23:00:00Z"),
         provider: client,
+        wait,
       }),
-    ).toEqual({ status: "START_UNCERTAIN_REVIEW_REQUIRED" });
-    expect(client.start).toHaveBeenCalledTimes(1);
-    expect(await testDb.database.db.select().from(operatorPollCandidates)).toHaveLength(0);
+    ).toMatchObject({ status: "SUCCEEDED" });
   });
-  it("rolls back a partially inserted batch and does not advance the success marker", async () => {
+  it("rolls back the entire failing channel transaction and its checkpoint", async () => {
     const client = provider();
-    client.read.mockResolvedValue({
-      status: "READY",
+    client.collect.mockResolvedValueOnce({
+      report: {
+        channel: "진행빵집",
+        status: "OK",
+        pages: 1,
+        posts: 2,
+        polls: 2,
+        skipped: 0,
+        hasMore: false,
+      },
       rows: [
-        { source, raw: { original: true } },
-        {
-          source: { ...source, postId: "UgkxInvalid2" },
-          raw: { original: BigInt(1) },
-        },
+        { source, raw: {} },
+        { source: { ...source, postId: "UgkxInvalid2" }, raw: { bad: BigInt(1) } },
       ],
     });
     expect(
-      await runDailyPollSync(testDb.database.db, { env, now, provider: client }),
+      await runDailyPollSync(testDb.database.db, { env, now, provider: client, wait }),
     ).toMatchObject({ status: "FAILED" });
     expect(await testDb.database.db.select().from(operatorPollCandidates)).toHaveLength(0);
-    expect((await readPollSyncStatus(testDb.database.db, {})).lastSuccessfulImportAt).toBeNull();
+    expect((await readPollSyncStatus(testDb.database.db, {})).latest?.channelReports).toEqual([]);
+  });
+  it("rejects an importer without an active operator grant", async () => {
+    const client = provider();
+    expect(
+      await runDailyPollSync(testDb.database.db, {
+        env: { ...env, POLL_SYNC_IMPORT_MEMBER_ID: "00000000-0000-4000-8000-000000000001" },
+        now,
+        provider: client,
+        wait,
+      }),
+    ).toMatchObject({ status: "FAILED", code: "IMPORT_OPERATOR_REQUIRED" });
+    expect(client.collect).not.toHaveBeenCalled();
   });
 });

@@ -1,114 +1,197 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { pollSyncDay, pollSyncSettings } from "../src/modules/operations/poll-sync-config.js";
 import {
-  createOctoparsePollClient,
-  parsePollExport,
-} from "../src/modules/operations/octoparse-polls.js";
-
-const config = {
-  taskId: "task-real",
-  apiKey: "test-secret",
-  memberId: "00000000-0000-4000-8000-000000000001",
-  exportHosts: ["export.example.com"],
-};
-const row = {
-  Channel_name: "진행빵집",
-  Post_URL: "https://www.youtube.com/post/UgkxDailyTest123",
-  Post_text: "어디로 갈까요?",
-  Poll_options: ["집", "산", "바다", "공원"],
-  Poll_vote_count: "1.2만명 투표",
-  Post_date: "2 days ago",
-};
-const json = (data: unknown) => new Response(JSON.stringify(data));
-describe("daily poll sync", () => {
-  it("is due only from 08:00 KST, including UTC date rollover", () => {
+  createYouTubePollCollector,
+  parseYouTubePoll,
+  publicYouTubeFetch,
+} from "../src/modules/operations/youtube-polls.js";
+import { POLL_CHANNEL_REGISTER } from "../src/modules/operations/poll-channels.js";
+const mocks = vi.hoisted(() => ({ create: vi.fn(), resolve: vi.fn(), channel: vi.fn() }));
+vi.mock("youtubei.js", () => ({
+  Innertube: { create: mocks.create },
+  Log: { setLevel: vi.fn(), Level: { NONE: 0 } },
+}));
+const channel = POLL_CHANNEL_REGISTER[0];
+const id = channel.channelId;
+const text = (s: string) => ({ toString: () => s });
+const post = () => ({
+  type: "BackstagePost",
+  id: "UgkxTest1234567",
+  author: { id },
+  content: text("어느 쪽?"),
+  published: text("3일 전"),
+  attachment: {
+    type: "Poll",
+    choices: [{ text: text("집") }, { text: text("산") }],
+    total_votes: text("5.7만명 투표"),
+  },
+});
+beforeEach(() => {
+  vi.clearAllMocks();
+  mocks.create.mockResolvedValue({ resolveURL: mocks.resolve, getChannel: mocks.channel });
+  mocks.resolve.mockResolvedValue({ payload: { browseId: id } });
+});
+describe("YouTube.js poll source", () => {
+  it("keeps Korea 08:00 boundary and explicit verification/activation gates without API keys", () => {
     expect(pollSyncDay(new Date("2026-09-18T22:59:59Z"))).toBeNull();
     expect(pollSyncDay(new Date("2026-09-18T23:00:00Z"))).toBe("2026-09-19");
-    expect(pollSyncDay(new Date("2026-12-31T23:00:00Z"))).toBe("2027-01-01");
-  });
-  it("requires credentials AND real mapping verification and an explicit enable flag", () => {
-    expect(pollSyncSettings({ POLL_SYNC_ENABLED: "true" }).enabled).toBe(false);
     const env = {
-      OCTOPARSE_TASK_ID: config.taskId,
-      OCTOPARSE_API_KEY: config.apiKey,
-      OCTOPARSE_IMPORT_MEMBER_ID: config.memberId,
-      OCTOPARSE_EXPORT_HOSTS: config.exportHosts.join(","),
+      POLL_SYNC_IMPORT_MEMBER_ID: "00000000-0000-4000-8000-000000000001",
+      POLL_SYNC_SOURCE_VERIFIED: "true",
+      POLL_SYNC_ENABLED: "true",
     };
-    expect(pollSyncSettings(env).configured).toBe(false);
-    expect(pollSyncSettings({ ...env, OCTOPARSE_MAPPING_VERIFIED: "true" })).toMatchObject({
+    expect(pollSyncSettings(env)).toMatchObject({
       configured: true,
-      enabled: false,
+      enabled: true,
+      config: { maxPages: 5 },
     });
+    expect(pollSyncSettings({ ...env, POLL_SYNC_SOURCE_VERIFIED: "false" }).enabled).toBe(false);
+    expect(pollSyncSettings({ ...env, POLL_SYNC_MAX_PAGES: "999" }).enabled).toBe(false);
   });
-  it("preserves all options, raw source and relative dates without guessing", () => {
-    expect(parsePollExport([row])[0]).toMatchObject({
+  it("preserves exact choice text, displayed vote count and relative dates without inventing numbers", () => {
+    expect(parseYouTubePoll(post(), channel, id)).toMatchObject({
       source: {
-        originalChoices: row.Poll_options,
+        originalChoices: ["집", "산"],
+        participationText: "5.7만명 투표",
         observedDate: null,
-        participationText: row.Poll_vote_count,
       },
-      raw: row,
+      raw: { publishedText: "3일 전" },
     });
-    expect(() => parsePollExport([{ ...row, Poll_options: "집, 산, 바다, 공원" }])).toThrow();
-    expect(() => parsePollExport([{ ...row, Channel_name: "만렙백수" }])).toThrow(
-      "CHANNEL_NOT_CONFIRMED",
-    );
+    expect(
+      parseYouTubePoll(
+        { ...post(), attachment: { ...post().attachment, total_votes: undefined } },
+        channel,
+        id,
+      )?.source.participationText,
+    ).toBeNull();
   });
-  it("honors waiting guidance and never treats preview data as a full export", async () => {
-    const request = vi
-      .fn<typeof fetch>()
-      .mockResolvedValueOnce(
-        json({ data: { status: "collecting", retryGuidance: { waitSecondsMin: 95 } } }),
-      )
-      .mockResolvedValueOnce(
-        json({
-          data: {
-            status: "exported",
-            taskId: config.taskId,
-            dataTotal: 2,
-            sampleData: [row],
-            exportFileUrl: "https://export.example.com/signed",
-          },
+  it("rejects author changes and invalid polls, skips shared posts and non-polls", () => {
+    expect(() => parseYouTubePoll({ ...post(), author: { id: "other" } }, channel, id)).toThrow(
+      "POST_AUTHOR_MISMATCH",
+    );
+    expect(() => parseYouTubePoll({ ...post(), content: text("") }, channel, id)).toThrow(
+      "POLL_SHAPE_CHANGED",
+    );
+    expect(parseYouTubePoll({ ...post(), type: "SharedPost" }, channel, id)).toBeNull();
+    expect(parseYouTubePoll({ ...post(), attachment: null }, channel, id)).toBeNull();
+  });
+  it("preserves long source posts without silently truncating them", () => {
+    const original = "가".repeat(1100);
+    expect(
+      parseYouTubePoll({ ...post(), content: text(original) }, channel, id)?.source
+        .originalQuestion,
+    ).toBe(original);
+    expect(() =>
+      parseYouTubePoll({ ...post(), content: text("가".repeat(10001)) }, channel, id),
+    ).toThrow("POLL_SHAPE_CHANGED");
+  });
+  it("follows bounded continuation pages, deduplicates pinned posts and reports remaining history", async () => {
+    const continuation = vi.fn().mockResolvedValue({
+      posts: [post(), { ...post(), id: "UgkxTestSecond1234" }],
+      has_continuation: true,
+    });
+    mocks.channel.mockResolvedValue({
+      hasTabWithURL: () => true,
+      getCommunity: () =>
+        Promise.resolve({
+          posts: [post()],
+          has_continuation: true,
+          getContinuation: continuation,
         }),
-      )
-      .mockResolvedValueOnce(json([row]));
-    const client = createOctoparsePollClient(config, request);
-    expect(await client.read(new AbortController().signal)).toEqual({
-      status: "WAITING",
-      waitMs: 95000,
     });
-    await expect(client.read(new AbortController().signal)).rejects.toThrow("EXPORT_INCOMPLETE");
-    expect(request.mock.calls[2]?.[1]?.headers).toBeUndefined();
-    expect(request.mock.calls[2]?.[1]?.redirect).toBe("error");
-  });
-  it("downloads only an approved HTTPS host and no credential is forwarded", async () => {
-    const request = vi.fn<typeof fetch>().mockResolvedValueOnce(
-      json({
-        data: { status: "exported", dataTotal: 1, exportFileUrl: "https://127.0.0.1/admin" },
-      }),
+    const result = await createYouTubePollCollector(2).collect(
+      channel,
+      new AbortController().signal,
     );
-    await expect(
-      createOctoparsePollClient(config, request).read(new AbortController().signal),
-    ).rejects.toThrow("EXPORT_HOST_NOT_ALLOWED");
-    expect(request).toHaveBeenCalledTimes(1);
+    expect(result.report).toMatchObject({ status: "OK", pages: 2, polls: 2, hasMore: true });
+    expect(result.rows).toHaveLength(2);
+    expect(continuation).toHaveBeenCalledTimes(1);
+    expect(mocks.create).toHaveBeenCalledWith(
+      expect.objectContaining({ retrieve_player: false, enable_session_cache: false }),
+    );
   });
-  it("requires its own accepted start rather than borrowing an already-running task", async () => {
+  it("holds unconfirmed identities, rejects changed handles and safely reports missing tabs", async () => {
+    expect(
+      (
+        await createYouTubePollCollector().collect(
+          POLL_CHANNEL_REGISTER[3],
+          new AbortController().signal,
+        )
+      ).report.status,
+    ).toBe("HELD");
+    expect(mocks.create).not.toHaveBeenCalled();
+    mocks.resolve.mockResolvedValueOnce({ payload: { browseId: "UCun14pE-GmXEd1qB9FLuQHA" } });
+    expect(
+      (await createYouTubePollCollector().collect(channel, new AbortController().signal)).report
+        .errorCode,
+    ).toBe("CHANNEL_ID_MISMATCH");
+    mocks.channel.mockResolvedValue({ hasTabWithURL: () => false });
+    expect(
+      (await createYouTubePollCollector().collect(channel, new AbortController().signal)).report
+        .errorCode,
+    ).toBe("POSTS_TAB_UNAVAILABLE");
+  });
+  it("does not mark changed/empty renderers or failed continuation as healthy zero", async () => {
+    mocks.channel.mockResolvedValue({
+      hasTabWithURL: () => true,
+      getCommunity: () => Promise.resolve({ posts: [], has_continuation: false }),
+    });
+    expect(
+      (await createYouTubePollCollector().collect(channel, new AbortController().signal)).report
+        .errorCode,
+    ).toBe("POSTS_EMPTY_REVIEW_REQUIRED");
+    mocks.channel.mockResolvedValue({
+      hasTabWithURL: () => true,
+      getCommunity: () =>
+        Promise.resolve({
+          posts: [post()],
+          has_continuation: true,
+          getContinuation: () => Promise.reject(new Error("private details")),
+        }),
+    });
+    const failed = await createYouTubePollCollector(2).collect(
+      channel,
+      new AbortController().signal,
+    );
+    expect(failed.rows).toEqual([]);
+    expect(failed.report.errorCode).toBe("SOURCE_READ_FAILED");
+  });
+  it("allows valid non-poll pages as zero polls", async () => {
+    mocks.channel.mockResolvedValue({
+      hasTabWithURL: () => true,
+      getCommunity: () =>
+        Promise.resolve({
+          posts: [{ ...post(), attachment: null }],
+          has_continuation: false,
+        }),
+    });
+    expect(
+      (await createYouTubePollCollector().collect(channel, new AbortController().signal)).report,
+    ).toMatchObject({ status: "OK", polls: 0, skipped: 1 });
+  });
+  it("restricts hosts, redirects, credentials, response size and request count", async () => {
     const request = vi
       .fn<typeof fetch>()
-      .mockResolvedValueOnce(json({ data: { status: "already_running" } }));
-    await expect(
-      createOctoparsePollClient(config, request).start(new AbortController().signal),
-    ).rejects.toThrow("TASK_ALREADY_RUNNING");
-  });
-  it("rejects no-data and provider errors without leaking response content", async () => {
-    const request = vi
-      .fn<typeof fetch>()
-      .mockResolvedValueOnce(new Response("sensitive details", { status: 401 }))
-      .mockResolvedValueOnce(json({ data: { status: "no_data" } }));
-    const client = createOctoparsePollClient(config, request);
-    await expect(client.read(new AbortController().signal)).rejects.toThrow("AUTH_FAILED");
-    await expect(client.read(new AbortController().signal)).rejects.toThrow(
-      "SOURCE_NO_DATA_REVIEW_REQUIRED",
+      .mockImplementation(() => Promise.resolve(new Response("{}")));
+    const read = publicYouTubeFetch(new AbortController().signal, request);
+    await expect(read("http://localhost/private")).rejects.toThrow("SOURCE_HOST_NOT_ALLOWED");
+    await read("https://www.youtube.com/test", {
+      headers: { cookie: "secret", authorization: "secret" },
+    });
+    expect(request.mock.calls[0]?.[1]).toMatchObject({ redirect: "error", credentials: "omit" });
+    expect(new Headers(request.mock.calls[0]?.[1]?.headers).has("cookie")).toBe(false);
+    expect(new Headers(request.mock.calls[0]?.[1]?.headers).has("authorization")).toBe(false);
+    for (let i = 1; i < 16; i++) await read("https://www.youtube.com/test");
+    await expect(read("https://www.youtube.com/test")).rejects.toThrow("SOURCE_REQUEST_LIMIT");
+    const huge = publicYouTubeFetch(
+      new AbortController().signal,
+      vi.fn<typeof fetch>().mockResolvedValue(new Response("x".repeat(8_000_001))),
     );
+    await expect(huge("https://www.youtube.com/test")).rejects.toThrow("SOURCE_BODY_TOO_LARGE");
+    const limited = publicYouTubeFetch(
+      new AbortController().signal,
+      vi.fn<typeof fetch>().mockResolvedValue(new Response("limited", { status: 429 })),
+    );
+    await expect(limited("https://www.youtube.com/test")).rejects.toThrow("SOURCE_RATE_LIMITED");
   });
 });

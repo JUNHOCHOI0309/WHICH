@@ -42,4 +42,4 @@ powershell -ExecutionPolicy Bypass -File apps/marketing-hyperframes/scripts/inst
 
 기본 템플릿은 1080×1920, 30fps, 5초 무음 키네틱 타이포그래피입니다. 외부 영상·이미지·TTS API를 호출하지 않으며 확인되지 않은 투표 수치도 사용하지 않습니다. 렌더러는 `127.0.0.1:8783`에만 바인딩합니다.
 
-Octoparse 작업 ID·채널 URL·서버 자격 증명 연결은 별도 설정 단계입니다. 현재 `/ops` JSON 가져오기로 동일한 검수 흐름을 사용할 수 있습니다.
+투표 수집은 WHICH 서버의 YouTube.js 실행기가 담당합니다. `/ops`에서 수집 상태 확인과 수동 JSON 가져오기를 사용할 수 있으며, 콘텐츠 스튜디오는 수집기와 분리되어 있습니다.

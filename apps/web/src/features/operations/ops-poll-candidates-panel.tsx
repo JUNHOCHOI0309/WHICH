@@ -25,9 +25,9 @@ type Page = {
     channelUrl: string;
     identityNeedsConfirmation: boolean;
   }>;
-  octoparseConfigured: boolean;
   sync?: {
     label: string;
+    maxPages?: number;
     configured: boolean;
     enabled: boolean;
     lastSuccessfulImportAt: string | null;
@@ -38,6 +38,14 @@ type Page = {
       duplicates: number;
       errorCode: string | null;
       attempts: number;
+      channelReports?: Array<{
+        channel: string;
+        status: string;
+        polls: number;
+        pages: number;
+        hasMore: boolean;
+        errorCode?: string;
+      }>;
     } | null;
   };
 };
@@ -169,20 +177,20 @@ export function OpsPollCandidatesPanel() {
         <h1>투표 후보</h1>
         <span>원문을 확인하고 텍스트 질문을 Review Center로 보내세요.</span>
       </header>
-      <section className={styles.connection} aria-label="Octoparse 연결 상태">
+      <section className={styles.connection} aria-label="YouTube.js 수집 상태">
         <strong>
-          Octoparse ·{" "}
+          YouTube.js ·{" "}
           {page?.sync?.enabled
             ? "정기 수집 설정됨"
             : page?.sync?.configured
               ? "정기 수집 비활성"
-              : "연결 정보 대기"}
+              : "운영 수집 설정 대기"}
         </strong>
         <p>매일 오전 8시 (한국시간) · 신규 투표만 추가 · 기존 후보와 검수 상태 유지</p>
         {!page?.sync?.enabled && (
           <p>
-            자동 실행은 아직 비활성입니다. 작업 ID·서버 인증·실제 수집 샘플 검증과 서버 예약 연결이
-            필요합니다. JSON 가져오기는 사용할 수 있습니다.
+            자동 실행은 아직 비활성입니다. 운영 환경 수집 검증과 서버 예약 연결이 필요합니다. 외부
+            유료 API 키는 필요하지 않으며 JSON 가져오기도 사용할 수 있습니다.
           </p>
         )}
         <p>
@@ -193,6 +201,10 @@ export function OpsPollCandidatesPanel() {
               })
             : "없음"}
         </p>
+        <p>
+          채널별 최근 최대 {page?.sync?.maxPages ?? 5}페이지를 확인합니다. 전체 과거 게시물 수집이
+          아니며, 원문 투표 수는 표시된 값 그대로 보존합니다.
+        </p>
         {page?.sync?.latest && (
           <p role="status">
             최근 실행 {page.sync.latest.day} · {page.sync.latest.status} · 신규{" "}
@@ -201,6 +213,23 @@ export function OpsPollCandidatesPanel() {
             {page.sync.latest.errorCode ? ` · 확인 필요: ${page.sync.latest.errorCode}` : ""}
           </p>
         )}
+        {page?.sync?.latest?.channelReports?.length ? (
+          <ul aria-label="채널별 최근 수집 결과">
+            {page.sync.latest.channelReports.map((report) => (
+              <li key={report.channel}>
+                {report.channel} ·{" "}
+                {report.status === "OK"
+                  ? "정상"
+                  : report.status === "HELD"
+                    ? "확인 보류"
+                    : "수집 실패"}
+                {` · 투표 ${report.polls}개 · ${report.pages}페이지`}
+                {report.hasMore ? " · 이전 게시물 더 있음" : ""}
+                {report.errorCode ? ` · ${report.errorCode}` : ""}
+              </li>
+            ))}
+          </ul>
+        ) : null}
         <details>
           <summary>수집 대상 채널 {page?.channels.length ?? 12}개</summary>
           <p>{page?.channels.join(" · ")}</p>
@@ -212,7 +241,7 @@ export function OpsPollCandidatesPanel() {
                 </a>
                 {item.identityNeedsConfirmation
                   ? " · 동명 채널 확인 필요 / 초기 자동 수집 보류"
-                  : " · 실제 수집 미검증"}
+                  : " · 자동 수집 대상"}
               </li>
             ))}
           </ul>

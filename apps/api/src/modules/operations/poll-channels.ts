@@ -1,8 +1,9 @@
-// Channel addresses supplied in the 2026-09-19 handoff; no live collection has been verified.
+// Handles resolved in an anonymous local youtubei.js 18.0.0 probe on 2026-09-19.
+// Production collection evidence is recorded per run, not inferred from this register.
 export const POLL_CHANNEL_REGISTER = [
   {
     name: "진행빵집",
-    channelId: null,
+    channelId: "UCW7Fmplx7kzcB7cpJj4qnjg",
     channelUrl: "https://www.youtube.com/@jinhaeng_bakery",
     communityUrl: "https://www.youtube.com/@jinhaeng_bakery/community",
     initialBatchEligible: true,
@@ -20,7 +21,7 @@ export const POLL_CHANNEL_REGISTER = [
   },
   {
     name: "궁금해소",
-    channelId: null,
+    channelId: "UC51utkF10WAANO81dEPJwyA",
     channelUrl: "https://www.youtube.com/@whysolution",
     communityUrl: "https://www.youtube.com/@whysolution/community",
     initialBatchEligible: true,
@@ -38,7 +39,7 @@ export const POLL_CHANNEL_REGISTER = [
   },
   {
     name: "그분이 알고싶다",
-    channelId: null,
+    channelId: "UCfH6s4v-giFKJx9qNmtz7bA",
     channelUrl: "https://www.youtube.com/@그분이알고싶다",
     communityUrl:
       "https://www.youtube.com/@%EA%B7%B8%EB%B6%84%EC%9D%B4%EC%95%8C%EA%B3%A0%EC%8B%B6%EB%8B%A4/community",
@@ -66,7 +67,7 @@ export const POLL_CHANNEL_REGISTER = [
   },
   {
     name: "가비 걸",
-    channelId: null,
+    channelId: "UCoC-ZGuPCvJJrbcz9eMW8zw",
     channelUrl: "https://www.youtube.com/@GABEEGIRL",
     communityUrl: "https://www.youtube.com/@GABEEGIRL/community",
     initialBatchEligible: true,
@@ -93,7 +94,7 @@ export const POLL_CHANNEL_REGISTER = [
   },
   {
     name: "닥터딩요",
-    channelId: null,
+    channelId: "UCedNxnMK3b2-_hzqLyo4stg",
     channelUrl: "https://www.youtube.com/@doctordinho",
     communityUrl: "https://www.youtube.com/@doctordinho/community",
     initialBatchEligible: true,
@@ -102,7 +103,7 @@ export const POLL_CHANNEL_REGISTER = [
   },
   {
     name: "캠핑한끼CampingHankki",
-    channelId: null,
+    channelId: "UCkGr7BCJ8plP-Jhy4kSfP8w",
     channelUrl: "https://www.youtube.com/@campinghankki",
     communityUrl: "https://www.youtube.com/@campinghankki/community",
     initialBatchEligible: true,

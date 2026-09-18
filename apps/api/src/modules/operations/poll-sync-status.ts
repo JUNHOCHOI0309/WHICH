@@ -18,6 +18,7 @@ export async function readPollSyncStatus(
     errorCode: operatorPollSyncRuns.errorCode,
     startedAt: operatorPollSyncRuns.startedAt,
     finishedAt: operatorPollSyncRuns.finishedAt,
+    channelReports: operatorPollSyncRuns.channelReports,
   };
   const [latest] = await database
     .select(columns)
@@ -35,6 +36,8 @@ export async function readPollSyncStatus(
   const enabled = env.POLL_SYNC_SCHEDULE_ACTIVE === "true";
   return {
     ...POLL_SYNC_SCHEDULE,
+    provider: "YouTube.js",
+    maxPages: settings.config?.maxPages ?? 5,
     configured: settings.configured || !!latest,
     enabled,
     latest: latest ?? null,

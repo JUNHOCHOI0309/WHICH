@@ -42,6 +42,16 @@ describe("Ops poll inbox", () => {
                 duplicates: 0,
                 attempts: 1,
                 errorCode: "AUTH_FAILED",
+                channelReports: [
+                  {
+                    channel: "뭉케뭉케",
+                    status: "FAILED",
+                    polls: 0,
+                    pages: 0,
+                    hasMore: false,
+                    errorCode: "SOURCE_HTTP_FAILED",
+                  },
+                ],
               },
             },
           }),
@@ -55,6 +65,11 @@ describe("Ops poll inbox", () => {
     expect(screen.getByText(/자동 실행은 아직 비활성/)).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("AUTH_FAILED");
     expect(screen.getByText("마지막 가져오기 성공: 없음")).toBeInTheDocument();
+    expect(screen.getByLabelText("YouTube.js 수집 상태")).toBeInTheDocument();
+    expect(screen.getByLabelText("채널별 최근 수집 결과")).toHaveTextContent(
+      "뭉케뭉케 · 수집 실패",
+    );
+    expect(screen.queryByText(/Octoparse/)).not.toBeInTheDocument();
   });
   it("sends all four text choices to review and opens the persistent candidate", async () => {
     const fetchMock = vi.fn(
@@ -67,7 +82,6 @@ describe("Ops poll inbox", () => {
                   items: [poll],
                   channels: ["진행빵집"],
                   nextCursor: null,
-                  octoparseConfigured: false,
                 },
           ),
           { status: 200 },
