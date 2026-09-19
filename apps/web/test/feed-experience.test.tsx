@@ -564,9 +564,11 @@ describe("FeedExperience", () => {
     render(<FeedExperience />);
 
     expect(await screen.findByText("여행은 미리 계획하는 편인가요?")).toBeInTheDocument();
-    fireEvent.scroll(window);
+    await waitFor(() => {
+      fireEvent.scroll(window);
+      expect(requestedFeeds.some((url) => url.includes("cursor=page-2"))).toBe(true);
+    });
     expect(await screen.findByText("자동으로 이어진 다음 질문")).toBeInTheDocument();
-    expect(requestedFeeds.some((url) => url.includes("cursor=page-2"))).toBe(true);
   });
 
   it("shows an empty completion state and can retry a failed load", async () => {
