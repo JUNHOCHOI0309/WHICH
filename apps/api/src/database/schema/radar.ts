@@ -8,6 +8,7 @@ import {
   jsonb,
   pgTable,
   primaryKey,
+  serial,
   timestamp,
   unique,
   uuid,
@@ -42,6 +43,50 @@ export const radarTopics = pgTable(
   (t) => [check("radar_topics_name_check", sql`length(trim(${t.name})) > 0`)],
 );
 
+export const radarTopicAliases = pgTable(
+  "radar_topic_aliases",
+  {
+    id: uuid("alias_id").primaryKey(),
+    aliasKey: varchar("alias_key", { length: 64 }).notNull(),
+    topicId: uuid("topic_id")
+      .notNull()
+      .references(() => radarTopics.id, { onDelete: "cascade" }),
+    alias: varchar("alias", { length: 500 }).notNull(),
+    normalizedAlias: varchar("normalized_alias", { length: 500 }).notNull(),
+    languageCode: varchar("language_code", { length: 35 }).notNull(),
+    source: varchar("source_code", { length: 32 }).references(() => radarSources.code, {
+      onDelete: "restrict",
+    }),
+    validFrom: instant("valid_from"),
+    validUntil: instant("valid_until"),
+    status: varchar("status", { length: 16 }).notNull(),
+    createdAt: instant("created_at").defaultNow().notNull(),
+  },
+  (t) => [
+    unique("radar_topic_aliases_key_unique").on(t.aliasKey),
+    check("radar_topic_aliases_hash_check", sql`${t.aliasKey} ~ '^[0-9a-f]{64}$'`),
+    check(
+      "radar_topic_aliases_text_check",
+      sql`length(trim(${t.alias})) > 0 and length(trim(${t.normalizedAlias})) > 0 and length(trim(${t.languageCode})) > 0`,
+    ),
+    check(
+      "radar_topic_aliases_status_check",
+      sql`${t.status} in ('CANDIDATE','VERIFIED','REJECTED')`,
+    ),
+    check(
+      "radar_topic_aliases_validity_check",
+      sql`${t.validFrom} is null or ${t.validUntil} is null or ${t.validUntil} > ${t.validFrom}`,
+    ),
+    index("radar_topic_aliases_lookup_idx").on(
+      t.normalizedAlias,
+      t.languageCode,
+      t.source,
+      t.status,
+    ),
+    index("radar_topic_aliases_topic_idx").on(t.topicId, t.createdAt),
+  ],
+);
+
 export const radarEvents = pgTable(
   "radar_events",
   {
@@ -58,6 +103,83 @@ export const radarEvents = pgTable(
       sql`(${t.timePrecision} = 'UNKNOWN' and ${t.occurredAt} is null) or (${t.timePrecision} in ('EXACT','DAY') and ${t.occurredAt} is not null)`,
     ),
     index("radar_events_occurred_idx").on(t.occurredAt),
+  ],
+);
+
+export const radarEventSourceReferences = pgTable(
+  "radar_event_source_references",
+  {
+    id: uuid("reference_id").primaryKey(),
+    referenceKey: varchar("reference_key", { length: 64 }).notNull(),
+    eventId: uuid("event_id")
+      .notNull()
+      .references(() => radarEvents.id, { onDelete: "cascade" }),
+    source: varchar("source_code", { length: 32 })
+      .notNull()
+      .references(() => radarSources.code, { onDelete: "restrict" }),
+    sourceItemId: varchar("source_item_id", { length: 500 }).notNull(),
+    title: varchar("title", { length: 500 }).notNull(),
+    normalizedTitle: varchar("normalized_title", { length: 500 }).notNull(),
+    languageCode: varchar("language_code", { length: 35 }).notNull(),
+    observedAt: instant("observed_at").notNull(),
+    createdAt: instant("created_at").defaultNow().notNull(),
+  },
+  (t) => [
+    unique("radar_event_source_references_key_unique").on(t.referenceKey),
+    unique("radar_event_source_item_unique").on(t.source, t.sourceItemId),
+    check("radar_event_source_references_hash_check", sql`${t.referenceKey} ~ '^[0-9a-f]{64}$'`),
+    check(
+      "radar_event_source_references_text_check",
+      sql`length(trim(${t.sourceItemId})) > 0 and length(trim(${t.title})) > 0 and length(trim(${t.normalizedTitle})) > 0 and length(trim(${t.languageCode})) > 0`,
+    ),
+    index("radar_event_source_references_lookup_idx").on(
+      t.normalizedTitle,
+      t.languageCode,
+      t.source,
+    ),
+    index("radar_event_source_references_event_idx").on(t.eventId, t.observedAt),
+  ],
+);
+
+export const radarResolutionActions = pgTable(
+  "radar_resolution_actions",
+  {
+    id: uuid("action_id").primaryKey(),
+    sequence: serial("sequence").notNull(),
+    entityType: varchar("entity_type", { length: 16 }).notNull(),
+    action: varchar("action", { length: 16 }).notNull(),
+    subjectId: uuid("subject_id").notNull(),
+    targetIds: uuid("target_ids").array().notNull(),
+    revertsActionId: uuid("reverts_action_id"),
+    reason: varchar("reason", { length: 2_000 }).notNull(),
+    actor: varchar("actor", { length: 200 }).notNull(),
+    resolverVersion: varchar("resolver_version", { length: 100 }).notNull(),
+    createdAt: instant("created_at").defaultNow().notNull(),
+  },
+  (t) => [
+    unique("radar_resolution_actions_sequence_unique").on(t.sequence),
+    foreignKey({
+      columns: [t.revertsActionId],
+      foreignColumns: [t.id],
+      name: "radar_resolution_actions_reverts_fk",
+    }).onDelete("restrict"),
+    check("radar_resolution_actions_type_check", sql`${t.entityType} in ('TOPIC','EVENT')`),
+    check(
+      "radar_resolution_actions_action_check",
+      sql`(${t.action} = 'MERGE' and cardinality(${t.targetIds}) = 1 and ${t.revertsActionId} is null)
+        or (${t.action} = 'SPLIT' and cardinality(${t.targetIds}) >= 2 and ${t.revertsActionId} is null)
+        or (${t.action} = 'REVERT' and cardinality(${t.targetIds}) = 0 and ${t.revertsActionId} is not null)`,
+    ),
+    check(
+      "radar_resolution_actions_subject_check",
+      sql`array_position(${t.targetIds}, ${t.subjectId}) is null`,
+    ),
+    check(
+      "radar_resolution_actions_text_check",
+      sql`length(trim(${t.reason})) > 0 and length(trim(${t.actor})) > 0 and length(trim(${t.resolverVersion})) > 0`,
+    ),
+    index("radar_resolution_actions_subject_idx").on(t.entityType, t.subjectId, t.createdAt),
+    index("radar_resolution_actions_revert_idx").on(t.revertsActionId),
   ],
 );
 
