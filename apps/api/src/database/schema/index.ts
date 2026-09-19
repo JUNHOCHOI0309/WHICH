@@ -25,3 +25,4 @@ export * from "./shares.js";
 export * from "./subjects.js";
 export * from "./votes.js";
 export * from "./radar.js";
+export * from "./radar-ingestion.js";

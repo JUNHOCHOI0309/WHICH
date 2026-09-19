@@ -70,6 +70,7 @@
   - 성공/정상빈결과/부분결과/실패를 구분하고 pagination 누락 기록
   - lease·timeout·backoff·동시 실행 잠금; 재수집 중복 방지
 - 검증: 중복 dispatch, 중간 실패, lease 만료, 429/5xx 테스트
+- 로컬 산출물: [수집 실행 원장·재시도](../development/radar-ingestion-ledger.md). 원자적 호출 예산 예약과 lease fencing까지 구현했으며 실제 provider/스케줄러는 비활성, 운영 미반영이다.
 
 ### R05. Google Trending RSS 수집 어댑터 구현
 

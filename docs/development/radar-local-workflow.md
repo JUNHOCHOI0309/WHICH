@@ -50,4 +50,4 @@ pnpm radar:test:db
 pnpm --filter @which/api exec vitest run test/radar-contracts.test.ts test/poll-candidates.test.ts
 ```
 
-`radar:test:db`는 전용 로컬 PostgreSQL에 일회성 테스트 DB를 만들어 신규/업그레이드 migration과 저장소·질문 조회·투표 회귀를 검증하고 테스트 DB만 제거한다. 기존 localhost DB에 새 migration만 적용하려면 `pnpm radar:migrate`를 사용한다(seed 재실행 없음).
+`radar:test:db`는 전용 로컬 PostgreSQL에 일회성 테스트 DB를 만들어 신규/업그레이드 migration, Radar 저장소·수집 실행 원장, 기존 질문 조회·투표 회귀를 검증하고 테스트 DB만 제거한다. 실행 원장 테스트는 외부 제공자를 호출하지 않는다. 기존 localhost DB에 새 migration만 적용하려면 `pnpm radar:migrate`를 사용한다(seed 재실행 없음).

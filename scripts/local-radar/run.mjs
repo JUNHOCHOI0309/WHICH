@@ -95,6 +95,7 @@ try {
           resolve(api, "node_modules/vitest/vitest.mjs"),
           "run",
           "test/radar-storage.integration.test.ts",
+          "test/radar-ingestion.integration.test.ts",
           "test/issue-read.integration.test.ts",
           "test/voting.integration.test.ts",
           "--maxWorkers=1",
