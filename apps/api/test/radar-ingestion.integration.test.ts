@@ -26,6 +26,8 @@ import type { RadarSource } from "../src/modules/radar/source-registry.js";
 import { collectGoogleTrendingRss } from "../src/modules/radar/providers/google/trending-rss.js";
 import { collectNaverNews } from "../src/modules/radar/providers/naver/news.js";
 import { collectNaverSearchTrend } from "../src/modules/radar/providers/naver/search-trend.js";
+import { searchYouTubeVideos } from "../src/modules/radar/providers/youtube/search.js";
+import { collectYouTubeVideoStatistics } from "../src/modules/radar/providers/youtube/videos.js";
 import { createTestDatabase } from "./helpers/test-database.js";
 
 const start = new Date("2026-09-20T00:00:00.000Z");
@@ -215,6 +217,92 @@ describe("Radar ingestion dispatch and leases", () => {
 });
 
 describe("Radar run outcomes and retries", () => {
+  it("runs YouTube related search through its dedicated quota pool", async () => {
+    currentTime = new Date("2026-09-20T01:00:01.000Z");
+    const service = createRadarIngestionService(database.db, options);
+    const activation = approved("YOUTUBE_DATA_API");
+    const run = await service.dispatch(command("YOUTUBE_DATA_API", "search.list"), activation);
+    const claim = await service.claimNext();
+    const json = await readFile(
+      new URL("./fixtures/radar/youtube-search.json", import.meta.url),
+      "utf8",
+    );
+    expect(
+      await service.processClaim(claim!, activation, async (context) => {
+        const collected = await searchYouTubeVideos(context, {
+          query: "실시간 트렌드",
+          maxResults: 2,
+          requestKey: "attempt1:page1",
+          credentials: { apiKey: "fixture-key" },
+          now: () => currentTime,
+          fetchImpl: () =>
+            Promise.resolve(
+              new Response(json, {
+                status: 200,
+                headers: { "content-type": "application/json; charset=utf-8" },
+              }),
+            ),
+        });
+        expect(collected.records).toHaveLength(2);
+        return collected.completion;
+      }),
+    ).toBe("SUCCEEDED");
+    expect(await service.getRun(run.id)).toMatchObject({
+      status: "SUCCEEDED",
+      pageCount: 1,
+      observationCount: 2,
+    });
+    expect(await database.db.select().from(radarProviderRequests)).toEqual([
+      expect.objectContaining({ status: "SUCCEEDED", operation: "search.list", unitCost: 1 }),
+    ]);
+    expect(await database.db.select().from(radarQuotaDailyUsage)).toEqual([
+      expect.objectContaining({ requestCount: 1, unitCount: 1, pool: "youtube-search" }),
+    ]);
+  });
+
+  it("runs YouTube statistics through the shared general quota pool", async () => {
+    currentTime = new Date("2026-09-20T01:00:01.000Z");
+    const service = createRadarIngestionService(database.db, options);
+    const activation = approved("YOUTUBE_DATA_API");
+    const run = await service.dispatch(command("YOUTUBE_DATA_API", "videos.list"), activation);
+    const claim = await service.claimNext();
+    const json = await readFile(
+      new URL("./fixtures/radar/youtube-videos.json", import.meta.url),
+      "utf8",
+    );
+    expect(
+      await service.processClaim(claim!, activation, async (context) => {
+        const collected = await collectYouTubeVideoStatistics(context, {
+          videoIds: ["AbCdEfGhI01", "JkLmNoPqR02"],
+          sampledAt: claim!.sampledAt.toISOString(),
+          requestKey: "attempt1:batch1",
+          credentials: { apiKey: "fixture-key" },
+          now: () => currentTime,
+          fetchImpl: () =>
+            Promise.resolve(
+              new Response(json, {
+                status: 200,
+                headers: { "content-type": "application/json; charset=utf-8" },
+              }),
+            ),
+        });
+        expect(collected.observations).toHaveLength(4);
+        return collected.completion;
+      }),
+    ).toBe("SUCCEEDED");
+    expect(await service.getRun(run.id)).toMatchObject({
+      status: "SUCCEEDED",
+      pageCount: 1,
+      observationCount: 4,
+    });
+    expect(await database.db.select().from(radarProviderRequests)).toEqual([
+      expect.objectContaining({ status: "SUCCEEDED", operation: "videos.list", unitCost: 1 }),
+    ]);
+    expect(await database.db.select().from(radarQuotaDailyUsage)).toEqual([
+      expect.objectContaining({ requestCount: 1, unitCount: 1, pool: "youtube-general" }),
+    ]);
+  });
+
   it("runs NAVER news through its separate request and completion ledger", async () => {
     currentTime = new Date("2026-09-20T00:00:00.000Z");
     const service = createRadarIngestionService(database.db, options);

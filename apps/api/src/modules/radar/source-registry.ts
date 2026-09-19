@@ -2,7 +2,7 @@ import type { z } from "zod";
 import type { radarSourceSchema } from "./contracts.js";
 
 export type RadarSource = z.infer<typeof radarSourceSchema>;
-export const RADAR_POLICY_VERSION = "radar-sources-2026-09-20-v2";
+export const RADAR_POLICY_VERSION = "radar-sources-2026-09-20-v3";
 export const RADAR_POLICY_REVIEW_DUE = "2026-10-19T00:00:00Z";
 export const RADAR_CAPABILITIES = [
   "collect",
@@ -82,10 +82,12 @@ export const radarSourceRegistry: Readonly<Record<RadarSource, RadarSourceRegist
     operations: { "search.trend": budget("naver-datalab", "Asia/Seoul", 5, 50) },
   },
   YOUTUBE_DATA_API: {
-    reviewedAt: "2026-09-19",
+    reviewedAt: "2026-09-20",
     credential: "YOUTUBE_PROJECT",
     retentionCeilingHours: 24,
     evidence: [
+      "https://developers.google.com/youtube/v3/docs/search/list",
+      "https://developers.google.com/youtube/v3/docs/videos/list",
       "https://developers.google.com/youtube/v3/determine_quota_cost",
       "https://developers.google.com/youtube/terms/developer-policies",
       "https://developers.google.com/youtube/terms/derived-metrics-policy",

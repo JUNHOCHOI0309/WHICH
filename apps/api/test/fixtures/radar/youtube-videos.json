@@ -1,0 +1,30 @@
+{
+  "kind": "youtube#videoListResponse",
+  "etag": "fixture-videos",
+  "items": [
+    {
+      "id": "AbCdEfGhI01",
+      "snippet": {
+        "publishedAt": "2026-09-19T12:00:00Z",
+        "channelId": "UCfixtureOne",
+        "title": "한글  관련   영상",
+        "channelTitle": "첫 번째 채널"
+      },
+      "statistics": {
+        "viewCount": "123456",
+        "likeCount": "7890",
+        "commentCount": "321"
+      }
+    },
+    {
+      "id": "JkLmNoPqR02",
+      "snippet": {
+        "publishedAt": "2026-09-18T01:02:03Z",
+        "channelId": "UCfixtureTwo",
+        "title": "두 번째 영상",
+        "channelTitle": "두 번째 채널"
+      },
+      "statistics": { "viewCount": "42" }
+    }
+  ]
+}

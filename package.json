@@ -16,6 +16,7 @@
     "radar:test:db": "node scripts/local-radar/run.mjs test-db",
     "radar:test:google": "pnpm --filter @which/api exec vitest run test/google-trending-rss.test.ts",
     "radar:test:naver": "pnpm --filter @which/api exec vitest run test/naver-api-hub.test.ts",
+    "radar:test:youtube": "pnpm --filter @which/api exec vitest run test/youtube-data-api.test.ts",
     "radar:migrate": "node scripts/local-radar/run.mjs migrate",
     "build": "turbo run build",
     "check": "pnpm format:check && turbo run lint typecheck test build",

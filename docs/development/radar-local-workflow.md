@@ -49,7 +49,8 @@ pnpm radar:test
 pnpm radar:test:db
 pnpm radar:test:google
 pnpm radar:test:naver
+pnpm radar:test:youtube
 pnpm --filter @which/api exec vitest run test/radar-contracts.test.ts test/poll-candidates.test.ts
 ```
 
-`radar:test:db`는 전용 로컬 PostgreSQL에 일회성 테스트 DB를 만들어 신규/업그레이드 migration, Radar 저장소·수집 실행 원장, 기존 질문 조회·투표 회귀를 검증하고 테스트 DB만 제거한다. 실행 원장 테스트는 외부 제공자를 호출하지 않는다. `radar:test:google`과 `radar:test:naver`도 기본적으로 고정 fixture만 사용한다. 전자는 명시적인 smoke 환경변수에서 공개 KR RSS를 한 번 읽고, 후자는 별도 승인된 API HUB 서버 자격증명과 smoke 환경변수가 모두 있을 때만 실제 호출한다. 기존 localhost DB에 새 migration만 적용하려면 `pnpm radar:migrate`를 사용한다(seed 재실행 없음).
+`radar:test:db`는 전용 로컬 PostgreSQL에 일회성 테스트 DB를 만들어 신규/업그레이드 migration, Radar 저장소·수집 실행 원장, 기존 질문 조회·투표 회귀를 검증하고 테스트 DB만 제거한다. 실행 원장 테스트는 외부 제공자를 호출하지 않는다. `radar:test:google`, `radar:test:naver`, `radar:test:youtube`도 기본적으로 고정 fixture만 사용한다. Google은 명시적인 smoke 환경변수에서 공개 KR RSS를 한 번 읽고, NAVER와 YouTube는 별도 승인된 서버 자격증명과 각 smoke 환경변수가 모두 있을 때만 실제 호출한다. 기존 localhost DB에 새 migration만 적용하려면 `pnpm radar:migrate`를 사용한다(seed 재실행 없음).
