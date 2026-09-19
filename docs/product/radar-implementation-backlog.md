@@ -46,6 +46,7 @@
   - Google/Naver/YouTube 수집·재표시·파생·보존 권한을 근거 URL/확인일과 기록
   - 알파 미승인·권한 미확인 소스는 비활성; 실행/일별 요청 상한 정의
 - 검증: 권한 unknown/expired와 예산 소진 시 fail-closed 테스트
+- 로컬 산출물: [소스 권한·보존·호출 예산 등록부](../development/radar-source-register.md). 운영 수집 비활성, 실제 계정 권한은 미확인 상태로 유지한다.
 
 ### R03. Topic·Event·Evidence·Observation 저장소와 마이그레이션
 
