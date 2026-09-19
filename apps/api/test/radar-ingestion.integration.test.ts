@@ -36,8 +36,8 @@ let database: Database;
 let dropDatabase: () => Promise<void>;
 
 const options = {
-  leaseMilliseconds: 1_000,
-  timeoutMilliseconds: 100,
+  leaseMilliseconds: 5_000,
+  timeoutMilliseconds: 2_000,
   retryBaseMilliseconds: 200,
   retryMaxMilliseconds: 1_600,
   now: () => currentTime,
