@@ -13,6 +13,8 @@
     "radar:dev": "node scripts/local-radar/run.mjs dev",
     "radar:db:stop": "node scripts/local-radar/run.mjs stop-db",
     "radar:test": "node --test scripts/local-radar/profile.test.mjs",
+    "radar:test:db": "node scripts/local-radar/run.mjs test-db",
+    "radar:migrate": "node scripts/local-radar/run.mjs migrate",
     "build": "turbo run build",
     "check": "pnpm format:check && turbo run lint typecheck test build",
     "dev": "turbo run dev --parallel",

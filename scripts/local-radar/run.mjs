@@ -88,8 +88,25 @@ try {
     case "stop-db":
       await run("docker", ["compose", "-f", "infra/compose.radar.yaml", "stop"]);
       break;
+    case "test-db":
+      await run(
+        process.execPath,
+        [
+          resolve(api, "node_modules/vitest/vitest.mjs"),
+          "run",
+          "test/radar-storage.integration.test.ts",
+          "test/issue-read.integration.test.ts",
+          "test/voting.integration.test.ts",
+          "--maxWorkers=1",
+        ],
+        api,
+      );
+      break;
+    case "migrate":
+      await apiScript("src/database/migrate.ts");
+      break;
     default:
-      throw new Error("Usage: node scripts/local-radar/run.mjs setup|dev|stop-db");
+      throw new Error("Usage: node scripts/local-radar/run.mjs setup|dev|stop-db|test-db|migrate");
   }
 } catch (error) {
   console.error(error.message);

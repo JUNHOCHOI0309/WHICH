@@ -58,6 +58,7 @@
   - 유일키·시간 인덱스·출처 FK·관측창 보존
   - 재실행 무중복; 기존 Issue/Vote 테이블 데이터 불변
 - 검증: 신규 DB 및 업그레이드 migration, transaction integration 테스트
+- 로컬 산출물: [Radar PostgreSQL 저장소](../development/radar-storage.md). 기존 질문·투표 데이터를 변경하지 않는 추가 migration이며 운영 미반영이다.
 
 ### R04. 수집 실행 원장·중복 방지·재시도 구현
 
