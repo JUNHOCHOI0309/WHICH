@@ -1,5 +1,12 @@
 # WHICH 작업 완료 기준
 
+## Radar 로컬 개발 — 2026-09-19 사용자 지시
+
+- Radar 백로그는 `C:/workspace/vscode/which-radar-local`, `codex/radar-local-development`에서 로컬 구현·검증을 누적한다.
+- 사용자가 별도로 배포를 요청하기 전까지 작업마다 PR 병합, main push, Cloud Build 실행, 운영 배포를 하지 않는다. 아래 일반 배포 기준보다 이 명시적 보류 지시가 우선한다.
+- `pnpm radar:setup` / `pnpm radar:dev`의 전용 로컬 DB·안전한 실행 환경을 사용한다. 운영 환경파일·DB dump·클라우드 비밀 값은 복사하지 않는다.
+- 로컬 완료와 운영 반영을 별도로 기록한다. 운영 배포가 필요한 R21/R26은 로컬 테스트만으로 완료 처리하지 않는다.
+
 - 사용자가 코드 수정·기능 구현을 요청하면, 별도로 배포 보류를 요청하지 않는 한 검증뿐 아니라 운영 사이트 배포와 반영 확인까지 진행합니다.
 - 요청한 변경만 커밋하고 PR과 필수 CI 검사를 거쳐 정상 배포 경로를 사용합니다. 브랜치 보호나 실패한 검사를 우회하지 않습니다.
 - 현재 운영 웹 배포 경로는 `main` → Cloud Build → Cloud Run `which-web`입니다. 배포 설정은 저장소의 `cloudbuild.yaml`을 확인합니다.

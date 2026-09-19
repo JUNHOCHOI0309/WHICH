@@ -9,6 +9,10 @@
     "pnpm": ">=10.6.5 <11"
   },
   "scripts": {
+    "radar:setup": "node scripts/local-radar/run.mjs setup",
+    "radar:dev": "node scripts/local-radar/run.mjs dev",
+    "radar:db:stop": "node scripts/local-radar/run.mjs stop-db",
+    "radar:test": "node --test scripts/local-radar/profile.test.mjs",
     "build": "turbo run build",
     "check": "pnpm format:check && turbo run lint typecheck test build",
     "dev": "turbo run dev --parallel",
