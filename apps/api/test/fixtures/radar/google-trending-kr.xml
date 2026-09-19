@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<rss xmlns:atom="http://www.w3.org/2005/Atom" xmlns:ht="https://trends.google.com/trending/rss" version="2.0">
+  <channel>
+    <title>Daily Search Trends</title>
+    <description>Recent searches</description>
+    <link>https://trends.google.com/trending/rss?geo=KR</link>
+    <atom:link href="https://trends.google.com/trending/rss?geo=KR" rel="self" type="application/rss+xml"/>
+    <item>
+      <title>한글 &amp; English</title>
+      <ht:approx_traffic>10K+</ht:approx_traffic>
+      <description/>
+      <link>https://trends.google.com/trending/rss?geo=KR</link>
+      <pubDate>Sat, 19 Sep 2026 07:10:00 -0700</pubDate>
+    </item>
+    <item>
+      <title>&#xC0C8; 검색어</title>
+      <ht:approx_traffic>1,000+</ht:approx_traffic>
+      <description/>
+      <link>https://trends.google.com/trending/rss?geo=KR</link>
+      <pubDate>Sat, 19 Sep 2026 06:50:00 -0700</pubDate>
+    </item>
+  </channel>
+</rss>

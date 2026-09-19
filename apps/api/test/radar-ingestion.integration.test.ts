@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
 
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -22,6 +23,7 @@ import {
   type RadarActivation,
 } from "../src/modules/radar/source-policy.js";
 import type { RadarSource } from "../src/modules/radar/source-registry.js";
+import { collectGoogleTrendingRss } from "../src/modules/radar/providers/google/trending-rss.js";
 import { createTestDatabase } from "./helpers/test-database.js";
 
 const start = new Date("2026-09-20T00:00:00.000Z");
@@ -211,6 +213,47 @@ describe("Radar ingestion dispatch and leases", () => {
 });
 
 describe("Radar run outcomes and retries", () => {
+  it("runs the Google RSS adapter through the request and completion ledgers", async () => {
+    currentTime = new Date("2026-09-19T14:20:01.000Z");
+    const service = createRadarIngestionService(database.db, options);
+    const activation = approved();
+    const run = await service.dispatch(command(), activation);
+    const claim = await service.claimNext();
+    const xml = await readFile(
+      new URL("./fixtures/radar/google-trending-kr.xml", import.meta.url),
+      "utf8",
+    );
+    expect(
+      await service.processClaim(claim!, activation, async (context) => {
+        const collected = await collectGoogleTrendingRss(context, {
+          sampledAt: claim!.sampledAt.toISOString(),
+          requestKey: "attempt1:page1",
+          now: () => currentTime,
+          fetchImpl: () =>
+            Promise.resolve(
+              new Response(xml, {
+                status: 200,
+                headers: { "content-type": "application/rss+xml; charset=utf-8" },
+              }),
+            ),
+        });
+        expect(collected.records).toHaveLength(2);
+        return collected.completion;
+      }),
+    ).toBe("SUCCEEDED");
+    expect(await service.getRun(run.id)).toMatchObject({
+      status: "SUCCEEDED",
+      pageCount: 1,
+      observationCount: 2,
+    });
+    expect(await database.db.select().from(radarProviderRequests)).toEqual([
+      expect.objectContaining({ status: "SUCCEEDED", operation: "trending.rss", unitCost: 1 }),
+    ]);
+    expect(await database.db.select().from(radarQuotaDailyUsage)).toEqual([
+      expect.objectContaining({ requestCount: 1, unitCount: 1, pool: "google-rss" }),
+    ]);
+  });
+
   it("fails closed without retry when the claimed policy activation changes", async () => {
     const service = createRadarIngestionService(database.db, options);
     const activation = approved();

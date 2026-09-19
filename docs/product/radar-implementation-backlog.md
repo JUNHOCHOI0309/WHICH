@@ -82,6 +82,7 @@
   - KR feed 제한 시간·크기·항목수·XML 안전 파싱
   - 원문 시각·수집 시각·검색량 구간 의미 보존; 빈결과와 파싱 실패 구분
 - 검증: 고정 XML fixture, 악성 XML/redirect/큰응답 테스트와 공개 피드 smoke
+- 로컬 산출물: [Google Trending RSS 어댑터](../development/radar-google-trending-rss.md). KR 고정 URL, timeout/stream 크기/항목/중첩/redirect/entity 경계와 R04 원장 연결을 구현하며 자동 수집은 비활성, 운영 미반영이다.
 
 ### R06. Naver 검색·DataLab 어댑터 구현
 
