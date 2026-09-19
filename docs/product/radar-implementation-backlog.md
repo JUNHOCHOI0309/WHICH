@@ -94,6 +94,7 @@
   - 발견 키워드 관련 뉴스와 일간 상대 검색 추이를 분리 저장
   - 최대값100의 비교 범위·검색어 묶음 보존; 인증정보 서버 전용
 - 검증: mock 인증/쿼터/빈응답/상대비율 테스트; 승인된 설정으로 smoke
+- 로컬 산출물: [NAVER API HUB 어댑터](../development/radar-naver-api-hub.md). 뉴스 근거 후보와 DataLab 상대지수 관측을 분리하고 새 Hub 도메인·인증 헤더만 허용한다. fixture/mock과 원장 연결은 완료했으며 승인 자격증명이 없어 live smoke는 실행하지 않았다.
 
 ### R07. YouTube 공식 API 영상 신호 어댑터 구현
 

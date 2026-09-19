@@ -24,6 +24,8 @@ import {
 } from "../src/modules/radar/source-policy.js";
 import type { RadarSource } from "../src/modules/radar/source-registry.js";
 import { collectGoogleTrendingRss } from "../src/modules/radar/providers/google/trending-rss.js";
+import { collectNaverNews } from "../src/modules/radar/providers/naver/news.js";
+import { collectNaverSearchTrend } from "../src/modules/radar/providers/naver/search-trend.js";
 import { createTestDatabase } from "./helpers/test-database.js";
 
 const start = new Date("2026-09-20T00:00:00.000Z");
@@ -213,6 +215,100 @@ describe("Radar ingestion dispatch and leases", () => {
 });
 
 describe("Radar run outcomes and retries", () => {
+  it("runs NAVER news through its separate request and completion ledger", async () => {
+    currentTime = new Date("2026-09-20T00:00:00.000Z");
+    const service = createRadarIngestionService(database.db, options);
+    const activation = approved("NAVER_SEARCH");
+    const run = await service.dispatch(command("NAVER_SEARCH", "news.search"), activation);
+    const claim = await service.claimNext();
+    const json = await readFile(
+      new URL("./fixtures/radar/naver-news.json", import.meta.url),
+      "utf8",
+    );
+    expect(
+      await service.processClaim(claim!, activation, async (context) => {
+        const collected = await collectNaverNews(context, {
+          query: "한글",
+          display: 2,
+          start: 1,
+          sort: "date",
+          sampledAt: claim!.sampledAt.toISOString(),
+          requestKey: "attempt1:page1",
+          credentials: { clientId: "fixture-id", clientSecret: "fixture-secret" },
+          now: () => currentTime,
+          fetchImpl: () =>
+            Promise.resolve(
+              new Response(json, {
+                status: 200,
+                headers: { "content-type": "application/json; charset=utf-8" },
+              }),
+            ),
+        });
+        expect(collected.records).toHaveLength(2);
+        return collected.completion;
+      }),
+    ).toBe("SUCCEEDED");
+    expect(await service.getRun(run.id)).toMatchObject({
+      status: "SUCCEEDED",
+      pageCount: 1,
+      observationCount: 2,
+    });
+    expect(await database.db.select().from(radarProviderRequests)).toEqual([
+      expect.objectContaining({ status: "SUCCEEDED", operation: "news.search", unitCost: 1 }),
+    ]);
+    expect(await database.db.select().from(radarQuotaDailyUsage)).toEqual([
+      expect.objectContaining({ requestCount: 1, unitCount: 1, pool: "naver-search" }),
+    ]);
+  });
+
+  it("runs NAVER search trend through a distinct quota pool", async () => {
+    currentTime = new Date("2026-09-20T00:00:00.000Z");
+    const service = createRadarIngestionService(database.db, options);
+    const activation = approved("NAVER_DATALAB");
+    const run = await service.dispatch(command("NAVER_DATALAB", "search.trend"), activation);
+    const claim = await service.claimNext();
+    const json = await readFile(
+      new URL("./fixtures/radar/naver-search-trend.json", import.meta.url),
+      "utf8",
+    );
+    expect(
+      await service.processClaim(claim!, activation, async (context) => {
+        const collected = await collectNaverSearchTrend(context, {
+          startDate: "2026-09-17",
+          endDate: "2026-09-19",
+          keywordGroups: [
+            { groupName: "한글", keywords: ["한글", "korean"] },
+            { groupName: "영어", keywords: ["영어", "english"] },
+          ],
+          sampledAt: claim!.sampledAt.toISOString(),
+          requestKey: "attempt1:page1",
+          credentials: { clientId: "fixture-id", clientSecret: "fixture-secret" },
+          now: () => currentTime,
+          fetchImpl: () =>
+            Promise.resolve(
+              new Response(json, {
+                status: 200,
+                headers: { "content-type": "application/json; charset=utf-8" },
+              }),
+            ),
+        });
+        expect(collected.observations).toHaveLength(6);
+        return collected.completion;
+      }),
+    ).toBe("SUCCEEDED");
+    expect(await service.getRun(run.id)).toMatchObject({
+      status: "SUCCEEDED",
+      pageCount: 1,
+      observationCount: 6,
+    });
+    expect(await database.db.select().from(radarProviderRequests)).toEqual([
+      expect.objectContaining({ status: "SUCCEEDED", operation: "search.trend", unitCost: 1 }),
+    ]);
+    expect(await database.db.select().from(radarQuotaDailyUsage)).toEqual([
+      expect.objectContaining({ requestCount: 1, unitCount: 1, pool: "naver-datalab" }),
+    ]);
+  });
+
   it("runs the Google RSS adapter through the request and completion ledgers", async () => {
     currentTime = new Date("2026-09-19T14:20:01.000Z");
     const service = createRadarIngestionService(database.db, options);

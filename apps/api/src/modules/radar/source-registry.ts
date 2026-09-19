@@ -2,7 +2,7 @@ import type { z } from "zod";
 import type { radarSourceSchema } from "./contracts.js";
 
 export type RadarSource = z.infer<typeof radarSourceSchema>;
-export const RADAR_POLICY_VERSION = "radar-sources-2026-09-19-v1";
+export const RADAR_POLICY_VERSION = "radar-sources-2026-09-20-v2";
 export const RADAR_POLICY_REVIEW_DUE = "2026-10-19T00:00:00Z";
 export const RADAR_CAPABILITIES = [
   "collect",
@@ -28,7 +28,7 @@ export interface RadarBudget {
 interface RadarSourceRegistration {
   reviewedAt: string;
   evidence: readonly string[];
-  credential: "NONE" | "NAVER_APPLICATION" | "YOUTUBE_PROJECT";
+  credential: "NONE" | "NAVER_API_HUB_APPLICATION" | "YOUTUBE_PROJECT";
   /** Internal ceiling, not a grant of storage rights from the provider. */
   retentionCeilingHours: number;
   operations: Readonly<Record<string, RadarBudget>>;
@@ -60,22 +60,24 @@ export const radarSourceRegistry: Readonly<Record<RadarSource, RadarSourceRegist
     operations: { "trending.rss": budget("google-rss", "UTC", 1, 144) },
   },
   NAVER_SEARCH: {
-    reviewedAt: "2026-09-19",
-    credential: "NAVER_APPLICATION",
+    reviewedAt: "2026-09-20",
+    credential: "NAVER_API_HUB_APPLICATION",
     retentionCeilingHours: 24,
     evidence: [
-      "https://developers.naver.com/docs/serviceapi/search/news/news.md",
-      "https://developers.naver.com/products/intro/plan/plan.md",
+      "https://api.ncloud-docs.com/docs/naver-api-hub-search-news",
+      "https://guide.ncloud-docs.com/docs/apihub-migration",
+      "https://guide.ncloud-docs.com/docs/apihub-overview",
     ],
     operations: { "news.search": budget("naver-search", "Asia/Seoul", 10, 300) },
   },
   NAVER_DATALAB: {
-    reviewedAt: "2026-09-19",
-    credential: "NAVER_APPLICATION",
+    reviewedAt: "2026-09-20",
+    credential: "NAVER_API_HUB_APPLICATION",
     retentionCeilingHours: 24,
     evidence: [
-      "https://developers.naver.com/docs/serviceapi/datalab/search/search.md",
-      "https://developers.naver.com/products/intro/plan/plan.md",
+      "https://api.ncloud-docs.com/docs/naver-api-hub-search-trend",
+      "https://guide.ncloud-docs.com/docs/apihub-migration",
+      "https://guide.ncloud-docs.com/docs/apihub-overview",
     ],
     operations: { "search.trend": budget("naver-datalab", "Asia/Seoul", 5, 50) },
   },

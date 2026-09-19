@@ -1,0 +1,22 @@
+{
+  "lastBuildDate": "Sun, 20 Sep 2026 08:00:00 +0900",
+  "total": 2,
+  "start": 1,
+  "display": 2,
+  "items": [
+    {
+      "title": "<b>한글</b> &amp; English 뉴스",
+      "originallink": "https://news.example.com/articles/1#tracking",
+      "link": "https://n.news.naver.com/article/001/0000000001",
+      "description": "검색어의 &#xC0C8; 소식을 전합니다.",
+      "pubDate": "Sun, 20 Sep 2026 07:50:00 +0900"
+    },
+    {
+      "title": "두 번째 <b>한글</b> 기사",
+      "originallink": "http://news.example.net/articles/2",
+      "link": "https://n.news.naver.com/article/002/0000000002",
+      "description": "관련 소식 요약",
+      "pubDate": "Sun, 20 Sep 2026 07:40:00 +0900"
+    }
+  ]
+}

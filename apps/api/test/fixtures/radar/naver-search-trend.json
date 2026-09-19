@@ -1,0 +1,25 @@
+{
+  "startDate": "2026-09-17",
+  "endDate": "2026-09-19",
+  "timeUnit": "date",
+  "results": [
+    {
+      "title": "한글",
+      "keywords": ["한글", "korean"],
+      "data": [
+        { "period": "2026-09-17", "ratio": 50 },
+        { "period": "2026-09-18", "ratio": 100 },
+        { "period": "2026-09-19", "ratio": 80.25 }
+      ]
+    },
+    {
+      "title": "영어",
+      "keywords": ["영어", "english"],
+      "data": [
+        { "period": "2026-09-17", "ratio": 25 },
+        { "period": "2026-09-18", "ratio": 40 },
+        { "period": "2026-09-19", "ratio": 30 }
+      ]
+    }
+  ]
+}

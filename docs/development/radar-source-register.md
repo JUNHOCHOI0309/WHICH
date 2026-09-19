@@ -1,6 +1,6 @@
 # Radar 소스 등록·권한·보존·호출 예산 (R02 / WHICH-148)
 
-확인일: **2026-09-19**. 로컬 구현이며 운영 미반영. 법적 이용 허가를 새로 취득하거나 약관을 대신 수락한 결과가 아니다.
+최초 확인일: **2026-09-19**, NAVER API HUB 재확인일: **2026-09-20**. 로컬 구현이며 운영 미반영. 법적 이용 허가를 새로 취득하거나 약관을 대신 수락한 결과가 아니다.
 
 ## 실행 상태
 
@@ -25,9 +25,10 @@
 
 ### Naver Search / DataLab
 
-- [공식 API 목록](https://developers.naver.com/products/intro/plan/plan.md): 검색 25,000회/일, 검색어 트렌드 1,000회/일 안내. 실제 앱 배정량·공유 사용량은 별도 확인 대상이다.
-- [뉴스 검색](https://developers.naver.com/docs/serviceapi/search/news/news.md): 관련 뉴스 검색 결과를 다루는 API이지 실시간 인기 검색어 순위 API가 아니다. 제목/요약의 HTML을 안전하게 처리하고 원문 URL을 보존한다.
-- [검색어 트렌드](https://developers.naver.com/docs/serviceapi/datalab/search/search.md): 지정 키워드 묶음의 상대 검색 추이. 0–100 값을 절대 검색량이나 서로 다른 요청 간 같은 척도로 취급하지 않는다.
+- [NAVER API HUB 개요](https://guide.ncloud-docs.com/docs/apihub-overview): 2026-09-20 현재 신규 신청 기준은 API HUB다. NAVER 검색은 월 최대 775,000건, 검색어 트렌드는 월 최대 50,000건이고 API key당 50 RPS다. 아래 예산은 이 외부 한도가 아니라 더 낮은 WHICH 내부 상한이다.
+- [API HUB 이관 가이드](https://guide.ncloud-docs.com/docs/apihub-migration): 새 Hub 도메인과 `X-NCP-APIGW-API-KEY-ID`/`X-NCP-APIGW-API-KEY`를 사용한다. 기존 Developer Center 키·헤더로 자동 fallback하지 않는다.
+- [뉴스 검색](https://api.ncloud-docs.com/docs/naver-api-hub-search-news): 관련 뉴스 검색 결과를 다루는 API이지 실시간 인기 검색어 순위 API가 아니다. 제목/요약의 `<b>` 강조만 제거하고 원문 URL을 보존하며 링크를 따라가지 않는다.
+- [검색어 트렌드](https://api.ncloud-docs.com/docs/naver-api-hub-search-trend): 지정 키워드 묶음의 상대 검색 추이. 0–100 값을 절대 검색량이나 서로 다른 요청 간 같은 척도로 취급하지 않는다. API reference의 그룹당 20개와 Hub 개요 FAQ의 5개가 충돌하므로 구현은 더 낮은 5개를 적용한다.
 - 앱 등록·각 API 선택·서버 전용 Client ID/Secret 확인이 필요하다. 이번 작업에서는 발급/조회/등록하지 않았다.
 - [개발자 약관 URL](https://developers.naver.com/terms/)은 이번 도구에서 본문 조회 실패. 메서드 명세만으로 재배포·보존 기간·가공·AI 추론/학습 권한을 확정하지 않았다. 권리자가 다른 뉴스 본문/이미지 사용 허가도 별개다. 활성화 전에 현재 약관 원문과 서비스 용도의 적합성을 확인해야 한다.
 
@@ -56,7 +57,7 @@
 - APPROVED에는 비밀정보 없는 근거 URL·검토자·확인 시각·만료 시각이 필요하다. unknown/denied/미래 확인일/만료/빈 근거는 거절한다. 사용자 요청 본문이 아니라 검토된 서버 설정만 입력한다.
 - 저장 기간은 기본 null(미확인). 승인 후에도 이번 단계의 WHICH 내부 상한은 **24시간**, 용도별 허용 기간이 더 짧으면 더 짧게 설정한다. 24시간 자체가 제공자의 허가는 아니다. 장기 보관은 별도 설계/권리 검증 없이 켤 수 없다.
 - 원래 fetchedAt 기준 TTL을 검사하고 만료 순간부터 읽기/표시/파생을 거절한다. 읽기 시각으로 수명을 연장하지 않는다. 실제 삭제 배치·백업/로그/파생물 삭제 전파는 후속 보존 작업에 필요하다. 사전 검사가 삭제를 실행하지는 않는다.
-- 정책 버전 `radar-sources-2026-09-19-v1`, 내부 재검토 기한 **2026-10-19 00:00 UTC**. 그 이후 일괄 fail-closed. 제공자가 정한 갱신 의무일이 아니라 내부 정책 재검토일이다.
+- NAVER 이관 사실을 반영해 정책 버전을 `radar-sources-2026-09-20-v2`로 올렸다. 내부 재검토 기한은 **2026-10-19 00:00 UTC**이며 그 이후 일괄 fail-closed다. 제공자가 정한 갱신 의무일이 아니라 내부 정책 재검토일이다.
 - 자동 학습은 승인 필드만 바꾸어도 열리지 않는다. 알파 연결도 현재 어댑터가 없으므로 열리지 않는다.
 
 ## 후속 실행 원장(R04) 연결 계약
