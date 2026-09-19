@@ -5,6 +5,7 @@ import { runDailyPollSync } from "./modules/operations/poll-sync.js";
 import { pollSyncSettings } from "./modules/operations/poll-sync-config.js";
 import { createYouTubePollCollector } from "./modules/operations/youtube-polls.js";
 import { POLL_CHANNEL_REGISTER } from "./modules/operations/poll-channels.js";
+import { waitForPollDatabase } from "./modules/operations/poll-sync-startup.js";
 
 loadEnvironment({
   path: [resolve(process.cwd(), "../../.env.local"), resolve(process.cwd(), "../../.env")],
@@ -32,17 +33,29 @@ if (process.argv.includes("--probe")) {
   console.error(JSON.stringify({ event: "POLL_SYNC", status: "DATABASE_NOT_CONFIGURED" }));
   process.exitCode = 1;
 } else {
-  const database = createDatabase(process.env.DATABASE_URL, { maxConnections: 2 });
+  const database = createDatabase(process.env.DATABASE_URL, {
+    maxConnections: 2,
+    connectionTimeoutMillis: 20_000,
+  });
   const stop = new AbortController();
   const signal = AbortSignal.any([stop.signal, AbortSignal.timeout(20 * 60_000)]);
   for (const name of ["SIGTERM", "SIGINT"] as const) process.once(name, () => stop.abort());
+  let databaseReady = false;
   try {
+    await waitForPollDatabase(() => database.ping(), signal);
+    databaseReady = true;
     const result = await runDailyPollSync(database.db, { signal });
     console.info(JSON.stringify({ event: "POLL_SYNC", ...result }));
     if (!["SUCCEEDED", "ALREADY_COMPLETED", "BUSY", "NOT_DUE"].includes(result.status))
       process.exitCode = 1;
   } catch {
-    console.error(JSON.stringify({ event: "POLL_SYNC", status: "FAILED" }));
+    console.error(
+      JSON.stringify({
+        event: "POLL_SYNC",
+        status: "FAILED",
+        code: databaseReady ? "SYNC_FAILED" : "DATABASE_NOT_READY",
+      }),
+    );
     process.exitCode = 1;
   } finally {
     await database.close();
