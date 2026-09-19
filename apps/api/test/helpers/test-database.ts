@@ -12,7 +12,7 @@ function wait(milliseconds: number) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
-export async function createTestDatabase() {
+export async function createTestDatabase(options: { migrationsFolder?: string } = {}) {
   const sourceUrl = new URL(
     process.env.DATABASE_URL ?? "postgresql://which:which_local@localhost:54329/which",
   );
@@ -47,7 +47,7 @@ export async function createTestDatabase() {
   const database = createDatabase(testUrl.toString());
 
   try {
-    await migrate(database.db, { migrationsFolder });
+    await migrate(database.db, { migrationsFolder: options.migrationsFolder ?? migrationsFolder });
   } catch (error) {
     await database.close();
     await dropDatabaseWhenDisconnected();

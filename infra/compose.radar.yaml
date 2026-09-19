@@ -1,0 +1,21 @@
+name: which-radar-local
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: which_radar
+      POSTGRES_USER: which_radar
+      POSTGRES_PASSWORD: radar_local_only
+    ports:
+      - "127.0.0.1:54339:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U which_radar -d which_radar"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - radar-postgres-data:/var/lib/postgresql/data
+
+volumes:
+  radar-postgres-data:

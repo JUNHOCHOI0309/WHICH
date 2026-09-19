@@ -8,7 +8,25 @@
     "node": ">=22.14.0 <23",
     "pnpm": ">=10.6.5 <11"
   },
+  "pnpm": {
+    "overrides": {
+      "@xmldom/xmldom@0.8.14": "0.8.15",
+      "@xmldom/xmldom@0.9.11": "0.9.12",
+      "fast-uri@3.1.5": "3.1.6",
+      "js-yaml@4.3.1": "4.3.2"
+    }
+  },
   "scripts": {
+    "radar:setup": "node scripts/local-radar/run.mjs setup",
+    "radar:dev": "node scripts/local-radar/run.mjs dev",
+    "radar:db:stop": "node scripts/local-radar/run.mjs stop-db",
+    "radar:test": "node --test scripts/local-radar/profile.test.mjs",
+    "radar:test:db": "node scripts/local-radar/run.mjs test-db",
+    "radar:test:resolution": "pnpm --filter @which/api exec vitest run test/radar-entity-resolution.test.ts",
+    "radar:test:google": "pnpm --filter @which/api exec vitest run test/google-trending-rss.test.ts",
+    "radar:test:naver": "pnpm --filter @which/api exec vitest run test/naver-api-hub.test.ts",
+    "radar:test:youtube": "pnpm --filter @which/api exec vitest run test/youtube-data-api.test.ts",
+    "radar:migrate": "node scripts/local-radar/run.mjs migrate",
     "build": "turbo run build",
     "check": "pnpm format:check && turbo run lint typecheck test build",
     "dev": "turbo run dev --parallel",

@@ -1,0 +1,30 @@
+{
+  "kind": "youtube#searchListResponse",
+  "etag": "fixture-search",
+  "nextPageToken": "NEXT_PAGE_NOT_PERSISTED",
+  "pageInfo": { "totalResults": 120, "resultsPerPage": 2 },
+  "items": [
+    {
+      "kind": "youtube#searchResult",
+      "etag": "item-1",
+      "id": { "kind": "youtube#video", "videoId": "AbCdEfGhI01" },
+      "snippet": {
+        "publishedAt": "2026-09-19T12:00:00Z",
+        "channelId": "UCfixtureOne",
+        "title": "한글  관련   영상",
+        "description": "not requested by the adapter",
+        "channelTitle": "첫 번째 채널",
+        "liveBroadcastContent": "none"
+      }
+    },
+    {
+      "id": { "kind": "youtube#video", "videoId": "JkLmNoPqR02" },
+      "snippet": {
+        "publishedAt": "2026-09-18T01:02:03+00:00",
+        "channelId": "UCfixtureTwo",
+        "title": "두 번째 영상",
+        "channelTitle": "두 번째 채널"
+      }
+    }
+  ]
+}

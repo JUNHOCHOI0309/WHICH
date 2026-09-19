@@ -19,7 +19,9 @@
 
 ## 공통 완료 기준
 
-단위/통합/회귀 검증 → 요청 범위만 PR → 필수 CI → 정상 main 배포 → 운영 반영 확인. 코드만 작성한 상태는 Done이 아니다. 새 유료 자원·서비스 약관 수락·자동 발행 활성화는 별도 확인한다. 비용/납기는 실측 전 확정하지 않는다.
+2026-09-19 사용자 지시로 로컬 우선 개발로 변경했다. 단위/통합/회귀 검증 및 필요한 localhost 확인을 마친 개발 Task는 **로컬 완료 / 운영 미반영**으로 기록한다. 작업마다 PR 병합·main push·운영 배포를 하지 않는다. R21/R26처럼 운영 검증이 본래 목적인 Task는 별도 배포 확인 전 완료로 처리하지 않는다.
+
+배포를 요청받으면 누적 변경을 묶어 요청 범위만 PR → 필수 CI → 정상 main 배포 → 운영 확인을 진행한다. 새 유료 자원·서비스 약관 수락·자동 발행 활성화는 별도 확인한다. 비용/납기는 실측 전 확정하지 않는다. 실행 방법은 [로컬 개발 환경](../development/radar-local-workflow.md)을 참고한다.
 
 ## 작업
 
@@ -44,6 +46,7 @@
   - Google/Naver/YouTube 수집·재표시·파생·보존 권한을 근거 URL/확인일과 기록
   - 알파 미승인·권한 미확인 소스는 비활성; 실행/일별 요청 상한 정의
 - 검증: 권한 unknown/expired와 예산 소진 시 fail-closed 테스트
+- 로컬 산출물: [소스 권한·보존·호출 예산 등록부](../development/radar-source-register.md). 운영 수집 비활성, 실제 계정 권한은 미확인 상태로 유지한다.
 
 ### R03. Topic·Event·Evidence·Observation 저장소와 마이그레이션
 
@@ -55,6 +58,7 @@
   - 유일키·시간 인덱스·출처 FK·관측창 보존
   - 재실행 무중복; 기존 Issue/Vote 테이블 데이터 불변
 - 검증: 신규 DB 및 업그레이드 migration, transaction integration 테스트
+- 로컬 산출물: [Radar PostgreSQL 저장소](../development/radar-storage.md). 기존 질문·투표 데이터를 변경하지 않는 추가 migration이며 운영 미반영이다.
 
 ### R04. 수집 실행 원장·중복 방지·재시도 구현
 
@@ -66,6 +70,7 @@
   - 성공/정상빈결과/부분결과/실패를 구분하고 pagination 누락 기록
   - lease·timeout·backoff·동시 실행 잠금; 재수집 중복 방지
 - 검증: 중복 dispatch, 중간 실패, lease 만료, 429/5xx 테스트
+- 로컬 산출물: [수집 실행 원장·재시도](../development/radar-ingestion-ledger.md). 원자적 호출 예산 예약과 lease fencing까지 구현했으며 실제 provider/스케줄러는 비활성, 운영 미반영이다.
 
 ### R05. Google Trending RSS 수집 어댑터 구현
 
@@ -77,6 +82,7 @@
   - KR feed 제한 시간·크기·항목수·XML 안전 파싱
   - 원문 시각·수집 시각·검색량 구간 의미 보존; 빈결과와 파싱 실패 구분
 - 검증: 고정 XML fixture, 악성 XML/redirect/큰응답 테스트와 공개 피드 smoke
+- 로컬 산출물: [Google Trending RSS 어댑터](../development/radar-google-trending-rss.md). KR 고정 URL, timeout/stream 크기/항목/중첩/redirect/entity 경계와 R04 원장 연결을 구현하며 자동 수집은 비활성, 운영 미반영이다.
 
 ### R06. Naver 검색·DataLab 어댑터 구현
 
@@ -88,6 +94,7 @@
   - 발견 키워드 관련 뉴스와 일간 상대 검색 추이를 분리 저장
   - 최대값100의 비교 범위·검색어 묶음 보존; 인증정보 서버 전용
 - 검증: mock 인증/쿼터/빈응답/상대비율 테스트; 승인된 설정으로 smoke
+- 로컬 산출물: [NAVER API HUB 어댑터](../development/radar-naver-api-hub.md). 뉴스 근거 후보와 DataLab 상대지수 관측을 분리하고 새 Hub 도메인·인증 헤더만 허용한다. fixture/mock과 원장 연결은 완료했으며 승인 자격증명이 없어 live smoke는 실행하지 않았다.
 
 ### R07. YouTube 공식 API 영상 신호 어댑터 구현
 
